@@ -1550,6 +1550,16 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     }
 }
 
+// The window manager made a window of another client the active one: the application is no longer
+// active, even when none of its own windows ever held the focus and so no focus-out will tell it.
+- (void) noteActiveWindowOfAnotherClient {
+    Window active = X11OcclusionActiveWindow(_display);
+
+    if (active != None && [self windowForID: active] == nil &&
+        ![_overlayWindows containsObject: [NSNumber numberWithUnsignedLong: (unsigned long) active]])
+        [NSApp _systemFocusMovedToAnotherClient];
+}
+
 // Marks the occlusion state for a new judgement when the event can change it. Returns YES for the
 // root window's and the watched foreign window's events, which nothing else is interested in.
 // A ConfigureNotify that repeats the geometry of the previous one for the same window changes
@@ -1564,6 +1574,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         if (atom == XInternAtom(_display, "_NET_ACTIVE_WINDOW", False)) {
             _occlusionActiveKnown = NO;
             _occlusionDirty = YES;
+            [self noteActiveWindowOfAnotherClient];
         } else if (atom == XInternAtom(_display, "_NET_CLIENT_LIST_STACKING", False)) {
             _occlusionDirty = YES;
         }

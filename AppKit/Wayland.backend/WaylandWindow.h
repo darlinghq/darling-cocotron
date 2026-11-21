@@ -79,6 +79,9 @@ struct WaylandBuffer {
     // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
     BOOL _shouldBeMapped;
     BOOL _fullyTransparent;
+    // Ordered in by an application that may not take the input focus, so not mapped yet (see
+    // -mapWouldTakeFocusFromOthers).
+    BOOL _mapDeferred;
     // A menu is ordered in but waits for its parent window's first configure: a popup cannot be
     // created for a surface that has no role and configuration yet, and as a toplevel the
     // compositor would place and size it.
@@ -126,6 +129,9 @@ struct WaylandBuffer {
 - (BOOL) isMapped;
 - (BOOL) isFullyTransparent;
 - (BOOL) isOrderedIn;
+- (void) keyboardFocusLeft;
+- (BOOL) isActivatedByCompositor;
+- (BOOL) isMapDeferred;
 - (BOOL) takeKeyRequest;
 - (void) reportActivationDisplayingIfNeeded: (BOOL) displayIfNeeded;
 - (int32_t) bufferScale;

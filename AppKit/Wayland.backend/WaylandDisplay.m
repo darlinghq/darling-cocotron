@@ -392,6 +392,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         CFRelease(notification);
     }
 
+    // Windows ordered in while the application was not active are mapped once it is.
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector(applicationBecameActive:)
+                                                 name: NSApplicationDidBecomeActiveNotification
+                                               object: nil];
+
     [self runAfterDispatchBlocks];
     [self flush];
 
@@ -1945,6 +1951,7 @@ static NSUInteger modifierDeviceMask(int code) {
         _keyboardWindow = nil;
         [self stopKeyRepeat];
         [self resetKeyboardModifiers];
+        [self applicationFocusMayHaveLeft];
         break;
 
     case WP_KEYBOARD_EV_KEY: {
@@ -2677,6 +2684,32 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     CFArrayAppendValue(_windows, window);
 }
 
+// A window lost the keyboard focus or the compositor's activation. The focus moving from one of our
+// surfaces to another arrives as a loss and a gain in the same dispatch; a loss that no gain follows
+// means another client has it.
+- (void) applicationFocusMayHaveLeft {
+    [self performAfterDispatch: ^{
+        if (self->_keyboardWindow != nil)
+            return;
+        for (CFIndex i = 0; i < CFArrayGetCount(self->_windows); i++) {
+            if ([(WaylandWindow *) CFArrayGetValueAtIndex(self->_windows, i) isActivatedByCompositor])
+                return;
+        }
+        [self keyboardFocusLeftApplication];
+    }];
+}
+
+// Another client has the keyboard focus: no window of the application is active any more, including
+// one that was only reported active because it is never shown (see -[WaylandWindow makeKey]), which no
+// configure event would ever take the activation from. The application resigns once none is.
+- (void) keyboardFocusLeftApplication {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        [window keyboardFocusLeft];
+    }
+    [NSApp _systemFocusMovedToAnotherClient];
+}
+
 - (void) windowActivated: (WaylandWindow *) window {
     CFIndex index = CFArrayGetFirstIndexOfValue(
             _windows, CFRangeMake(0, CFArrayGetCount(_windows)), window);
@@ -3091,9 +3124,32 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 // compositor decides: it may only mark the window as wanting attention. The token
 // carries the serial of the last input event when there is one, because
 // compositors refuse requests that cannot be tied to user input.
+- (BOOL) mappingForActivation {
+    return _mappingForActivation;
+}
+
+// Maps the windows that were ordered in while the application could not take the input focus.
+- (void) mapDeferredWindows {
+    BOOL previous = _mappingForActivation;
+    _mappingForActivation = YES;
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window isMapDeferred])
+            [window ensureMapped];
+    }
+    _mappingForActivation = previous;
+    [self flush];
+}
+
+- (void) applicationBecameActive: (NSNotification *) notification {
+    [self mapDeferredWindows];
+}
+
 - (void) requestActivation {
     if (_activation == NULL || _activationToken != NULL)
         return;
+    // An application that is asked to activate shows the windows it was holding back.
+    [self mapDeferredWindows];
     WaylandWindow *window = [self windowForActivation];
     struct wl_proxy *surface = [window surface];
     if (surface == NULL)

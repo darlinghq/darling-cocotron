@@ -221,8 +221,38 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // Mapped, or ordered in but kept unmapped because it is fully transparent. Such a window counts as
 // on screen for the window order (and so for the choice of the next key window), as on X11 where
 // it is mapped with no opacity.
+// The keyboard focus is in another client. A window the compositor does not hold active can still be
+// active for AppKit, because a window that is never shown is reported active when it is made key.
+- (BOOL) isActivatedByCompositor {
+    return _activated;
+}
+
+- (void) keyboardFocusLeft {
+    NSWindow *delegate = _delegate;
+    if (delegate != nil && !_activated && [delegate _isActive])
+        [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
+}
+
 - (BOOL) isOrderedIn {
-    return _mapped || (_fullyTransparent && _shouldBeMapped && !_invalidated);
+    return _mapped || ((_fullyTransparent || _mapDeferred) && _shouldBeMapped && !_invalidated);
+}
+
+- (BOOL) isMapDeferred {
+    return _mapDeferred && _shouldBeMapped && !_invalidated;
+}
+
+// Mapping a toplevel makes compositors give it the keyboard focus (nothing in xdg-shell lets a client
+// say that a window is shown without taking it), but an application that is not active does not take
+// the focus by ordering a window in. Such a window stays unmapped until the application is active
+// (the display maps it then) or is asked to activate; modal windows and sheets are shown, as the
+// application cannot continue without them.
+- (BOOL) mapWouldTakeFocusFromOthers {
+    if ([NSApp _mayTakeInputFocus] || [_display mappingForActivation])
+        return NO;
+    NSWindow *window = _delegate;
+    if ([window isSheet] || window == [NSApp modalWindow])
+        return NO;
+    return YES;
 }
 
 - (BOOL) isPopup { return _popup != NULL; }
@@ -272,6 +302,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _popupWaitingForParent = parent != nil && !parent->_configured;
     if (_popupWaitingForParent)
         return;
+    if (parent == nil && !tooltip && !menu && [self mapWouldTakeFocusFromOthers]) {
+        _mapDeferred = YES;
+        return;
+    }
+    _mapDeferred = NO;
     _surfaceGeneration++;
     _configureUpdatePending = NO;
     // WaylandDecorations (org.darlinghq.AppKit) or DARLING_WAYLAND_DECORATIONS set to
@@ -472,6 +507,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) unmap {
     _shouldBeMapped = NO;
+    _mapDeferred = NO;
     _popupWaitingForParent = NO;
     _keyRequested = NO;
     if (!_mapped)
@@ -531,6 +567,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             if (self->_invalidated || self->_activated || delegate == nil || ![delegate _isActive])
                 return;
             [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
+            [self->_display applicationFocusMayHaveLeft];
         }];
     }
     _pendingSuspended = _suspended = NO;
@@ -1492,6 +1529,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
           } else if (activationChanged) {
               [delegate platformWindowDeactivated: self
                           checkForAppDeactivation: NO];
+              [self->_display applicationFocusMayHaveLeft];
           }
         }];
     }
