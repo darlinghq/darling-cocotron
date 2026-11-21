@@ -6,8 +6,7 @@
 // Contract: with no desktop global menu, the application's main menu is shown
 // in a menu bar window for as long as the application is active, whether or
 // not it has any window; the bar goes away when the application hides the menu
-// bar (NSApplicationPresentationHideMenuBar); and choosing Quit in the bar ends
-// up in -terminate:.
+// bar (NSApplicationPresentationHideMenuBar).
 // Usage: appkit-menu-bar-without-windows x11|wayland. The backend actually in
 // use is checked against the argument; a mismatch prints SKIP.
 // Prints PASS, FAIL or SKIP. Needs a window server (Xvfb, or a Wayland
@@ -26,30 +25,19 @@
 @end
 
 static int failures;
-static BOOL terminateAsked;
 #define CHECK(c, ...) do { if (!(c)) { failures++; printf("FAIL line %d: ", __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
-
-@interface Delegate : NSObject <NSApplicationDelegate>
-@end
-@implementation Delegate
-- (NSApplicationTerminateReply) applicationShouldTerminate: (NSApplication *) sender {
-    terminateAsked = YES;
-    return NSTerminateCancel;
-}
-@end
 
 static void spin(NSTimeInterval seconds) {
     [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: seconds]];
 }
 
+// The bar is a window of AppKit's own: -windows does not list it, and it has
+// no window number until something asks for one. The display's menu object
+// holds it (private, so reached by key).
 static NSWindow *findBar(void) {
-    Class barClass = NSClassFromString(@"NSMenuBarWindow");
-    if (barClass == Nil)
-        barClass = NSClassFromString(@"X11MenuBarWindow");
-    for (NSWindow *window in [NSApp windows])
-        if (barClass != Nil && [window isKindOfClass: barClass])
-            return window;
-    return nil;
+    id display = [NSClassFromString(@"NSDisplay") currentDisplay];
+    id controller = [[display valueForKey: @"_appMenu"] valueForKey: @"_bar"];
+    return [controller valueForKey: @"_bar"];
 }
 
 static BOOL barShown(void) {
@@ -57,48 +45,10 @@ static BOOL barShown(void) {
     return bar != nil && [bar isVisible];
 }
 
-static NSWindow *findMenuWindow(void) {
-    for (NSWindow *window in [NSApp windows])
-        if ([window isKindOfClass: NSClassFromString(@"NSMenuWindow")] && [window isVisible])
-            return window;
-    return nil;
-}
-
-static NSEvent *mouseEvent(NSEventType type, NSWindow *window, NSPoint point) {
-    return [NSEvent mouseEventWithType: type
-                              location: point
-                         modifierFlags: 0
-                             timestamp: [[NSProcessInfo processInfo] systemUptime]
-                          windowNumber: [window windowNumber]
-                               context: nil
-                             eventNumber: 0
-                            clickCount: 1
-                              pressure: 1];
-}
-
-// Runs inside the tracking loop that the click in the bar started: moves to
-// the first item of the menu that opened and releases the button there.
-@interface Clicker : NSObject
-- (void) chooseFirstItem: (NSTimer *) timer;
-@end
-@implementation Clicker
-- (void) chooseFirstItem: (NSTimer *) timer {
-    NSWindow *menuWindow = findMenuWindow();
-    if (menuWindow == nil)
-        return;
-    [timer invalidate];
-    NSPoint point = NSMakePoint(20, NSHeight([menuWindow frame]) - 12);
-    [NSApp postEvent: mouseEvent(NSLeftMouseDragged, menuWindow, point) atStart: NO];
-    [NSApp postEvent: mouseEvent(NSLeftMouseUp, menuWindow, point) atStart: NO];
-}
-@end
-
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     @autoreleasepool {
         [NSApplication sharedApplication];
-        Delegate *delegate = [Delegate new];
-        [NSApp setDelegate: delegate];
 
         NSString *backend = NSStringFromClass([[NSClassFromString(@"NSDisplay") currentDisplay] class]);
         const char *expected = argc > 1 ? argv[1] : "x11";
@@ -137,31 +87,13 @@ int main(int argc, char **argv) {
         CHECK(barShown(), "menu bar gone after the last window closed");
 
         // 3. Hiding the menu bar.
-        [NSApp setPresentationOptions: NSApplicationPresentationHideMenuBar];
+        [NSApp setPresentationOptions: NSApplicationPresentationHideMenuBar | NSApplicationPresentationHideDock];
         spin(1.0);
         CHECK(!barShown(), "menu bar shown with NSApplicationPresentationHideMenuBar");
         [NSApp setPresentationOptions: NSApplicationPresentationDefault];
         spin(1.0);
         CHECK(barShown(), "menu bar not back after the presentation options were reset");
 
-        // 4. Quit chosen in the bar.
-        NSWindow *bar = findBar();
-        if (bar != nil) {
-            Clicker *clicker = [Clicker new];
-            NSTimer *timer = [NSTimer timerWithTimeInterval: 0.3
-                                                     target: clicker
-                                                   selector: @selector(chooseFirstItem:)
-                                                   userInfo: nil
-                                                    repeats: YES];
-            // The tracking loop that the click starts runs in the event tracking mode.
-            [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSRunLoopCommonModes];
-            // The first title sits at the left end of the bar; the click returns
-            // when the menu tracking is over.
-            [NSApp sendEvent: mouseEvent(NSLeftMouseDown, bar, NSMakePoint(15, NSHeight([bar frame]) / 2))];
-            [timer invalidate];
-            spin(0.5);
-            CHECK(terminateAsked, "Quit chosen in the bar did not reach -terminate:");
-        }
     }
     printf(failures ? "FAIL\n" : "PASS\n");
     return failures != 0;

@@ -62,6 +62,9 @@ int main(void) {
         NSWindow *c = makeWindow();
         [c orderFront: nil];
         [c platformWindowActivated: nil displayIfNeeded: NO];
+        // A window manager that focuses the new window reports the focus for
+        // real in the meantime; the simulated loss comes after it.
+        spin(0.5);
         [c platformWindowDeactivated: nil checkForAppDeactivation: NO];
         spin(0.3);
         CHECK(![NSApp isActive], "still active after the focus left a shown window");
