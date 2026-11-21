@@ -23,6 +23,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Legacy ObjC ABI (i386): instance size must stay 0x9c, Apple's; an
 // application's subclass is laid out right after it. New state goes to a
 // side structure, never to a larger ivar block.
+@interface NSMenu (NSMenuViewUpdate)
+- (void) _updateWithoutSubmenus;
+@end
+
 @interface NSMenuView : NSView {
     NSUInteger _selectedItemIndex;
     NSMutableArray *_visibleArray;
@@ -40,5 +44,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSMenuView *) viewAtSelectedIndexPositionOnScreen: (NSScreen *) screen;
 
 - (NSMenuItem *) trackForEvent: (NSEvent *) event;
+- (NSMenuItem *) _trackForEvent: (NSEvent *) event session: (id) session;
 
 @end
