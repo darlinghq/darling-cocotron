@@ -1,8 +1,14 @@
-// CGGetDisplaysWithPoint and CGGetDisplaysWithRect, as documented
-// (https://developer.apple.com/documentation/coregraphics/cggetdisplayswithpoint(_:_:_:_:)):
-// the displays array may be NULL, and then the count is of all the displays that
-// match; with an array the count is of the IDs written, at most maxDisplays.
-// Needs a display (X11 or Wayland session).
+// The display list functions count as documented
+// (https://developer.apple.com/documentation/coregraphics/cggetdisplayswithpoint(_:_:_:_:),
+// .../cggetdisplayswithrect(_:_:_:_:), .../cggetactivedisplaylist(_:_:_:) and
+// .../cggetonlinedisplaylist(_:_:_:)): the displays array may be NULL, and
+// then the count is of all the displays; with an array the count is of the IDs
+// written, at most maxDisplays. Not pinned, because the pages leave it open: the
+// count when maxDisplays is 0, and a NULL count pointer (the rect page requires a
+// non-NULL one).
+// Needs a display (X11 or Wayland session). The over-count that the "room
+// for one" checks catch needs two or more displays; on one display they still
+// check that at most one ID is written and counted.
 #include <ApplicationServices/ApplicationServices.h>
 #include <stdio.h>
 #include <string.h>
@@ -20,6 +26,54 @@ static int contains(const CGDirectDisplayID *ids, uint32_t count, CGDirectDispla
     return 0;
 }
 
+typedef CGError (*ListFn)(uint32_t, CGDirectDisplayID *, uint32_t *);
+
+// A list function that takes no query: all, through a NULL array, and with room.
+static void checkList(const char *name, ListFn list, CGDirectDisplayID main, int mainFirst)
+{
+    CGDirectDisplayID ids[MAX];
+    uint32_t total = 0, count = 99;
+
+    // NULL array with room claimed: nothing is written (this crashed) and the count is of all.
+    if (list(MAX, NULL, &total) != kCGErrorSuccess || total < 1 || total > MAX) {
+        printf("FAIL %s: count through a NULL array (%u)\n", name, total);
+        failures++;
+        return;
+    }
+    if (list(MAX, ids, &count) != kCGErrorSuccess || count != total || !contains(ids, count, main)) {
+        printf("FAIL %s: all displays with room (%u of %u)\n", name, count, total);
+        failures++;
+    }
+    if (mainFirst && ids[0] != main) {
+        printf("FAIL %s: main display first\n", name);
+        failures++;
+    }
+    // Room for one: one ID is written and counted, however many displays there are.
+    memset(ids, 0xAB, sizeof ids);
+    count = 99;
+    if (list(1, ids, &count) != kCGErrorSuccess || count != 1 || ids[1] != 0xABABABAB) {
+        printf("FAIL %s: room for one (count %u)\n", name, count);
+        failures++;
+    }
+}
+
+static CGError online(uint32_t max, CGDirectDisplayID *ids, uint32_t *count)
+{
+    return CGGetOnlineDisplayList(max, ids, count);
+}
+
+static CGError active(uint32_t max, CGDirectDisplayID *ids, uint32_t *count)
+{
+    return CGGetActiveDisplayList(max, ids, count);
+}
+
+static CGDirectDisplayID glMask;
+
+static CGError withMask(uint32_t max, CGDirectDisplayID *ids, uint32_t *count)
+{
+    return CGGetDisplaysWithOpenGLDisplayMask(glMask, max, ids, count);
+}
+
 int main(void)
 {
     CGDirectDisplayID main = CGMainDisplayID();
@@ -30,6 +84,11 @@ int main(void)
     CGDirectDisplayID ids[MAX];
     uint32_t count = 99, total = 0;
 
+    glMask = CGDisplayIDToOpenGLDisplayMask(main);
+    checkList("CGGetOnlineDisplayList", online, main, 1);
+    checkList("CGGetActiveDisplayList", active, main, 0);
+    checkList("CGGetDisplaysWithOpenGLDisplayMask", withMask, main, 1);
+
     // A point on the main display: the display is listed.
     CHECK(CGGetDisplaysWithPoint(inside, MAX, ids, &count) == kCGErrorSuccess);
     CHECK(count >= 1 && count <= MAX && contains(ids, count, main));
@@ -38,18 +97,15 @@ int main(void)
     // No array: the count is of all that match, the same as when there is room for them.
     CHECK(CGGetDisplaysWithPoint(inside, MAX, NULL, &total) == kCGErrorSuccess);
     CHECK(total == written);
-    CHECK(CGGetDisplaysWithPoint(inside, 0, NULL, &total) == kCGErrorSuccess && total == written);
 
-    // An array with no room is not written to; the count is of all that match.
+    // An array with no room is not written to.
     memset(ids, 0xAB, sizeof ids);
-    CHECK(CGGetDisplaysWithPoint(inside, 0, ids, &total) == kCGErrorSuccess && total == written);
+    CHECK(CGGetDisplaysWithPoint(inside, 0, ids, &total) == kCGErrorSuccess);
     CHECK(ids[0] == 0xABABABAB);
 
     // Room for one: at most one ID is written and counted.
-    CHECK(CGGetDisplaysWithPoint(inside, 1, ids, &count) == kCGErrorSuccess && count == 1);
-
-    // The count is optional.
-    CHECK(CGGetDisplaysWithPoint(inside, MAX, ids, NULL) == kCGErrorSuccess);
+    memset(ids, 0xAB, sizeof ids);
+    CHECK(CGGetDisplaysWithPoint(inside, 1, ids, &count) == kCGErrorSuccess && count == 1 && ids[1] == 0xABABABAB);
 
     // A point on no display.
     count = 99;
@@ -61,10 +117,10 @@ int main(void)
     written = count;
     CHECK(CGGetDisplaysWithRect(bounds, MAX, NULL, &total) == kCGErrorSuccess && total == written);
     memset(ids, 0xAB, sizeof ids);
-    CHECK(CGGetDisplaysWithRect(bounds, 0, ids, &total) == kCGErrorSuccess && total == written);
+    CHECK(CGGetDisplaysWithRect(bounds, 0, ids, &total) == kCGErrorSuccess);
     CHECK(ids[0] == 0xABABABAB);
-    CHECK(CGGetDisplaysWithRect(bounds, 1, ids, &count) == kCGErrorSuccess && count == 1);
-    CHECK(CGGetDisplaysWithRect(bounds, MAX, ids, NULL) == kCGErrorSuccess);
+    memset(ids, 0xAB, sizeof ids);
+    CHECK(CGGetDisplaysWithRect(bounds, 1, ids, &count) == kCGErrorSuccess && count == 1 && ids[1] == 0xABABABAB);
     count = 99;
     CHECK(CGGetDisplaysWithRect(nowhereRect, MAX, ids, &count) == kCGErrorSuccess && count == 0);
 
