@@ -1897,6 +1897,18 @@ static BOOL X11WindowManagerSupports(Display *display, const char *name) {
     return _occluded;
 }
 
+- (BOOL) noteConfigureGeometryChanged: (XConfigureEvent *) event {
+    if (_configureKnown && event->x == _configureX && event->y == _configureY &&
+        event->width == _configureWidth && event->height == _configureHeight)
+        return NO;
+    _configureKnown = YES;
+    _configureX = event->x;
+    _configureY = event->y;
+    _configureWidth = event->width;
+    _configureHeight = event->height;
+    return YES;
+}
+
 - (void) setOccluded: (BOOL) occluded {
     _occluded = occluded;
 }

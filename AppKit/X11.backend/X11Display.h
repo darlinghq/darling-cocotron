@@ -107,6 +107,20 @@
     // per batch of events, when _occlusionDirty is set.
     BOOL _occlusionDirty;
     Window _occlusionWatchWindow;
+    // What was last read from the server about the focused foreign window, kept until an event that
+    // can change it: the window itself (_occlusionActive, from _NET_ACTIVE_WINDOW), its geometry and
+    // state (the cover fields, root coordinates, device pixels) and the last ConfigureNotify geometry
+    // seen on it, so that a notification repeating the same geometry changes nothing.
+    BOOL _occlusionActiveKnown;
+    Window _occlusionActive;
+    BOOL _occlusionCoverValid;
+    BOOL _occlusionCoverOK;
+    BOOL _occlusionCoverFullscreen;
+    BOOL _occlusionCoverOpaque;
+    int _occlusionCoverX, _occlusionCoverY;
+    unsigned int _occlusionCoverWidth, _occlusionCoverHeight;
+    BOOL _occlusionWatchGeometryKnown;
+    int _occlusionWatchX, _occlusionWatchY, _occlusionWatchWidth, _occlusionWatchHeight;
 
 @public
     XIM _xim;
