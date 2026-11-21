@@ -129,7 +129,7 @@ int main(void) {
 
         // key times that are not usable are ignored: a NaN, then a count that does not match.
         move.timingFunctions = nil;
-        move.keyTimes = @[@0, @NAN, @1];
+        move.keyTimes = @[@0, @(NAN), @1];
         run(move, 0.25, @"position");
         CHECK(lit(24, 4) && !lit(44, 4), "NaN key time: ignored, evenly spaced (x = 20)");
         move.keyTimes = @[@0, @1];
