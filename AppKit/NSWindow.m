@@ -62,6 +62,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGWindowPrivate.h>
 #include <math.h>
 #import "NSGestureRecognizer-Private.h"
+#import "private-include/AppKit/NSEventTime.h"
 
 const NSNotificationName NSWindowDidBecomeKeyNotification =
         @"NSWindowDidBecomeKeyNotification";
@@ -4918,8 +4919,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSMouseExited
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
@@ -4938,8 +4938,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSMouseEntered
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
@@ -4958,7 +4957,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     mouseEventWithType: NSMouseMoved
                               location: mousePoint
                          modifierFlags: [NSEvent modifierFlags]
-                             timestamp: [NSDate timeIntervalSinceReferenceDate]
+                             timestamp: NSEventCurrentTime()
                           windowNumber: [self windowNumber]
                                context: [self graphicsContext]
                            eventNumber: 0 // NSEvent currently ignores this.
@@ -4976,8 +4975,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSCursorUpdate
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
