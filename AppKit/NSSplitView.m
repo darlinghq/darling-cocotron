@@ -43,12 +43,38 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
 
 // Operated at once: the click that activates the window is delivered to it
 // (see -[NSWindow sendEvent:]).
+// The nib is loaded completely: the divider thickness the subviews were laid
+// out for may differ from ours, in which case they are fitted to the split view.
+- (void) awakeFromNib {
+    if ([[self _arrangedList] count] == 0)
+        return;
+
+    CGFloat used = 0;
+    NSUInteger visible = 0;
+
+    for (NSView *subview in [self _arrangedList]) {
+        if ([self isSubviewCollapsed: subview])
+            continue;
+        used += [self _lengthOfSubview: subview];
+        visible++;
+    }
+    if (visible > 1)
+        used += [self dividerThickness] * (visible - 1);
+    if (fabs(used - ([self isVertical] ? NSWidth([self bounds]) : NSHeight([self bounds]))) > 0.5)
+        [self adjustSubviews];
+}
+
 - (BOOL) acceptsFirstMouse: (NSEvent *) event {
     return YES;
 }
 
 - (void) encodeWithCoder: (NSCoder *) coder {
-    NSUnimplementedMethod();
+    [super encodeWithCoder: coder];
+
+    if ([coder allowsKeyedCoding]) {
+        [coder encodeBool: NS_EXTRA(NSSplitView, self)->_isVertical forKey: @"NSIsVertical"];
+        [coder encodeInteger: NS_EXTRA(NSSplitView, self)->_dividerStyle forKey: @"NSDividerStyle"];
+    }
 }
 
 - (instancetype) initWithFrame: (NSRect) frame {
@@ -71,8 +97,12 @@ NSString *const NSSplitViewWillResizeSubviewsNotification =
             NS_EXTRA(NSSplitView, self)->_dividerStyle = [keyed decodeIntegerForKey: @"NSDividerStyle"];
         else
             NS_EXTRA(NSSplitView, self)->_dividerStyle = NSSplitViewDividerStyleThick;
-        // The divider thickness in the nib may not be the same as ours
-        [self resizeSubviewsWithOldSize: [self bounds].size];
+        // The subviews keep the frames they were archived with. They are not
+        // all complete yet when the archive reached one of them before the
+        // split view (the nib connects a subview first, and the split view is
+        // decoded from its superview reference): fitting them here would lay
+        // out a subview whose frame is still empty. -awakeFromNib fits them
+        // once the whole nib is loaded.
     } else {
         // The delegate (a one-object group up to version 16), and from version 348 a
         // byte whose bit 0 is the vertical flag (its other bits do not change the
