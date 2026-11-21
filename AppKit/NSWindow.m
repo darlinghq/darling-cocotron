@@ -4125,12 +4125,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     }
 }
 
+// The sender's title is the application's to set (macOS leaves it as it is)
 - (void) toggleToolbarShown: (id) sender {
     [_toolbar setVisible: ![_toolbar isVisible]];
-    [sender setTitle: [NSString stringWithFormat: @"%@ Toolbar",
-                                                  [_toolbar isVisible]
-                                                          ? @"Hide"
-                                                          : @"Show"]];
 }
 
 - (void) runToolbarCustomizationPalette: (id) sender {
@@ -4986,6 +4983,8 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
         return [[self undoManager] canUndo];
     if ([item action] == @selector(redo:))
         return [[self undoManager] canRedo];
+    if ([item action] == @selector(toggleToolbarShown:))
+        return _toolbar != nil;
 
     return YES;
 }
