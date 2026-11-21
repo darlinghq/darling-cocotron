@@ -481,17 +481,41 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [_afterDispatch addObject: [[block copy] autorelease]];
 }
 
+// Runs the blocks that were queued before this pass. Blocks queued by those
+// blocks wait for the next run loop iteration, so that work which keeps
+// queueing more work (a view whose frame alternates, say) cannot keep the main
+// thread here and starve the run loop, as events and timers are only serviced
+// between iterations.
 - (void) runAfterDispatchBlocks {
-    while ([_afterDispatch count] > 0) {
-        NSArray *blocks = [_afterDispatch copy];
-        [_afterDispatch removeAllObjects];
-        @try {
-            for (void (^block)(void) in blocks)
-                block();
-        } @finally {
-            [blocks release];
-        }
+    if ([_afterDispatch count] == 0)
+        return;
+    NSArray *blocks = [_afterDispatch copy];
+    [_afterDispatch removeAllObjects];
+    @try {
+        for (void (^block)(void) in blocks)
+            block();
+    } @finally {
+        [blocks release];
+        if ([_afterDispatch count] > 0)
+            [self scheduleAfterDispatchRun];
     }
+}
+
+// Wakes the main run loop to run the blocks that were queued during a pass.
+- (void) scheduleAfterDispatchRun {
+    if (_afterDispatchRunQueued)
+        return;
+    _afterDispatchRunQueued = YES;
+    [self retain];
+    CFRunLoopRef loop = CFRunLoopGetMain();
+    CFRunLoopPerformBlock(loop, kCFRunLoopCommonModes, ^{
+        _afterDispatchRunQueued = NO;
+        [self runAfterDispatchBlocks];
+        if (_wlDisplay != NULL)
+            WL.wl_display_flush(_wlDisplay);
+        [self release];
+    });
+    CFRunLoopWakeUp(loop);
 }
 
 - (void) processPendingEvents {
