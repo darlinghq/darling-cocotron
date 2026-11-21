@@ -115,7 +115,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                         generation: generation];
 
     if (lookup == nil)
-        return [O2PDFObject_const pdfObjectWithNull];
+        return [O2PDFObject_const pdfObjectWithMissingObject];
     else {
         O2PDFObject *result = NSMapGet(_entryToObject, lookup);
 

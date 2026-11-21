@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
 // CATextLayer renders its string through CARenderer: documented defaults,
-// drawing from the top of the bounds, alignment, wrapping, a CRLF counting as
+// drawing from the top of the bounds, alignment, wrapping, truncation, a CRLF counting as
 // one line break, and a font given as a name, a CGFont or a CTFont.
 // Needs a GL-capable backend (X11 on Xvfb).
 #import <AppKit/AppKit.h>
@@ -44,6 +44,20 @@ static int litExtent(int *minX, int *maxX, int *minY, int *maxY) {
                 if (y < *minY) *minY = y;
                 if (y > *maxY) *maxY = y;
             }
+        }
+    return count;
+}
+
+
+// Lit pixels in the columns x0..x1 of the upper part of the text line (where
+// the stems of capital letters are and an ellipsis, which sits on the baseline, is not).
+static int stemPixels(int x0, int x1) {
+    int count = 0;
+    for (int y = H - 12; y < H; y++)
+        for (int x = x0; x <= x1; x++) {
+            const unsigned char *p = pixels + (y * W + x) * 4;
+            if (p[0] > 100 && p[1] > 100 && p[2] > 100)
+                count++;
         }
     return count;
 }
@@ -159,6 +173,60 @@ int main(void) {
         CHECK(minY < unwrappedLow, "wrapped text uses more lines (%d vs %d)", minY, unwrappedLow);
         textLayer.bounds = CGRectMake(0, 0, W, H);
         textLayer.wrapped = NO;
+
+        // Truncation: a line too wide for an unwrapped layer is cut where the
+        // mode says and an ellipsis marks the cut, which sits on the baseline,
+        // so the stems of the capitals end up on the side that is kept.
+        textLayer.bounds = CGRectMake(0, 0, 60, H);
+        textLayer.wrapped = NO;
+        textLayer.alignmentMode = kCAAlignmentLeft;
+        textLayer.truncationMode = kCATruncationNone;
+        configure(@"HHHHHHHHHH");
+        CHECK(stemPixels(0, 4) > 0 && stemPixels(52, 59) > 0, "no truncation: stems on both sides");
+        textLayer.truncationMode = kCATruncationEnd;
+        render();
+        CHECK(stemPixels(0, 4) > 0, "end: the beginning is kept");
+        CHECK(stemPixels(52, 59) == 0 && litExtent(&minX, &maxX, &minY, &maxY) > 0 && maxX > 40,
+              "end: an ellipsis, no stem, at the right edge");
+        textLayer.truncationMode = kCATruncationStart;
+        render();
+        CHECK(stemPixels(0, 6) == 0, "start: an ellipsis, no stem, at the left edge");
+        // The truncated line is left aligned and narrower than the layer, so its
+        // right edge is where the lit pixels end, not at the edge of the layer.
+        CHECK(litExtent(&minX, &maxX, &minY, &maxY) > 0 && maxX < 60 && stemPixels(maxX - 8, maxX) > 0,
+              "start: the end is kept");
+        textLayer.truncationMode = kCATruncationMiddle;
+        render();
+        CHECK(litExtent(&minX, &maxX, &minY, &maxY) > 0 && maxX < 60 && stemPixels(0, 4) > 0 &&
+              stemPixels(maxX - 8, maxX) > 0, "middle: both ends are kept");
+        // The truncated line is aligned by alignmentMode like any other: it is
+        // about 49 px wide here (two capitals and the ellipsis), so flush right
+        // leaves the left edge bare and centred leaves a few pixels on each side.
+        textLayer.truncationMode = kCATruncationEnd;
+        textLayer.alignmentMode = kCAAlignmentRight;
+        configure(@"HHHHHHHHHH");
+        CHECK(stemPixels(0, 9) == 0 && stemPixels(10, 24) > 0, "end, right aligned: the truncated line is flush right");
+        textLayer.alignmentMode = kCAAlignmentCenter;
+        render();
+        CHECK(stemPixels(0, 4) == 0 && stemPixels(5, 14) > 0, "end, centred: the truncated line is centred");
+        textLayer.alignmentMode = kCAAlignmentLeft;
+        // A wrapped layer is not truncated: a single word wider than it is drawn whole,
+        // so its stems reach the right edge where truncation would leave an ellipsis.
+        textLayer.wrapped = YES;
+        configure(@"HHHHHHHHHH");
+        CHECK(stemPixels(52, 59) > 0, "wrapped: a long word is not truncated");
+        textLayer.wrapped = NO;
+        configure(@"HHHHHHHHHH");
+        CHECK(stemPixels(52, 59) == 0, "unwrapped again: truncated");
+        // A line that fits is not changed by the mode.
+        configure(@"H");
+        unsigned char fitting[sizeof pixels];
+        memcpy(fitting, pixels, sizeof pixels);
+        textLayer.truncationMode = kCATruncationNone;
+        render();
+        CHECK(memcmp(fitting, pixels, sizeof pixels) == 0, "a line that fits is drawn as without truncation");
+        textLayer.bounds = CGRectMake(0, 0, W, H);
+        textLayer.alignmentMode = kCAAlignmentLeft;
 
         // Foreground color.
         CGColorRef green = CGColorCreateGenericRGB(0, 1, 0, 1);
