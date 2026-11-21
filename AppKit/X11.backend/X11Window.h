@@ -59,6 +59,7 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _fullscreenRequested;
     BOOL _fullscreenReported; // what the window manager last said, told to the delegate
     BOOL _isOpaque;
+    NSSize _opaqueRegionSize; // device size of the _NET_WM_OPAQUE_REGION currently set, zero for none (see -updateOpaqueRegion)
     BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
     BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
