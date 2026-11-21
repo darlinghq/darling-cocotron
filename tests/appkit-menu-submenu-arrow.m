@@ -57,7 +57,8 @@ static NSInteger arrowWidth(NSBitmapImageRep *rep, NSInteger y0, NSInteger y1) {
     return width;
 }
 
-// Ends the menu tracking loop the way a user would: Escape.
+// Ends the menu tracking loop the way a user would: Escape (kept for the 8 s guard, which also
+// covers a hung -cancelTracking); the examination ends it with -[NSMenu cancelTracking].
 static void pressEscape(void) {
     NSEvent *escape = [NSEvent keyEventWithType: NSEventTypeKeyDown location: NSZeroPoint modifierFlags: 0 timestamp: 0
                                    windowNumber: [hostWindow windowNumber] context: nil
@@ -96,7 +97,7 @@ static void analyse(void) {
         }
         CHECK(groups == 2, "%d rows groups with ink in the right 30 pixels, expected 2 (one per submenu item)", groups);
     }
-    pressEscape();
+    [openMenu cancelTracking];
 }
 
 int main(void) {
