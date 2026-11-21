@@ -21,9 +21,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSObject+BindingSupport.h>
 #import <AppKit/NSPopUpButton.h>
 #import <AppKit/NSPopUpButtonCell.h>
+#import "NSKeyValueBinding/NSBinder.h"
 
 NSString *const NSPopUpButtonWillPopUpNotification =
         @"NSPopUpButtonWillPopUpNotification";
+
+@interface NSPopUpButtonCell (BindingItems)
+- (NSMenuItem *) _appendItemWithTitle: (NSString *) title;
+@end
 
 static NSString *const NSPopUpButtonBindingObservationContext =
         @"NSPopUpButtonBindingObservationContext";
@@ -347,64 +352,140 @@ static NSString *const NSPopUpButtonBindingObservationContext =
 
 @implementation NSPopUpButton (BindingSupport)
 
-- (void) _setItemValues: (NSArray *) values forKey: (NSString *) key {
-    // A binding whose value is a single string, or the placeholder the binder
-    // substitutes for "no selection", must not be handed to the cell as a
-    // collection: -[NSPopUpButtonCell addItemsWithTitles:] sends -count to it and
-    // raises. Treat a lone scalar as a one-item list.
-    if (values != nil && ![values isKindOfClass: [NSArray class]] &&
-        ![values isKindOfClass: [NSSet class]]) {
-        values = [NSArray arrayWithObject: values];
-    }
+// A bound value that is not an array (a single string, or the placeholder the
+// binder substitutes for "no selection") must not be handed on as a
+// collection: it counts as a one-item list. nil is no items.
+static NSArray *popUpBindingArray(id value) {
+    if (value == nil)
+        return [NSArray array];
+    if ([value isKindOfClass: [NSArray class]])
+        return value;
+    if ([value isKindOfClass: [NSSet class]])
+        return [value allObjects];
+    return [NSArray arrayWithObject: value];
+}
 
-    // The cell stores titles, so every member must be a string. A binding whose
-    // collection holds non-strings reaches -[NSMenu itemWithTitle:], which sends
-    // -isEqualToString: to each member and raises on anything else.
-    if (values != nil) {
-        NSMutableArray *titles = [NSMutableArray arrayWithCapacity: values.count];
-        for (id value in values) {
-            [titles addObject: [value isKindOfClass: [NSString class]] ? value :
-                              ([value respondsToSelector: @selector(description)] ? [value description] : @"")];
+// Item titles are strings. A member that is not one is shown by its
+// description (the content binding reference gives that for content objects).
+static NSString *popUpItemTitle(id value) {
+    if ([value isKindOfClass: [NSString class]])
+        return value;
+    return [value respondsToSelector: @selector(description)] ? [value description] : @"";
+}
+
+// The array another content binding currently supplies, or nil when that
+// binding is not made.
+- (NSArray *) _popUpArrayOfBinding: (NSString *) name {
+    id binder = [self _binderForBinding: name];
+
+    if (binder == nil)
+        return nil;
+    return popUpBindingArray([[binder destination] valueForKeyPath: [binder keyPath]]);
+}
+
+// After the items are rebuilt the cell selects the first one without telling
+// observers. The selection the model holds, through the first of the selection
+// bindings that is made, is put back; the binder's own write to its source does
+// not write the value back to the model.
+// GUESS: the reference does not say that a bound selection survives a change of
+// the content, nor which selection binding wins if several are bound.
+- (void) _reapplyBoundSelection {
+    static NSString *const names[] = {@"selectedObject", @"selectedValue", @"selectedTag", @"selectedIndex"};
+    NSUInteger i;
+
+    for (i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        id binder = [self _binderForBinding: names[i]];
+
+        if ([binder respondsToSelector: @selector(syncUp)]) {
+            [binder performSelector: @selector(syncUp)];
+            return;
         }
-        values = titles;
     }
+}
+
+// The three content bindings describe one list of items, so each of them
+// rebuilds it from its own new value and what the other two supply. content is
+// the list of objects, one item each; contentValues are the titles (else the
+// descriptions of the content objects); contentObjects are the objects the
+// items stand for in place of the content objects.
+// https://developer.apple.com/library/archive/documentation/Cocoa/Reference/CocoaBindingsRef/BindingsText/NSPopUpButton.html
+// GUESS: an item stands for its object as its representedObject (the
+// reference does not name the property), and each content object gets an item
+// of its own even when two descriptions are equal. The reference makes
+// contentObjects available only with content bound; with neither content nor
+// contentValues there is nothing to build items from, so nothing changes.
+// Limitation: the other two bindings are read from their destination, so a
+// value transformer or null placeholder on them is not applied.
+- (void) _setItemsFromContent: (NSArray *) content
+                       values: (NSArray *) values
+                      objects: (NSArray *) objects
+{
+    NSUInteger count = content != nil ? [content count] : [values count];
+    NSUInteger i;
+
+    if (content == nil && values == nil)
+        return;
 
     [_cell removeAllItems];
-    [_cell addItemsWithTitles: values];
+    for (i = 0; i < count; i++) {
+        NSString *title = @"";
+        id represented = nil;
 
-    if ([self indexOfSelectedItem] >= values.count) {
-        [self selectItem: nil];
+        if (values != nil && i < [values count])
+            title = popUpItemTitle([values objectAtIndex: i]);
+        else if (content != nil && i < [content count])
+            title = popUpItemTitle([content objectAtIndex: i]);
+
+        if (objects != nil && i < [objects count])
+            represented = [objects objectAtIndex: i];
+        else if (content != nil && i < [content count])
+            represented = [content objectAtIndex: i];
+
+        [[_cell _appendItemWithTitle: title] setRepresentedObject: represented];
     }
     [self synchronizeTitleAndSelectedItem];
+    [self _reapplyBoundSelection];
 }
 
 - (id) _contentValues {
     return [self valueForKeyPath: @"itemArray.title"];
 }
 
-// FIXME: is it contentValues or contentObjects, or both?
-- (void) _setContentValues: (NSArray *) values {
-    [self _setItemValues: values forKey: @"title"];
+- (void) _setContentValues: (id) values {
+    [self _setItemsFromContent: [self _popUpArrayOfBinding: @"content"]
+                        values: popUpBindingArray(values)
+                       objects: [self _popUpArrayOfBinding: @"contentObjects"]];
 }
 
 - (id) _contentObjects {
-    return [self valueForKeyPath: @"itemArray.title"];
+    return [self valueForKeyPath: @"itemArray.representedObject"];
 }
 
-- (void) _setContentObjects: (NSArray *) objects {
-    [self _setItemValues: objects forKey: @"title"];
+- (void) _setContentObjects: (id) objects {
+    [self _setItemsFromContent: [self _popUpArrayOfBinding: @"content"]
+                        values: [self _popUpArrayOfBinding: @"contentValues"]
+                       objects: popUpBindingArray(objects)];
 }
 
 - (id) _content {
     return [self valueForKeyPath: @"itemArray.representedObject"];
 }
 
-- (void) _setContent: (NSArray *) values {
-    [self _setItemValues: values forKey: @"representedObject"];
-    if (![self _binderForBinding: @"contentValues"]) {
-        [self _setItemValues: [values valueForKey: @"description"]
-                      forKey: @"title"];
-    }
+- (void) _setContent: (id) content {
+    [self _setItemsFromContent: popUpBindingArray(content)
+                        values: [self _popUpArrayOfBinding: @"contentValues"]
+                       objects: [self _popUpArrayOfBinding: @"contentObjects"]];
+}
+
+// The object the selected item stands for: its content object, or the
+// matching contentObjects entry when that is bound.
+- (id) _selectedObject {
+    return [[_cell selectedItem] representedObject];
+}
+
+- (void) _setSelectedObject: (id) object {
+    // GUESS: an object that is not among the items selects none.
+    [_cell selectItemAtIndex: [_cell indexOfItemWithRepresentedObject: object]];
 }
 
 - (NSInteger) _selectedTag {

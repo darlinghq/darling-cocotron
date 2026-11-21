@@ -285,6 +285,21 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     edge = NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge;
 }
 
+// Appends an item for the title without looking for an earlier item of the
+// same title. The first item of an empty menu becomes the selected one.
+- (NSMenuItem *) _appendItemWithTitle: (NSString *) title {
+    NSMenuItem *item = [_menu addItemWithTitle: title
+                                        action: @selector(_popUpItemAction:)
+                                 keyEquivalent: @""];
+    [item setTarget: self];
+
+    if (_selectedIndex < 0) {
+        _selectedIndex = 0;
+        [self _setStateOfItemAtIndex: 0 to: NSControlStateValueOn];
+    }
+    return item;
+}
+
 - (void) _addItemWithTitle: (NSString *) title {
 
     NSMenuItem *duplicate = [_menu itemWithTitle: title];
@@ -293,16 +308,7 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
         [_menu removeItem: duplicate];
     }
 
-    [_menu addItemWithTitle: title
-                     action: @selector(_popUpItemAction:)
-              keyEquivalent: @""];
-    NSMenuItem *item = [[_menu itemArray] lastObject];
-    [item setTarget: self];
-
-    if (_selectedIndex < 0) {
-        _selectedIndex = 0;
-        [self _setStateOfItemAtIndex: 0 to: NSControlStateValueOn];
-    }
+    [self _appendItemWithTitle: title];
 }
 
 - (void) addItemWithTitle: (NSString *) title {
