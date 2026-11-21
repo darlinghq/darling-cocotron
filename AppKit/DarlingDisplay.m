@@ -68,8 +68,6 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
         return [NSColor whiteColor];
     if ([colorName isEqual: @"selectedMenuItemColor"])
         return [NSColor colorWithSRGBRed: 0.259f green: 0.467f blue: 0.957f alpha: 1.0f];
-    if ([colorName isEqual: @"selectedControlTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"windowFrameColor"])
         return [NSColor lightGrayColor];
     if ([colorName isEqual: @"shadowColor"])
