@@ -208,50 +208,51 @@ CGDirectDisplayID CGOpenGLDisplayMaskToDisplayID(CGOpenGLDisplayMask mask) {
     return kCGNullDirectDisplay;
 }
 
-CGError CGGetDisplaysWithPoint(CGPoint point, uint32_t maxDisplays,
-                               CGDirectDisplayID *displays,
-                               uint32_t *matchingDisplayCount)
+// The displays a point or a rectangle falls on. As documented, the array may
+// be NULL (or of no room): the count is then of all the displays that match;
+// with an array it is of the IDs written, at most maxDisplays.
+static CGError displaysMatching(CGPoint point, CGRect rect, BOOL isPoint,
+                                uint32_t maxDisplays, CGDirectDisplayID *displays,
+                                uint32_t *matchingDisplayCount)
 {
     NSDisplay *display = currentDisplay();
     if (!display)
         return kCGErrorInvalidConnection;
 
     NSArray<NSScreen *> *screens = [display screens];
-    *matchingDisplayCount = 0;
+    BOOL wantsIDs = displays != NULL && maxDisplays > 0;
+    uint32_t matching = 0, written = 0;
 
     for (NSScreen *screen in screens) {
-        NSRect rect = globalRectForFrame(screens, [screen frame]);
-        if (NSPointInRect(point, rect)) {
-            if (*matchingDisplayCount < maxDisplays)
-                displays[*matchingDisplayCount] = [screen cgDirectDisplayID];
-            (*matchingDisplayCount)++;
-        }
+        NSRect screenRect = globalRectForFrame(screens, [screen frame]);
+        BOOL hit = isPoint ? NSPointInRect(point, screenRect)
+                           : NSIntersectsRect(rect, screenRect);
+        if (!hit)
+            continue;
+        matching++;
+        if (wantsIDs && written < maxDisplays)
+            displays[written++] = [screen cgDirectDisplayID];
     }
 
+    if (matchingDisplayCount != NULL)
+        *matchingDisplayCount = wantsIDs ? written : matching;
     return kCGErrorSuccess;
+}
+
+CGError CGGetDisplaysWithPoint(CGPoint point, uint32_t maxDisplays,
+                               CGDirectDisplayID *displays,
+                               uint32_t *matchingDisplayCount)
+{
+    return displaysMatching(point, CGRectZero, YES, maxDisplays, displays,
+                            matchingDisplayCount);
 }
 
 CGError CGGetDisplaysWithRect(CGRect rect, uint32_t maxDisplays,
                               CGDirectDisplayID *displays,
                               uint32_t *matchingDisplayCount)
 {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
-    NSArray<NSScreen *> *screens = [display screens];
-    *matchingDisplayCount = 0;
-
-    for (NSScreen *screen in screens) {
-        NSRect screenRect = globalRectForFrame(screens, [screen frame]);
-        if (NSIntersectsRect(rect, screenRect)) {
-            if (*matchingDisplayCount < maxDisplays)
-                displays[*matchingDisplayCount] = [screen cgDirectDisplayID];
-            (*matchingDisplayCount)++;
-        }
-    }
-
-    return kCGErrorSuccess;
+    return displaysMatching(CGPointZero, rect, NO, maxDisplays, displays,
+                            matchingDisplayCount);
 }
 
 CGRect CGDisplayBounds(CGDirectDisplayID displayIndex) {
