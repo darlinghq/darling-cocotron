@@ -746,6 +746,17 @@ static NSError *DocumentOpenFailureError(NSURL *url) {
     return paths;
 }
 
+// Tells the user why a document could not be opened. GUESS: the documentation says nothing about who
+// presents a failure to open (the legacy initialiser used to show an alert itself). An error that says
+// the user cancelled is not presented; that is this method's own rule (Darling's -presentError: does
+// not skip such errors).
+- (void) _presentOpenError: (NSError *) error {
+    if (error == nil ||
+        ([[error domain] isEqual: NSCocoaErrorDomain] && [error code] == NSUserCancelledError))
+        return;
+    [self presentError: error];
+}
+
 - (void) _openRecentDocument: sender {
     NSArray *paths = [self _recentDocumentPaths];
     NSMenuItem *item = sender;
@@ -769,6 +780,8 @@ static NSError *DocumentOpenFailureError(NSURL *url) {
                 } else if ([appDelegate respondsToSelector: @selector
                                         (application:openFile:)]) {
                     [appDelegate application: NSApp openFile: [url path]];
+                } else {
+                    [self _presentOpenError: error];
                 }
             }
         }
@@ -925,7 +938,8 @@ static NSError *DocumentOpenFailureError(NSURL *url) {
         NSError *error = nil;
         NSURL *url = [NSURL fileURLWithPath: [files objectAtIndex: i]];
 
-        [self openDocumentWithContentsOfURL: url display: YES error: &error];
+        if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+            [self _presentOpenError: error];
     }
 }
 
@@ -972,6 +986,8 @@ static BOOL actionIsDocumentController(SEL selector) {
                                                        display: YES
                                                          error: &error];
 
+    if (document == nil)
+        [self _presentOpenError: error];
     return (document != nil) ? YES : NO;
 }
 
