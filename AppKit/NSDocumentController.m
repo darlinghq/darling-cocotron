@@ -384,15 +384,34 @@ static NSDocumentController *shared = nil;
     return result;
 }
 
+// The error for a document that could not be made when its class reported none. The same
+// construction (Cocoa domain, NSFileReadUnknownError, the URL under NSURLErrorKey) is what
+// siliconforest patch 0351 uses for the error of its type lookup; it is the code this controller
+// already uses for an unreadable file (see -openDocumentWithContentsOfURL:display:completionHandler:).
+static NSError *DocumentOpenFailureError(NSURL *url) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain
+                               code: NSFileReadUnknownError
+                           userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
+}
+
 - makeDocumentWithContentsOfURL: (NSURL *) url
                          ofType: (NSString *) type
                           error: (NSError **) error
 {
-    id result;
     Class class = [self documentClassForType: type];
+    NSError *initError = nil;
+    id result = [[[class alloc] initWithContentsOfURL: url
+                                               ofType: type
+                                                error: &initError] autorelease];
 
-    result = [[[class alloc] initWithContentsOfURL: url
-                                            ofType: type] autorelease];
+    if (result == nil && error != NULL) {
+        if (initError == nil) {
+            // GUESS: the documentation promises an error whenever the method returns nil, but the
+            // document readers (or a missing class) do not always set one; a generic one stands in.
+            initError = DocumentOpenFailureError(url);
+        }
+        *error = initError;
+    }
     return result;
 }
 
