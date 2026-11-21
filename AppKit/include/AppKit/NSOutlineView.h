@@ -69,6 +69,8 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
         BOOL _indentationMarkerFollowsCell;
         BOOL _autoresizesOutlineColumn;
         BOOL _autosaveExpandedItems;
+        id _proposedDropItem;  // not retained
+        NSInteger _proposedDropChildIndex;
         CGFloat _editingCellPadding;
     NS_EXTRA_IVARS_END(NSOutlineView)
 }
