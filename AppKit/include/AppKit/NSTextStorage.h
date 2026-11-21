@@ -25,9 +25,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 NS_ASSUME_NONNULL_BEGIN
 
-enum {
-    NSTextStorageEditedCharacters = 0x01,
-    NSTextStorageEditedAttributes = 0x02,
+// NSUInteger-wide option set with the public values: attributes are bit 0 and
+// characters bit 1, so a mask built by an application matches ours.
+typedef NS_OPTIONS(NSUInteger, NSTextStorageEditActions) {
+    NSTextStorageEditedAttributes = (1 << 0),
+    NSTextStorageEditedCharacters = (1 << 1),
 };
 
 APPKIT_EXPORT NSString *const NSTextStorageWillProcessEditingNotification;
@@ -39,8 +41,8 @@ APPKIT_EXPORT NSString *const NSTextStorageDidProcessEditingNotification;
 @interface NSTextStorage : NSMutableAttributedString <NSCoding> {
     id _delegate;
     NSMutableArray *_layoutManagers;
-    int _changeInLength;
-    unsigned _editedMask;
+    NSInteger _changeInLength;
+    NSUInteger _editedMask;
     int _beginEditing;
     NS_EXTRA_IVARS_BEGIN(NSTextStorage)
         NSRange _editedRange;
@@ -50,8 +52,8 @@ APPKIT_EXPORT NSString *const NSTextStorageDidProcessEditingNotification;
 - (null_unspecified id) delegate;
 - (null_unspecified NSArray *) layoutManagers;
 
-- (int) changeInLength;
-- (unsigned) editedMask;
+- (NSInteger) changeInLength;
+- (NSTextStorageEditActions) editedMask;
 - (NSRange) editedRange;
 
 - (void) setDelegate: (null_unspecified id) delegate;
@@ -60,9 +62,9 @@ APPKIT_EXPORT NSString *const NSTextStorageDidProcessEditingNotification;
 
 - (void) processEditing;
 
-- (void) edited: (unsigned) editedMask
+- (void) edited: (NSTextStorageEditActions) editedMask
                  range: (NSRange) range
-        changeInLength: (int) delta;
+        changeInLength: (NSInteger) delta;
 
 - (void) setFont: (nullable NSFont *) font;
 
