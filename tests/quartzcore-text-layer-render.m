@@ -191,10 +191,14 @@ int main(void) {
         textLayer.truncationMode = kCATruncationStart;
         render();
         CHECK(stemPixels(0, 6) == 0, "start: an ellipsis, no stem, at the left edge");
-        CHECK(stemPixels(52, 59) > 0, "start: the end is kept");
+        // The truncated line is left aligned and narrower than the layer, so its
+        // right edge is where the lit pixels end, not at the edge of the layer.
+        CHECK(litExtent(&minX, &maxX, &minY, &maxY) > 0 && maxX < 60 && stemPixels(maxX - 8, maxX) > 0,
+              "start: the end is kept");
         textLayer.truncationMode = kCATruncationMiddle;
         render();
-        CHECK(stemPixels(0, 4) > 0 && stemPixels(52, 59) > 0, "middle: both ends are kept");
+        CHECK(litExtent(&minX, &maxX, &minY, &maxY) > 0 && maxX < 60 && stemPixels(0, 4) > 0 &&
+              stemPixels(maxX - 8, maxX) > 0, "middle: both ends are kept");
         // The truncated line is aligned by alignmentMode like any other: it is
         // about 49 px wide here (two capitals and the ellipsis), so flush right
         // leaves the left edge bare and centred leaves a few pixels on each side.
