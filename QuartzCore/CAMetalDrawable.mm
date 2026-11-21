@@ -576,6 +576,15 @@ bool CAMetalDrawableTexture::framebufferOnly() const {
 	return false;
 };
 
+Indium::TextureUsage CAMetalDrawableTexture::usage() const {
+	// the image is always a color attachment; unless it is framebufferOnly it can also be sampled and written by shaders
+	auto usage = Indium::TextureUsage::RenderTarget;
+	if (!_framebufferOnly) {
+		usage = usage | Indium::TextureUsage::ShaderRead | Indium::TextureUsage::ShaderWrite;
+	}
+	return usage;
+};
+
 bool CAMetalDrawableTexture::allowGPUOptimizedContents() const {
 	return true;
 };
