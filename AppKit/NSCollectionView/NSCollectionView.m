@@ -571,10 +571,10 @@ static NSInteger compareZIndex(id first, id second, void *context)
     NSCollectionViewScrollPosition horizontal = NSCollectionViewScrollPositionLeft | NSCollectionViewScrollPositionRight |
         NSCollectionViewScrollPositionCenteredHorizontally | NSCollectionViewScrollPositionLeadingEdge |
         NSCollectionViewScrollPositionTrailingEdge | NSCollectionViewScrollPositionNearestVerticalEdge;
-    if ((position & (vertical | horizontal)) == 0) {
-        [self scrollRectToVisible: target];
+    // NSCollectionViewScrollPositionNone names no edge to scroll to: nothing scrolls, even for an item out of view
+    // (macOS 10.14.4 and 26.7.3; tests/appkit-collection-view-scroll-position-none.m)
+    if ((position & (vertical | horizontal)) == 0)
         return;
-    }
     NSRect visible = [self visibleRect];
     NSPoint origin = visible.origin;
     if (position & NSCollectionViewScrollPositionTop)
