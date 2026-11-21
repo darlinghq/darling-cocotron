@@ -1624,8 +1624,12 @@ static NSMutableArray *pendingOpenURLs = nil;
     NSUnimplementedMethod();
 }
 
+// Only the windows on screen are updated (and their toolbars validated), as documented.
+// Test: tests/appkit-toolbar-closed-window-validation.m
 - (void) updateWindows {
-    [_windows makeObjectsPerformSelector: @selector(update)];
+    for (NSWindow *window in [[_windows copy] autorelease])
+        if ([window isVisible])
+            [window update];
 }
 
 // Unless the display backend activates the process itself, activating means

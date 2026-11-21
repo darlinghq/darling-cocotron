@@ -3545,14 +3545,21 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [recognizer _resetIfFinished];
 
     if (shouldValidateToolbarItems && [self toolbar]) {
-        [NSObject cancelPreviousPerformRequestsWithTarget: [self toolbar]
-                                                 selector: @selector
-                                                 (validateVisibleItems)
+        [NSObject cancelPreviousPerformRequestsWithTarget: self
+                                                 selector: @selector(_validateToolbarIfShown)
                                                    object: nil];
-        [[self toolbar] performSelector: @selector(validateVisibleItems)
-                             withObject: nil
-                             afterDelay: .5];
+        [self performSelector: @selector(_validateToolbarIfShown)
+                   withObject: nil
+                   afterDelay: .5];
     }
+}
+
+// The toolbar is validated after events only while the window is shown: an event can close the window, and its
+// toolbar items' targets may be gone by the time the validation would run.
+// Test: tests/appkit-toolbar-closed-window-validation.m
+- (void) _validateToolbarIfShown {
+    if ([self isVisible])
+        [[self toolbar] validateVisibleItems];
 }
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
