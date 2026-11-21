@@ -169,6 +169,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // WaylandWindows, not retained, most recently activated first.
     CFMutableArrayRef _windows;
     NSMutableArray *_afterDispatch;
+    BOOL _afterDispatchRunQueued;
 
     WaylandWindow *_pointerWindow;
     CGPoint _pointerSurfacePoint;
