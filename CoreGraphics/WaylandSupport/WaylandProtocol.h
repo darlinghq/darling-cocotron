@@ -281,6 +281,8 @@ enum {
     WP_TOPLEVEL_SET_MINIMIZED = 13,
     WP_TOPLEVEL_EV_CONFIGURE = 0,
     WP_TOPLEVEL_EV_CLOSE = 1,
+    WP_TOPLEVEL_EV_WM_CAPABILITIES = 3, /* xdg_toplevel version 5 */
+    WP_TOPLEVEL_CAPABILITY_MINIMIZE = 4, /* wm_capabilities: set_minimized is available */
 
     WP_APPMENU_MANAGER_CREATE = 0,
     WP_APPMENU_MANAGER_RELEASE = 1, /* version 2 */

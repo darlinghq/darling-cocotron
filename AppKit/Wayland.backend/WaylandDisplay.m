@@ -3151,9 +3151,32 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     // An application that is asked to activate shows the windows it was holding back.
     [self mapDeferredWindows];
     WaylandWindow *window = [self windowForActivation];
+    [self requestActivationOf: window from: window];
+}
+
+// The same request for a given window, for instance one the compositor was asked to minimize. The
+// requesting surface the token names (xdg-activation set_surface) is not the surface to activate:
+// it is the key or main window, when there is another one that is shown. GUESS: with none the token
+// names no surface, which the protocol allows and some compositors refuse. Returns whether a
+// request was made; one is not while another waits for its token, and then nothing was asked.
+- (BOOL) requestActivationOfWindow: (WaylandWindow *) window {
+    NSWindow *candidates[] = {[NSApp keyWindow], [NSApp mainWindow]};
+    WaylandWindow *requester = nil;
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]) && requester == nil; i++) {
+        id platform = [candidates[i] platformWindow];
+        if ([platform isKindOfClass: [WaylandWindow class]] && platform != window &&
+            [platform isMapped] && ![platform isPopup] && ![platform isMiniaturized])
+            requester = platform;
+    }
+    return [self requestActivationOf: window from: requester];
+}
+
+- (BOOL) requestActivationOf: (WaylandWindow *) window from: (WaylandWindow *) requester {
+    if (_activation == NULL || _activationToken != NULL)
+        return NO;
     struct wl_proxy *surface = [window surface];
     if (surface == NULL)
-        return;
+        return NO;
 
     union wl_argument none[1] = {{.o = NULL}};
     _activationToken = WaylandCreateObject(_activation, WP_ACTIVATION_GET_TOKEN,
@@ -3163,11 +3186,15 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         union wl_argument serial[2] = {{.u = _inputSerial}, {.o = (struct wl_object *) _seat}};
         WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SERIAL, NULL, 0, serial);
     }
-    union wl_argument forSurface[1] = {{.o = (struct wl_object *) surface}};
-    WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SURFACE, NULL, 0, forSurface);
+    struct wl_proxy *requesting = [requester surface];
+    if (requesting != NULL) {
+        union wl_argument forSurface[1] = {{.o = (struct wl_object *) requesting}};
+        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SURFACE, NULL, 0, forSurface);
+    }
     WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_COMMIT, NULL, 0, NULL);
     _activationWindow = [window retain];
     [self flush];
+    return YES;
 }
 
 - (void) cancelActivationRequest {

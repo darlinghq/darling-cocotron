@@ -268,6 +268,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) windowUnmapped: (WaylandWindow *) window;
 - (void) applicationFocusMayHaveLeft;
 - (BOOL) mappingForActivation;
+- (BOOL) requestActivationOfWindow: (WaylandWindow *) window;
 - (void) mapDeferredWindows;
 - (void) windowDestroyed: (WaylandWindow *) window;
 
