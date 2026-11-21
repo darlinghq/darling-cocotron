@@ -1,5 +1,6 @@
 // Contract: Apple CoreGraphics documentation for CGPDFArray, CGPDFStream and CGPDFDictionary
 // (https://developer.apple.com/documentation/coregraphics). Exit codes identify the failing check.
+#import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #include <stdio.h>
 #include <string.h>
