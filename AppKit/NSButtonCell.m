@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSImage+TemplateDrawing.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSAttributedString.h>
+#import <AppKit/NSButton.h>
 #import <AppKit/NSButtonCell.h>
 #import <objc/runtime.h>
 #import <AppKit/NSButtonImageSource.h>
@@ -909,6 +910,12 @@ static const CGFloat kImageMargin = 2.;
 
 - (void) setShowsBorderOnlyWhileMouseInside: (BOOL) show {
     NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside = show;
+    NS_EXTRA(NSButtonCell, self)->_mouseInside = NO;
+    // The button is the one that watches the pointer (and works out where it is now), so it is told
+    // when the cell it draws changes; a cell the button does not draw is not watched at all.
+    NSView *control = [self controlView];
+    if ([control isKindOfClass: [NSButton class]] && [(NSButton *) control cell] == self)
+        [control updateTrackingAreas];
 }
 
 - (void) setSound: (NSSound *) sound {
@@ -1328,6 +1335,13 @@ static const CGFloat kImageMargin = 2.;
 }
 
 - (void) drawBezelWithFrame: (NSRect) frame inView: (NSView *) controlView {
+    // Only a button reports where the pointer is (see -[NSButton updateTrackingAreas]); a cell in a
+    // matrix or a table never hears of it, and keeps the border it always had there.
+    if (NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside &&
+        !NS_EXTRA(NSButtonCell, self)->_mouseInside &&
+        [controlView isKindOfClass: [NSButton class]] && [(NSButton *) controlView cell] == self)
+        return;
+
     BOOL defaulted = ([[controlView window] defaultButtonCell] == self);
 
     if ([self _hasAquaToolbarBezel]) {
@@ -1953,12 +1967,21 @@ static char toggleFocusRingPathKey;
                            withObject: sender];
 }
 
+// The border of a cell that shows it only while the pointer is over it is drawn between these two.
+- (void) _setMouseInside: (BOOL) inside {
+    if (!NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside ||
+        NS_EXTRA(NSButtonCell, self)->_mouseInside == inside)
+        return;
+    NS_EXTRA(NSButtonCell, self)->_mouseInside = inside;
+    [[self controlView] setNeedsDisplay: YES];
+}
+
 - (void) mouseEntered: (NSEvent *) event {
-    NSUnimplementedMethod();
+    [self _setMouseInside: YES];
 }
 
 - (void) mouseExited: (NSEvent *) event {
-    NSUnimplementedMethod();
+    [self _setMouseInside: NO];
 }
 
 @end

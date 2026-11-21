@@ -27,7 +27,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSKeyEquivalentMatching.h>
+#import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSWindow.h>
+
+@interface NSButtonCell (NSButtonBorderTracking)
+- (void) _setMouseInside: (BOOL) inside;
+@end
 
 @interface NSButtonCell (NSButtonAlignmentPrivate)
 - (BOOL) _hasStockRoundedPushBezel;
@@ -39,6 +44,43 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @interface NSButtonCell (NSButtonLayoutPriorities)
 - (BOOL) _isStockToggleImage: (NSImage *) image;
 @end
+
+// A button whose border shows only while the pointer is over it watches the pointer and tells its cell,
+// which draws or leaves out the border (see -[NSButtonCell mouseEntered:]). A tracking area keeps its
+// owner and the button keeps its tracking areas, so the owner is this helper, which does not keep the
+// button.
+@interface NSButtonBorderTracker : NSObject {
+    NSButton *_button; // not retained
+}
+- (instancetype) initWithButton: (NSButton *) button;
+- (void) detach;
+@end
+
+@implementation NSButtonBorderTracker
+- (instancetype) initWithButton: (NSButton *) button {
+    self = [super init];
+    _button = button;
+    return self;
+}
+
+- (void) detach {
+    _button = nil;
+}
+
+- (void) mouseEntered: (NSEvent *) event {
+    NSButtonCell *cell = [_button cell];
+    if ([cell isKindOfClass: [NSButtonCell class]])
+        [cell mouseEntered: event];
+}
+
+- (void) mouseExited: (NSEvent *) event {
+    NSButtonCell *cell = [_button cell];
+    if ([cell isKindOfClass: [NSButtonCell class]])
+        [cell mouseExited: event];
+}
+@end
+
+static NSString *const NSButtonBorderTrackingKey = @"NSButtonBorderTracking";
 
 @implementation NSButton
 
@@ -150,6 +192,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) dealloc {
+    // The window may still hold a collected tracking area for a moment.
+    [self _removeBorderTrackingAreas];
     if (NS_EXTRA_ALLOCATED(NSButton, self)) {
         [NS_EXTRA(NSButton, self)->_contentTintColor release];
     }
@@ -357,9 +401,59 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self setNeedsDisplay: YES];
 }
 
+- (void) setCell: (id) cell {
+    [super setCell: cell];
+    [self updateTrackingAreas];
+}
+
 - (void) setShowsBorderOnlyWhileMouseInside: (BOOL) value {
     [_cell setShowsBorderOnlyWhileMouseInside: value];
+    [self updateTrackingAreas];
     [self setNeedsDisplay: YES];
+}
+
+// A button whose border shows only while the pointer is over it watches the pointer and tells its cell
+// (see -updateTrackingAreas).
+- (void) _removeBorderTrackingAreas {
+    for (NSTrackingArea *area in [self trackingAreas]) {
+        if ([[area userInfo] objectForKey: NSButtonBorderTrackingKey] != nil) {
+            [(NSButtonBorderTracker *) [area owner] detach];
+            [self removeTrackingArea: area];
+        }
+    }
+}
+
+// Called when the flag or the cell changes, and by the view whenever it moved or resized (itself or an
+// ancestor) or went to another window: the area is then replaced by a new one that never saw the pointer
+// come in, so the cell is told where the pointer is now.
+- (void) updateTrackingAreas {
+    [super updateTrackingAreas];
+    [self _removeBorderTrackingAreas];
+    if (![_cell isKindOfClass: [NSButtonCell class]] || ![_cell showsBorderOnlyWhileMouseInside])
+        return;
+
+    NSButtonBorderTracker *tracker = [[NSButtonBorderTracker alloc] initWithButton: self];
+    // GUESS: the border follows the pointer while the application is active (NSTrackingActiveInActiveApp);
+    // the documentation does not name the activity.
+    NSTrackingArea *area = [[NSTrackingArea alloc]
+            initWithRect: [self bounds]
+                 options: NSTrackingMouseEnteredAndExited | NSTrackingActiveInActiveApp | NSTrackingInVisibleRect
+                   owner: tracker
+                userInfo: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: YES]
+                                                      forKey: NSButtonBorderTrackingKey]];
+    [self addTrackingArea: area];
+    [area release];
+    [tracker release];
+
+    // GUESS: where the pointer is now is taken from the window's current mouse location; a button not in a
+    // window, or in an inactive application (the area is only active in an active one), has the pointer
+    // outside it.
+    BOOL inside = NO;
+    if ([self window] != nil && [NSApp isActive]) {
+        NSPoint point = [self convertPoint: [[self window] mouseLocationOutsideOfEventStream] fromView: nil];
+        inside = NSMouseInRect(point, [self visibleRect], [self isFlipped]);
+    }
+    [_cell _setMouseInside: inside];
 }
 
 - (void) setButtonType: (NSButtonType) value {
