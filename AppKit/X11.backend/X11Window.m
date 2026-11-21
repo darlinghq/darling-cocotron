@@ -47,6 +47,7 @@
 #import "X11InputShape.h"
 #import "X11RoundedShape.h"
 #import "X11InvisibleWindow.h"
+#import "X11PointerMotion.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
@@ -1325,9 +1326,9 @@ static const int X11ChromelessCornerRadius = 5;
                 VisibilityChangeMask | FocusChangeMask | PropertyChangeMask |
                 SubstructureRedirectMask;
 
-    if ([_delegate acceptsMouseMovedEvents]) {
-        mask |= PointerMotionMask;
-    }
+    mask |= X11PointerMotionEventMask(
+            [_delegate acceptsMouseMovedEvents],
+            [(X11Display *) [NSDisplay currentDisplay] cursorAwaitsPointerMotion]);
     XSelectInput(_display, _window, mask);
     X11TouchSelectWindow(_display, _window);
 

@@ -922,6 +922,34 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     }
 }
 
+- (BOOL) cursorAwaitsPointerMotion {
+    return _cursorHiddenUntilMouseMoves;
+}
+
+// Windows re-select their events when the wait for motion starts and when it ends.
+- (void) selectPointerMotionOnWindows {
+    for (id window in [_windowsByID allValues]) {
+        if ([window isKindOfClass: [X11Window class]])
+            [window syncDelegateProperties];
+    }
+}
+
+- (void) setCursorHiddenUntilMouseMoves: (BOOL) flag {
+    BOOL awaited = _cursorHiddenUntilMouseMoves;
+
+    [super setCursorHiddenUntilMouseMoves: flag];
+    if (awaited != _cursorHiddenUntilMouseMoves)
+        [self selectPointerMotionOnWindows];
+}
+
+- (void) pointerMoved {
+    BOOL awaited = _cursorHiddenUntilMouseMoves;
+
+    [super pointerMoved];
+    if (awaited)
+        [self selectPointerMotionOnWindows];
+}
+
 // Arrow, IBeam, HorizontalResize, VerticalResize
 - (id) cursorWithName: (NSString *) name {
     unsigned int shape = XC_left_ptr;
