@@ -57,6 +57,12 @@
     BOOL _relativeResumeValid;
     double _relativeResumeX, _relativeResumeY;
     Window _relativeWindow;
+    // A pinch gesture in progress (see X11Gesture.h): its window, the scale it last
+    // reported, and where and with which modifiers its last event was.
+    Window _pinchWindow;
+    CGFloat _pinchScale;
+    NSPoint _pinchLocation;
+    NSEventModifierFlags _pinchModifiers;
     X11RelativeMouse _relativeMouse;
     // ConfinePointerToFullscreenWindows (org.darlinghq.AppKit): keep the
     // pointer inside the focused fullscreen window, through a pointer grab on
@@ -154,6 +160,8 @@
 - (void) menuWindowUnmapped: (X11Window *) window;
 - (id) windowForID: (XID) i;
 - (void) windowHoldsFocus: (X11Window *) window;
+// The AppKit modifier flags for an X modifier state (the core protocol's state mask).
+- (NSEventModifierFlags) modifierFlagsForState: (unsigned int) state;
 
 // Re-reads the backing scale and, when it changed, resizes the windows to the
 // new scale and notifies them.
