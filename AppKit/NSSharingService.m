@@ -1,5 +1,6 @@
 #import <AppKit/NSSharingService.h>
 #import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
 
 NSSharingServiceName const NSSharingServiceNameAddToIPhoto = @"com.apple.share.System.add-to-iphoto";
 NSSharingServiceName const NSSharingServiceNameAddToSafariReadingList = @"com.apple.share.System.add-to-safari-reading-list";
@@ -115,11 +116,89 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
     NS_EXTRA(NSSharingServicePicker, self)->_delegate = delegate;
 }
 
-- (NSMenu *) menu {
-    return [[[NSMenu alloc] initWithTitle: @"Share"] autorelease];
+// What the picker lists: the services proposed for the items, which the
+// delegate may remove from, add to or reorder. Darling proposes none itself.
+- (NSArray *) _servicesToList {
+    NSArray *items = NS_EXTRA(NSSharingServicePicker, self)->_items;
+    id <NSSharingServicePickerDelegate> delegate = NS_EXTRA(NSSharingServicePicker, self)->_delegate;
+    NSArray *list = [NSSharingService sharingServicesForItems: items];
+
+    if ([delegate respondsToSelector: @selector(sharingServicePicker:sharingServicesForItems:proposedSharingServices:)])
+        list = [delegate sharingServicePicker: self sharingServicesForItems: items proposedSharingServices: list];
+    return list != nil ? list : [NSArray array];
 }
 
+- (NSMenu *) _menuListing: (NSArray *) services {
+    NSMenu *menu = [[[NSMenu alloc] initWithTitle: @"Share"] autorelease];
+    NSUInteger index;
+
+    for (index = 0; index < [services count]; index++) {
+        NSSharingService *service = [services objectAtIndex: index];
+        NSString *title = [service menuItemTitle] != nil ? [service menuItemTitle] : [service title];
+        NSMenuItem *entry = [menu addItemWithTitle: title != nil ? title : @""
+                                            action: @selector(_pickedFromMenu:)
+                                     keyEquivalent: @""];
+
+        [entry setTarget: self];
+        [entry setRepresentedObject: service];
+    }
+    return menu;
+}
+
+// -menu is not in the public reference; it lists the services as the menu that
+// older systems showed.
+- (NSMenu *) menu {
+    return [self _menuListing: [self _servicesToList]];
+}
+
+// The delegate supplies the service's own delegate, hears which service was
+// picked, and only then does the service get the items. GUESS: the reference
+// fixes that the delegate is told before the service shares; asking for the
+// service's delegate first is a choice. The picker is kept alive across the
+// calls because the delegate may release it from its callback.
+- (void) _pickedFromMenu: (NSMenuItem *) entry {
+    NSSharingService *picked = [entry representedObject];
+    id <NSSharingServicePickerDelegate> delegate = NS_EXTRA(NSSharingServicePicker, self)->_delegate;
+    NSArray *items = NS_EXTRA(NSSharingServicePicker, self)->_items;
+
+    [self retain];
+    if ([delegate respondsToSelector: @selector(sharingServicePicker:delegateForSharingService:)])
+        [picked setDelegate: [delegate sharingServicePicker: self delegateForSharingService: picked]];
+    if ([delegate respondsToSelector: @selector(sharingServicePicker:didChooseSharingService:)])
+        [delegate sharingServicePicker: self didChooseSharingService: picked];
+    [picked performWithItems: items];
+    [self release];
+}
+
+// Pops the list up beside the named edge of the rectangle and returns once the
+// menu is dismissed. GUESS: the reference does not say where on the edge the
+// menu opens (the middle is used) or what happens with no services (nothing is
+// shown).
 - (void) showRelativeToRect: (NSRect) rect ofView: (NSView *) view preferredEdge: (NSRectEdge) preferredEdge {
+    NSArray *services = [self _servicesToList];
+    NSPoint anchor;
+
+    if ([services count] > 0) {
+        if (preferredEdge == NSMinXEdge)
+            anchor = NSMakePoint(NSMinX(rect), NSMidY(rect));
+        else if (preferredEdge == NSMaxXEdge)
+            anchor = NSMakePoint(NSMaxX(rect), NSMidY(rect));
+        else if (preferredEdge == NSMinYEdge)
+            anchor = NSMakePoint(NSMidX(rect), NSMinY(rect));
+        else
+            anchor = NSMakePoint(NSMidX(rect), NSMaxY(rect));
+
+        [self retain];
+        NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu = [[self _menuListing: services] retain];
+        [NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu popUpMenuPositioningItem: nil atLocation: anchor inView: view];
+        [NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu release];
+        NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu = nil;
+        [self release];
+    }
+}
+
+- (void) close {
+    [NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu cancelTracking];
 }
 
 @end
