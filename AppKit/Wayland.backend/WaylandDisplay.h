@@ -108,6 +108,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_activation, *_activationToken;
     uint32_t _activationName;
     WaylandWindow *_activationWindow;
+    // Windows of an inactive application that were not mapped are being mapped for an activation.
+    BOOL _mappingForActivation;
     uint32_t _viewporterName, _fractionalScaleManagerName;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
@@ -264,6 +266,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) windowActivated: (WaylandWindow *) window;
 - (void) windowUnmapped: (WaylandWindow *) window;
 - (void) applicationFocusMayHaveLeft;
+- (BOOL) mappingForActivation;
+- (void) mapDeferredWindows;
 - (void) windowDestroyed: (WaylandWindow *) window;
 
 // Where the main menu is exported on the session bus, for the appmenu objects

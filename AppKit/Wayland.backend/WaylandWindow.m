@@ -234,7 +234,25 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (BOOL) isOrderedIn {
-    return _mapped || (_fullyTransparent && _shouldBeMapped && !_invalidated);
+    return _mapped || ((_fullyTransparent || _mapDeferred) && _shouldBeMapped && !_invalidated);
+}
+
+- (BOOL) isMapDeferred {
+    return _mapDeferred && _shouldBeMapped && !_invalidated;
+}
+
+// Mapping a toplevel makes compositors give it the keyboard focus (nothing in xdg-shell lets a client
+// say that a window is shown without taking it), but an application that is not active does not take
+// the focus by ordering a window in. Such a window stays unmapped until the application is active
+// (the display maps it then) or is asked to activate; modal windows and sheets are shown, as the
+// application cannot continue without them.
+- (BOOL) mapWouldTakeFocusFromOthers {
+    if ([NSApp _mayTakeInputFocus] || [_display mappingForActivation])
+        return NO;
+    NSWindow *window = _delegate;
+    if ([window isSheet] || window == [NSApp modalWindow])
+        return NO;
+    return YES;
 }
 
 - (BOOL) isPopup { return _popup != NULL; }
@@ -284,6 +302,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _popupWaitingForParent = parent != nil && !parent->_configured;
     if (_popupWaitingForParent)
         return;
+    if (parent == nil && !tooltip && !menu && [self mapWouldTakeFocusFromOthers]) {
+        _mapDeferred = YES;
+        return;
+    }
+    _mapDeferred = NO;
     _surfaceGeneration++;
     _configureUpdatePending = NO;
     // WaylandDecorations (org.darlinghq.AppKit) or DARLING_WAYLAND_DECORATIONS set to
@@ -484,6 +507,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) unmap {
     _shouldBeMapped = NO;
+    _mapDeferred = NO;
     _popupWaitingForParent = NO;
     _keyRequested = NO;
     if (!_mapped)
