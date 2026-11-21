@@ -229,7 +229,7 @@ NSMapTableKeyCallBacks O2PDFOwnedCStringKeyCallBacks = {O2PDFHashCString,
     O2PDFObject *value;
 
     while (NSNextMapEnumeratorPair(&state, (void **) &key, (void **) &value)) {
-        // A reference that points nowhere resolves to a null object, which is passed on like any other.
+        // A reference to a missing object resolves to the shared missing-object marker.
         function(key, [value realObject], info);
     }
     NSEndMapTableEnumeration(&state);

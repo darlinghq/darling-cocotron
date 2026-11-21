@@ -1,8 +1,17 @@
 #import <CoreGraphics/CGPDFDictionary.h>
 #import <Onyx2D/O2PDFDictionary.h>
 
-// An indirect reference is followed when the entry is read. One that points nowhere reads as a
-// PDF null object.
+#import <Onyx2D/O2PDFObject_const.h>
+
+// An indirect reference is followed when the entry is read. QUIRK: one that points to an object
+// that does not exist is still an entry (it is counted and visited), but reading it as an
+// object gives NULL, with CGPDFDictionaryGetObject returning true, and it is not any typed
+// value. Black-box observation of macOS 26.7.3 (tier 2); the documentation does not cover
+// dangling references.
+// Test: the missing-object checks of tests/coregraphics-pdf-array-stream-dictionary.m
+static CGPDFObjectRef publicObject(O2PDFObject *object) {
+    return object == [O2PDFObject_const pdfObjectWithMissingObject] ? NULL : (CGPDFObjectRef)object;
+}
 
 size_t CGPDFDictionaryGetCount(CGPDFDictionaryRef dict) {
     return [(O2PDFDictionary *)dict count];
@@ -11,7 +20,7 @@ size_t CGPDFDictionaryGetCount(CGPDFDictionaryRef dict) {
 bool CGPDFDictionaryGetObject(CGPDFDictionaryRef dict, const char *key, CGPDFObjectRef *value) {
     O2PDFObject *object;
     bool found = [(O2PDFDictionary *)dict getObjectForKey:key value:&object];
-    if (found && value) *value = (CGPDFObjectRef)object;
+    if (found && value) *value = publicObject(object);
     return found;
 }
 
@@ -80,7 +89,7 @@ struct ApplierContext {
 static void applyEntry(const char *key, O2PDFObject *value, void *context) {
     struct ApplierContext *applier = context;
 
-    applier->function(key, (CGPDFObjectRef)value, applier->info);
+    applier->function(key, publicObject(value), applier->info);
 }
 
 void CGPDFDictionaryApplyFunction(CGPDFDictionaryRef dict, CGPDFDictionaryApplierFunction function, void *info) {

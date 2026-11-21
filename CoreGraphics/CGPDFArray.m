@@ -1,8 +1,17 @@
 #import <CoreGraphics/CGPDFArray.h>
 #import <Onyx2D/O2PDFArray.h>
 
-// An indirect reference is followed when the element is read. One that points nowhere reads as
-// a PDF null object.
+#import <Onyx2D/O2PDFObject_const.h>
+
+// An indirect reference is followed when the element is read. QUIRK: one that points to an
+// object that does not exist gives no object at all: CGPDFArrayGetObject returns false and
+// stores NULL, and the element is not a null (CGPDFArrayGetNull is false) nor any typed value.
+// A null object written in the file ("null") is a real null object. Black-box observation of
+// macOS 26.7.3 (tier 2); the documentation does not cover dangling references.
+// Test: the missing-object checks of tests/coregraphics-pdf-array-stream-dictionary.m
+static BOOL isMissingObject(O2PDFObject *object) {
+    return object == [O2PDFObject_const pdfObjectWithMissingObject];
+}
 
 size_t CGPDFArrayGetCount(CGPDFArrayRef array) {
     return [(O2PDFArray *)array count];
@@ -14,12 +23,21 @@ bool CGPDFArrayGetObject(CGPDFArrayRef array, size_t index, CGPDFObjectRef *valu
     // The documentation leaves an index past the end undefined; this reports no object.
     if (index >= [pdfArray count])
         return false;
+    O2PDFObject *object = [[pdfArray objectAtIndex:index] realObject];
+
+    if (isMissingObject(object)) {
+        if (value)
+            *value = NULL;
+        return false;
+    }
     if (value)
-        *value = (CGPDFObjectRef)[[pdfArray objectAtIndex:index] realObject];
+        *value = (CGPDFObjectRef)object;
     return true;
 }
 
 bool CGPDFArrayGetNull(CGPDFArrayRef array, size_t index) {
+    if (index >= [(O2PDFArray *)array count] || isMissingObject([[(O2PDFArray *)array objectAtIndex:index] realObject]))
+        return false;
     return [(O2PDFArray *)array getNullAtIndex:index];
 }
 

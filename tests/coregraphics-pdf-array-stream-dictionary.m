@@ -9,27 +9,29 @@ static NSData *documentData(void) {
     NSMutableData *data = [NSMutableData dataWithData:[@"%PDF-1.4\n" dataUsingEncoding:NSASCIIStringEncoding]];
     const char *objects[] = {
         "<< /Type /Catalog /Pages 2 0 R >>",
-        "<< /Type /Pages /Kids [] /Count 0 >>",
+        "<< /Type /Pages /Kids [5 0 R] /Count 1 >>",
         "<< /Title (Fixture) /Flag true /Off false /Count 7 /Ratio 2.5 /Kind /Fixture"
         " /List [1 2.5 (s) /Nm true null [3] << /K 1 >> 4 0 R 99 0 R]"
         " /Sub << /Depth 1 >> /Data 4 0 R /Nothing null /Dangling 99 0 R >>",
-        "<< /Length 5 >>\nstream\nhello\nendstream"
+        "<< /Length 5 >>\nstream\nhello\nendstream",
+        // a document needs a page to be accepted (observed on macOS 26.7.3)
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 10 10] >>"
     };
-    NSUInteger offsets[4];
-    for (NSUInteger i = 0; i < 4; i++) {
+    NSUInteger offsets[5];
+    for (NSUInteger i = 0; i < 5; i++) {
         offsets[i] = [data length];
         NSString *object = [NSString stringWithFormat:@"%lu 0 obj\n%s\nendobj\n",
             (unsigned long)i + 1, objects[i]];
         [data appendData:[object dataUsingEncoding:NSASCIIStringEncoding]];
     }
     NSUInteger xref = [data length];
-    [data appendData:[@"xref\n0 5\n0000000000 65535 f \n" dataUsingEncoding:NSASCIIStringEncoding]];
-    for (NSUInteger i = 0; i < 4; i++) {
+    [data appendData:[@"xref\n0 6\n0000000000 65535 f \n" dataUsingEncoding:NSASCIIStringEncoding]];
+    for (NSUInteger i = 0; i < 5; i++) {
         NSString *entry = [NSString stringWithFormat:@"%010lu 00000 n \n", (unsigned long)offsets[i]];
         [data appendData:[entry dataUsingEncoding:NSASCIIStringEncoding]];
     }
     NSString *trailer = [NSString stringWithFormat:
-        @"trailer\n<< /Size 5 /Root 1 0 R /Info 3 0 R >>\nstartxref\n%lu\n%%%%EOF\n",
+        @"trailer\n<< /Size 6 /Root 1 0 R /Info 3 0 R >>\nstartxref\n%lu\n%%%%EOF\n",
         (unsigned long)xref];
     [data appendData:[trailer dataUsingEncoding:NSASCIIStringEncoding]];
     return data;
@@ -38,13 +40,15 @@ static NSData *documentData(void) {
 struct Visit {
     const char *keys[16];
     int count;
+    int nullValues;
 };
 
 static void visit(const char *key, CGPDFObjectRef value, void *info) {
     struct Visit *visited = info;
-    if (value && visited->count < 16)
+    if (visited->count < 16)
         visited->keys[visited->count] = key;
     visited->count++;
+    if (!value) visited->nullValues++;
 }
 
 static int timesVisited(const struct Visit *visited, const char *key) {
@@ -90,28 +94,33 @@ int main(void) {
         // Dictionary: nested containers and a stream reached through an indirect reference.
         CGPDFDictionaryRef sub = NULL;
         if (!CGPDFDictionaryGetDictionary(dict, "Sub", &sub) || !sub || !CGPDFDictionaryGetInteger(sub, "Depth", &count) || count != 1) return 37;
-        CGPDFDictionaryRef untouchedDict = (CGPDFDictionaryRef)&sub;
-        CGPDFDictionaryRef probe = untouchedDict;
-        if (CGPDFDictionaryGetDictionary(dict, "List", &probe) || probe != untouchedDict) return 38;
+        // What a failed pointer-valued read from a dictionary leaves in the out value is not
+        // specified (the system stores NULL), so only the result is checked for those.
+        CGPDFDictionaryRef probe = NULL;
+        if (CGPDFDictionaryGetDictionary(dict, "List", &probe)) return 38;
         CGPDFArrayRef list = NULL;
         if (!CGPDFDictionaryGetArray(dict, "List", &list) || CGPDFArrayGetCount(list) != 10) return 39;
         CGPDFArrayRef arrayProbe = (CGPDFArrayRef)&sub;
-        if (CGPDFDictionaryGetArray(dict, "Sub", &arrayProbe) || arrayProbe != (CGPDFArrayRef)&sub) return 40;
+        if (CGPDFDictionaryGetArray(dict, "Sub", &arrayProbe)) return 40;
         CGPDFStreamRef stream = NULL;
         if (!CGPDFDictionaryGetStream(dict, "Data", &stream) || !stream) return 41;
         CGPDFDictionaryRef streamDict = CGPDFStreamGetDictionary(stream);
         if (!streamDict || !CGPDFDictionaryGetInteger(streamDict, "Length", &count) || count != 5) return 42;
         CGPDFStreamRef streamProbe = (CGPDFStreamRef)&sub;
-        if (CGPDFDictionaryGetStream(dict, "Sub", &streamProbe) || streamProbe != (CGPDFStreamRef)&sub) return 43;
+        if (CGPDFDictionaryGetStream(dict, "Sub", &streamProbe)) return 43;
 
-        // Dictionary: a reference to an object that does not exist is still an entry, and it is not a value of any type.
-        if (!CGPDFDictionaryGetObject(dict, "Dangling", &object) || !object) return 44;
+        // Dictionary: a reference to an object that does not exist is still an entry, reads as a
+        // NULL object (QUIRK observed on macOS 26.7.3), and is not a value of any type.
+        object = (CGPDFObjectRef)&sub;
+        if (!CGPDFDictionaryGetObject(dict, "Dangling", &object) || object != NULL) return 44;
         if (CGPDFDictionaryGetInteger(dict, "Dangling", &count) || CGPDFDictionaryGetDictionary(dict, "Dangling", &probe)) return 45;
 
         // Dictionary: the applier visits every entry once.
-        struct Visit visited = {{0}, 0};
+        struct Visit visited = {{0}, 0, 0};
         CGPDFDictionaryApplyFunction(dict, visit, &visited);
         if (visited.count != 11) return 50;
+        // only the entry that refers to a missing object comes with a NULL value
+        if (visited.nullValues != 1) return 52;
         const char *keys[] = {"Title", "Flag", "Off", "Count", "Ratio", "Kind", "List", "Sub", "Data", "Nothing", "Dangling"};
         for (unsigned i = 0; i < 11; i++)
             if (timesVisited(&visited, keys[i]) != 1) return 51;
@@ -144,8 +153,11 @@ int main(void) {
         if (!CGPDFArrayGetObject(list, 2, NULL)) return 76;
         if (!CGPDFArrayGetNumber(list, 0, NULL) || CGPDFArrayGetBoolean(list, 0, NULL)) return 77;
 
-        // Array: a reference to an object that does not exist reads as a PDF null.
-        if (!CGPDFArrayGetNull(list, 9)) return 78;
+        // Array: a reference to an object that does not exist gives no object and is not a null
+        // (QUIRK observed on macOS 26.7.3).
+        object = (CGPDFObjectRef)&sub;
+        if (CGPDFArrayGetObject(list, 9, &object) || object != NULL) return 82;
+        if (CGPDFArrayGetNull(list, 9)) return 78;
         if (CGPDFArrayGetInteger(list, 9, &integer) || CGPDFArrayGetArray(list, 9, &arrayProbe)) return 79;
 
         // Array: no element past the end (the documentation leaves this undefined; the answer here is no).
