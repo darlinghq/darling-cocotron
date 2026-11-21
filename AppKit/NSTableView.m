@@ -73,6 +73,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 - (void) noteSelectionIsChanging;
 - (void) noteSelectionDidChange;
 - (void) noteColumnDidResizeWithOldWidth: (CGFloat) oldWidth;
+- (CGFloat) _spaceTakenByColumn: (NSTableColumn *) column;
 - (BOOL) dataSourceCanSetObjectValue;
 - (void) dataSourceSetObjectValue: object
                    forTableColumn: (NSTableColumn *) tableColumn
@@ -603,6 +604,13 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return [self _effectiveRowHeight];
 }
 
+// The width a column takes in the table and its header, with its share of the intercell spacing.
+// GUESS: a hidden column takes no width at all, spacing included; the documentation of isHidden says only
+// that the column stays in tableColumns and in the count.
+- (CGFloat) _spaceTakenByColumn: (NSTableColumn *) column {
+    return [column isHidden] ? 0. : [column width] + _intercellSpacing.width;
+}
+
 - (NSRect) rectOfRow: (NSInteger) row {
     NSRect rect = _bounds;
     NSInteger i, count;
@@ -619,8 +627,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     rect.size.width = 0.;
     count = [_tableColumns count];
     for (i = 0; i < count; i++)
-        rect.size.width += [[_tableColumns objectAtIndex: i] width] +
-                           _intercellSpacing.width;
+        rect.size.width += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
     rect.size.height = rowHeightAtIndex(self, row) + _intercellSpacing.height;
 
     return rect;
@@ -639,12 +646,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     rect.origin.x = 0.;
     for (i = 0; i < column; i++)
-        rect.origin.x += [[_tableColumns objectAtIndex: i] width] +
-                         _intercellSpacing.width;
+        rect.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
     rect.origin.y = 0.;
 
-    rect.size.width = [[_tableColumns objectAtIndex: column] width] +
-                      _intercellSpacing.width;
+    rect.size.width = [self _spaceTakenByColumn: [_tableColumns objectAtIndex: column]];
     rect.size.height = 0.;
     for (i = 0; i < numberOfRows; i++)
         rect.size.height +=
@@ -686,36 +691,32 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return range; // returns 0,0 if not found, not NSNotFound
 }
 
+// The columns that the rect touches, as one range: it starts at the first column that is not hidden and ends
+// beyond the rect's right edge, and so may hold hidden columns between its ends.
 - (NSRange) columnsInRect: (NSRect) rect {
-    NSRange range = NSMakeRange(0, 0);
     NSInteger numberOfColumns = [self numberOfColumns];
-    NSInteger i;
-    CGFloat width = 0.;
+    NSInteger i, first = -1, last = -1;
+    CGFloat right = 0.;
 
     for (i = 0; i < numberOfColumns; i++) {
-        width += [[_tableColumns objectAtIndex: i] width] +
-                 _intercellSpacing.width;
+        NSTableColumn *column = [_tableColumns objectAtIndex: i];
 
-        if (width > rect.origin.x)
+        right += [self _spaceTakenByColumn: column];
+        if ([column isHidden])
+            continue;
+        if (first < 0) {
+            if (right <= rect.origin.x)
+                continue;
+            first = i;
+        }
+        last = i;
+        if (right > rect.origin.x + rect.size.width)
             break;
     }
-    if (i < numberOfColumns) {
-        range.location = i;
 
-        for (; i < numberOfColumns; i++) {
-            if (width > rect.origin.x + rect.size.width)
-                break;
-
-            width += [[_tableColumns objectAtIndex: i] width] +
-                     _intercellSpacing.width;
-        }
-        if (i < numberOfColumns)
-            range.length = i - range.location + 1;
-        else
-            range.length = numberOfColumns - range.location;
-    }
-
-    return range; // returns 0,0 if not found, not NSNotFound
+    if (first < 0)
+        return NSMakeRange(0, 0); // returns 0,0 if not found, not NSNotFound
+    return NSMakeRange(first, last - first + 1);
 }
 
 - (NSInteger) rowAtPoint: (NSPoint) point {
@@ -751,15 +752,13 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     frame.origin.x = 0.;
     for (i = 0; i < column; i++)
-        frame.origin.x += [[_tableColumns objectAtIndex: i] width] +
-                          _intercellSpacing.width;
+        frame.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
 
     frame.origin.y = 0.;
     for (i = 0; i < row; i++)
         frame.origin.y += rowHeightAtIndex(self, i) + _intercellSpacing.height;
 
-    frame.size.width = [[_tableColumns objectAtIndex: column] width] +
-                       _intercellSpacing.width;
+    frame.size.width = [self _spaceTakenByColumn: [_tableColumns objectAtIndex: column]];
     frame.size.height = rowHeightAtIndex(self, row) + _intercellSpacing.height;
 
     return frame;
@@ -779,8 +778,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 - (NSRect) frameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
     NSRect frame = [self _spacedFrameOfCellAtColumn: column row: row];
 
-    if (NSIsEmptyRect(frame))
-        return frame;
+    if (NSIsEmptyRect(frame) || NSWidth(frame) <= 0)
+        return frame; // also the zero-width frame of a hidden column
     CGFloat insetX = floor(_intercellSpacing.width / 2), insetY = floor(_intercellSpacing.height / 2);
 
     frame.origin.x += insetX;
@@ -1621,13 +1620,23 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if ([clipView isKindOfClass: [NSClipView class]]) {
         NSSize size = [clipView bounds].size;
         NSInteger i, count = [_tableColumns count];
-        CGFloat lastWidth = size.width - (count * _intercellSpacing.width);
-        NSTableColumn *lastColumn = [_tableColumns lastObject];
+        NSTableColumn *lastColumn = nil;
+        CGFloat lastWidth = size.width;
 
-        for (i = 0; i < count - 1; ++i)
-            lastWidth -= [[_tableColumns objectAtIndex: i] width];
+        // GUESS: the column that takes the slack is the last one that is not hidden
+        for (i = 0; i < count; ++i) {
+            NSTableColumn *column = [_tableColumns objectAtIndex: i];
 
-        // The last column takes what the others leave and stops at its minimum width.
+            if ([column isHidden])
+                continue;
+            lastWidth -= [self _spaceTakenByColumn: column];
+            lastColumn = column;
+        }
+        if (lastColumn == nil)
+            return;
+
+        // What the others leave goes to the last column, which stops at its minimum width.
+        lastWidth += [lastColumn width];
         [lastColumn setWidth: MAX(lastWidth, [lastColumn minWidth])];
 
         [self setNeedsDisplay: YES];
@@ -1760,6 +1769,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         }
 
         for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
+            if ([[_tableColumns objectAtIndex: drawThisColumn] isHidden])
+                continue;
+
             NSView *cellView = [self _cellViewAtColumn: drawThisColumn row: row make: YES];
 
             if (cellView != nil) {
@@ -1780,6 +1792,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                     format: @"invalid row in drawRow:clipRect:"];
 
     for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
+        if ([[_tableColumns objectAtIndex: drawThisColumn] isHidden])
+            continue;
 
         if (row == _editedRow && drawThisColumn == _editedColumn &&
             _editingCell != nil) {
@@ -1868,6 +1882,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         NSRange rangeOfColumns = [self columnsInRect: clipRect];
         n = rangeOfColumns.location + rangeOfColumns.length;
         for (i = rangeOfColumns.location; i < n; i++) {
+            if ([[_tableColumns objectAtIndex: i] isHidden])
+                continue;
+
             NSRect columnRect = [self rectOfColumn: i];
             x = columnRect.origin.x + columnRect.size.width +
                 ((i < n - 1) ? -0.5 : 0.5);
@@ -1910,10 +1927,19 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     CGFloat result = 0;
 
     for (i = 0; i < count; ++i)
-        result += [[_tableColumns objectAtIndex: i] width] +
-                  _intercellSpacing.width;
+        result += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
 
     return result;
+}
+
+// The columns that take room in the table, in order. GUESS: the autoresizing styles leave the hidden ones alone.
+- (NSArray *) _shownTableColumns {
+    NSMutableArray *shown = [NSMutableArray arrayWithCapacity: [_tableColumns count]];
+
+    for (NSTableColumn *column in _tableColumns)
+        if (![column isHidden])
+            [shown addObject: column];
+    return shown;
 }
 
 // Moves the width the columns miss (or exceed) relative to the clip view onto
@@ -1921,7 +1947,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 // maximum widths, and what a column cannot absorb passes to the next one.
 - (void) _autoresizeColumnsToFitClipView {
     NSTableViewColumnAutoresizingStyle style = NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle;
-    NSInteger count = [_tableColumns count];
+    NSArray *shown = [self _shownTableColumns];
+    NSInteger count = [shown count];
 
     if (count == 0 || ![[self superview] isKindOfClass: [NSClipView class]])
         return;
@@ -1951,7 +1978,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         NSInteger visits = style == NSTableViewFirstColumnOnlyAutoresizingStyle ? 1 : count;
 
         for (i = 0; i < visits && fabs(delta) >= 0.5; ++i) {
-            NSTableColumn *column = [_tableColumns objectAtIndex: fromLast ? count - 1 - i : i];
+            NSTableColumn *column = [shown objectAtIndex: fromLast ? count - 1 - i : i];
             CGFloat before = [column width];
 
             [column setWidth: before + delta];
@@ -1964,7 +1991,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 // Spreads delta over the columns in equal whole points, the points left over
 // going one each to the first columns.
 - (void) _resizeColumnsUniformlyBy: (CGFloat) delta {
-    NSInteger i, count = [_tableColumns count];
+    NSArray *columns = [self _shownTableColumns];
+    NSInteger i, count = [columns count];
 
     if (count == 0)
         return;
@@ -1973,7 +2001,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NSInteger extra = (NSInteger) (delta - share * count);
 
     for (i = 0; i < count; ++i) {
-        NSTableColumn *column = [_tableColumns objectAtIndex: i];
+        NSTableColumn *column = [columns objectAtIndex: i];
         [column setWidth: [column width] + share + (i < extra ? 1 : 0)];
     }
 }
@@ -2887,7 +2915,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     CGFloat widths = 0;
 
     for (NSTableColumn *column in _tableColumns)
-        widths += [column width];
+        widths += [column isHidden] ? 0 : [column width];
 
     NSString *signature = [NSString stringWithFormat: @"%@ %@ %ld %lu %g", NSStringFromRange(rows), NSStringFromRange(columns),
                                                       (long) [self numberOfRows], (unsigned long) [_tableColumns count], widths];

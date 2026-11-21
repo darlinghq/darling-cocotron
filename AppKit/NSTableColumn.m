@@ -188,14 +188,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSTableColumn, self)->_width = width;
 }
 
-// Terminal's inspector asks each column whether it is shown. Cocotron's
-// table column has no column-hiding state, so the flag is stored and read back.
+// A hidden column is still in tableColumns and in the count; only the layout of the table and of its header
+// leaves it out. Changing the flag lays the table out again.
 - (BOOL) isHidden {
     return NS_EXTRA(NSTableColumn, self)->_hidden;
 }
 
 - (void) setHidden: (BOOL) hidden {
+    if (hidden == NS_EXTRA(NSTableColumn, self)->_hidden)
+        return;
     NS_EXTRA(NSTableColumn, self)->_hidden = hidden;
+    [NS_EXTRA(NSTableColumn, self)->_tableView tile];
 }
 
 - (void) setMinWidth: (CGFloat) width {
