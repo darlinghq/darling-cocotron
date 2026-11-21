@@ -459,13 +459,28 @@ static NSMutableArray *pendingOpenURLs = nil;
     [self _handleInitialEvent: kind paths: paths];
 }
 
+// The documents of an open-documents event go to application:openURLs:, as file URLs, when the
+// delegate implements it; application:openFile: and application:openFiles: are then not called
+// (NSApplicationDelegate documentation). Documents named in argv are not an event: they go to
+// openFile(s): (observed on macOS 26.7.3; tests/src/launch_documents_delivery.m in darling).
+- (void) _openDocumentsOfEvent: (NSArray *) paths {
+    if ([paths count] == 0)
+        return;
+    if ([_delegate respondsToSelector: @selector(application:openURLs:)]) {
+        NSMutableArray *urls = [NSMutableArray arrayWithCapacity: [paths count]];
+        for (NSString *path in paths)
+            [urls addObject: [NSURL fileURLWithPath: path]];
+        [self _openURLs: urls];
+    } else
+        [self _openFileNames: paths];
+}
+
 - (void) _handleOpenDocumentsEvent: (NSAppleEventDescriptor *) event
                     withReplyEvent: (NSAppleEventDescriptor *) reply {
     NSArray *paths = pathsOfDocumentsEvent(event);
 
     if (launchComplete) {
-        if ([paths count] > 0)
-            [self _openFileNames: paths];
+        [self _openDocumentsOfEvent: paths];
         return;
     }
     [self _launchEvent: InitialEventOpenDocuments paths: paths];
@@ -1188,7 +1203,7 @@ static NSMutableArray *pendingOpenURLs = nil;
         if (!argumentDocumentsOpened)
             [self _openUntitledFileIfNeeded];
     } else if (kind == InitialEventOpenDocuments) {
-        [self _openFileNames: paths];
+        [self _openDocumentsOfEvent: paths];
     } else if (kind == InitialEventOpenURLs) {
         [self _openURLs: paths];
     } else {
@@ -1231,7 +1246,7 @@ static NSMutableArray *pendingOpenURLs = nil;
         NSArray *paths = [pendingOpenFiles autorelease];
 
         pendingOpenFiles = nil;
-        [self _openFileNames: paths];
+        [self _openDocumentsOfEvent: paths];
     }
     if ([pendingOpenURLs count] > 0) {
         NSArray *urls = [pendingOpenURLs autorelease];
