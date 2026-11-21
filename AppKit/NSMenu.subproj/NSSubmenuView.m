@@ -435,6 +435,8 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
         NSMenuItem *item = [items objectAtIndex: _selectedItemIndex];
 
         if ([item hasSubmenu]) {
+            [[item submenu] _updateWithoutSubmenus];
+
             NSMenuWindow *branch =
                     [[NSMenuWindow alloc] initWithMenu: [item submenu]];
 

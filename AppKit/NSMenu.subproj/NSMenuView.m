@@ -60,7 +60,9 @@ static void _NSMenuTrackingInit(void) {
     });
 }
 
-static _NSMenuTrackingSession *_NSMenuTrackingBegin(NSMenu *menu) {
+// Also used by -[NSMenu popUpMenuPositioningItem:atLocation:inView:], which begins its session before
+// the menu is updated and shown.
+_NSMenuTrackingSession *_NSMenuTrackingBegin(NSMenu *menu) {
     _NSMenuTrackingSession *session = [[_NSMenuTrackingSession alloc] init];
 
     _NSMenuTrackingInit();
@@ -71,11 +73,15 @@ static _NSMenuTrackingSession *_NSMenuTrackingBegin(NSMenu *menu) {
     return session;
 }
 
-static void _NSMenuTrackingEnd(_NSMenuTrackingSession *session) {
+void _NSMenuTrackingEnd(_NSMenuTrackingSession *session) {
     [trackingSessionsLock lock];
     [trackingSessions removeObjectIdenticalTo: session];
     [trackingSessionsLock unlock];
     [session release];
+}
+
+BOOL _NSMenuTrackingCancelRequested(_NSMenuTrackingSession *session) {
+    return session->cancelRequested;
 }
 
 // Ends the tracking of `menu`, if it is being tracked; callable from any
@@ -221,12 +227,16 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
     return [self isKindOfClass: [NSMainMenuView class]];
 }
 
+// The calls that start a tracking session, in the order macOS makes them:
+// the begin notification, then -menuNeedsUpdate: (only for the menu itself:
+// a submenu is updated when it opens), then -menuWillOpen:.
 - (void) _willBeginTracking {
     NSMenu *menu = [self menu];
 
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSMenuDidBeginTrackingNotification
                           object: menu];
+    [menu _updateWithoutSubmenus];
     if (![self _isMenuBar] &&
         [[menu delegate] respondsToSelector: @selector(menuWillOpen:)])
         [[menu delegate] menuWillOpen: menu];
@@ -262,6 +272,12 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
 }
 
 - (NSMenuItem *) trackForEvent: (NSEvent *) event {
+    return [self _trackForEvent: event session: nil];
+}
+
+// With a session, the caller has already begun tracking (begin notification,
+// update, -menuWillOpen:) and made it cancellable; this ends it.
+- (NSMenuItem *) _trackForEvent: (NSEvent *) event session: (_NSMenuTrackingSession *) session {
     NSMenuItem *item = nil;
 
     enum {
@@ -285,12 +301,10 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
     // But while we're dealing with menus we want to track the mouse...
     [[self window] setAcceptsMouseMovedEvents: YES];
 
-    _NSMenuTrackingSession *session = _NSMenuTrackingBegin([self menu]);
-
-    [self _willBeginTracking];
-
-    // Make sure the menu contents are up to date
-    [[self menu] update];
+    if (session == nil) {
+        session = _NSMenuTrackingBegin([self menu]);
+        [self _willBeginTracking];
+    }
 
     // And we, of course, are first on the stack
     [viewStack addObject: self];

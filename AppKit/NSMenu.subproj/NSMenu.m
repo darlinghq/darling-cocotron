@@ -51,6 +51,9 @@ NSString *const _NSWindowsMenuName = @"Window";
 
 // Defined in NSMenuView.m
 extern void _NSMenuCancelTracking(NSMenu *menu);
+extern id _NSMenuTrackingBegin(NSMenu *menu);
+extern void _NSMenuTrackingEnd(id session);
+extern BOOL _NSMenuTrackingCancelRequested(id session);
 
 @implementation NSMenu
 
@@ -110,9 +113,23 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
 
     if (item != nil && itemIndex == NSNotFound)
         return NO;
-    [self update];
-    if ([self numberOfItems] == 0)
+
+    // As on macOS: the begin notification, then -menuNeedsUpdate:, then
+    // -menuWillOpen:, all before the menu is shown; -menuDidClose: and the end
+    // notification come from the tracking that follows.
+    id session = _NSMenuTrackingBegin(self);
+
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSMenuDidBeginTrackingNotification
+                          object: self];
+    [self _updateWithoutSubmenus];
+    if ([self numberOfItems] == 0) {
+        _NSMenuTrackingEnd(session);
+        [[NSNotificationCenter defaultCenter]
+                postNotificationName: NSMenuDidEndTrackingNotification
+                              object: self];
         return NO;
+    }
 
     NSPoint screenPoint = location;
     if (view != nil) {
@@ -162,6 +179,16 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     if ([delegate respondsToSelector: @selector(menuWillOpen:)])
         [delegate menuWillOpen: self];
 
+    // Cancelled from the delegate: nothing was shown.
+    if (_NSMenuTrackingCancelRequested(session)) {
+        [menuWindow release];
+        _NSMenuTrackingEnd(session);
+        [[NSNotificationCenter defaultCenter]
+                postNotificationName: NSMenuDidEndTrackingNotification
+                              object: self];
+        return NO;
+    }
+
     [menuWindow setReleasedWhenClosed: YES];
     [menuWindow setFrame: frame display: NO];
     [menuWindow orderFront: nil];
@@ -192,12 +219,9 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
                                       clickCount: 1
                                         pressure: 0];
 
-    NSMenuItem *chosen = [menuView trackForEvent: start];
+    NSMenuItem *chosen = [menuView _trackForEvent: start session: session];
 
     [menuWindow close];
-
-    if ([delegate respondsToSelector: @selector(menuDidClose:)])
-        [delegate menuDidClose: self];
 
     if (chosen == nil)
         return NO;
@@ -582,6 +606,15 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 }
 
 - (void) update {
+    [self _updateWithoutSubmenus];
+
+    for (NSMenuItem *item in [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray])
+        [[item submenu] update];
+}
+
+// The delegates -menuNeedsUpdate: and the validation of this menus own
+// items; a submenu is brought up to date when it is shown.
+- (void) _updateWithoutSubmenus {
     if ([NS_EXTRA(NSMenu, self)->_delegate respondsToSelector: @selector(menuNeedsUpdate:)]) {
         [NS_EXTRA(NSMenu, self)->_delegate menuNeedsUpdate: self];
     }
@@ -602,7 +635,6 @@ BOOL itemIsEnabled(NSMenuItem *item) {
             }
         }
 
-        [[item submenu] update];
     }
 }
 
