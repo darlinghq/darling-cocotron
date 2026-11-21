@@ -53,7 +53,7 @@ CA_EXPORT NSString *const kCATruncationMiddle;
 @property CGColorRef foregroundColor; // default opaque white
 @property(getter=isWrapped) BOOL wrapped;
 @property(copy) NSString *alignmentMode;  // kCAAlignmentNatural (default), Left, Right, Center, Justified
-@property(copy) NSString *truncationMode; // stored; truncation isn't implemented
+@property(copy) NSString *truncationMode; // kCATruncationNone (default), Start, End, Middle; cuts a line too wide for an unwrapped layer
 @property BOOL allowsFontSubpixelQuantization;
 
 @end
