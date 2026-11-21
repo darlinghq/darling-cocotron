@@ -3,6 +3,7 @@
 #import <QuartzCore/CAAction.h>
 #import <QuartzCore/CABase.h>
 #import <QuartzCore/CAMediaTiming.h>
+#import <CoreGraphics/CGPath.h>
 
 @class CAMediaTimingFunction, CAPropertyAnimation;
 
@@ -73,7 +74,30 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
 
 @end
 
-@interface CAKeyframeAnimation : CAPropertyAnimation
+#define _NS_SIDE_CAKeyframeAnimation 0, 1,
+@interface CAKeyframeAnimation : CAPropertyAnimation {
+    NS_EXTRA_IVARS_BEGIN(CAKeyframeAnimation)
+        NSArray *_values;
+        CGPathRef _path;
+        NSArray *_keyTimes;
+        NSArray *_timingFunctions;
+        NSString *_calculationMode;
+        NSArray *_tensionValues;
+        NSArray *_continuityValues;
+        NSArray *_biasValues;
+        NSString *_rotationMode;
+    NS_SIDE_IVARS_END(CAKeyframeAnimation)
+}
+
+@property(copy) NSArray *values;
+@property CGPathRef path;
+@property(copy) NSArray<NSNumber *> *keyTimes;
+@property(copy) NSArray<CAMediaTimingFunction *> *timingFunctions;
+@property(copy) NSString *calculationMode;
+@property(copy) NSArray<NSNumber *> *tensionValues;
+@property(copy) NSArray<NSNumber *> *continuityValues;
+@property(copy) NSArray<NSNumber *> *biasValues;
+@property(copy) NSString *rotationMode;
 
 @end
 
