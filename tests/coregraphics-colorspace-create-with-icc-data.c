@@ -54,6 +54,23 @@ int main(void)
 
     CHECK(CGColorSpaceCreateWithICCData(CFSTR("not data")) == NULL, "an object that is not data");
 
+    // QUIRK (observed on macOS 26.7.3): a data provider over the profile is accepted too.
+    CGColorSpaceRef sRGB = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+    CFDataRef profile = sRGB ? CGColorSpaceCopyICCData(sRGB) : NULL;
+    CHECK(profile != NULL, "a profile for the provider case");
+    if (profile != NULL) {
+        CGDataProviderRef provider = CGDataProviderCreateWithCFData(profile);
+        CGColorSpaceRef fromProvider = CGColorSpaceCreateWithICCData(provider);
+        CHECK(fromProvider != NULL, "a space from a provider over the profile");
+        if (fromProvider != NULL) {
+            CHECK(CGColorSpaceGetModel(fromProvider) == kCGColorSpaceModelRGB, "model of the space from a provider");
+            CGColorSpaceRelease(fromProvider);
+        }
+        CGDataProviderRelease(provider);
+        CFRelease(profile);
+    }
+    CGColorSpaceRelease(sRGB);
+
     if (failures == 0)
         puts("PASS: coregraphics-colorspace-create-with-icc-data");
     return failures != 0;
