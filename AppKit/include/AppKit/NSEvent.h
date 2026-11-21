@@ -415,7 +415,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @property(nonatomic, readonly) CGFloat deltaY;
 @property(nonatomic, readonly) CGFloat deltaZ;
 
-// Set on magnify and rotate events; NSEventPhaseNone, 0 and 0 on every other event.
+// Set on magnify and rotate events and on precise scroll events; NSEventPhaseNone, 0 and 0 on every other event.
 @property(nonatomic, readonly) NSEventPhase phase;
 @property(nonatomic, readonly) NSEventPhase momentumPhase;
 @property(nonatomic, readonly) CGFloat magnification;

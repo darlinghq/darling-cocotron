@@ -253,6 +253,34 @@ static NSInteger defaultButtonNumber(NSEventType type) {
     _buttonNumber = num;
 }
 
+- (void) _setPreciseScrollingDeltaX: (CGFloat) deltaX deltaY: (CGFloat) deltaY phase: (NSEventPhase) phase {
+    if (_type != NSScrollWheel)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"-[%@ %s] needs a scroll wheel event, not type %d",
+                            [self class], sel_getName(_cmd), (int) _type];
+
+    _hasPreciseScrollingDeltas = YES;
+    _scrollingDeltaX = deltaX;
+    _scrollingDeltaY = deltaY;
+    _scrollPhase = phase;
+}
+
+- (BOOL) hasPreciseScrollingDeltas {
+    return _hasPreciseScrollingDeltas;
+}
+
+- (CGFloat) scrollingDeltaX {
+    return _hasPreciseScrollingDeltas ? _scrollingDeltaX : [super scrollingDeltaX];
+}
+
+- (CGFloat) scrollingDeltaY {
+    return _hasPreciseScrollingDeltas ? _scrollingDeltaY : [super scrollingDeltaY];
+}
+
+- (NSEventPhase) phase {
+    return _hasPreciseScrollingDeltas ? _scrollPhase : [super phase];
+}
+
 - (void) _setWindowWasKeyOnArrival: (BOOL) key {
     _keyStateOnArrival = key ? 1 : 2;
 }
