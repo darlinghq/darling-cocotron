@@ -38,10 +38,12 @@ set_property(SOURCE
 	CGLPixelSurface.m
 	CGPath.m
 	CGPattern.m
+	CGPDFArray.m
 	CGPDFContext.m
 	CGPDFDictionary.m
 	CGPDFDocument.m
 	CGPDFPage.m
+	CGPDFStream.m
 	CGPDFString.m
 	CGPSConverter.m
 	CGRemoteOperation.m
@@ -94,10 +96,12 @@ set(CoreGraphics_sources
 	CGLPixelSurface.m
 	CGPath.m
 	CGPattern.m
+	CGPDFArray.m
 	CGPDFContext.m
 	CGPDFDictionary.m
 	CGPDFDocument.m
 	CGPDFPage.m
+	CGPDFStream.m
 	CGPDFString.m
 	CGScreenRefresh.m
 	CGShading.m
