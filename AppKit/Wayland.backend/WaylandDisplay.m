@@ -1079,13 +1079,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self releasePointerLock];
         [_draggingManager cancel];
         [self consumeDragPress];
+        [self cancelFingerScroll];
         [self releaseInputDevice: &_pointer opcode: WP_POINTER_RELEASE];
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
         _pressedButtons = 0;
-        _pendingScrollX = _pendingScrollY = 0;
-        _pendingScrollWindow = nil;
-        _pendingScrollActive = NO;
+        [self discardPendingScroll];
         _wlLastClickWindow = nil;
         [_buttonClickCounts removeAllObjects];
     }
@@ -1177,7 +1176,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 #pragma mark - Pointer
 
 - (void) pointerEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    if (opcode != WP_POINTER_EV_AXIS && opcode != WP_POINTER_EV_FRAME)
+    if (opcode != WP_POINTER_EV_AXIS && opcode != WP_POINTER_EV_FRAME &&
+        opcode != WP_POINTER_EV_AXIS_SOURCE && opcode != WP_POINTER_EV_AXIS_STOP)
         [self postPendingScroll];
     [self flushPendingModifier];
     switch (opcode) {
@@ -1193,15 +1193,14 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         break;
 
     case WP_POINTER_EV_LEAVE:
+        [self cancelFingerScroll];
         _pressedButtons = 0;
         [_buttonClickCounts removeAllObjects];
         [self consumeDragPress];
         _lastMouseLocation = [self mouseLocation];
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
-        _pendingScrollX = _pendingScrollY = 0;
-        _pendingScrollWindow = nil;
-        _pendingScrollActive = NO;
+        [self discardPendingScroll];
         break;
 
     case WP_POINTER_EV_MOTION:
@@ -1240,6 +1239,17 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     }
     case WP_POINTER_EV_AXIS:
         [self pointerAxis: args[1].u value: wl_fixed_to_double(args[2].f)];
+        break;
+
+    case WP_POINTER_EV_AXIS_SOURCE:
+        _pendingScrollSourceNamed = YES;
+        _pendingScrollFinger = args[0].u == WP_POINTER_AXIS_SOURCE_FINGER;
+        break;
+
+    case WP_POINTER_EV_AXIS_STOP:
+        [self startPendingScrollFrame];
+        if (args[1].u <= WP_POINTER_AXIS_HORIZONTAL_SCROLL)
+            _pendingScrollStoppedAxes |= 1u << args[1].u;
         break;
 
     case WP_POINTER_EV_FRAME:
@@ -1384,27 +1394,44 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [self postEvent: event atStart: NO];
 }
 
+// wl_pointer.axis values are lengths in surface-local coordinates, the space pointer motion uses
+// (https://gitlab.freedesktop.org/wayland/wayland/-/blob/main/protocol/wayland.xml). One wheel
+// notch is this many of them; precise scrolling reports them as they are.
+static const CGFloat WaylandAxisUnitsPerNotch = 10.0;
+
+- (void) startPendingScrollFrame {
+    if (_pendingScrollActive)
+        return;
+    _pendingScrollWindow = _pointerWindow;
+    _pendingScrollSurfacePoint = _pointerSurfacePoint;
+    _pendingScrollModifiers = [self currentModifierFlags];
+    _pendingScrollActive = YES;
+}
+
+- (void) discardPendingScroll {
+    _pendingScrollX = _pendingScrollY = 0;
+    _pendingScrollWindow = nil;
+    _pendingScrollActive = NO;
+    _pendingScrollFinger = _pendingScrollSourceNamed = NO;
+    _pendingScrollStoppedAxes = 0;
+    _fingerScrollActive = NO;
+    _fingerScrollWindow = nil;
+}
+
 - (void) pointerAxis: (uint32_t) axis value: (CGFloat) value {
-    WaylandWindow *window = _pointerWindow;
-    if (window == nil)
+    if (_pointerWindow == nil)
         return;
 
-    // One wheel notch is 10 units, scrolling down is positive; the X11 backend
-    // reports a notch up as deltaY 1.
-    CGFloat delta = -value / 10.0;
+    // Scrolling down is positive; the X11 backend reports a notch up as deltaY 1, so the sum keeps
+    // the opposite sign.
     if (axis != WP_POINTER_AXIS_HORIZONTAL_SCROLL &&
         axis != WP_POINTER_AXIS_VERTICAL_SCROLL)
         return;
-    if (!_pendingScrollActive) {
-        _pendingScrollWindow = window;
-        _pendingScrollSurfacePoint = _pointerSurfacePoint;
-        _pendingScrollModifiers = [self currentModifierFlags];
-        _pendingScrollActive = YES;
-    }
+    [self startPendingScrollFrame];
     if (axis == WP_POINTER_AXIS_HORIZONTAL_SCROLL)
-        _pendingScrollX += delta;
+        _pendingScrollX -= value;
     else if (axis == WP_POINTER_AXIS_VERTICAL_SCROLL)
-        _pendingScrollY += delta;
+        _pendingScrollY -= value;
 
     // wl_pointer.frame was added in version 5. Older seats deliver each axis
     // event independently, so preserve their immediate behavior.
@@ -1413,19 +1440,52 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 }
 
 - (void) postPendingScroll {
-    CGFloat deltaX = _pendingScrollX;
-    CGFloat deltaY = _pendingScrollY;
+    CGFloat unitsX = _pendingScrollX;
+    CGFloat unitsY = _pendingScrollY;
     WaylandWindow *window = _pendingScrollWindow;
     CGPoint surfacePoint = _pendingScrollSurfacePoint;
     NSUInteger modifiers = _pendingScrollModifiers;
+    BOOL finger = _pendingScrollFinger;
+    BOOL sourceNamed = _pendingScrollSourceNamed;
+    uint32_t stoppedAxes = _pendingScrollStoppedAxes;
     _pendingScrollX = _pendingScrollY = 0;
     _pendingScrollWindow = nil;
     _pendingScrollActive = NO;
-    if (deltaX == 0 && deltaY == 0)
-        return;
+    _pendingScrollFinger = _pendingScrollSourceNamed = NO;
+    _pendingScrollStoppedAxes = 0;
 
+    BOOL moved = unitsX != 0 || unitsY != 0;
     if (window == nil)
         return;
+
+    NSEventPhase phase = NSEventPhaseNone;
+    // GUESS: the source is optional in a frame, so a finger sequence in progress also continues in
+    // a frame that names no source, and a frame without motion (an axis_stop alone) can end it
+    // whatever source it names. A frame that moves and names another source is not part of it.
+    if (finger || (_fingerScrollActive && (!sourceNamed || !moved))) {
+        // GUESS: the protocol only says a finger source sends axis_stop when the finger lifts.
+        // The first frame with motion is taken as the began phase and later ones as changed. A
+        // sequence ends in a frame whose axis_stop covers every axis that moved in it (so also in
+        // one with no motion); an axis_stop beside motion on the other axis is a change, since the
+        // protocol says that axis is still moving then.
+        // A first frame that has motion and an axis_stop for it gives began only, since one event cannot
+        // be both began and ended; the sequence then ends at the next axis_stop.
+        uint32_t movedAxes = (unitsX != 0 ? 1u << WP_POINTER_AXIS_HORIZONTAL_SCROLL : 0) |
+                             (unitsY != 0 ? 1u << WP_POINTER_AXIS_VERTICAL_SCROLL : 0);
+        BOOL ends = _fingerScrollActive && stoppedAxes != 0 && (movedAxes & ~stoppedAxes) == 0;
+        if (ends)
+            phase = NSEventPhaseEnded;
+        else if (moved)
+            phase = _fingerScrollActive ? NSEventPhaseChanged : NSEventPhaseBegan;
+        if (phase == NSEventPhaseNone)
+            return;
+        _fingerScrollActive = phase != NSEventPhaseEnded;
+        _fingerScrollWindow = _fingerScrollActive ? window : nil;
+        _fingerScrollSurfacePoint = surfacePoint;
+    } else if (!moved) {
+        return;
+    }
+    BOOL precise = phase != NSEventPhaseNone;
 
     NSEvent *event = [NSEvent
             mouseEventWithType: NSScrollWheel
@@ -1433,8 +1493,38 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                  modifierFlags: modifiers
                         window: [window delegate]
                     clickCount: 1
-                        deltaX: deltaX
-                        deltaY: deltaY];
+                        deltaX: unitsX / WaylandAxisUnitsPerNotch
+                        deltaY: unitsY / WaylandAxisUnitsPerNotch];
+    if (precise)
+        // GUESS: the line deltas stay set to the wheel-notch equivalent of the axis values, so code
+        // that reads deltaX and deltaY keeps scrolling by a proportional amount.
+        [(NSEvent_mouse *) event _setPreciseScrollingDeltaX: unitsX
+                                                     deltaY: unitsY
+                                                      phase: phase];
+    [self postEvent: event atStart: NO];
+}
+
+// A pointer that leaves, a seat that loses its pointer or a window that goes away in the middle of
+// a finger scroll ends it with the cancelled phase, as a pinch does. GUESS: the documentation of
+// NSEvent.phase lists cancelled as an ending phase of a gesture but not when it is used.
+- (void) cancelFingerScroll {
+    WaylandWindow *window = _fingerScrollWindow;
+    CGPoint surfacePoint = _fingerScrollSurfacePoint;
+    BOOL known = _fingerScrollActive && window != nil && [self windowIsKnown: window];
+    _fingerScrollActive = NO;
+    _fingerScrollWindow = nil;
+    if (!known)
+        return;
+
+    NSEvent *event = [NSEvent
+            mouseEventWithType: NSScrollWheel
+                      location: [window transformPoint: surfacePoint]
+                 modifierFlags: [self currentModifierFlags]
+                        window: [window delegate]
+                    clickCount: 1
+                        deltaX: 0
+                        deltaY: 0];
+    [(NSEvent_mouse *) event _setPreciseScrollingDeltaX: 0 deltaY: 0 phase: NSEventPhaseCancelled];
     [self postEvent: event atStart: NO];
 }
 
@@ -2706,13 +2796,13 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         [self postPinchPhase: NSEventPhaseCancelled];
     [_draggingManager windowUnmapped: window];
     if (_dragPressWindow == window) [self consumeDragPress];
+    if (_fingerScrollWindow == window)
+        [self cancelFingerScroll];
     if (_pointerWindow == window) {
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
         _pressedButtons = 0;
-        _pendingScrollX = _pendingScrollY = 0;
-        _pendingScrollWindow = nil;
-        _pendingScrollActive = NO;
+        [self discardPendingScroll];
         [_buttonClickCounts removeAllObjects];
     }
     if (_inputWindow == window) {
