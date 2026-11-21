@@ -13,6 +13,8 @@
 #include <stdio.h>
 #include <math.h>
 #include <unistd.h>
+#include <string.h>
+#include <mach-o/dyld.h>
 
 static int g_failures;
 #define CHECK(cond) do { \
@@ -79,8 +81,27 @@ static void set_global_pref(CFStringRef key, CFPropertyListRef val) {
     [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
-int main(void)
+// Posts a distributed notification from a separate process, the way settingsd does.
+static void post_from_other_process(const char *selfPath, const char *name) {
+    char command[1024];
+    snprintf(command, sizeof(command), "'%s' --post %s", selfPath, name);
+    system(command);
+}
+
+int main(int argc, char **argv)
 {
+    if (argc == 3 && strcmp(argv[1], "--post") == 0) {
+        CFStringRef name = CFStringCreateWithCString(NULL, argv[2], kCFStringEncodingUTF8);
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDistributedCenter(), name, NULL, NULL, TRUE);
+        CFRelease(name);
+        return 0;
+    }
+    char selfPath[1024];
+    uint32_t selfPathSize = sizeof(selfPath);
+    if (_NSGetExecutablePath(selfPath, &selfPathSize) != 0) {
+        printf("FAIL: executable path\n");
+        return 1;
+    }
     @autoreleasepool {
         [NSApplication sharedApplication];
 
@@ -158,15 +179,15 @@ int main(void)
         TestAppearanceView *explicitView = [[[TestAppearanceView alloc] initWithFrame: NSMakeRect(0, 0, 200, 200)] autorelease];
         [explicitWin setContentView: explicitView];
 
-        // Trigger change to Dark via distributed notification
+        __block int colorsChangedCount = 0;
+        id colorsObserver = [[NSNotificationCenter defaultCenter] addObserverForName: NSSystemColorsDidChangeNotification
+                                                                              object: nil
+                                                                               queue: nil
+                                                                          usingBlock: ^(NSNotification *n) { colorsChangedCount++; }];
+
+        // Trigger change to Dark via a distributed notification posted by another process
         set_global_pref(CFSTR("AppleInterfaceStyle"), CFSTR("Dark"));
-        CFNotificationCenterPostNotification(
-            CFNotificationCenterGetDistributedCenter(),
-            CFSTR("AppleInterfaceThemeChangedNotification"),
-            NULL,
-            NULL,
-            TRUE
-        );
+        post_from_other_process(selfPath, "AppleInterfaceThemeChangedNotification");
 
         for (int i = 0; i < 50 && (appObserver->kvoCount == 0); i++) {
             usleep(10000);
@@ -179,6 +200,28 @@ int main(void)
         CHECK(contentView->appearanceChangeCount >= 1);
         CHECK(subview->appearanceChangeCount >= 1);
         CHECK(explicitView->appearanceChangeCount == 0);
+        // the style changed, the accent and highlight did not
+        CHECK(colorsChangedCount == 0);
+
+        // a notification without a change reports nothing
+        post_from_other_process(selfPath, "AppleInterfaceThemeChangedNotification");
+        for (int i = 0; i < 30; i++) {
+            usleep(10000);
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, false);
+        }
+        CHECK(appObserver->kvoCount == 1);
+        CHECK(colorsChangedCount == 0);
+
+        // an accent change is announced as AppleColorPreferencesChangedNotification
+        set_global_pref(CFSTR("AppleAccentColor"), (CFPropertyListRef)@(5));
+        post_from_other_process(selfPath, "AppleColorPreferencesChangedNotification");
+        for (int i = 0; i < 50 && colorsChangedCount == 0; i++) {
+            usleep(10000);
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, false);
+        }
+        CHECK(colorsChangedCount == 1);
+        CHECK(appObserver->kvoCount == 1);
+        [[NSNotificationCenter defaultCenter] removeObserver: colorsObserver];
 
         [NSApp removeObserver: appObserver forKeyPath: @"effectiveAppearance"];
         [window removeObserver: winObserver forKeyPath: @"effectiveAppearance"];
@@ -298,6 +341,7 @@ int main(void)
             { @"keyboardFocusIndicatorColor", 0.102, 0.663, 1.0, 0.298 },
         };
         set_global_pref(CFSTR("AppleHighlightColor"), NULL);
+        set_global_pref(CFSTR("AppleAccentColor"), NULL);
         for (size_t i = 0; i < sizeof(darkExpected) / sizeof(darkExpected[0]); i++) {
             NSColor *c = [NSColor performSelector: NSSelectorFromString(darkExpected[i].name)];
             __block BOOL ok = NO;
@@ -307,6 +351,34 @@ int main(void)
             if (!ok) {
                 printf("FAIL: dark %s\n", [darkExpected[i].name UTF8String]);
                 g_failures++;
+            }
+        }
+
+        // The selection colours follow the accent/highlight preset (read on macOS 10.14.4, {light, dark}): Purple.
+        set_global_pref(CFSTR("AppleAccentColor"), (CFPropertyListRef)@(5));
+        {
+            static const struct { NSString *name; CGFloat r, g, b, a; } purpleExpected[2][3] = {
+                { { @"selectedControlColor", 0.875, 0.773, 0.875, 1.0 },
+                  { @"selectedContentBackgroundColor", 0.490, 0.165, 0.494, 1.0 },
+                  { @"keyboardFocusIndicatorColor", 0.514, 0.149, 0.518, 0.247 } },
+                { { @"selectedControlColor", 0.439, 0.337, 0.439, 1.0 },
+                  { @"selectedContentBackgroundColor", 0.498, 0.196, 0.502, 1.0 },
+                  { @"keyboardFocusIndicatorColor", 0.859, 0.471, 0.871, 0.298 } },
+            };
+            NSAppearance *appearances[2] = { aqua, darkAqua };
+            set_global_pref(CFSTR("AppleHighlightColor"), CFSTR("0.968627 0.831373 1.000000 Purple"));
+            for (int a = 0; a < 2; a++) {
+                for (int c = 0; c < 3; c++) {
+                    NSColor *color = [NSColor performSelector: NSSelectorFromString(purpleExpected[a][c].name)];
+                    __block BOOL ok = NO;
+                    [appearances[a] performAsCurrentDrawingAppearance: ^{
+                        ok = near(color, purpleExpected[a][c].r, purpleExpected[a][c].g, purpleExpected[a][c].b, purpleExpected[a][c].a);
+                    }];
+                    if (!ok) {
+                        printf("FAIL: purple %s (%s)\n", [purpleExpected[a][c].name UTF8String], a ? "dark" : "light");
+                        g_failures++;
+                    }
+                }
             }
         }
 

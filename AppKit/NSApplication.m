@@ -62,12 +62,25 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSApplication (AppearancePrivate)
 - (void) _systemAppearanceDidChange;
+- (void) _captureSystemAppearanceState;
 @end
 
-// QUIRK: macOS posts AppleInterfaceThemeChangedNotification through the distributed
-// notification center when the interface style changes.
-// Evidence: observing distributed notifications on macOS 10.14+ (tier 2, MAC-EVIDENCE).
-// Test: tests/appkit-appearance-theme.m
+BOOL NSAccessibilityDisplayShouldIncreaseContrast(void);
+
+// The state the last system appearance change left, so that a change is only reported when a value differs.
+static id s_lastAccent = nil;
+static id s_lastHighlight = nil;
+static NSAppearanceName s_lastEffectiveAppearanceName = nil;
+static BOOL s_lastIncreaseContrast = NO;
+
+// QUIRK: macOS announces a change of the interface style as AppleInterfaceThemeChangedNotification and a
+// change of the accent or highlight colour as AppleColorPreferencesChangedNotification, both through the
+// distributed notification center. Neither is documented by Apple.
+// Evidence: widely reported behaviour (tier 4): tools that follow the theme observe the former through
+// DistributedNotificationCenter (https://samasaur1.github.io/blog/terminal-apps-respecting-system-dark-mode,
+// https://docs.rs/crate/dark-light/0.1.1/source/src/macos.rs) and posting the latter is how a changed accent is
+// applied (https://alexwlchan.net/2022/changing-the-macos-accent-colour/).
+// Test: tests/appkit-appearance-theme.m (the notification is posted from another process)
 static void _themeChangedNotificationCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
     [(NSApplication *)observer _systemAppearanceDidChange];
 }
@@ -373,7 +386,16 @@ static void observeProcessCommands(NSApplication *application) {
             NULL,
             CFNotificationSuspensionBehaviorDeliverImmediately
         );
+        CFNotificationCenterAddObserver(
+            distCenter,
+            (void *)self,
+            _themeChangedNotificationCallback,
+            CFSTR("AppleColorPreferencesChangedNotification"),
+            NULL,
+            CFNotificationSuspensionBehaviorDeliverImmediately
+        );
     }
+    [self _captureSystemAppearanceState];
 
     [self _showSplashImage];
 
@@ -784,13 +806,34 @@ static void _propagateAppearanceChangeToView(NSView *view) {
     [windows release];
 }
 
+// Records the appearance, accent, highlight and contrast in effect, as the reference for later changes.
+- (void) _captureSystemAppearanceState {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+
+    [s_lastAccent release];
+    s_lastAccent = [[defaults objectForKey: @"AppleAccentColor"] retain];
+    [s_lastHighlight release];
+    s_lastHighlight = [[defaults objectForKey: @"AppleHighlightColor"] retain];
+    [s_lastEffectiveAppearanceName release];
+    s_lastEffectiveAppearanceName = [[[self effectiveAppearance] name] copy];
+    s_lastIncreaseContrast = NSAccessibilityDisplayShouldIncreaseContrast();
+}
+
 - (void) _systemAppearanceDidChange {
     CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication);
     CFPreferencesAppSynchronize(kCFPreferencesAnyApplication);
+    CFPreferencesAppSynchronize(CFSTR("com.apple.universalaccess"));
     [[NSUserDefaults standardUserDefaults] synchronize];
 
-    static id s_lastAccent = nil;
-    static id s_lastHighlight = nil;
+    BOOL contrast = NSAccessibilityDisplayShouldIncreaseContrast();
+    BOOL contrastChanged = (contrast != s_lastIncreaseContrast);
+    s_lastIncreaseContrast = contrast;
+    if (contrastChanged) {
+        [[[NSWorkspace sharedWorkspace] notificationCenter]
+                postNotificationName: NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+                              object: [NSWorkspace sharedWorkspace]];
+    }
+
     id currentAccent = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
     id currentHighlight = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleHighlightColor"];
     BOOL colorsChanged = NO;
@@ -809,13 +852,10 @@ static void _propagateAppearanceChangeToView(NSView *view) {
         [[NSNotificationCenter defaultCenter] postNotificationName: NSSystemColorsDidChangeNotification object: nil];
     }
 
-    static NSAppearanceName s_lastEffectiveAppearanceName = nil;
     NSAppearance *newAppAppearance = [self effectiveAppearance];
     NSAppearanceName newName = [newAppAppearance name];
     BOOL appAppearanceChanged = (_appearance == nil && (![newName isEqualToString: s_lastEffectiveAppearanceName]));
-    if (s_lastEffectiveAppearanceName == nil) {
-        s_lastEffectiveAppearanceName = [newName copy];
-    } else if (appAppearanceChanged) {
+    if (appAppearanceChanged) {
         [s_lastEffectiveAppearanceName release];
         s_lastEffectiveAppearanceName = [newName copy];
     }
@@ -825,7 +865,7 @@ static void _propagateAppearanceChangeToView(NSView *view) {
         [self didChangeValueForKey: @"effectiveAppearance"];
     }
 
-    if (appAppearanceChanged || colorsChanged) {
+    if (appAppearanceChanged || colorsChanged || contrastChanged) {
         NSArray *windows = [[self windows] copy];
         for (NSWindow *window in windows) {
             BOOL windowHasExplicitAppearance = ([window appearance] != nil);
@@ -852,16 +892,19 @@ static void _propagateAppearanceChangeToView(NSView *view) {
     if (_appearance != nil)
         return _appearance;
 
-    // QUIRK: macOS 10.14 Mojave keeps Aqua appearance for binaries linked against SDK < 10.14.
-    // Evidence: dyld_get_program_sdk_version() check on macOS 10.14+ (tier 2, MAC-EVIDENCE).
+    // Applications linked against an SDK before 10.14 keep the Aqua appearance, as Apple documents for Dark
+    // Mode (https://developer.apple.com/documentation/appkit/choosing-a-specific-appearance-for-your-macos-app).
+    // This is not observed black-box here (the ssh sessions of the Macs have no window server session).
     // Test: tests/appkit-appearance-theme.m
     uint32_t sdk = dyld_get_program_sdk_version();
     if (sdk != 0 && sdk < 0x000A0E00) {
         return [NSAppearance appearanceNamed: NSAppearanceNameAqua];
     }
 
-    // QUIRK: NSRequiresAquaSystemAppearance in NSUserDefaults or Info.plist forces Aqua appearance.
-    // Evidence: Apple documentation and Mojave defaults behavior.
+    // QUIRK: NSRequiresAquaSystemAppearance forces Aqua when it is an Info.plist key, as Apple documents (same page),
+    // and also when it is a user default (`defaults write <bundle id> NSRequiresAquaSystemAppearance -bool YES`),
+    // which the documentation does not say.
+    // Evidence: widely reported Mojave behaviour (tier 4); the Info.plist key is documented.
     // Test: tests/appkit-appearance-theme.m
     id reqAqua = [[NSUserDefaults standardUserDefaults] objectForKey: @"NSRequiresAquaSystemAppearance"];
     if (reqAqua == nil) {
@@ -871,8 +914,10 @@ static void _propagateAppearanceChangeToView(NSView *view) {
         return [NSAppearance appearanceNamed: NSAppearanceNameAqua];
     }
 
-    // QUIRK: AppleInterfaceStyle preference in NSGlobalDomain determines dark mode when set to "Dark".
-    // Evidence: macOS System Preferences General pane dark mode setting.
+    // QUIRK: AppleInterfaceStyle in the global domain is "Dark" in dark mode and absent in light mode.
+    // Evidence: widely reported (tier 4), for example `defaults read -g AppleInterfaceStyle` in
+    // https://gist.github.com/jerblack/869a303d1a604171bf8f00bbbefa59c2 and
+    // https://samasaur1.github.io/blog/terminal-apps-respecting-system-dark-mode.
     // Test: tests/appkit-appearance-theme.m
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSString *style = [defaults stringForKey: @"AppleInterfaceStyle"];

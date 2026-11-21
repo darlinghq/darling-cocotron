@@ -489,6 +489,7 @@ void NSColorInitializeDynamicSystemColors(void);
 
 // QUIRK: AppleAccentColor is an integer from -1 (Graphite) to 6 (Pink), default 4 (Blue), and +controlAccentColor
 // is the matching colour, which differs between the appearances for Graphite, Red and Purple.
+// (the value numbers are listed in https://alexwlchan.net/2022/changing-the-macos-accent-colour/)
 // Evidence: black-box reads of +controlAccentColor converted to sRGB with each AppleAccentColor value, in the Aqua
 // and DarkAqua appearances, on macOS 10.14.4 and 26.7.3 (tier 2). Both gave identical values except Yellow
 // (26.7.3 is 1.000, 0.780, 0.149; the Mojave value is used).
@@ -529,7 +530,8 @@ void NSColorInitializeDynamicSystemColors(void);
 
 // QUIRK: AppleAquaColorVariant == 6 corresponds to Graphite control tint (or AppleAccentColor == -1).
 // Any other variant or default is NSBlueControlTint (value 1, not NSDefaultControlTint which is 0).
-// Evidence: macOS 10.14+ defaults read -g AppleAquaColorVariant.
+// Evidence: black-box reads of +currentControlTint on macOS 10.14.4 and 26.7.3 (tier 2): AppleAccentColor -1 and
+// AppleAquaColorVariant 6 give 6 (graphite), every other accent gives 1 (blue).
 // Test: tests/appkit-appearance-theme.m
 + (NSControlTint) currentControlTint {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -728,23 +730,61 @@ static void registerDynamicSystemColor(NSColorName name, NSColor *light, NSColor
     NSColorSetCatalogColor(@"System", name, dynamic);
 }
 
-// QUIRK: AppleHighlightColor in NSGlobalDomain stores RGB components as a space-separated float string.
-// Default macOS 10.14 Mojave Blue highlight color is sRGB (0.698039, 0.843137, 1.0).
-// Evidence: macOS 10.14+ defaults read -g AppleHighlightColor.
+// The selection colours follow the highlight colour the General preference pane writes together with the
+// accent, so they are a table keyed by AppleAccentColor (-1 Graphite to 6 Pink), each as {light, dark}.
+// QUIRK: selectedControlColor (= selectedTextBackgroundColor), selectedContentBackgroundColor and
+// keyboardFocusIndicatorColor depend on the accent/highlight setting, and differ between the appearances.
+// Evidence: black-box reads of the three colours converted to sRGB on macOS 10.14.4 (tier 2), run with each
+// AppleAccentColor value together with its AppleHighlightColor string (the preset names are the ones listed in
+// https://alexwlchan.net/2022/changing-the-macos-accent-colour/ and the highlight strings in
+// https://pypi.org/project/osx-colors/); the Blue light values are the ones pinned by the focus ring and
+// system colour tests.
+// Test: tests/appkit-appearance-theme.m
+typedef struct {
+    CGFloat control[2][4];
+    CGFloat content[2][4];
+    CGFloat focus[2][4];
+} AccentSelectionColors;
+
+static const AccentSelectionColors *accentSelectionColors(void) {
+    static const AccentSelectionColors table[8] = {
+    { /* -1 */ { { 0.878f, 0.878f, 0.878f, 1.000f }, { 1.000f, 1.000f, 1.000f, 0.247f } }, { { 0.502f, 0.502f, 0.502f, 1.000f }, { 0.408f, 0.408f, 0.408f, 1.000f } }, { { 0.600f, 0.600f, 0.620f, 1.000f }, { 0.765f, 0.765f, 0.765f, 0.498f } } },
+    { /* 0 */ { { 0.961f, 0.765f, 0.773f, 1.000f }, { 0.545f, 0.341f, 0.345f, 1.000f } }, { { 0.765f, 0.145f, 0.169f, 1.000f }, { 0.816f, 0.204f, 0.224f, 1.000f } }, { { 0.827f, 0.125f, 0.153f, 0.247f }, { 1.000f, 0.478f, 0.502f, 0.298f } } },
+    { /* 1 */ { { 0.988f, 0.851f, 0.733f, 1.000f }, { 0.533f, 0.396f, 0.278f, 1.000f } }, { { 0.851f, 0.420f, 0.039f, 1.000f }, { 0.784f, 0.376f, 0.012f, 1.000f } }, { { 0.922f, 0.435f, 0.008f, 0.247f }, { 1.000f, 0.698f, 0.224f, 0.298f } } },
+    { /* 2 */ { { 0.996f, 0.914f, 0.745f, 1.000f }, { 0.541f, 0.459f, 0.290f, 1.000f } }, { { 0.871f, 0.620f, 0.082f, 1.000f }, { 0.804f, 0.561f, 0.055f, 1.000f } }, { { 0.945f, 0.659f, 0.055f, 0.247f }, { 1.000f, 0.949f, 0.278f, 0.298f } } },
+    { /* 3 */ { { 0.816f, 0.918f, 0.780f, 1.000f }, { 0.361f, 0.463f, 0.325f, 1.000f } }, { { 0.302f, 0.627f, 0.196f, 1.000f }, { 0.259f, 0.569f, 0.165f, 1.000f } }, { { 0.302f, 0.671f, 0.184f, 0.247f }, { 0.553f, 0.957f, 0.424f, 0.298f } } },
+    { /* 4 */ { { 0.701961f, 0.843137f, 1.000000f, 1.000f }, { 0.247f, 0.388f, 0.545f, 1.000f } }, { { 0.000000f, 0.388235f, 0.882353f, 1.000f }, { 0.000000f, 0.345098f, 0.815686f, 1.000f } }, { { 0.000000f, 0.403922f, 0.956863f, 0.247059f }, { 0.102f, 0.663f, 1.000f, 0.298f } } },
+    { /* 5 */ { { 0.875f, 0.773f, 0.875f, 1.000f }, { 0.439f, 0.337f, 0.439f, 1.000f } }, { { 0.490f, 0.165f, 0.494f, 1.000f }, { 0.498f, 0.196f, 0.502f, 1.000f } }, { { 0.514f, 0.149f, 0.518f, 0.247f }, { 0.859f, 0.471f, 0.871f, 0.298f } } },
+    { /* 6 */ { { 0.988f, 0.792f, 0.886f, 1.000f }, { 0.533f, 0.337f, 0.431f, 1.000f } }, { { 0.851f, 0.231f, 0.522f, 1.000f }, { 0.784f, 0.192f, 0.475f, 1.000f } }, { { 0.922f, 0.224f, 0.553f, 0.247f }, { 1.000f, 0.463f, 0.827f, 0.298f } } },
+    };
+    id val = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
+    NSInteger code = (val != nil) ? [val integerValue] : 4;
+    if (code < -1 || code > 6)
+        code = 4;
+    return &table[code + 1];
+}
+
+static NSColor *selectionColor(const CGFloat c[4]) {
+    return [NSColor colorWithSRGBRed: c[0] green: c[1] blue: c[2] alpha: c[3]];
+}
+
+// QUIRK: AppleHighlightColor in NSGlobalDomain stores RGB components as a space-separated float string,
+// and selectedTextBackgroundColor and selectedControlColor follow it in the light appearance.
+// Evidence: black-box reads on macOS 10.14.4 (tier 2) with AppleHighlightColor set to each preset; the string
+// format is described in https://pypi.org/project/osx-colors/ (for example "0.752941 0.964706 0.678431 Green").
 // Test: tests/appkit-appearance-theme.m
 static NSColor *highlightColorFromDefaults(NSAppearance *appearance) {
-    NSString *val = [[NSUserDefaults standardUserDefaults] stringForKey: @"AppleHighlightColor"];
-    if (val != nil && [val length] > 0) {
-        float r = 0, g = 0, b = 0, a = 1.0;
-        int count = sscanf([val UTF8String], "%f %f %f %f", &r, &g, &b, &a);
-        if (count >= 3) {
-            return [NSColor colorWithSRGBRed: r green: g blue: b alpha: (count >= 4) ? a : 1.0f];
+    BOOL dark = isDarkAppearance(appearance);
+    if (!dark) {
+        NSString *val = [[NSUserDefaults standardUserDefaults] stringForKey: @"AppleHighlightColor"];
+        if (val != nil && [val length] > 0) {
+            float r = 0, g = 0, b = 0, a = 1.0;
+            int count = sscanf([val UTF8String], "%f %f %f %f", &r, &g, &b, &a);
+            if (count >= 3)
+                return [NSColor colorWithSRGBRed: r green: g blue: b alpha: (count >= 4) ? a : 1.0f];
         }
     }
-    if (isDarkAppearance(appearance)) {
-        return [NSColor colorWithSRGBRed: 0.247f green: 0.388f blue: 0.545f alpha: 1.0f];
-    }
-    return [NSColor colorWithSRGBRed: 0.698039f green: 0.843137f blue: 1.0f alpha: 1.0f];
+    return selectionColor(accentSelectionColors()->control[dark ? 1 : 0]);
 }
 
 // Registers the system colours that follow the appearance and the accent preferences in the System
@@ -780,8 +820,6 @@ void NSColorInitializeDynamicSystemColors(void) {
                                            [NSColor colorWithSRGBRed: 0.254902f green: 0.611765f blue: 1.0f alpha: 1.0f]);
     registerDynamicSystemColor(@"windowBackgroundColor", [NSColor colorWithSRGBRed: 0.925f green: 0.925f blue: 0.925f alpha: 1.0f],
                                                        constantRGB(0.196, 0.196, 0.196, 1.0));
-    registerDynamicSystemColor(@"selectedContentBackgroundColor", [NSColor colorWithSRGBRed: 0.0f green: 0.388235f blue: 0.882353f alpha: 1.0f],
-                                                                 [NSColor colorWithSRGBRed: 0.0f green: 0.345098f blue: 0.815686f alpha: 1.0f]);
     registerDynamicSystemColor(@"unemphasizedSelectedContentBackgroundColor", [NSColor colorWithSRGBRed: 0.862745f green: 0.862745f blue: 0.862745f alpha: 1.0f],
                                                                              [NSColor colorWithSRGBRed: 0.274510f green: 0.274510f blue: 0.274510f alpha: 1.0f]);
     registerDynamicSystemColor(@"unemphasizedSelectedTextColor", constantWhite(0.0, 1.0), constantWhite(1.0, 1.0));
@@ -790,21 +828,12 @@ void NSColorInitializeDynamicSystemColors(void) {
 
     // Dark values read on macOS 10.14.4 (tier 2, black-box reads of the colours in the DarkAqua appearance);
     // the light values are those DarlingDisplay returns.
-    registerDynamicSystemColor(@"selectedControlColor", [NSColor colorWithSRGBRed: 0.701961f green: 0.843137f blue: 1.0f alpha: 1.0f],
-                                                       [NSColor colorWithSRGBRed: 0.247f green: 0.388f blue: 0.545f alpha: 1.0f]);
     registerDynamicSystemColor(@"gridColor", [NSColor colorWithGenericGamma22White: 0.80f alpha: 1.0f], constantWhite(1.0, 0.098));
     registerDynamicSystemColor(@"headerTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f], constantWhite(1.0, 1.0));
     registerDynamicSystemColor(@"alternatingContentBackgroundColor", [NSColor colorWithSRGBRed: 0.956863f green: 0.960784f blue: 0.960784f alpha: 1.0f],
                                                                     constantWhite(1.0, 0.047));
     registerDynamicSystemColor(@"disabledControlTextColor", [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f], constantWhite(1.0, 0.247));
     registerDynamicSystemColor(@"highlightColor", [NSColor colorWithGenericGamma22White: 1.0f alpha: 1.0f], constantWhite(0.706, 1.0));
-    // QUIRK: the indicator colour is a translucent blue, not an opaque one. Evidence: black-box read of
-    // +[NSColor keyboardFocusIndicatorColor] converted to sRGB on macOS 10.14.4, Blue control tint (tier 2); other
-    // accents give other tints, which are not followed here.
-    // Test: appkit-focus-ring.m (test_quirk_keyboard_focus_indicator_color)
-    registerDynamicSystemColor(@"keyboardFocusIndicatorColor", [NSColor colorWithSRGBRed: 0.0f green: 0.403922f blue: 0.956863f alpha: 0.247059f],
-                                                              [NSColor colorWithSRGBRed: 0.102f green: 0.663f blue: 1.0f alpha: 0.298f]);
-
     NSColor *dynamicAccent = [NSColor colorWithName: @"controlAccentColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
         id val = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
         NSInteger code = (val != nil) ? [val integerValue] : 4;
@@ -816,6 +845,20 @@ void NSColorInitializeDynamicSystemColors(void) {
         return highlightColorFromDefaults(appearance);
     }];
     NSColorSetCatalogColor(@"System", @"selectedTextBackgroundColor", dynamicHighlight);
+    NSColor *dynamicSelectedControl = [NSColor colorWithName: @"selectedControlColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
+        return highlightColorFromDefaults(appearance);
+    }];
+    NSColorSetCatalogColor(@"System", @"selectedControlColor", dynamicSelectedControl);
+    NSColor *dynamicContent = [NSColor colorWithName: @"selectedContentBackgroundColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
+        return selectionColor(accentSelectionColors()->content[isDarkAppearance(appearance) ? 1 : 0]);
+    }];
+    NSColorSetCatalogColor(@"System", @"selectedContentBackgroundColor", dynamicContent);
+    // QUIRK: the indicator colour is a translucent tint of the accent, not an opaque one (see the table above).
+    // Test: appkit-focus-ring.m (test_quirk_keyboard_focus_indicator_color) pins the Blue light value.
+    NSColor *dynamicFocus = [NSColor colorWithName: @"keyboardFocusIndicatorColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
+        return selectionColor(accentSelectionColors()->focus[isDarkAppearance(appearance) ? 1 : 0]);
+    }];
+    NSColorSetCatalogColor(@"System", @"keyboardFocusIndicatorColor", dynamicFocus);
 }
 
 // A System catalog color that display backends may not know: the value a
