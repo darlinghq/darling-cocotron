@@ -600,8 +600,22 @@ static BOOL _allowsAutomaticWindowTabbing;
     return nil;
 }
 
+// -_autosaveFrameKeyWithName: gives a saved frame one defaults key per screen
+// layout: the fixed text, the name, then the screen frame as text. Remove every
+// such key of this name. The screen frame text starts with "{", which keeps the
+// keys of a longer name that begins with this one out of the match.
 + (void) removeFrameUsingName: (NSString *) name {
-    NSUnimplementedMethod();
+    if ([name length] == 0)
+        return;
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *prefix = [NSString stringWithFormat: @"NSWindow frame %@ ", name];
+
+    for (NSString *key in [[defaults dictionaryRepresentation] allKeys]) {
+        if ([key hasPrefix: prefix] &&
+            [[key substringFromIndex: [prefix length]] hasPrefix: @"{"])
+            [defaults removeObjectForKey: key];
+    }
 }
 
 // The window manager's frame shows these buttons for a window with a title
