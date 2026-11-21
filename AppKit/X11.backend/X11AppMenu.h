@@ -65,6 +65,10 @@
 
 - (void) setMainMenu: (NSMenu *) menu;
 
+// Whether the session has a desktop that shows application menus (an appmenu
+// registrar owns its name on the session bus). Connects to the bus on first use.
+- (BOOL) globalMenuPresent;
+
 // A top-level window of the application was created or destroyed (not a popup
 // or the bar).
 - (void) windowCreated: (Window) window;

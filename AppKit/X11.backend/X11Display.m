@@ -27,6 +27,7 @@
 #import "../private-include/AppKit/NSEventTime.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
+#import "X11DockSupport.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSScreen.h>
@@ -1102,6 +1103,23 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
         if (_relativeWindow == i)
             [self suspendRelativeMouse];
     }
+}
+
+// The menu bar window is a dock that the window manager has to place at the top of the screen. Under a manager
+// that does not handle docks it would float over the windows of the application (see X11DockSupport.h), so
+// there the menu is outside the windows only when the desktop has a global menu, as on Wayland, and the
+// windows draw it themselves otherwise. -appMenu is not used: it asks +[NSWindow _usesInWindowMenuBar], which
+// is what is being answered.
+- (BOOL) _showsMainMenuOutsideWindows {
+    if (X11WindowManagerPlacesDocks(_display))
+        return YES;
+    if (_appMenu == nil)
+        _appMenu = [[X11AppMenu alloc] initWithDisplay: _display];
+    if ([_appMenu globalMenuPresent])
+        return YES;
+    [_appMenu release];
+    _appMenu = nil;
+    return NO;
 }
 
 - (X11AppMenu *) appMenu {
