@@ -100,6 +100,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _miniaturizedReported;
     // Whether X11Display found the window covered (see X11Occlusion.h).
     BOOL _occluded;
+    // Geometry of the last ConfigureNotify (see -noteConfigureGeometryChanged:).
+    BOOL _configureKnown;
+    int _configureX, _configureY, _configureWidth, _configureHeight;
 }
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
@@ -154,6 +157,8 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 - (void) restackForLevels;
 - (BOOL) isMapped;
 - (void) setOccluded: (BOOL) occluded;
+// Records the geometry of a ConfigureNotify; NO when it repeats the previous one.
+- (BOOL) noteConfigureGeometryChanged: (XConfigureEvent *) event;
 // Whether the window is fullscreen (_NET_WM_STATE_FULLSCREEN), as last asked
 // for or as the window manager last set it.
 - (BOOL) isFullscreen;
