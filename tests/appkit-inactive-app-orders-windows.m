@@ -12,9 +12,7 @@
 // (DARLING_APPKIT_BACKEND=x11 on Xvfb with xfwm4, or DARLING_APPKIT_BACKEND=wayland
 // in a compositor with a seat).
 //
-//   appkit-inactive-app-orders-windows                  all combinations (24 runs; on Wayland the kinds that
-//          keep ordering windows in while inactive are only checked for resigning and activating, as the
-//          compositor decides the focus of a newly mapped window)
+//   appkit-inactive-app-orders-windows                  all combinations (24 runs)
 //   appkit-inactive-app-orders-windows bg <policy> <when> <call> <secs> <kind>
 //          the background app by itself, printing every activation change
 //          for a harness that watches the window system's own focus
@@ -259,6 +257,14 @@ static int runOther(double seconds, const char *policy) {
         [window setReleasedWhenClosed: NO];
         [window setTitle: @"FS-OTHER"];
         [window makeKeyAndOrderFront: nil];
+        // Tells the harness when the window stops being key, i.e. when the input focus left this client.
+        [[NSNotificationCenter defaultCenter] addObserverForName: NSWindowDidResignKeyNotification
+                                                          object: window
+                                                           queue: nil
+                                                      usingBlock: ^(NSNotification *n) {
+            printf("LOST-KEY\n");
+            fflush(stdout);
+        }];
         [NSTimer scheduledTimerWithTimeInterval: 0.1 repeats: YES block: ^(NSTimer *t) {
             static BOOL announced;
             if (!announced && [NSApp isActive] && [window isKeyWindow]) {
@@ -297,13 +303,25 @@ static void startOther(const char *self, const char *policy) {
     fcntl(childOut, F_SETFL, O_NONBLOCK);
 }
 
+// What the other client has printed so far.
+static char otherOutput[256];
+
+static void pollOther(void) {
+    size_t used = strlen(otherOutput);
+    ssize_t n = read(childOut, otherOutput + used, sizeof(otherOutput) - 1 - used);
+    if (n > 0)
+        otherOutput[used + n] = 0;
+}
+
 static BOOL otherIsReady(void) {
-    char buffer[64];
-    ssize_t n = read(childOut, buffer, sizeof(buffer) - 1);
-    if (n <= 0)
-        return NO;
-    buffer[n] = 0;
-    return strstr(buffer, "READY") != NULL;
+    pollOther();
+    return strstr(otherOutput, "READY") != NULL;
+}
+
+// Whether the other client's window stopped being key after it announced itself.
+static BOOL otherLostKey(void) {
+    pollOther();
+    return strstr(otherOutput, "LOST-KEY") != NULL;
 }
 
 static int runBackground(const char *self, const char *policy, const char *when, const char *call,
@@ -350,37 +368,44 @@ static int runBackground(const char *self, const char *policy, const char *when,
                     [NSTimer scheduledTimerWithTimeInterval: 1.5 repeats: NO block: ^(NSTimer *t2) {
                         say("checking");
                         // Compositors give the keyboard focus to a toplevel when it is mapped, and
-                        // xdg-shell has no way to map one without that. A program that keeps ordering
-                        // windows in while its application is inactive (every kind but vgui) can
-                        // therefore get the focus back on Wayland, whatever AppKit does; only the
-                        // application that stops (vgui) is checked there.
-                        BOOL compositorDecides = getenv("DARLING_APPKIT_BACKEND") != NULL &&
-                                                 strcmp(getenv("DARLING_APPKIT_BACKEND"), "wayland") == 0 &&
-                                                 strcmp(kind, "vgui") != 0;
-                        if (compositorDecides)
-                            say("NOTE: Wayland compositor decides the focus of newly mapped windows");
-                        expect(compositorDecides || ![NSApp isActive],
-                               "the application resigns when another client takes the focus");
+                        // xdg-shell has no way to map one without that, so on Wayland the windows an
+                        // inactive application orders in are not mapped until it is activated. The other
+                        // client therefore keeps the keyboard focus on every backend.
+                        expect(![NSApp isActive], "the application resigns when another client takes the focus");
+                        expect(!otherLostKey(), "the other client keeps the input focus");
                         activationsAtReady = activations;
                         [NSTimer scheduledTimerWithTimeInterval: 4.0 repeats: NO block: ^(NSTimer *t3) {
-                            expect(compositorDecides || activations == activationsAtReady,
+                            expect(activations == activationsAtReady,
                                    "ordering windows in does not make the application active again");
-                            expect(compositorDecides || ![NSApp isActive], "the application is still inactive");
+                            expect(![NSApp isActive], "the application is still inactive");
+                            expect(!otherLostKey(), "the other client still has the input focus");
                             // Activation by request still works.
                             [w.timer invalidate];
                             for (NSWindow *hidden in w.windows)
                                 [hidden orderOut: nil];
+                            // An inactive application orders a titled window in: it is ordered in as far
+                            // as AppKit is concerned and the other client keeps the focus. Activating then
+                            // shows the window and makes it key.
                             NSWindow *main = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 200, 100)
                                                                           styleMask: NSWindowStyleMaskTitled
                                                                             backing: NSBackingStoreBuffered
                                                                               defer: NO];
                             [main setReleasedWhenClosed: NO];
                             [main setTitle: @"FS-BG-MAIN"];
+                            [main orderFront: nil];
+                            expect([main isVisible], "a window ordered in while inactive is visible");
+                            expect([[NSApp orderedWindows] containsObject: main],
+                                   "and is in the ordered window list");
+                            expect(![main isKeyWindow], "but is not key");
+                            [NSTimer scheduledTimerWithTimeInterval: 1.5 repeats: NO block: ^(NSTimer *t3b) {
+                            expect(![NSApp isActive], "ordering the titled window in does not activate");
+                            expect(!otherLostKey(), "ordering the titled window in leaves the focus with the other client");
                             [main makeKeyAndOrderFront: nil];
                             [NSApp activateIgnoringOtherApps: YES];
                             [NSTimer scheduledTimerWithTimeInterval: 2.5 repeats: NO block: ^(NSTimer *t4) {
                                 expect([NSApp isActive], "activateIgnoringOtherApps: still activates");
-                                expect([main isKeyWindow], "and the window it ordered in becomes key");
+                                expect([main isVisible], "the window it ordered in is shown");
+                                expect([main isKeyWindow], "and becomes key");
                                 finished = YES;
                                 if (childPid > 0) {
                                     kill(childPid, SIGTERM);
@@ -389,6 +414,7 @@ static int runBackground(const char *self, const char *policy, const char *when,
                                 printf("%s\n", failures ? "FAIL" : "PASS");
                                 fflush(stdout);
                                 _exit(failures ? 1 : 0);
+                            }];
                             }];
                         }];
                     }];
