@@ -109,7 +109,9 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
 
 @end
 
+// Every method of both protocols is optional, as on macOS
 @protocol NSOutlineViewDataSource <NSObject>
+@optional
 - (NSInteger) outlineView: (NSOutlineView *) outlineView
         numberOfChildrenOfItem: (nullable id) item;
 - (BOOL) outlineView: (NSOutlineView *) outlineView isItemExpandable: (id) item;
@@ -123,9 +125,11 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
         setObjectValue: (nullable id) object
         forTableColumn: (nullable NSTableColumn *) tableColumn
                 byItem: (nullable id) item;
+- (void) outlineView: (NSOutlineView *) outlineView sortDescriptorsDidChange: (NSArray<NSSortDescriptor *> *) oldDescriptors;
 @end
 
 @protocol NSOutlineViewDelegate <NSControlTextEditingDelegate>
+@optional
 - (BOOL) outlineView: (NSOutlineView *) outlineView shouldExpandItem: (id) item;
 - (BOOL) outlineView: (NSOutlineView *) outlineView shouldCollapseItem: (id) item;
 - (BOOL) selectionShouldChangeInOutlineView: (NSOutlineView *) outlineView;
@@ -143,7 +147,6 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
         willDisplayOutlineCell: (id) cell
                 forTableColumn: (nullable NSTableColumn *) tableColumn
                           item: (id) item;
-@optional
 - (nullable NSTableRowView *) outlineView: (NSOutlineView *) outlineView rowViewForItem: (id) item;
 - (void) outlineView: (NSOutlineView *) outlineView didAddRowView: (NSTableRowView *) rowView forRow: (NSInteger) row;
 - (void) outlineView: (NSOutlineView *) outlineView didRemoveRowView: (NSTableRowView *) rowView forRow: (NSInteger) row;

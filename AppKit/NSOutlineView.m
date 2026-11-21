@@ -638,6 +638,18 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     [self reloadData];
 }
 
+// The data source hears of a change of the sort descriptors as outlineView:sortDescriptorsDidChange:, with the old
+// ones, whether a column header was clicked or they were set programmatically.
+// Test: tests/appkit-outline-view-sort-descriptors.m
+- (void) setSortDescriptors: (NSArray *) value {
+    NSArray *old = [[self sortDescriptors] retain];
+    [super setSortDescriptors: value];
+    if ([self sortDescriptors] != old &&
+        [_dataSource respondsToSelector: @selector(outlineView:sortDescriptorsDidChange:)])
+        [_dataSource outlineView: self sortDescriptorsDidChange: old];
+    [old release];
+}
+
 - (void) setDelegate: delegate {
     struct {
         NSString *name;
