@@ -36,6 +36,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // What the window is to the window system: a DarlingWindowPresentation (see
 // DarlingWindowPresentation.h), decided from the window's current state.
 - (int) _windowPresentation;
+// The smallest and largest frame sizes user resizing is limited to, from minSize, maxSize,
+// contentMinSize and contentMaxSize. A 0 minimum or a maximum of FLT_MAX is no limit.
+- (NSSize) _minFrameSize;
+- (NSSize) _maxFrameSize;
 - (CGContextRef) cgContext;
 - (BOOL) _isActive;
 - (BOOL) _isHiddenForDeactivation;
@@ -86,6 +90,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) dirtyRect: (NSRect) rect;
 // The restoration class that -encodeRestorableStateWithCoder: recorded in state, or Nil.
 + (Class) _restorationClassFromState: (NSCoder *) state;
+@end
+
+// Sent by NSWindow to a platform window that implements it when one of the size limits changed.
+@interface NSObject (NSWindow_sizeLimits)
+- (void) sizeLimitsChanged;
 @end
 
 @interface NSApplication (NSApplication_private)

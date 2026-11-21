@@ -885,17 +885,49 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [_display flush];
 }
 
+// A size limit of the NSWindow as a xdg_toplevel size: in window geometry coordinates, where 0
+// means no limit. A value that is 0 or less, or too large to represent (the FLT_MAX of an unset
+// maximum), is no limit.
+static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
+    if (!(limit > 0) || limit >= (CGFloat) INT32_MAX - decoration)
+        return 0;
+    return (int32_t) ceil(limit + decoration);
+}
+
 - (void) updateSizeLimits {
     if (_toplevel == NULL)
         return;
 
-    union wl_argument args[2] = {{.i = 0}, {.i = 0}};
+    CGFloat decorationWidth = _clientDecorated ? 2 * WaylandBorder : 0;
+    CGFloat decorationHeight = _clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0;
+    union wl_argument min[2] = {{.i = 0}, {.i = 0}};
+    union wl_argument max[2] = {{.i = 0}, {.i = 0}};
     if (!(_styleMask & NSWindowStyleMaskResizable)) {
-        args[0].i = (int32_t) _frame.size.width + (_clientDecorated ? 2 * WaylandBorder : 0);
-        args[1].i = (int32_t) _frame.size.height + (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0);
+        min[0].i = max[0].i = (int32_t) _frame.size.width + (int32_t) decorationWidth;
+        min[1].i = max[1].i = (int32_t) _frame.size.height + (int32_t) decorationHeight;
+    } else if ([_delegate respondsToSelector: @selector(_minFrameSize)]) {
+        NSSize minSize = [(NSWindow *) _delegate _minFrameSize];
+        NSSize maxSize = [(NSWindow *) _delegate _maxFrameSize];
+        min[0].i = WaylandToplevelLimit(minSize.width, decorationWidth);
+        min[1].i = WaylandToplevelLimit(minSize.height, decorationHeight);
+        max[0].i = WaylandToplevelLimit(maxSize.width, decorationWidth);
+        max[1].i = WaylandToplevelLimit(maxSize.height, decorationHeight);
+        // A maximum below the minimum is a protocol error, so the minimum wins.
+        for (int i = 0; i < 2; i++)
+            if (max[i].i != 0 && max[i].i < min[i].i)
+                max[i].i = min[i].i;
     }
-    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, args);
-    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, args);
+    // Double buffered: the compositor sees them with the surface's next commit.
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, min);
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, max);
+}
+
+// The NSWindow's minSize, maxSize, contentMinSize or contentMaxSize changed.
+- (void) sizeLimitsChanged {
+    if (_toplevel == NULL)
+        return;
+    [self updateSizeLimits];
+    [_display flush];
 }
 
 - (void) setOpaque: (BOOL) value {

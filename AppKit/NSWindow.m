@@ -1479,22 +1479,60 @@ static BOOL _allowsAutomaticWindowTabbing;
     [self setFrame: frame display: NO];
 }
 
+// The window system limits user resizing to the sizes below, which a platform window reads when
+// it is told they changed.
+- (void) _sizeLimitsChanged {
+    id platform = _platformWindow;
+    if ([platform respondsToSelector: @selector(sizeLimitsChanged)])
+        [platform sizeLimitsChanged];
+}
+
+// The sizes are frame sizes: the content size limits include what the frame adds around the content
+// (title bar, menu, toolbar). Per the documentation of contentMinSize and contentMaxSize they take
+// precedence over minSize and maxSize. A limit of 0 in a dimension is none. GUESS: a content maximum
+// that is not set is stored as zero here, and is taken as none, like the FLT_MAX default of maxSize.
+- (NSSize) _minFrameSize {
+    NSSize size = [self minSize];
+    NSSize content = [self contentMinSize];
+    NSSize chrome = [self frameRectForContentRect: NSZeroRect].size;
+    if (content.width > 0)
+        size.width = content.width + chrome.width;
+    if (content.height > 0)
+        size.height = content.height + chrome.height;
+    return size;
+}
+
+- (NSSize) _maxFrameSize {
+    NSSize size = [self maxSize];
+    NSSize content = [self contentMaxSize];
+    NSSize chrome = [self frameRectForContentRect: NSZeroRect].size;
+    if (content.width > 0 && content.width < FLT_MAX)
+        size.width = content.width + chrome.width;
+    if (content.height > 0 && content.height < FLT_MAX)
+        size.height = content.height + chrome.height;
+    return size;
+}
+
 - (void) setMinSize: (NSSize) size {
     NS_EXTRA(NSWindow, self)->_minSize = size;
+    [self _sizeLimitsChanged];
 }
 
 - (void) setMaxSize: (NSSize) size {
     NS_EXTRA(NSWindow, self)->_maxSize = size;
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentMinSize: (NSSize) value {
     // The value was already being stored; the unimplemented marker made every
     // caller raise instead.
     NS_EXTRA(NSWindow, self)->_contentMinSize = value;
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentMaxSize: (NSSize) value {
     NS_EXTRA(NSWindow, self)->_contentMaxSize = value;
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentBorderThickness: (CGFloat) thickness
@@ -4611,14 +4649,16 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     // Don't allow the platform window changes to violate our window size limits
     // (if we have them). Windows (for example) likes to make the platform
     // window very small so it fits in the task bar...
-    if (!NSEqualSizes([self minSize], NSMakeSize(0, 0))) {
-        frame.size.width = MAX(NSWidth(frame), [self minSize].width);
-        frame.size.height = MAX(NSHeight(frame), [self minSize].height);
-    }
-
-    if (!NSEqualSizes([self maxSize], NSMakeSize(FLT_MAX, FLT_MAX))) {
-        frame.size.width = MIN(NSWidth(frame), [self maxSize].width);
-        frame.size.height = MIN(NSHeight(frame), [self maxSize].height);
+    // The same limits the platform window is given (see -_minFrameSize), and the minimum wins over a
+    // maximum below it, as in what is sent to the window system. Only a resize is limited: a move
+    // reports the size the window has and must not change it (nothing would resize the views).
+    if (didSize) {
+        NSSize maxSize = [self _maxFrameSize];
+        frame.size.width = MIN(NSWidth(frame), maxSize.width);
+        frame.size.height = MIN(NSHeight(frame), maxSize.height);
+        NSSize minSize = [self _minFrameSize];
+        frame.size.width = MAX(NSWidth(frame), minSize.width);
+        frame.size.height = MAX(NSHeight(frame), minSize.height);
     }
 
     // We don't want the miniaturized frame.
