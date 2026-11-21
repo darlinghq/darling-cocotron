@@ -218,6 +218,8 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     [coder encodeObject: NS_EXTRA(NSMenu, self)->_name forKey: @"NSName"];
     [coder encodeObject: NS_EXTRA(NSMenu, self)->_itemArray forKey: @"NSMenuItems"];
     [coder encodeBool: !NS_EXTRA(NSMenu, self)->_autoenablesItems forKey: @"NSNoAutoenable"];
+    if (NS_EXTRA(NSMenu, self)->_identifier != nil)
+        [coder encodeObject: NS_EXTRA(NSMenu, self)->_identifier forKey: @"NSMenuIdentifier"];
 }
 
 - (void) setMenuChangedMessagesEnabled: (BOOL) flag {
@@ -237,6 +239,9 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
         NS_EXTRA(NSMenu, self)->_itemArray = [[NSMutableArray alloc]
                 initWithArray: [keyed decodeObjectForKey: @"NSMenuItems"]];
         NS_EXTRA(NSMenu, self)->_autoenablesItems = ![keyed decodeBoolForKey: @"NSNoAutoenable"];
+        // The identifier applications look their menus up by (nibs and archives
+        // store it under this key on macOS).
+        NS_EXTRA(NSMenu, self)->_identifier = [[keyed decodeObjectForKey: @"NSMenuIdentifier"] copy];
     } else {
         // One layout for every class version, as recorded from Mac archives: a flag word
         // (bit 31: no automatic enabling of items, bit 29: no state column), the title,
