@@ -731,7 +731,8 @@ static void registerDynamicSystemColor(NSColorName name, NSColor *light, NSColor
 }
 
 // The selection colours follow the highlight colour the General preference pane writes together with the
-// accent, so they are a table keyed by AppleAccentColor (-1 Graphite to 6 Pink), each as {light, dark}.
+// accent, so they are a table of the presets, Graphite (index 0) to Pink (7), each as {light, dark}. The
+// selection colours are chosen by AppleHighlightColor's preset name and the focus indicator by AppleAccentColor.
 // QUIRK: selectedControlColor (= selectedTextBackgroundColor), selectedContentBackgroundColor and
 // keyboardFocusIndicatorColor depend on the accent/highlight setting, and differ between the appearances.
 // Evidence: black-box reads of the three colours converted to sRGB on macOS 10.14.4 (tier 2), run with each
@@ -746,7 +747,7 @@ typedef struct {
     CGFloat focus[2][4];
 } AccentSelectionColors;
 
-static const AccentSelectionColors *accentSelectionColors(void) {
+static const AccentSelectionColors *accentSelectionTable(void) {
     static const AccentSelectionColors table[8] = {
     { /* -1 */ { { 0.878f, 0.878f, 0.878f, 1.000f }, { 1.000f, 1.000f, 1.000f, 0.247f } }, { { 0.502f, 0.502f, 0.502f, 1.000f }, { 0.408f, 0.408f, 0.408f, 1.000f } }, { { 0.600f, 0.600f, 0.620f, 1.000f }, { 0.765f, 0.765f, 0.765f, 0.498f } } },
     { /* 0 */ { { 0.961f, 0.765f, 0.773f, 1.000f }, { 0.545f, 0.341f, 0.345f, 1.000f } }, { { 0.765f, 0.145f, 0.169f, 1.000f }, { 0.816f, 0.204f, 0.224f, 1.000f } }, { { 0.827f, 0.125f, 0.153f, 0.247f }, { 1.000f, 0.478f, 0.502f, 0.298f } } },
@@ -757,11 +758,35 @@ static const AccentSelectionColors *accentSelectionColors(void) {
     { /* 5 */ { { 0.875f, 0.773f, 0.875f, 1.000f }, { 0.439f, 0.337f, 0.439f, 1.000f } }, { { 0.490f, 0.165f, 0.494f, 1.000f }, { 0.498f, 0.196f, 0.502f, 1.000f } }, { { 0.514f, 0.149f, 0.518f, 0.247f }, { 0.859f, 0.471f, 0.871f, 0.298f } } },
     { /* 6 */ { { 0.988f, 0.792f, 0.886f, 1.000f }, { 0.533f, 0.337f, 0.431f, 1.000f } }, { { 0.851f, 0.231f, 0.522f, 1.000f }, { 0.784f, 0.192f, 0.475f, 1.000f } }, { { 0.922f, 0.224f, 0.553f, 0.247f }, { 1.000f, 0.463f, 0.827f, 0.298f } } },
     };
+    return table;
+}
+
+// The row the AppleAccentColor setting selects (keyboard focus indicator).
+static const AccentSelectionColors *accentSelectionColors(void) {
     id val = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
     NSInteger code = (val != nil) ? [val integerValue] : 4;
     if (code < -1 || code > 6)
         code = 4;
-    return &table[code + 1];
+    return &accentSelectionTable()[code + 1];
+}
+
+// The row the AppleHighlightColor setting selects (selection colours): the preset name the General pane appends to
+// the RGB string, Blue when there is none. Returns -1 in *custom when the string has RGB but no preset name.
+static const AccentSelectionColors *highlightSelectionColors(BOOL *custom) {
+    static NSString *const names[8] = { @"Graphite", @"Red", @"Orange", @"Yellow", @"Green", @"Blue", @"Purple", @"Pink" };
+    NSString *val = [[NSUserDefaults standardUserDefaults] stringForKey: @"AppleHighlightColor"];
+    if (custom != NULL)
+        *custom = NO;
+    if (val != nil && [val length] > 0) {
+        NSString *last = [[val componentsSeparatedByString: @" "] lastObject];
+        for (int i = 0; i < 8; i++) {
+            if ([last isEqualToString: names[i]])
+                return &accentSelectionTable()[i];
+        }
+        if (custom != NULL)
+            *custom = YES;
+    }
+    return &accentSelectionTable()[5];
 }
 
 static NSColor *selectionColor(const CGFloat c[4]) {
@@ -775,7 +800,9 @@ static NSColor *selectionColor(const CGFloat c[4]) {
 // Test: tests/appkit-appearance-theme.m
 static NSColor *highlightColorFromDefaults(NSAppearance *appearance) {
     BOOL dark = isDarkAppearance(appearance);
-    if (!dark) {
+    BOOL custom = NO;
+    const AccentSelectionColors *row = highlightSelectionColors(&custom);
+    if (!dark && custom) {
         NSString *val = [[NSUserDefaults standardUserDefaults] stringForKey: @"AppleHighlightColor"];
         if (val != nil && [val length] > 0) {
             float r = 0, g = 0, b = 0, a = 1.0;
@@ -784,7 +811,7 @@ static NSColor *highlightColorFromDefaults(NSAppearance *appearance) {
                 return [NSColor colorWithSRGBRed: r green: g blue: b alpha: (count >= 4) ? a : 1.0f];
         }
     }
-    return selectionColor(accentSelectionColors()->control[dark ? 1 : 0]);
+    return selectionColor(row->control[dark ? 1 : 0]);
 }
 
 // Registers the system colours that follow the appearance and the accent preferences in the System
@@ -850,7 +877,7 @@ void NSColorInitializeDynamicSystemColors(void) {
     }];
     NSColorSetCatalogColor(@"System", @"selectedControlColor", dynamicSelectedControl);
     NSColor *dynamicContent = [NSColor colorWithName: @"selectedContentBackgroundColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
-        return selectionColor(accentSelectionColors()->content[isDarkAppearance(appearance) ? 1 : 0]);
+        return selectionColor(highlightSelectionColors(NULL)->content[isDarkAppearance(appearance) ? 1 : 0]);
     }];
     NSColorSetCatalogColor(@"System", @"selectedContentBackgroundColor", dynamicContent);
     // QUIRK: the indicator colour is a translucent tint of the accent, not an opaque one (see the table above).
