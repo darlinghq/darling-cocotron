@@ -90,6 +90,8 @@ static NSString *const NSAppearanceThreadKey = @"NSAppearanceCurrentDrawingAppea
     return _name;
 }
 
+BOOL NSAccessibilityDisplayShouldIncreaseContrast(void);
+
 static BOOL isDarkAppearanceName(NSAppearanceName name) {
     return [name isEqualToString: NSAppearanceNameDarkAqua] ||
            [name isEqualToString: NSAppearanceNameVibrantDark] ||
@@ -107,6 +109,21 @@ static BOOL isDarkAppearanceName(NSAppearanceName name) {
 {
     if (_name == nil)
         return nil;
+    // QUIRK: with Increase Contrast on, the Aqua and Dark Aqua appearances match the high contrast variant of
+    // the same family when it is offered, while their own name stays Aqua / Dark Aqua.
+    // Evidence: black-box reads on macOS 10.14.4 and 26.7.3 (tier 2): with increaseContrast set in
+    // com.apple.universalaccess, asking Aqua for a best match among {Aqua, high contrast Aqua, Dark Aqua, high
+    // contrast Dark Aqua} gives high contrast Aqua (Dark Aqua gives high contrast Dark Aqua), asking among
+    // {Aqua, Dark Aqua} gives its own name, and the name itself is unchanged. Without the setting the own name wins.
+    // Test: tests/appkit-appearance-increase-contrast.m
+    BOOL isAqua = [_name isEqualToString: NSAppearanceNameAqua];
+    BOOL isDarkAqua = [_name isEqualToString: NSAppearanceNameDarkAqua];
+    if ((isAqua || isDarkAqua) && NSAccessibilityDisplayShouldIncreaseContrast()) {
+        NSAppearanceName highContrast = isAqua ? NSAppearanceNameAccessibilityHighContrastAqua
+                                               : NSAppearanceNameAccessibilityHighContrastDarkAqua;
+        if ([appearances containsObject: highContrast])
+            return highContrast;
+    }
     if ([appearances containsObject: _name])
         return _name;
     NSAppearanceName family = isDarkAppearanceName(_name)

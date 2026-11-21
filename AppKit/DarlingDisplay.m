@@ -44,32 +44,15 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
 }
 
 - (NSColor *) colorWithName: (NSString *) colorName {
-    if ([colorName isEqual: @"controlColor"])
-        return [NSColor colorWithCalibratedWhite: 0.93 alpha: 1.0];
     // The disabled text colour and the menu highlight are the values macOS 10.14 returns in the light
     // appearance, converted to sRGB. There is no public menu background or menu text colour to read back; the
     // menu text takes the label colour's value and the background is an estimate of the light menu material.
-    if ([colorName isEqual: @"disabledControlTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f];
-    // QUIRK: the control text colours are black at alpha 0.847 in the light appearance, not opaque black.
-    // Evidence: black-box reads of +controlTextColor, +selectedControlTextColor and +windowFrameTextColor
-    // converted to sRGB on macOS 10.14.4 and 26.7.3 (tier 2); the same alpha as +labelColor.
-    // Test: test_quirk_control_text_color_alpha in tests/appkit-system-text-colors.m
-    if ([colorName isEqual: @"controlTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"menuBackgroundColor"])
         return [NSColor colorWithSRGBRed: 0.945f green: 0.945f blue: 0.945f alpha: 1.0f];
     if ([colorName isEqual: @"mainMenuBarColor"])
         return [NSColor colorWithCalibratedWhite: 0.9 alpha: 1.0];
     if ([colorName isEqual: @"controlShadowColor"])
         return [NSColor darkGrayColor];
-    if ([colorName isEqual: @"selectedControlColor"])
-        return [NSColor colorWithSRGBRed: 0.701961f /* 179 */
-                                   green: 0.843137f /* 215 */
-                                    blue: 1.0f
-                                   alpha: 1.0f];
-    if ([colorName isEqual: @"controlBackgroundColor"])
-        return [NSColor whiteColor];
     if ([colorName isEqual: @"controlLightHighlightColor"])
         return [NSColor lightGrayColor];
     // QUIRK: the header colours of macOS 10.14 (light appearance). Evidence: black-box reads of +headerColor and
@@ -77,62 +60,20 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     // Test: appkit-table-header-aqua.m (test_quirk_header_colors)
     if ([colorName isEqual: @"headerColor"])
         return [NSColor colorWithSRGBRed: 0.666667f green: 0.666667f blue: 0.666667f alpha: 1.0f];
-    if ([colorName isEqual: @"textBackgroundColor"])
-        return [NSColor whiteColor];
-    if ([colorName isEqual: @"textColor"])
-        return [NSColor blackColor];
     if ([colorName isEqual: @"selectedTextColor"])
         return [NSColor whiteColor];
-    if ([colorName isEqual: @"headerTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"menuItemTextColor"])
         return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847f];
     if ([colorName isEqual: @"selectedMenuItemTextColor"])
         return [NSColor whiteColor];
     if ([colorName isEqual: @"selectedMenuItemColor"])
         return [NSColor colorWithSRGBRed: 0.259f green: 0.467f blue: 0.957f alpha: 1.0f];
-    if ([colorName isEqual: @"selectedControlTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847059f];
     if ([colorName isEqual: @"windowFrameColor"])
         return [NSColor lightGrayColor];
     if ([colorName isEqual: @"shadowColor"])
         return [NSColor colorWithGenericGamma22White: 0.0f alpha: 1.0f];
     if ([colorName isEqual: @"alternateSelectedControlTextColor"])
         return [NSColor colorWithGenericGamma22White: 1.0f alpha: 1.0f];
-    if ([colorName isEqual: @"labelColor"])
-        return [NSColor colorWithSRGBRed: 0.0f
-                                   green: 0.0f
-                                    blue: 0.0f
-                                   alpha: 0.847059f];
-    if ([colorName isEqual: @"linkColor"])
-        return [NSColor colorWithSRGBRed: 0.0f
-                                   green: 0.411765f
-                                    blue: 0.850980f
-                                   alpha: 1.0f];
-    if ([colorName isEqual: @"unemphasizedSelectedTextColor"])
-        return [NSColor
-                colorWithGenericGamma22White: 0.0f /* 1.0f on dark mode */
-                                               alpha: 1.0f];
-    if ([colorName isEqual: @"selectedContentBackgroundColor"])
-        return [NSColor colorWithSRGBRed: 0.0f
-                                   green: 0.388235f /* 0.345098f on dark mode */
-                                    blue: 0.882353f /* 0.815686f on dark mode */
-                                   alpha: 1.0f];
-    if ([colorName isEqual: @"unemphasizedSelectedContentBackgroundColor"])
-        return [NSColor colorWithSRGBRed: 0.862745f /* 0.274510f on dark mode */
-                                   green: 0.862745f /* 0.274510f on dark mode */
-                                    blue: 0.862745f /* 0.274510f on dark mode */
-                                   alpha: 1.0f];
-    if ([colorName isEqual: @"alternatingContentBackgroundColor"])
-        return [NSColor colorWithSRGBRed: 0.956863f
-                                   green: 0.960784f
-                                    blue: 0.960784f
-                                   alpha: 1.0f];
-    if ([colorName isEqual: @"selectedTextBackgroundColor"])
-        return [NSColor colorWithCalibratedRed: 0.20f
-                                         green: 0.55f
-                                          blue: 1.00f
-                                         alpha: 1.00f];
     if ([colorName isEqual: @"alternateSelectedControlColor"])
         return [NSColor colorWithSRGBRed: 0.0f
                                    green: 0.388235f
@@ -148,18 +89,6 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
                                          green: 0.890097f
                                           blue: 0.890097f
                                          alpha: 1.0f];
-    if ([colorName isEqual: @"gridColor"])
-        return [NSColor colorWithGenericGamma22White: 0.80f alpha: 1.0f];
-    if ([colorName isEqual: @"highlightColor"])
-        return [NSColor colorWithGenericGamma22White: 1.0f alpha: 1.0f];
-    if ([colorName isEqual: @"keyboardFocusIndicatorColor"])
-        // QUIRK: the indicator colour is a translucent blue, not an opaque one. Evidence: black-box read of
-        // +[NSColor keyboardFocusIndicatorColor] converted to sRGB on macOS 10.14.4, Blue control tint (tier 2).
-        // Test: appkit-focus-ring.m (test_quirk_keyboard_focus_indicator_color)
-        return [NSColor colorWithSRGBRed: 0.0f
-                                   green: 0.403922f
-                                    blue: 0.956863f
-                                    alpha: 0.247059f];
     if ([colorName isEqual: @"knobColor"])
         return [NSColor colorWithSRGBRed: 0.60f
                                    green: 0.60f
@@ -181,31 +110,13 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
                                     blue: 0.60f
                                     alpha: 1.0f];
 
-    // The label, background, accent and system colors of the System catalog. The values are those
+    // The under page background, find highlight and system colors of the System catalog. The values are those
     // of macOS 10.14 in the light appearance, measured with black-box probes
     // (mac-probes/ua3-system-colors.m): later releases move some of them slightly.
-    if ([colorName isEqual: @"secondaryLabelColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.498f];
-    if ([colorName isEqual: @"tertiaryLabelColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f];
-    if ([colorName isEqual: @"quaternaryLabelColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.098f];
-    if ([colorName isEqual: @"placeholderTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.247f];
-    if ([colorName isEqual: @"windowFrameTextColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.847f];
-    if ([colorName isEqual: @"separatorColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.0f blue: 0.0f alpha: 0.098f];
-    if ([colorName isEqual: @"windowBackgroundColor"])
-        return [NSColor colorWithSRGBRed: 0.925f green: 0.925f blue: 0.925f alpha: 1.0f];
     if ([colorName isEqual: @"underPageBackgroundColor"])
         return [NSColor colorWithSRGBRed: 0.588f green: 0.588f blue: 0.588f alpha: 0.898f];
     if ([colorName isEqual: @"findHighlightColor"])
         return [NSColor colorWithSRGBRed: 1.0f green: 1.0f blue: 0.0f alpha: 1.0f];
-    if ([colorName isEqual: @"unemphasizedSelectedTextBackgroundColor"])
-        return [NSColor colorWithSRGBRed: 0.863f green: 0.863f blue: 0.863f alpha: 1.0f];
-    if ([colorName isEqual: @"controlAccentColor"])
-        return [NSColor colorWithSRGBRed: 0.0f green: 0.478f blue: 1.0f alpha: 1.0f];
     if ([colorName isEqual: @"systemRedColor"])
         return [NSColor colorWithSRGBRed: 1.0f green: 0.231f blue: 0.188f alpha: 1.0f];
     if ([colorName isEqual: @"systemGreenColor"])

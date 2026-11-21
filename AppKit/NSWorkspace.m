@@ -171,10 +171,33 @@ static NSRunningApplication *QueryFrontApplication(void) {
     return _notificationCenter;
 }
 
-// Darling has no bridge to the host's accessibility display preferences yet.
-// Report the standard, unmodified display mode until that bridge exists.
+// Increase Contrast is the increaseContrast preference of com.apple.universalaccess. Nothing else of the
+// accessibility display options is bridged yet, so those report the standard, unmodified display mode.
+// QUIRK: reading the preference is what +accessibilityDisplayShouldIncreaseContrast does here; macOS asks its
+// accessibility server, which this preference drives.
+// Evidence: black-box reads on macOS 10.14.4 and 26.7.3 (tier 2): writing increaseContrast in
+// com.apple.universalaccess and starting a new process flips the property, and removing the key flips it back.
+// Test: tests/appkit-appearance-theme.m
+BOOL NSAccessibilityDisplayShouldIncreaseContrast(void) {
+    CFPropertyListRef value = CFPreferencesCopyAppValue(CFSTR("increaseContrast"), CFSTR("com.apple.universalaccess"));
+    BOOL result = NO;
+
+    if (value != NULL) {
+        if (CFGetTypeID(value) == CFBooleanGetTypeID())
+            result = CFBooleanGetValue(value) ? YES : NO;
+        else if (CFGetTypeID(value) == CFNumberGetTypeID()) {
+            int n = 0;
+            CFNumberGetValue(value, kCFNumberIntType, &n);
+            result = n != 0;
+        }
+        CFRelease(value);
+    }
+    return result;
+}
 - (BOOL) accessibilityDisplayShouldDifferentiateWithoutColor { return NO; }
-- (BOOL) accessibilityDisplayShouldIncreaseContrast { return NO; }
+- (BOOL) accessibilityDisplayShouldIncreaseContrast {
+    return NSAccessibilityDisplayShouldIncreaseContrast();
+}
 - (BOOL) accessibilityDisplayShouldReduceTransparency { return NO; }
 - (BOOL) accessibilityDisplayShouldInvertColors { return NO; }
 - (BOOL) accessibilityDisplayShouldReduceMotion { return NO; }
