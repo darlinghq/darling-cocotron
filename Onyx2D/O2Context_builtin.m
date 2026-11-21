@@ -587,6 +587,8 @@ ONYX2D_STATIC O2Paint *paintFromColor(O2Context_builtin *self, O2ColorRef color,
         VGPath *vgPath =
                 [[VGPath alloc] initWithKGPath: O2ClipStateOnePath(clipState)];
         VGPathFill(vgPath, O2AffineTransformIdentity, self);
+        // the edges are copies, the path is not needed past the fill
+        [vgPath release];
         break;
 
     default:
