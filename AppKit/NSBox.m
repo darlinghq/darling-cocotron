@@ -330,8 +330,57 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self setFrame: content];
 }
 
+// The content view is made to enclose its subviews (by its own -sizeToFit when it has one), then the
+// box is resized around it, keeping the space it had between its edges and the content view.
 - (void) sizeToFit {
-    NSUnimplementedMethod();
+    NSView *content = [self contentView];
+    if (content == nil)
+        return;
+
+    NSRect bounds = [self bounds];
+    NSRect contentFrame = [content frame];
+    CGFloat left = NSMinX(contentFrame), bottom = NSMinY(contentFrame);
+    CGFloat right = NSWidth(bounds) - NSMaxX(contentFrame), top = NSHeight(bounds) - NSMaxY(contentFrame);
+
+    // The frames below are set one by one; no view is to be resized by autoresizing meanwhile.
+    BOOL boxAutoresizes = [self autoresizesSubviews], contentAutoresizes = [content autoresizesSubviews];
+    [self setAutoresizesSubviews: NO];
+    [content setAutoresizesSubviews: NO];
+
+    if ([content respondsToSelector: @selector(sizeToFit)]) {
+        [content performSelector: @selector(sizeToFit)];
+    } else if ([[content subviews] count] > 0) {
+        // GUESS: the documentation says the content view is moved and resized to enclose its
+        // subviews, and nothing about moving the subviews; here the content view takes the size of
+        // the union of their frames and the subviews are shifted so the union starts at its origin
+        // (a hidden subview counts too).
+        NSRect enclosing = NSZeroRect;
+        BOOL first = YES;
+        for (NSView *subview in [content subviews]) {
+            enclosing = first ? [subview frame] : NSUnionRect(enclosing, [subview frame]);
+            first = NO;
+        }
+        for (NSView *subview in [content subviews])
+            [subview setFrameOrigin: NSMakePoint(NSMinX([subview frame]) - NSMinX(enclosing),
+                                                 NSMinY([subview frame]) - NSMinY(enclosing))];
+        // GUESS: a content view without subviews is left as it is.
+        [content setFrameSize: enclosing.size];
+    }
+
+    NSSize size = NSMakeSize(left + NSWidth([content frame]) + right, bottom + NSHeight([content frame]) + top);
+    if (NS_EXTRA(NSBox, self)->_titlePosition != NSNoTitle && [[self title] length] > 0) {
+        // GUESS: the title starts where -titleRect puts it and wants as much room to its right as to
+        // its left (10 points of groove); the documentation only asks for the title to be fully shown.
+        // The title cell's size is used although -titleRect says it gives too low a width.
+        NSRect titleRect = [self titleRect];
+        size.width = MAX(size.width, NSMinX(titleRect) + ceil([_titleCell cellSize].width) + 10);
+    }
+
+    [self setFrameSize: size];
+    [content setFrame: NSMakeRect(left, bottom, size.width - left - right, size.height - bottom - top)];
+    [content setAutoresizesSubviews: contentAutoresizes];
+    [self setAutoresizesSubviews: boxAutoresizes];
+    [self setNeedsDisplay: YES];
 }
 
 - (void) drawRect: (NSRect) rect {
