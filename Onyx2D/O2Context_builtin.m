@@ -1609,6 +1609,29 @@ void O2DContextFillEdgesOnSurface(O2Context_builtin *self, O2Surface *surface,
 
     int ylimit = self->_vpy + self->_vpheight;
     int xlimit = self->_vpx + self->_vpwidth;
+    int firstY = self->_vpy;
+
+    // Only the rows and columns the edges reach can change. Scanning the whole
+    // viewport made the time to fill a small path grow with the size of the
+    // surface: the edges that cover part of a row add their winding to every
+    // pixel to the right of them up to the viewport's edge.
+    if (edgeCount > 0) {
+        O2Float minY = edges[0]->v0.y, maxY = edges[0]->v1.y, maxX = -INFINITY;
+        int i;
+
+        for (i = 0; i < edgeCount; i++) {
+            minY = MIN(minY, MIN(edges[i]->v0.y, edges[i]->v1.y));
+            maxY = MAX(maxY, MAX(edges[i]->v0.y, edges[i]->v1.y));
+            maxX = MAX(maxX, MAX(edges[i]->v0.x, edges[i]->v1.x));
+        }
+        if (minY > firstY)
+            firstY = MAX(self->_vpy, (int) floor(minY));
+        if (maxY + 1 < ylimit)
+            ylimit = MAX(firstY, (int) ceil(maxY) + 1);
+        // one pixel more than the rightmost vertex for the pixel it lies in
+        if (maxX + 2 < xlimit)
+            xlimit = MAX(self->_vpx, (int) ceil(maxX) + 2);
+    }
 
     Edge *activeRoot = NULL;
     int nextAvailableEdge = 0;
@@ -1621,7 +1644,7 @@ void O2DContextFillEdgesOnSurface(O2Context_builtin *self, O2Surface *surface,
     int totalActiveEdges = 0;
     int totalActiveVerticalEdgesFullCoverage = 0;
 
-    for (scany = self->_vpy; scany < ylimit; scany++) {
+    for (scany = firstY; scany < ylimit; scany++) {
         Edge *edge, *previous = NULL;
         int unchangedActiveEdges = 1;
 
