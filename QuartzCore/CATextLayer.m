@@ -113,6 +113,62 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
     return width;
 }
 
+// The CoreText truncation type for a truncationMode, or NO for none (and for
+// a string that is not one of the documented modes).
+static BOOL truncationTypeForMode(NSString *mode, CTLineTruncationType *type) {
+    if ([mode isEqualToString: kCATruncationStart])
+        *type = kCTLineTruncationStart;
+    else if ([mode isEqualToString: kCATruncationEnd])
+        *type = kCTLineTruncationEnd;
+    else if ([mode isEqualToString: kCATruncationMiddle])
+        *type = kCTLineTruncationMiddle;
+    else
+        return NO;
+    return YES;
+}
+
+// Draws a line that is wider than the bounds cut down to their width, with an
+// ellipsis where the text is missing. CoreText makes the cut; it adds no
+// token of its own, so the ellipsis is passed in. NO when CoreText has no
+// truncated line to give (the ellipsis alone does not fit): the caller draws
+// the line whole then.
+static BOOL drawTruncatedLine(CGContextRef context, CTFontRef font,
+                              NSString *text, CTLineTruncationType type,
+                              NSString *alignmentMode, CGRect bounds,
+                              CGFloat baseline)
+{
+    NSDictionary *attributes =
+            @{(id) kCTFontAttributeName: (id) font};
+    NSAttributedString *string =
+            [[NSAttributedString alloc] initWithString: text attributes: attributes];
+    NSAttributedString *ellipsis =
+            [[NSAttributedString alloc] initWithString: @"\u2026" attributes: attributes];
+    CTLineRef line = CTLineCreateWithAttributedString((CFAttributedStringRef) string);
+    CTLineRef token = CTLineCreateWithAttributedString((CFAttributedStringRef) ellipsis);
+    CTLineRef truncated = (line != NULL && token != NULL)
+            ? CTLineCreateTruncatedLine(line, bounds.size.width, type, token)
+            : NULL;
+
+    if (truncated != NULL) {
+        double width = CTLineGetTypographicBounds(truncated, NULL, NULL, NULL);
+        CGFloat x = CGRectGetMinX(bounds);
+        if ([alignmentMode isEqualToString: kCAAlignmentRight])
+            x = CGRectGetMaxX(bounds) - width;
+        else if ([alignmentMode isEqualToString: kCAAlignmentCenter])
+            x = CGRectGetMinX(bounds) + (bounds.size.width - width) / 2;
+        CGContextSetTextPosition(context, x, baseline);
+        CTLineDraw(truncated, context);
+        CFRelease(truncated);
+    }
+    if (line != NULL)
+        CFRelease(line);
+    if (token != NULL)
+        CFRelease(token);
+    [string release];
+    [ellipsis release];
+    return truncated != NULL;
+}
+
 @implementation CATextLayer
 
 - (void) _setTextDefaults {
@@ -374,6 +430,18 @@ static CGFloat layoutLine(CTFontRef font, NSString *line, CGGlyph **outGlyphs,
         CGGlyph *glyphs;
         CGSize *advances;
         CGFloat width = layoutLine(font, line, &glyphs, &advances);
+
+        // A line too wide for an unwrapped layer is cut per truncationMode.
+        CTLineTruncationType truncation;
+        if (!NS_EXTRA(CATextLayer, self)->_wrapped && width > bounds.size.width &&
+            truncationTypeForMode(NS_EXTRA(CATextLayer, self)->_truncationMode, &truncation) &&
+            drawTruncatedLine(context, font, line, truncation,
+                              NS_EXTRA(CATextLayer, self)->_alignmentMode, bounds, baseline)) {
+            free(glyphs);
+            free(advances);
+            baseline -= lineHeight;
+            continue;
+        }
 
         CGFloat x = CGRectGetMinX(bounds);
         if ([NS_EXTRA(CATextLayer, self)->_alignmentMode isEqualToString: kCAAlignmentRight])
