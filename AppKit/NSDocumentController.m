@@ -169,11 +169,13 @@ static NSDocumentController *shared = nil;
 
 - (NSArray *) documentClassNames {
     NSMutableSet *result = [NSMutableSet set];
-    int i, count = [_fileTypes count];
 
-    for (i = 0; i < count; i++)
-        [result addObject: [(NSDictionary *) [_fileTypes objectAtIndex: i]
-                                   objectForKey: @"NSDocumentClass"]];
+    for (NSDictionary *fileType in _fileTypes) {
+        // An entry that declares no document class has no name to list.
+        NSString *className = [fileType objectForKey: @"NSDocumentClass"];
+        if (className != nil)
+            [result addObject: className];
+    }
 
     return [result allObjects];
 }
