@@ -667,6 +667,8 @@ static BOOL copyBitsPixel(O2Float value, long *pixel) {
         VGPath *vgPath =
                 [[VGPath alloc] initWithKGPath: O2ClipStateOnePath(clipState)];
         VGPathFill(vgPath, O2AffineTransformIdentity, self);
+        // the edges are copies, the path is not needed past the fill
+        [vgPath release];
         break;
 
     default:
