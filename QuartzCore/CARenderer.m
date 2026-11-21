@@ -160,16 +160,13 @@ static CGFloat mediaTimingScale(CAAnimation *animation,
     return applyMediaTimingFunction(function, zeroToOne);
 }
 
-// Copies the key times into times when they are usable for the calculation
-// mode: as many as knots (the values, or one more for discrete), from 0 to 1,
-// never decreasing (a NaN is not). Anything else is ignored, as documented for
-// CAKeyframeAnimation.keyTimes. GUESS: that a count that does not match the
-// values is ignored rather than used in part (the page says only that the
-// timing may not be as expected).
+// Copies the first `knots` key times into times when they are usable: every one a
+// number in [0,1] and none smaller than the one before (a NaN is not a number in
+// range). Anything else is ignored, as documented for CAKeyframeAnimation.keyTimes.
 static BOOL copyUsableKeyTimes(NSArray *keyTimes, NSUInteger knots,
                                double *times)
 {
-    if ([keyTimes count] != knots || knots < 2)
+    if ([keyTimes count] < knots || knots < 2)
         return NO;
 
     double previous = 0;
@@ -179,15 +176,15 @@ static BOOL copyUsableKeyTimes(NSArray *keyTimes, NSUInteger knots,
             return NO;
         times[i] = previous = time;
     }
-    return times[0] == 0 && previous == 1;
+    return YES;
 }
 
-// The span of knot times at progress, and how far through it: the last knot
-// at or before progress starts the span.
-static NSUInteger spanAtProgress(const double *times, NSUInteger knots,
+// The index of the span of knot times that progress falls in: the last knot at or
+// before progress starts the span, the first span when there is none, and there
+// are `spans` spans.
+static NSUInteger spanAtProgress(const double *times, NSUInteger spans,
                                  double progress)
 {
-    NSUInteger spans = knots - 1;
     NSUInteger index = 0;
 
     while (index + 1 < spans && times[index + 1] <= progress)
@@ -201,12 +198,23 @@ enum { StackKnots = 32 };
 // through that span it is. Linear, discrete and (for values with a distance)
 // paced modes are covered. NO, so that the caller leaves the layer at its model
 // value, for what is not: a path (the docs say values are then ignored), cubic
-// modes, and a paced animation of values without a distance. GUESS: the model
-// value is what a renderer that cannot follow an animation shows. With no usable
-// keyTimes the knots are evenly spaced (GUESS: the documentation of keyTimes does
-// not say what the default spacing is). GUESS: a paced animation ignores
-// timingFunctions (the page says it ignores keyTimes) but still gets the
-// animation's own timingFunction.
+// modes, fewer than two values (an animation of one value shows nothing), and a
+// paced animation of values without a distance.
+//
+// QUIRK: the documentation says little about key times that do not fit the values.
+// Black-box observation of macOS 26.7.3 (tier 2): the key times are used as long as
+// there are at least two numbers in [0,1] that never decrease, whatever the first and
+// last are: before the first key time the first value is shown and after the last
+// one the last value; with more key times than values, or fewer, only as many of the
+// leading ones as there are knots are used (fewer than values: only the leading values
+// take part); with no usable key times the knots are evenly spaced. A discrete
+// animation takes one more key time than values, or just as many, in which case the
+// last value is not reached before the end of the animation: the value of a span holds
+// from its key time until the next.
+// Test: the key time checks of tests/quartzcore-keyframe-animation-render.m
+//
+// GUESS: a paced animation ignores timingFunctions (the header says it ignores
+// keyTimes and timingFunctions) but still gets the animation's own timingFunction.
 static BOOL keyframeSpan(CAKeyframeAnimation *animation,
                          CFTimeInterval currentTime,
                          double (*distance)(id, id), id *from, id *to,
@@ -221,8 +229,8 @@ static BOOL keyframeSpan(CAKeyframeAnimation *animation,
     BOOL discrete = [mode isEqualToString: kCAAnimationDiscrete];
     BOOL paced = [mode isEqualToString: kCAAnimationPaced];
 
-    if (count == 0 || (!discrete && !paced &&
-                       ![mode isEqualToString: kCAAnimationLinear]))
+    if (count < 2 || (!discrete && !paced &&
+                      ![mode isEqualToString: kCAAnimationLinear]))
         return NO;
     if (paced && distance == NULL)
         return NO;
@@ -240,12 +248,8 @@ static BOOL keyframeSpan(CAKeyframeAnimation *animation,
         progress = applyMediaTimingFunction([animation timingFunction],
                                             progress);
 
-    if (count == 1) {
-        *from = *to = [values objectAtIndex: 0];
-        *fraction = 0;
-        return YES;
-    }
-
+    // Linear and paced animations have a knot per value, a discrete one a knot at the
+    // start of every value and one at the end of the last.
     NSUInteger knots = discrete ? count + 1 : count;
     double stackTimes[StackKnots];
     double *times = knots <= StackKnots ? stackTimes
@@ -264,19 +268,31 @@ static BOOL keyframeSpan(CAKeyframeAnimation *animation,
         }
         for (NSUInteger i = 1; i < count; i++)
             times[i] = total > 0 ? times[i] / total : (double) i / (count - 1);
-    } else if (!copyUsableKeyTimes([animation keyTimes], knots, times)) {
-        for (NSUInteger i = 0; i < knots; i++)
-            times[i] = (double) i / (knots - 1);
+    } else {
+        NSArray *keyTimes = [animation keyTimes];
+        NSUInteger given = [keyTimes count];
+        NSUInteger used = MIN(given, knots);
+
+        if (copyUsableKeyTimes(keyTimes, used, times)) {
+            knots = used;
+        } else {
+            for (NSUInteger i = 0; i < knots; i++)
+                times[i] = (double) i / (knots - 1);
+        }
     }
 
-    NSUInteger index = spanAtProgress(times, knots, progress);
-
-    if (discrete || progress >= times[knots - 1]) {
-        // a discrete value holds until the next key time
-        NSUInteger held = discrete ? index : count - 1;
-        *from = *to = [values objectAtIndex: held];
+    if (discrete) {
+        // the value of a span holds from its key time until the next
+        *from = *to = [values objectAtIndex: spanAtProgress(times, knots - 1, progress)];
+        *fraction = 0;
+    } else if (progress <= times[0]) {
+        *from = *to = [values objectAtIndex: 0];
+        *fraction = 0;
+    } else if (progress >= times[knots - 1]) {
+        *from = *to = [values objectAtIndex: knots - 1];
         *fraction = 0;
     } else {
+        NSUInteger index = spanAtProgress(times, knots - 1, progress);
         double start = times[index], end = times[index + 1];
         double local = end > start ? (progress - start) / (end - start) : 1;
         NSArray *functions = paced ? nil : [animation timingFunctions];

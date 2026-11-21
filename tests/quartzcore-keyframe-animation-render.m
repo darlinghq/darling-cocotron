@@ -127,14 +127,49 @@ int main(void) {
         run(blink, 0.9, @"opacity");
         CHECK(lit(4, 4), "discrete: second value after it");
 
+        // QUIRK (observed on macOS 26.7.3): a discrete animation may also have as many key
+        // times as values; each value holds from its key time to the next and the last one
+        // is not reached before the end.
+        CAKeyframeAnimation *three = [CAKeyframeAnimation animationWithKeyPath: @"opacity"];
+        three.calculationMode = kCAAnimationDiscrete;
+        three.values = @[@0.0, @1.0, @0.0];
+        three.keyTimes = @[@0, @0.5, @1];
+        run(three, 0.4, @"opacity");
+        CHECK(!lit(4, 4), "discrete, as many key times as values: first value");
+        run(three, 0.6, @"opacity");
+        CHECK(lit(4, 4), "discrete, as many key times as values: second value");
+        run(three, 0.9, @"opacity");
+        CHECK(lit(4, 4), "discrete, as many key times as values: the last value is not reached");
+
+        // QUIRK (observed on macOS 26.7.3): an animation of a single value shows nothing: the
+        // layer stays at its model value, here opaque, not the value given.
+        CAKeyframeAnimation *single = [CAKeyframeAnimation animationWithKeyPath: @"opacity"];
+        single.values = @[@0.0];
+        run(single, 0.5, @"opacity");
+        CHECK(lit(4, 4), "a single value: the layer keeps its model value");
+
         // key times that are not usable are ignored: a NaN, then a count that does not match.
         move.timingFunctions = nil;
         move.keyTimes = @[@0, @(NAN), @1];
         run(move, 0.25, @"position");
         CHECK(lit(24, 4) && !lit(44, 4), "NaN key time: ignored, evenly spaced (x = 20)");
+        // QUIRK (observed on macOS 26.7.3): fewer key times than values are used for the
+        // leading values only: 0 -> 40 over the whole animation, x = 10 at a quarter.
         move.keyTimes = @[@0, @1];
         run(move, 0.25, @"position");
-        CHECK(lit(24, 4) && !lit(44, 4), "key times that do not match the values: ignored");
+        CHECK(lit(14, 4) && !lit(4, 4) && !lit(24, 4), "fewer key times than values: the leading values only");
+        // QUIRK: more key times than values, the surplus ones are not used.
+        move.keyTimes = @[@0, @0.25, @1, @1];
+        run(move, 0.25, @"position");
+        CHECK(lit(44, 4) && !lit(24, 4), "more key times than values: the leading ones");
+        // QUIRK: key times that do not start at 0 or end at 1 are used as they are, the first
+        // value showing before the first key time and the last after the last.
+        move.keyTimes = @[@0.5, @0.75, @1];
+        run(move, 0.25, @"position");
+        CHECK(lit(4, 4) && !lit(24, 4), "first key time 0.5: the first value before it");
+        move.keyTimes = @[@0, @0.1, @0.2];
+        run(move, 0.25, @"position");
+        CHECK(lit(4, 4) && !lit(44, 4), "last key time 0.2: the last value after it");
 
         // With a path set the values are ignored: the layer stays at its model value (x = 0).
         CGMutablePathRef path = CGPathCreateMutable();
