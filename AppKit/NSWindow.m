@@ -1336,7 +1336,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     }
 #endif
 
-    if (changed) {
+    // A window that sits exactly at the limit (a window an application keeps hidden at the screen's corner)
+    // computes its own frame back. Setting it would only restart the check (-setFrame:display: asks for
+    // another one) and make the platform window reconfigure itself, which the window system reports
+    // back: a loop that spins the application's main thread while it is idle.
+    if (changed && !NSEqualRects(frame, _frame)) {
         [self setFrame: frame display: YES];
     }
     NS_EXTRA(NSWindow, self)->_makeSureIsOnAScreen = NO;
