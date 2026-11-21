@@ -67,8 +67,8 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 
 - (void) applyToObject: (id) object inRow: (NSInteger) row keyPath: (id) path {
     @try {
-        [object setValue: [[self _objectForRow: row]
-                                  valueForKeyPath: _valueKeyPath]
+        [object setValue: [self transformedObject: [[self _objectForRow: row]
+                                                           valueForKeyPath: _valueKeyPath]]
                   forKey: path];
     } @catch (id e) {
         NSLog(@"exception %@ while setting value for key path %@ for row %ld", e,
@@ -92,7 +92,11 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
                    inRow: (NSInteger) row
                  keyPath: (id) keypath
 {
-    [[self _objectForRow: row] setValue: [object valueForKeyPath: keypath]
+    // GUESS: a value transformer that cannot reverse makes the binding read-only, as in -[_NSBinder
+    // observeValueForKeyPath:ofObject:change:context:]
+    if (![self allowsReverseTransformation])
+        return;
+    [[self _objectForRow: row] setValue: [self reverseTransformedObject: [object valueForKeyPath: keypath]]
                                    forKeyPath: _valueKeyPath];
 }
 
@@ -113,7 +117,7 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 }
 
 - (id) objectAtIndex: (NSUInteger) row {
-    return [[self _objectForRow: row] valueForKeyPath: _valueKeyPath];
+    return [self transformedObject: [[self _objectForRow: row] valueForKeyPath: _valueKeyPath]];
 }
 
 - (void) cacheArrayKeyPath {
@@ -144,6 +148,8 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 }
 
 - (BOOL) allowsEditingForRow: (NSInteger) row {
+    if (![self allowsReverseTransformation]) // GUESS, see applyFromObject:inRow:keyPath:
+        return NO;
     if ([[self _objectForRow: row] classForCoder] == [NSDictionary class])
         return NO;
     return YES;

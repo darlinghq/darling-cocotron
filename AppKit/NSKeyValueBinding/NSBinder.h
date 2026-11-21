@@ -75,4 +75,5 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (id) nullPlaceholder;
 - (id) transformedObject: (id) object;
 - (id) reverseTransformedObject: (id) object;
+- (BOOL) allowsReverseTransformation;
 @end
