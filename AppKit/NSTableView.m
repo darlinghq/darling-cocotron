@@ -2209,7 +2209,13 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if ([self drawsGrid])
         [self drawGridInClipRect: clipRect];
 
-    if (NS_EXTRA(NSTableView, self)->_draggingRow >= 0) {
+    if (NS_EXTRA(NSTableView, self)->_draggingTargetShown && NS_EXTRA(NSTableView, self)->_draggingOperation == NSTableViewDropOn) {
+        // GUESS: the highlight of a drop on a row, or on the whole table (row -1), is an outline
+        NSRect target = NS_EXTRA(NSTableView, self)->_draggingRow < 0 ? [self visibleRect]
+                      : NSIntersectionRect([self rectOfRow: NS_EXTRA(NSTableView, self)->_draggingRow], [self visibleRect]);
+        [[NSColor blackColor] setStroke];
+        [NSBezierPath strokeRect: NSInsetRect(target, 1.0, 1.0)];
+    } else if (NS_EXTRA(NSTableView, self)->_draggingTargetShown && NS_EXTRA(NSTableView, self)->_draggingRow >= 0) {
         NSRect rowRect;
         [[NSColor blackColor] setStroke];
         if ([self numberOfRows] == 0)
@@ -2653,22 +2659,31 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return draggedRow;
 }
 
-- (unsigned) _validateDraggedRow: (id<NSDraggingInfo>) info {
-    BOOL result;
-    NSInteger proposedRow = [self _getDraggedRow: info];
+- (void) setDropRow: (NSInteger) row dropOperation: (NSTableViewDropOperation) operation {
+    NS_EXTRA(NSTableView, self)->_draggingRow = row;
+    NS_EXTRA(NSTableView, self)->_draggingOperation = operation;
+}
 
+// The table proposes a drop above the row under the pointer; the data source
+// may retarget it with -setDropRow:dropOperation: from validateDrop. The
+// target left in the table afterwards is what acceptDrop receives.
+- (NSDragOperation) _validateDraggedRow: (id<NSDraggingInfo>) info {
+    NSDragOperation result = NSDragOperationNone;
+
+    [self setDropRow: [self _getDraggedRow: info] dropOperation: NSTableViewDropAbove];
+
+    // GUESS: a data source without validateDrop refuses every drop
     if ([_dataSource
                 respondsToSelector: @selector
                 (tableView:validateDrop:proposedRow:proposedDropOperation:)]) {
-        if ((result = [_dataSource tableView: self
-                                validateDrop: info
-                                 proposedRow: proposedRow
-                       proposedDropOperation: NSTableViewDropAbove]))
-            NS_EXTRA(NSTableView, self)->_draggingRow = proposedRow;
-        else
-            NS_EXTRA(NSTableView, self)->_draggingRow = -1;
+        result = [_dataSource tableView: self
+                           validateDrop: info
+                            proposedRow: NS_EXTRA(NSTableView, self)->_draggingRow
+                  proposedDropOperation: NS_EXTRA(NSTableView, self)->_draggingOperation];
     }
 
+    NS_EXTRA(NSTableView, self)->_draggingTargetKnown = result != NSDragOperationNone;
+    NS_EXTRA(NSTableView, self)->_draggingTargetShown = result != NSDragOperationNone;
     [self display];
 
     return result;
@@ -2693,21 +2708,33 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) draggingExited: (id<NSDraggingInfo>) sender {
-    NS_EXTRA(NSTableView, self)->_draggingRow = -1;
+    NS_EXTRA(NSTableView, self)->_draggingTargetKnown = NO;
+    NS_EXTRA(NSTableView, self)->_draggingTargetShown = NO;
     [self display];
 }
 
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender {
-    NS_EXTRA(NSTableView, self)->_draggingRow = -1;
+    NS_EXTRA(NSTableView, self)->_draggingTargetShown = NO;
     [self display];
     return YES;
 }
 
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
+    if (!NS_EXTRA(NSTableView, self)->_draggingTargetKnown) {
+        // Dropped without a preceding validation: validate now; the outline this draws is cleared again at once
+        BOOL refused = [self _validateDraggedRow: sender] == NSDragOperationNone;
+
+        NS_EXTRA(NSTableView, self)->_draggingTargetShown = NO;
+        [self display];
+        if (refused)
+            return NO;
+    }
+
+    NS_EXTRA(NSTableView, self)->_draggingTargetKnown = NO;
     return [_dataSource tableView: self
                        acceptDrop: sender
-                              row: [self _getDraggedRow: sender]
-                    dropOperation: NSTableViewDropAbove];
+                              row: NS_EXTRA(NSTableView, self)->_draggingRow
+                    dropOperation: NS_EXTRA(NSTableView, self)->_draggingOperation];
 }
 
 - (NSString *) description {

@@ -182,7 +182,12 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         NSRect _editingFrame, _editingBorder;
         NSArray *_sortDescriptors;
 
+        // Drop target proposed by the table and retargeted by the data source; -1 with
+        // NSTableViewDropOn is the whole table.
         NSInteger _draggingRow;
+        NSTableViewDropOperation _draggingOperation;
+        BOOL _draggingTargetKnown;  // validated by the data source, not yet dropped
+        BOOL _draggingTargetShown;  // drop feedback is visible
         NSDragOperation _draggingSourceMaskLocal;
         NSDragOperation _draggingSourceMaskNonLocal;
 
@@ -281,6 +286,7 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (void) setDraggingSourceOperationMask: (NSDragOperation) mask
                                forLocal: (BOOL) isLocal;
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) isLocal;
+- (void) setDropRow: (NSInteger) row dropOperation: (NSTableViewDropOperation) dropOperation;
 
 
 - (void) addTableColumn: (NSTableColumn *) column;
