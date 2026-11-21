@@ -44,6 +44,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSTextFieldCell (NSTextFieldInset)
 - (NSSize) _textInsetSize;
+- (NSInteger) _maximumNumberOfLines;
+- (void) _setMaximumNumberOfLines: (NSInteger) value;
 @end
 
 @implementation NSTextField
@@ -392,12 +394,19 @@ NS_EXTRA_DEALLOC(NSTextField)
 }
 
 - (NSInteger) maximumNumberOfLines {
-    // TODO
-    return 0;
+    return [_cell respondsToSelector: @selector(_maximumNumberOfLines)]
+            ? [(NSTextFieldCell *) _cell _maximumNumberOfLines]
+            : 0;
 }
 
+// The cap changes how many lines the cell draws and measures, so the size and the drawing are stale.
 - (void) setMaximumNumberOfLines: (NSInteger) maximumNumberOfLines {
-    // TODO
+    if (![_cell respondsToSelector: @selector(_setMaximumNumberOfLines:)])
+        return;
+    // GUESS: the documentation gives no meaning to a negative cap; it is taken as no limit.
+    [(NSTextFieldCell *) _cell _setMaximumNumberOfLines: MAX(maximumNumberOfLines, 0)];
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay: YES];
 }
 
 - (BOOL) acceptsFirstResponder {
