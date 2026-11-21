@@ -21,6 +21,7 @@ static int g_failures;
 
 @interface NSColor (Internal)
 + (NSColor *) _accentColorForCode: (NSInteger) code;
++ (NSColor *) _accentColorForCode: (NSInteger) code dark: (BOOL) dark;
 @end
 
 @interface NSLayoutConstraint (DeactivateStub)
@@ -183,18 +184,23 @@ int main(void)
         [window removeObserver: winObserver forKeyPath: @"effectiveAppearance"];
         [explicitWin removeObserver: explicitWinObserver forKeyPath: @"effectiveAppearance"];
 
-        // 5. Pinned Mojave sRGB values for accent colors (-1 to 6)
+        // 5. Pinned sRGB values of the accent colours (-1 to 6), light appearance, read on macOS 10.14.4
         struct { NSInteger code; CGFloat r, g, b; } accentExpected[] = {
-            { -1, 0.557, 0.557, 0.576 }, // Graphite
-            {  0, 1.000, 0.231, 0.188 }, // Red
-            {  1, 1.000, 0.584, 0.000 }, // Orange
-            {  2, 1.000, 0.800, 0.000 }, // Yellow
-            {  3, 0.157, 0.804, 0.255 }, // Green
+            { -1, 0.596, 0.596, 0.596 }, // Graphite
+            {  0, 0.878, 0.220, 0.243 }, // Red
+            {  1, 0.969, 0.510, 0.106 }, // Orange
+            {  2, 0.988, 0.722, 0.153 }, // Yellow
+            {  3, 0.384, 0.729, 0.275 }, // Green
             {  4, 0.000, 0.478, 1.000 }, // Blue
-            {  5, 0.686, 0.322, 0.871 }, // Purple
-            {  6, 1.000, 0.176, 0.333 }, // Pink
+            {  5, 0.584, 0.239, 0.588 }, // Purple
+            {  6, 0.969, 0.310, 0.620 }, // Pink
         };
 #if DARLING
+        // the accents that differ in the dark appearance (read on macOS 10.14.4 and 26.7.3)
+        CHECK(near([NSColor _accentColorForCode: -1 dark: YES], 0.549, 0.549, 0.549, 1.0));
+        CHECK(near([NSColor _accentColorForCode: 0 dark: YES], 1.000, 0.322, 0.341, 1.0));
+        CHECK(near([NSColor _accentColorForCode: 5 dark: YES], 0.647, 0.314, 0.655, 1.0));
+        CHECK(near([NSColor _accentColorForCode: 4 dark: YES], 0.000, 0.478, 1.000, 1.0));
         for (size_t i = 0; i < sizeof(accentExpected) / sizeof(accentExpected[0]); i++) {
             NSColor *color = [NSColor _accentColorForCode: accentExpected[i].code];
             if (!near(color, accentExpected[i].r, accentExpected[i].g, accentExpected[i].b, 1.0)) {

@@ -493,30 +493,39 @@ static void _initializeDynamicSystemColors(void);
     return [NSColor colorWithCatalogName: @"System" colorName: @"controlColor"];
 }
 
-// QUIRK: AppleAccentColor preference is an integer from -1 (Graphite) to 6 (Pink), default 4 (Blue).
-// Values measured on macOS 10.14.4 Mojave in sRGB color space.
-// Evidence: macOS System Preferences General pane setting written to NSGlobalDomain AppleAccentColor.
+// QUIRK: AppleAccentColor is an integer from -1 (Graphite) to 6 (Pink), default 4 (Blue), and +controlAccentColor
+// is the matching colour, which differs between the appearances for Graphite, Red and Purple.
+// Evidence: black-box reads of +controlAccentColor converted to sRGB with each AppleAccentColor value, in the Aqua
+// and DarkAqua appearances, on macOS 10.14.4 and 26.7.3 (tier 2). Both gave identical values except Yellow
+// (26.7.3 is 1.000, 0.780, 0.149; the Mojave value is used).
 // Test: tests/appkit-appearance-theme.m
-+ (NSColor *) _accentColorForCode: (NSInteger) code {
++ (NSColor *) _accentColorForCode: (NSInteger) code dark: (BOOL) dark {
     switch (code) {
     case -1: // Graphite
-        return [NSColor colorWithSRGBRed: 0.557f green: 0.557f blue: 0.576f alpha: 1.0f];
+        return dark ? [NSColor colorWithSRGBRed: 0.549f green: 0.549f blue: 0.549f alpha: 1.0f]
+                    : [NSColor colorWithSRGBRed: 0.596f green: 0.596f blue: 0.596f alpha: 1.0f];
     case 0: // Red
-        return [NSColor colorWithSRGBRed: 1.0f green: 0.231f blue: 0.188f alpha: 1.0f];
+        return dark ? [NSColor colorWithSRGBRed: 1.0f green: 0.322f blue: 0.341f alpha: 1.0f]
+                    : [NSColor colorWithSRGBRed: 0.878f green: 0.220f blue: 0.243f alpha: 1.0f];
     case 1: // Orange
-        return [NSColor colorWithSRGBRed: 1.0f green: 0.584f blue: 0.0f alpha: 1.0f];
+        return [NSColor colorWithSRGBRed: 0.969f green: 0.510f blue: 0.106f alpha: 1.0f];
     case 2: // Yellow
-        return [NSColor colorWithSRGBRed: 1.0f green: 0.8f blue: 0.0f alpha: 1.0f];
+        return [NSColor colorWithSRGBRed: 0.988f green: 0.722f blue: 0.153f alpha: 1.0f];
     case 3: // Green
-        return [NSColor colorWithSRGBRed: 0.157f green: 0.804f blue: 0.255f alpha: 1.0f];
+        return [NSColor colorWithSRGBRed: 0.384f green: 0.729f blue: 0.275f alpha: 1.0f];
     case 4: // Blue
     default:
         return [NSColor colorWithSRGBRed: 0.0f green: 0.478f blue: 1.0f alpha: 1.0f];
     case 5: // Purple
-        return [NSColor colorWithSRGBRed: 0.686f green: 0.322f blue: 0.871f alpha: 1.0f];
+        return dark ? [NSColor colorWithSRGBRed: 0.647f green: 0.314f blue: 0.655f alpha: 1.0f]
+                    : [NSColor colorWithSRGBRed: 0.584f green: 0.239f blue: 0.588f alpha: 1.0f];
     case 6: // Pink
-        return [NSColor colorWithSRGBRed: 1.0f green: 0.176f blue: 0.333f alpha: 1.0f];
+        return [NSColor colorWithSRGBRed: 0.969f green: 0.310f blue: 0.620f alpha: 1.0f];
     }
+}
+
++ (NSColor *) _accentColorForCode: (NSInteger) code {
+    return [self _accentColorForCode: code dark: NO];
 }
 
 // The user's accent colour. Follows AppleAccentColor preference as a System catalog color.
@@ -785,7 +794,7 @@ static void _initializeDynamicSystemColors(void) {
     NSColor *dynamicAccent = [NSColor colorWithName: @"controlAccentColor" dynamicProvider: ^NSColor *(NSAppearance *appearance) {
         id val = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
         NSInteger code = (val != nil) ? [val integerValue] : 4;
-        return [NSColor _accentColorForCode: code];
+        return [NSColor _accentColorForCode: code dark: isDarkAppearance(appearance)];
     }];
     NSColorSetCatalogColor(@"System", @"controlAccentColor", dynamicAccent);
 
