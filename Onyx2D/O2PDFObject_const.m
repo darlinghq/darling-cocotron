@@ -54,6 +54,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             autorelease];
 }
 
++ pdfObjectWithMissingObject {
+    static O2PDFObject_const *missing;
+
+    @synchronized(self) {
+        if (missing == nil)
+            missing = [[self alloc] initWithObjectType: kO2PDFObjectTypeNull];
+    }
+    return missing;
+}
+
 + pdfObjectProcMark {
     return [[[self alloc] initWithObjectType: O2PDFObjectTypeMark_proc_open]
             autorelease];
