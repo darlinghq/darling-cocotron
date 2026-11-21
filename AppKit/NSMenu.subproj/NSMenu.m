@@ -209,6 +209,24 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     return YES;
 }
 
+// The menu bar is visible unless the application's presentation options hide
+// it (or auto-hide it).
++ (BOOL) menuBarVisible {
+    NSApplicationPresentationOptions options = [NSApp presentationOptions];
+
+    return (options & (NSApplicationPresentationHideMenuBar |
+                       NSApplicationPresentationAutoHideMenuBar)) == 0;
+}
+
+// The visibility is the presentation options: NO replaces them all with a
+// hidden Dock and menu bar (the options require the Dock to be hidden too),
+// YES replaces them with the default ones, as on macOS.
++ (void) setMenuBarVisible: (BOOL) visible {
+    [NSApp setPresentationOptions: visible ? NSApplicationPresentationDefault
+                                           : (NSApplicationPresentationHideDock |
+                                              NSApplicationPresentationHideMenuBar)];
+}
+
 + (NSZone *) menuZone {
     return NSDefaultMallocZone();
 }
