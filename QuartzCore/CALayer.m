@@ -897,6 +897,7 @@ static BOOL isOpaqueBlack(CGColorRef color) {
         CGColorRelease(NS_EXTRA(CALayer, self)->_backgroundColor);
     if (NS_EXTRA(CALayer, self)->_borderColor)
         CGColorRelease(NS_EXTRA(CALayer, self)->_borderColor);
+    [NS_EXTRA(CALayer, self)->_contents release];
     [NS_EXTRA(CALayer, self)->_textureContents release];
     NS_EXTRA_FREE(CALayer, self);
     [super dealloc];
