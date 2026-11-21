@@ -204,6 +204,8 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         BOOL _awaitingAwakeFromNib;
         // A data source set while loading from a nib is checked on the next -numberOfRows.
         BOOL _dataSourceCheckPending;
+        NSString *_autosaveName;
+        BOOL _autosaveTableColumns;
     NS_EXTRA_IVARS_END(NSTableView)
 }
 

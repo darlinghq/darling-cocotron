@@ -600,8 +600,11 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     [self reloadData];
 }
 
+// Retargets the drop being validated. The outline view takes the item and child index
+// without retaining the item: they are only meaningful while the data source validates the drop.
 - (void) setDropItem: (id) item dropChildIndex: (NSInteger) index {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSOutlineView, self)->_proposedDropItem = item;
+    NS_EXTRA(NSOutlineView, self)->_proposedDropChildIndex = index;
 }
 
 - (BOOL) shouldCollapseAutoExpandedItemsForDeposited: (BOOL) collapse {

@@ -340,6 +340,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
     [NS_EXTRA(NSTableView, self)->_typeSelectString release];
     [NS_EXTRA(NSTableView, self)->_toolTipSignature release];
     [NS_EXTRA(NSTableView, self)->_indicatorImages release];
+    [NS_EXTRA(NSTableView, self)->_autosaveName release];
     NS_EXTRA_FREE(NSTableView, self);
     [super dealloc];
 }
@@ -398,8 +399,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 }
 
 - (NSString *) autosaveName {
-    NSUnimplementedMethod();
-    return nil;
+    return NS_EXTRA(NSTableView, self)->_autosaveName;
 }
 
 // deprecated in OS X >= 10.3
@@ -485,8 +485,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 }
 
 - (BOOL) autosaveTableColumns {
-    NSUnimplementedMethod();
-    return NO;
+    return NS_EXTRA(NSTableView, self)->_autosaveTableColumns;
 }
 
 // row background and grid attributes for OS X >= 10.3
@@ -863,8 +862,11 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     _gridColor = color;
 }
 
+// The name is kept and returned. Saving and restoring the columns under it is not done.
 - (void) setAutosaveName: (NSString *) name {
-    NSUnimplementedMethod();
+    name = [name copy];
+    [NS_EXTRA(NSTableView, self)->_autosaveName release];
+    NS_EXTRA(NSTableView, self)->_autosaveName = name;
 }
 
 // deprecated in OS X >= 10.3
@@ -906,7 +908,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) setAutosaveTableColumns: (BOOL) flag {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSTableView, self)->_autosaveTableColumns = flag;
 }
 
 // row background and grid attributes for OS X >= 10.3
