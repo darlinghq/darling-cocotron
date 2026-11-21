@@ -84,7 +84,8 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 #define TITLE_TOP_MARGIN 0
 #define TITLE_BOTTOM_MARGIN 0
 #define BRANCH_ARROW_LEFT_MARGIN 2
-#define BRANCH_ARROW_RIGHT_MARGIN 2
+// Space between the arrow and the right edge of the menu.
+#define BRANCH_ARROW_RIGHT_MARGIN 14
 
 - (NSInterfacePartAttributedString *) branchArrow {
     static NSInterfacePartAttributedString *sBranchArrow = nil;
@@ -342,7 +343,6 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 {
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
     NSColor *color;
-    Margins margins = [self menuItemBranchArrowMargins];
     NSRect themeRect = rect;
 
     if (enabled)
@@ -353,10 +353,9 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
     [color set];
 
-    themeRect.origin.x += margins.left;
-    themeRect.origin.y += margins.top;
-    themeRect.size.width -= (margins.left + margins.right);
-    themeRect.size.height -= (margins.top + margins.bottom);
+    // The rectangle is the arrow itself (menuItemBranchArrowSize); the space
+    // around it is the caller's layout. Taking the margins off a rectangle of
+    // that size left a sliver one point wide.
 
     CGContextBeginPath(context);
     CGContextMoveToPoint(context, NSMinX(themeRect), NSMaxY(themeRect));
