@@ -745,8 +745,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NSRect frame;
     NSInteger i;
 
-    if (column < 0 || column > [self numberOfColumns] || row < 0 ||
-        row > [self numberOfRows])
+    if (column < 0 || column >= [self numberOfColumns] || row < 0 ||
+        row >= [self numberOfRows])
         return NSZeroRect;
 
     frame.origin.x = 0.;
