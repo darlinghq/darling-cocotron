@@ -353,10 +353,17 @@ NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
 
 // Only the link attribute is read: the documentation also says text that looks like a URL is
 // recognised, without saying what looks like one.
-// GUESS: an index at or past the end of the string (and so any index of an empty string) raises
-// NSRangeException, as the attribute accessors do; the documentation does not say.
+// An index at or past the end of a non-empty string raises NSRangeException (macOS 10.14.4; macOS 26.7.3 raises
+// NSInvalidArgumentException, the older, wider behaviour is followed), and so does a negative one. An empty string
+// is not an error: any index gives nil and the range {0, 0}. Observed by black-box test on both systems; the
+// test appkit-attributed-string-url-at-index.m pins it.
 - (NSURL *) URLAtIndex: (NSUInteger) location effectiveRange: (NSRangePointer) effectiveRange {
     NSRange range;
+    if ([self length] == 0) {
+        if (effectiveRange != NULL)
+            *effectiveRange = NSMakeRange(0, 0);
+        return nil;
+    }
     id link = [self attribute: NSLinkAttributeName
                       atIndex: location
         longestEffectiveRange: &range
