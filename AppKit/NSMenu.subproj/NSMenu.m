@@ -645,30 +645,39 @@ BOOL itemIsEnabled(NSMenuItem *item) {
         [[item submenu] update];
 }
 
+// The delegate's -menuNeedsUpdate:, which may add, remove or change items.
+static void askDelegateToUpdate(NSMenu *menu) {
+    id delegate = NS_EXTRA(NSMenu, menu)->_delegate;
+
+    if ([delegate respondsToSelector: @selector(menuNeedsUpdate:)])
+        [delegate menuNeedsUpdate: menu];
+}
+
+// Brings the enabled state of one item in line with its validation, when the
+// menu enables its items itself.
+static void validateItem(NSMenu *menu, NSMenuItem *item) {
+    if (!NS_EXTRA(NSMenu, menu)->_autoenablesItems)
+        return;
+
+    BOOL enabled = itemIsEnabled(item) ? YES : NO;
+    BOOL currentlyEnabled = [item isEnabled] ? YES : NO;
+
+    if (enabled != currentlyEnabled &&
+        ![item _binderForBinding: @"enabled" create: NO]) {
+        [item setEnabled: enabled];
+        [menu itemChanged: item];
+    }
+}
+
 // The delegates -menuNeedsUpdate: and the validation of this menus own
 // items; a submenu is brought up to date when it is shown.
 - (void) _updateWithoutSubmenus {
-    if ([NS_EXTRA(NSMenu, self)->_delegate respondsToSelector: @selector(menuNeedsUpdate:)]) {
-        [NS_EXTRA(NSMenu, self)->_delegate menuNeedsUpdate: self];
-    }
+    askDelegateToUpdate(self);
 
     NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
-    for (i = 0; i < count; i++) {
-        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
-
-        if (NS_EXTRA(NSMenu, self)->_autoenablesItems) {
-            BOOL enabled = itemIsEnabled(item) ? YES : NO;
-            BOOL currentlyEnabled = [item isEnabled] ? YES : NO;
-
-            if (enabled != currentlyEnabled &&
-                ![item _binderForBinding: @"enabled" create: NO]) {
-                [item setEnabled: enabled];
-                [self itemChanged: item];
-            }
-        }
-
-    }
+    for (i = 0; i < count; i++)
+        validateItem(self, [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i]);
 }
 
 - (void) itemChanged: (NSMenuItem *) item {
@@ -700,19 +709,18 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 }
 
 - (BOOL) performKeyEquivalent: (NSEvent *) event {
-    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
-
+    // The delegate may change the items, so it is asked before they are
+    // looked at. Only the item that matches is validated: validating the
+    // others is for a menu that is opened.
     if (NS_EXTRA(NSMenu, self)->_autoenablesItems)
-        [self update];
+        askDelegateToUpdate(self);
 
-    for (i = 0; i < count; i++) {
-        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
-
+    for (NSMenuItem *item in [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray]) {
         if (NSKeyEquivalentMatchesEvent([item keyEquivalent],
                                         [item keyEquivalentModifierMask], event)) {
-            // With automatic enabling, -update above brought isEnabled in
-            // line with validation. Without it only isEnabled counts and
-            // validation is not consulted.
+            // With automatic enabling the item is validated first. Without
+            // it only isEnabled counts and validation is not consulted.
+            validateItem(self, item);
             BOOL enabled = [item isEnabled];
             if (enabled && NS_EXTRA(NSMenu, self)->_autoenablesItems)
                 enabled = itemIsEnabled(item);
