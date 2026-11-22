@@ -346,9 +346,21 @@ static NSDocumentController *shared = nil;
     return [[window windowController] document];
 }
 
+// GUESS: the documentation says a nil type comes with an error saying the type is unrecognised
+// but names no code; NSFileReadUnknownError is the one this controller already uses for a file
+// that cannot be read.
+static NSError *UnrecognizedTypeError(NSURL *url) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain
+                               code: NSFileReadUnknownError
+                           userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
+}
+
 - (NSString *) typeForContentsOfURL: (NSURL *) url error: (NSError **) error {
-    if (![url isFileURL])
+    if (![url isFileURL]) {
+        if (error != NULL)
+            *error = UnrecognizedTypeError(url);
         return nil;
+    }
 
     NSString *extension = [[url path] pathExtension];
     if (extension == nil)
@@ -373,7 +385,10 @@ static NSDocumentController *shared = nil;
             return UTI;
         }
     }
-    return [self typeFromFileExtension: extension];
+    NSString *type = [self typeFromFileExtension: extension];
+    if (type == nil && error != NULL)
+        *error = UnrecognizedTypeError(url);
+    return type;
 }
 
 - makeDocumentWithContentsOfFile: (NSString *) path ofType: (NSString *) type {
