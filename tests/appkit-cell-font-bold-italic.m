@@ -9,8 +9,9 @@
 // GUESS, marked in the implementation: NO takes the trait off the font again (the reference
 // does not say; a column's data cell serves every row, so a row that is not bold must not keep
 // the bold of the row before); a cell without a font is left alone
-// (test_cell_without_font_is_left_alone); and a value that is not a true number (nil from a row
-// without the key, NSNull) asks for no trait (test_missing_and_null_values_mean_no).
+// (test_cell_without_font_is_left_alone). Pinned by black-box observation on macOS 26.7.3: YES gives the
+// trait, NO and a missing value (nil) give a font without it, and NSNull raises
+// NSInternalInconsistencyException (test_missing_and_null_values).
 // The test needs a family with bold and italic faces, which the guest must have (Helvetica);
 // the preconditions fail instead of skipping.
 // Written from the documentation; not yet run in a guest.
@@ -98,16 +99,22 @@ static void test_cell_without_font_is_left_alone(void)
     CHECK([[cell valueForKey:NSFontBoldBinding] boolValue] == NO);
 }
 
-// GUESS (see the file comment): nil and NSNull must not raise and mean no trait
-static void test_missing_and_null_values_mean_no(void)
+// nil means no trait; NSNull raises NSInternalInconsistencyException (macOS 26.7.3)
+static void test_missing_and_null_values(void)
 {
     NSTextFieldCell *cell = plainCell();
     [cell setValue:[NSNumber numberWithBool:YES] forKey:NSFontBoldBinding];
     [cell setValue:nil forKey:NSFontBoldBinding];
     CHECK((traits(cell) & NSBoldFontMask) == 0);
     [cell setValue:[NSNumber numberWithBool:YES] forKey:NSFontItalicBinding];
-    [cell setValue:[NSNull null] forKey:NSFontItalicBinding];
-    CHECK((traits(cell) & NSItalicFontMask) == 0);
+    NSString *raised = nil;
+    @try {
+        [cell setValue:[NSNull null] forKey:NSFontItalicBinding];
+    } @catch (NSException *e) {
+        raised = [e name];
+    }
+    CHECK([raised isEqual:NSInternalInconsistencyException]);
+    CHECK((traits(cell) & NSItalicFontMask) != 0);
 }
 
 // A column's data cell is prepared from the bound values of each row
@@ -139,7 +146,7 @@ int main(void)
         test_no_takes_the_trait_off_again();
         test_setting_the_same_value_changes_nothing();
         test_cell_without_font_is_left_alone();
-        test_missing_and_null_values_mean_no();
+        test_missing_and_null_values();
         test_column_binding();
     }
     if (failures)

@@ -897,10 +897,15 @@ static void initImageCellState(NSCell *self, NSImage *image) {
         [self setFont: converted];
 }
 
-// GUESS: only an NSNumber that is true asks for the trait. A row without the key (nil) and the null
-// placeholder or a selection marker (not numbers) ask for none; taking an id keeps key-value coding from
-// raising for nil, which a BOOL parameter would.
+// An NSNumber that is true asks for the trait; a row without the key (nil) asks for none. Taking an id keeps
+// key-value coding from raising for nil, which a BOOL parameter would. NSNull raises, as the BOOL setter of
+// key-value coding does on macOS 26.7.3 (black-box observation: NSInternalInconsistencyException, "Cannot
+// create BOOL from object null of class NSNull"; it is not known whether 10.14.4 differs).
+// Test: appkit-cell-font-bold-italic.m, test_missing_and_null_values
 static BOOL bindingValueIsTrue(id value) {
+    if ([value isKindOfClass: [NSNull class]])
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"Cannot create BOOL from object %@ of class %@", value, [value class]];
     return [value isKindOfClass: [NSNumber class]] && [value boolValue];
 }
 
