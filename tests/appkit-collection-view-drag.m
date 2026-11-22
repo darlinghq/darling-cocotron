@@ -82,7 +82,7 @@ static NSString *log_(void)
 }
 @end
 
-enum { ALLOW, REFUSE_DRAG, NIL_WRITER_FOR_4, RETARGET, REFUSE_DROP, EMPTY };
+enum { ALLOW, REFUSE_DRAG, NIL_WRITER_FOR_4, RETARGET, RETARGET_TO_VIEW, REFUSE_DROP, EMPTY };
 
 @interface Delegate : NSObject <NSCollectionViewDataSource, NSCollectionViewDelegate> {
 @public
@@ -123,13 +123,16 @@ enum { ALLOW, REFUSE_DRAG, NIL_WRITER_FOR_4, RETARGET, REFUSE_DROP, EMPTY };
     if (mode == RETARGET) {
         *path = [NSIndexPath indexPathForItem: 9 inSection: 0];
         *operation = NSCollectionViewDropBefore;
+    } else if (mode == RETARGET_TO_VIEW) {
+        *path = nil;
+        *operation = NSCollectionViewDropOn;
     }
     return mode == REFUSE_DROP ? NSDragOperationNone : NSDragOperationCopy;
 }
 - (BOOL) collectionView: (NSCollectionView *) view acceptDrop: (id<NSDraggingInfo>) info indexPath: (NSIndexPath *) path
           dropOperation: (NSCollectionViewDropOperation) operation
 {
-    [calls addObject: [NSString stringWithFormat: @"accept %ld %s", (long) path.item,
+    [calls addObject: [NSString stringWithFormat: @"accept %@ %s", path == nil ? @"view" : [NSString stringWithFormat: @"%ld", (long) path.item],
                                                   operation == NSCollectionViewDropOn ? "on" : "before"]];
     return YES;
 }
@@ -438,6 +441,19 @@ static void test_validate_can_retarget(void)
            [got UTF8String]);
 }
 
+// A delegate that sets the index path to nil (with the On operation) leaves nothing to drop on: the drop is
+// validated but not performed, and acceptDrop isn't asked
+static void test_validate_nil_path_is_not_accepted(void)
+{
+    NSCollectionView *view = makeView();
+    Info *info = infoFor(view);
+    delegate->mode = RETARGET_TO_VIEW;
+    NSString *got = dropAt(view, info, centerOf(view, 4));
+    expect([got isEqual: @"1 1 0: validate 4 on"], "a drop retargeted to no index path is not performed: [%s]",
+           [got UTF8String]);
+    delegate->mode = ALLOW;
+}
+
 static void test_validate_none_refuses(void)
 {
     NSCollectionView *view = makeView();
@@ -534,6 +550,7 @@ int main(void)
     test_drop_on_item();
     test_background_drop_proposes_gap();
     test_validate_can_retarget();
+    test_validate_nil_path_is_not_accepted();
     test_validate_none_refuses();
     test_drop_on_empty_view();
     test_drop_target_highlight();
