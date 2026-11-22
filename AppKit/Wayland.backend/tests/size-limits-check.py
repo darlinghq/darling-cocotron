@@ -6,7 +6,8 @@ xdg_toplevel.set_min_size requests (the fixture window), what NSWindow's size li
 sizes are window geometry sizes: the frame sizes the fixture sets, plus what a client-side frame adds around
 the window (at most EXTRA_W x EXTRA_H), so the checks allow that much.
  - the minimum (200, 150) and the maximum (800, 600) set before the window is shown arrive
- - contentMinSize (250, 180) takes precedence over minSize: the minimum then is at least that
+ - contentMinSize (250, 180), set after minSize, is the minimum then: at least that (the two are one limit,
+   the last set wins)
  - no set_max_size is below the set_min_size sent with it (a protocol error, unless it is zero), and the
    maximum 100x100 that the fixture sets below the minimum arrives raised to the minimum
  - removing every limit (min 0, content min 0, max FLT_MAX) ends with set_min_size(0, 0) and set_max_size(0, 0)
@@ -39,7 +40,7 @@ results.append(('the minimum 200x150 was set (%s)' % (mins[:3],),
                 any(within(w, 200, EXTRA_W) and within(h, 150, EXTRA_H) for w, h in mins)))
 results.append(('the maximum 800x600 was set (%s)' % (maxs[:3],),
                 any(within(w, 800, EXTRA_W) and within(h, 600, EXTRA_H) for w, h in maxs)))
-results.append(('contentMinSize 250x180 took precedence over minSize',
+results.append(('contentMinSize 250x180, set last, became the minimum',
                 any(w >= 250 and h >= 180 for w, h in mins)))
 bad = []
 raised = False

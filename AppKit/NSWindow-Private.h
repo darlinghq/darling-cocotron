@@ -36,8 +36,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // What the window is to the window system: a DarlingWindowPresentation (see
 // DarlingWindowPresentation.h), decided from the window's current state.
 - (int) _windowPresentation;
-// The smallest and largest frame sizes user resizing is limited to, from minSize, maxSize,
-// contentMinSize and contentMaxSize. A 0 minimum or a maximum of FLT_MAX is no limit.
+// The smallest and largest frame sizes that user resizing is limited to: minSize and maxSize, but
+// only in a dimension where the content limit is set, so that the title bar a window always has is not
+// a limit of its own. A 0 minimum or a maximum of FLT_MAX or more (or of 0 or less) is no limit.
 - (NSSize) _minFrameSize;
 - (NSSize) _maxFrameSize;
 - (CGContextRef) cgContext;

@@ -5,7 +5,7 @@
 // the wire. Prints CHECK PASS/FAIL lines and RESULT.
 //
 //   1. a resizable window with minSize 200x150 and maxSize 800x600 is shown
-//   2. contentMinSize 250x180 is set: it takes precedence over minSize
+//   2. contentMinSize 250x180 is set: the minimum and the content minimum are one limit, the last set wins
 //   3. maxSize 100x100 is set, below the minimum: the maximum sent is raised to the minimum (xdg-shell
 //      makes a maximum below the minimum an error)
 //   4. every limit is removed (minSize 0, contentMinSize 0, maxSize FLT_MAX)
