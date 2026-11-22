@@ -1335,11 +1335,12 @@ static const CGFloat kImageMargin = 2.;
 }
 
 - (void) drawBezelWithFrame: (NSRect) frame inView: (NSView *) controlView {
-    // Only a button reports where the pointer is (see -[NSButton updateTrackingAreas]); a cell in a
-    // matrix or a table never hears of it, and keeps the border it always had there.
+    // The border is not drawn until the pointer is reported over the cell (see -[NSButton updateTrackingAreas]).
+    // Observed on macOS 26.7.3: a button of a bordered style draws exactly what a button without a border does
+    // there, and a cell drawn by a view that is not its button, which never hears of the pointer, differs from
+    // what it draws without the flag (taken to be the same hiding).
     if (NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside &&
-        !NS_EXTRA(NSButtonCell, self)->_mouseInside &&
-        [controlView isKindOfClass: [NSButton class]] && [(NSButton *) controlView cell] == self)
+        !NS_EXTRA(NSButtonCell, self)->_mouseInside)
         return;
 
     BOOL defaulted = ([[controlView window] defaultButtonCell] == self);
