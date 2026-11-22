@@ -325,6 +325,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
     [_backgroundColor release];
     [_gridColor release];
     [NS_EXTRA(NSTableView, self)->_selectedRowIndexes release];
+    [NS_EXTRA(NSTableView, self)->_draggedRows release];
     [NS_EXTRA(NSTableView, self)->_selectedColumns release];
     [NS_EXTRA(NSTableView, self)->_sortDescriptors release];
     [NS_EXTRA(NSTableView, self)->_registeredNibs release];
@@ -2174,7 +2175,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if ([self drawsGrid])
         [self drawGridInClipRect: clipRect];
 
-    if (NS_EXTRA(NSTableView, self)->_draggingRow >= 0) {
+    if (NS_EXTRA(NSTableView, self)->_draggingRow >= 0 && NS_EXTRA(NSTableView, self)->_draggingRowOn) {
+        // A drop on a row: a frame around it
+        NSRect rowRect = NSInsetRect([self rectOfRow: NS_EXTRA(NSTableView, self)->_draggingRow], 1, 1);
+        [[NSColor alternateSelectedControlColor] setStroke];
+        NSBezierPath *frame = [NSBezierPath bezierPathWithRoundedRect: rowRect xRadius: 3 yRadius: 3];
+        [frame setLineWidth: 2];
+        [frame stroke];
+    } else if (NS_EXTRA(NSTableView, self)->_draggingRow >= 0) {
         NSRect rowRect;
         [[NSColor blackColor] setStroke];
         if ([self numberOfRows] == 0)
@@ -2417,8 +2425,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                         byExtendingSelection: NO];
         } else { // normal selection, allow for dragging
             BOOL dragging = NO;
-            if ([_dataSource respondsToSelector: @selector
-                             (tableView:writeRowsWithIndexes:toPasteboard:)]) {
+            NSEvent *down = event;
+            if ([self _dataSourceWritesRows]) {
                 NSPoint currentPoint;
                 do {
                     event = [_window
@@ -2449,7 +2457,28 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
                 NSPasteboard *pasteboard =
                         [NSPasteboard pasteboardWithName: NSDragPboard];
-                if ([_dataSource tableView: self
+                if ([self _dataSourceHasPasteboardWriters]) {
+                    // The rows' writers are the dragging session's items; a row without one stays out
+                    NSMutableArray *items = [NSMutableArray array];
+                    NSMutableIndexSet *dragged = [NSMutableIndexSet indexSet];
+                    NSUInteger row = [rowIndexes firstIndex];
+                    for (; row != NSNotFound; row = [rowIndexes indexGreaterThanIndex: row]) {
+                        id<NSPasteboardWriting> writer = [self _pasteboardWriterForRow: row];
+                        if (writer == nil)
+                            continue;
+                        NSDraggingItem *item = [[[NSDraggingItem alloc] initWithPasteboardWriter: writer] autorelease];
+                        [item setDraggingFrame: [self rectOfRow: row] contents: nil];
+                        [items addObject: item];
+                        [dragged addIndex: row];
+                    }
+                    if ([items count] == 0)
+                        dragging = NO;
+                    else {
+                        [NS_EXTRA(NSTableView, self)->_draggedRows release];
+                        NS_EXTRA(NSTableView, self)->_draggedRows = [dragged copy];
+                        [self beginDraggingSessionWithItems: items event: down source: self];
+                    }
+                } else if ([_dataSource tableView: self
                             writeRowsWithIndexes: rowIndexes
                                     toPasteboard: pasteboard] == NO)
                     dragging = NO;
@@ -2606,73 +2635,153 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return isLocal ? NS_EXTRA(NSTableView, self)->_draggingSourceMaskLocal : NS_EXTRA(NSTableView, self)->_draggingSourceMaskNonLocal;
 }
 
-- (NSInteger) _getDraggedRow: (id<NSDraggingInfo>) info {
-    NSPoint dragPoint = [self convertPoint: [info draggingLocation]
-                                  fromView: nil];
-    NSInteger draggedRow = [self rowAtPoint: dragPoint];
-    if (-1 == draggedRow) {
-        if (dragPoint.y >= [self rectOfRow: [self numberOfRows] - 1].origin.y) {
-            draggedRow = [self numberOfRows];
-        }
-    }
-    return draggedRow;
+#pragma mark Dragging source
+
+// The data source can give the rows to drag: as pasteboard writers, which come first, or onto a pasteboard
+- (BOOL) _dataSourceHasPasteboardWriters {
+    return [_dataSource respondsToSelector: @selector(tableView:pasteboardWriterForRow:)];
 }
 
-- (unsigned) _validateDraggedRow: (id<NSDraggingInfo>) info {
-    BOOL result;
-    NSInteger proposedRow = [self _getDraggedRow: info];
+- (BOOL) _dataSourceWritesRows {
+    return [self _dataSourceHasPasteboardWriters] ||
+           [_dataSource respondsToSelector: @selector(tableView:writeRowsWithIndexes:toPasteboard:)];
+}
 
-    if ([_dataSource
-                respondsToSelector: @selector
-                (tableView:validateDrop:proposedRow:proposedDropOperation:)]) {
-        if ((result = [_dataSource tableView: self
-                                validateDrop: info
-                                 proposedRow: proposedRow
-                       proposedDropOperation: NSTableViewDropAbove]))
-            NS_EXTRA(NSTableView, self)->_draggingRow = proposedRow;
-        else
-            NS_EXTRA(NSTableView, self)->_draggingRow = -1;
+- (id<NSPasteboardWriting>) _pasteboardWriterForRow: (NSInteger) row {
+    return [_dataSource tableView: self pasteboardWriterForRow: row];
+}
+
+- (NSDragOperation) draggingSession: (NSDraggingSession *) session
+    sourceOperationMaskForDraggingContext: (NSDraggingContext) context
+{
+    return [self draggingSourceOperationMaskForLocal: context == NSDraggingContextWithinApplication];
+}
+
+- (void) draggingSession: (NSDraggingSession *) session willBeginAtPoint: (NSPoint) screenPoint {
+    NSIndexSet *rows = NS_EXTRA(NSTableView, self)->_draggedRows ?: [NSIndexSet indexSet];
+    if ([_dataSource respondsToSelector: @selector(tableView:draggingSession:willBeginAtPoint:forRowIndexes:)])
+        [_dataSource tableView: self draggingSession: session willBeginAtPoint: screenPoint forRowIndexes: rows];
+}
+
+- (void) draggingSession: (NSDraggingSession *) session
+            endedAtPoint: (NSPoint) screenPoint
+               operation: (NSDragOperation) operation
+{
+    if ([_dataSource respondsToSelector: @selector(tableView:draggingSession:endedAtPoint:operation:)])
+        [_dataSource tableView: self draggingSession: session endedAtPoint: screenPoint operation: operation];
+    [NS_EXTRA(NSTableView, self)->_draggedRows release];
+    NS_EXTRA(NSTableView, self)->_draggedRows = nil;
+}
+
+#pragma mark Drop target
+
+// The drop a point proposes (black-box observation on macOS 26.7.3 and 10.14.4, test appkit-tableview-drag.m): in a
+// row's top quarter, above it; in its bottom quarter, above the next row; in between, on it. Elsewhere, above the
+// row count.
+- (void) _proposeDropAtPoint: (NSPoint) point {
+    NSInteger row = [self rowAtPoint: point];
+    NSTableViewDropOperation operation = NSTableViewDropAbove;
+    if (row < 0)
+        row = [self numberOfRows];
+    else {
+        NSRect rect = [self rectOfRow: row];
+        CGFloat offset = point.y - NSMinY(rect);
+        if (offset >= NSHeight(rect) * 3 / 4)
+            row++;
+        else if (offset >= NSHeight(rect) / 4)
+            operation = NSTableViewDropOn;
     }
+    NS_EXTRA(NSTableView, self)->_dropRow = row;
+    NS_EXTRA(NSTableView, self)->_dropOperation = operation;
+}
 
-    [self display];
+- (void) setDropRow: (NSInteger) row dropOperation: (NSTableViewDropOperation) dropOperation {
+    NS_EXTRA(NSTableView, self)->_dropRow = row;
+    NS_EXTRA(NSTableView, self)->_dropOperation = dropOperation;
+}
 
+// The data source's answer for the proposed drop; None when it takes no drops
+- (NSDragOperation) _dataSourceValidateDrop: (id<NSDraggingInfo>) info {
+    if (![_dataSource respondsToSelector: @selector(tableView:validateDrop:proposedRow:proposedDropOperation:)])
+        return NSDragOperationNone;
+    return [_dataSource tableView: self
+                     validateDrop: info
+                      proposedRow: NS_EXTRA(NSTableView, self)->_dropRow
+            proposedDropOperation: NS_EXTRA(NSTableView, self)->_dropOperation];
+}
+
+- (BOOL) _dataSourceAcceptDrop: (id<NSDraggingInfo>) info {
+    if (![_dataSource respondsToSelector: @selector(tableView:acceptDrop:row:dropOperation:)])
+        return NO;
+    return [_dataSource tableView: self
+                       acceptDrop: info
+                              row: NS_EXTRA(NSTableView, self)->_dropRow
+                    dropOperation: NS_EXTRA(NSTableView, self)->_dropOperation];
+}
+
+- (void) _setDropIndicatorRow: (NSInteger) row on: (BOOL) on {
+    if (NS_EXTRA(NSTableView, self)->_draggingRow == row && NS_EXTRA(NSTableView, self)->_draggingRowOn == on)
+        return;
+    NS_EXTRA(NSTableView, self)->_draggingRow = row;
+    NS_EXTRA(NSTableView, self)->_draggingRowOn = on;
+    [self setNeedsDisplay: YES];
+}
+
+// The row the indicator goes with, once the data source settled the drop, and whether the drop is on it
+- (NSInteger) _dropIndicatorRow {
+    return NS_EXTRA(NSTableView, self)->_dropRow;
+}
+
+- (BOOL) _dropIndicatorIsOn {
+    return NS_EXTRA(NSTableView, self)->_dropOperation == NSTableViewDropOn;
+}
+
+- (NSDragOperation) _validateDrop: (id<NSDraggingInfo>) info {
+    BOOL taken = NO;
+    for (NSString *type in [self _draggedTypes])
+        if ([[[info draggingPasteboard] types] containsObject: type])
+            taken = YES;
+    NSDragOperation result = NSDragOperationNone;
+    if (taken) {
+        [self _proposeDropAtPoint: [self convertPoint: [info draggingLocation] fromView: nil]];
+        result = [self _dataSourceValidateDrop: info];
+    }
+    NS_EXTRA(NSTableView, self)->_dropDragOperation = result;
+    if (result == NSDragOperationNone)
+        [self _setDropIndicatorRow: -1 on: NO];
+    else
+        [self _setDropIndicatorRow: [self _dropIndicatorRow] on: [self _dropIndicatorIsOn]];
     return result;
 }
 
 - (NSDragOperation) draggingEntered: (id<NSDraggingInfo>) sender {
-    for (NSInteger i = 0; i < [[self _draggedTypes] count]; i++) {
-        if ([[[sender draggingPasteboard] types]
-                    containsObject: [[self _draggedTypes] objectAtIndex: i]])
-            return [self _validateDraggedRow: sender];
-    }
-    return NSDragOperationNone;
+    return [self _validateDrop: sender];
 }
 
 - (NSDragOperation) draggingUpdated: (id<NSDraggingInfo>) sender {
-    for (NSInteger i = 0; i < [[self _draggedTypes] count]; i++) {
-        if ([[[sender draggingPasteboard] types]
-                    containsObject: [[self _draggedTypes] objectAtIndex: i]])
-            return [self _validateDraggedRow: sender];
-    }
-    return NSDragOperationNone;
+    return [self _validateDrop: sender];
 }
 
 - (void) draggingExited: (id<NSDraggingInfo>) sender {
-    NS_EXTRA(NSTableView, self)->_draggingRow = -1;
-    [self display];
+    NS_EXTRA(NSTableView, self)->_dropDragOperation = NSDragOperationNone;
+    [self _setDropIndicatorRow: -1 on: NO];
 }
 
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender {
-    NS_EXTRA(NSTableView, self)->_draggingRow = -1;
-    [self display];
+    [self _setDropIndicatorRow: -1 on: NO];
     return YES;
 }
 
+// The drop the data source validated last; one it answered None for isn't performed
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
-    return [_dataSource tableView: self
-                       acceptDrop: sender
-                              row: [self _getDraggedRow: sender]
-                    dropOperation: NSTableViewDropAbove];
+    if (NS_EXTRA(NSTableView, self)->_dropDragOperation == NSDragOperationNone)
+        return NO;
+    return [self _dataSourceAcceptDrop: sender];
+}
+
+- (void) draggingEnded: (id<NSDraggingInfo>) sender {
+    NS_EXTRA(NSTableView, self)->_dropDragOperation = NSDragOperationNone;
+    [self _setDropIndicatorRow: -1 on: NO];
 }
 
 - (NSString *) description {

@@ -23,6 +23,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTableView.h>
 #import <AppKit/NSControl.h>
 
+@protocol NSPasteboardWriting;
+
 @class NSTableColumn, NSButtonCell;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -70,6 +72,8 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
         BOOL _autoresizesOutlineColumn;
         BOOL _autosaveExpandedItems;
         CGFloat _editingCellPadding;
+        id _dropItem;                       // the drop being validated, as setDropItem:dropChildIndex: may change it
+        NSInteger _dropChildIndex;
     NS_EXTRA_IVARS_END(NSOutlineView)
 }
 
@@ -109,6 +113,9 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
 
 @end
 
+// The child index of a drop on an item rather than between its children
+enum { NSOutlineViewDropOnItemIndex = -1 };
+
 // Every method of both protocols is optional, as on macOS
 @protocol NSOutlineViewDataSource <NSObject>
 @optional
@@ -126,6 +133,24 @@ APPKIT_EXPORT NSString *const NSOutlineViewShowHideButtonKey;
         forTableColumn: (nullable NSTableColumn *) tableColumn
                 byItem: (nullable id) item;
 - (void) outlineView: (NSOutlineView *) outlineView sortDescriptorsDidChange: (NSArray<NSSortDescriptor *> *) oldDescriptors;
+- (nullable id<NSPasteboardWriting>) outlineView: (NSOutlineView *) outlineView pasteboardWriterForItem: (id) item;
+- (void) outlineView: (NSOutlineView *) outlineView
+     draggingSession: (NSDraggingSession *) session
+    willBeginAtPoint: (NSPoint) screenPoint
+            forItems: (NSArray *) draggedItems;
+- (void) outlineView: (NSOutlineView *) outlineView
+     draggingSession: (NSDraggingSession *) session
+        endedAtPoint: (NSPoint) screenPoint
+           operation: (NSDragOperation) operation;
+- (BOOL) outlineView: (NSOutlineView *) outlineView writeItems: (NSArray *) items toPasteboard: (NSPasteboard *) pasteboard;
+- (NSDragOperation) outlineView: (NSOutlineView *) outlineView
+                   validateDrop: (id<NSDraggingInfo>) info
+                   proposedItem: (nullable id) item
+             proposedChildIndex: (NSInteger) index;
+- (BOOL) outlineView: (NSOutlineView *) outlineView
+          acceptDrop: (id<NSDraggingInfo>) info
+                item: (nullable id) item
+          childIndex: (NSInteger) index;
 @end
 
 @protocol NSOutlineViewDelegate <NSControlTextEditingDelegate>
