@@ -100,9 +100,10 @@ static void test_quirk_highlight_cleared_before_did_close(void) {
     NSTimer *timer = [NSTimer timerWithTimeInterval: 0.5 repeats: NO block: ^(NSTimer *t) {
         // Highlight the way the tracking loop does, then cancel.
         for (NSWindow *candidate in [NSApp windows]) {
-            NSView *view = [candidate contentView];
-            if ([view isKindOfClass: NSClassFromString(@"NSMenuView")] &&
-                [[view performSelector: @selector(menu)] isEqual: popup])
+            if (![candidate respondsToSelector: @selector(menuView)])
+                continue;
+            NSView *view = [candidate performSelector: @selector(menuView)];
+            if ([[view performSelector: @selector(menu)] isEqual: popup])
                 highlight(view, 1);
         }
         [popup cancelTracking];
