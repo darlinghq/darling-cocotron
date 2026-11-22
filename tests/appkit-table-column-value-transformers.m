@@ -8,8 +8,9 @@
 // (https://developer.apple.com/documentation/foundation/valuetransformer/reversetransformedvalue(_:)),
 // which a transformer that cannot reverse refuses (it raises). The cell of a bound column shows the
 // transformed value, and what the user enters is reverse transformed before it is stored in the
-// model. GUESS, marked in the implementation: a transformer that cannot reverse makes the column
-// read-only instead of raising (test_irreversible_transformer_is_read_only).
+// model. A transformer that cannot reverse makes the column read-only instead of raising
+// (test_irreversible_transformer_is_read_only): pinned by black-box observation on macOS 26.7.3 and 10.14.4,
+// where such a column stays editable but no row reports editable, no editor starts and the model is unchanged.
 // -_binderForBinding:create: and -applyFromCell:inRow: are not public; the test calls them because
 // there is no public call that ends an edit without a user (test_write_back).
 // Written from the documentation; not yet run in a guest.
@@ -124,7 +125,7 @@ static void test_write_back(void)
     CHECK([stored(0) isEqual:@"alpha"]);
 }
 
-// GUESS (see the file comment): not reversible means read-only
+// (see the file comment, observed on macOS): not reversible means read-only
 static void test_irreversible_transformer_is_read_only(void)
 {
     setup([NSDictionary dictionaryWithObject:[[[OneWay alloc] init] autorelease] forKey:NSValueTransformerBindingOption]);

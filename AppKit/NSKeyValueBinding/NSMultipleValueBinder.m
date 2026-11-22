@@ -92,8 +92,9 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
                    inRow: (NSInteger) row
                  keyPath: (id) keypath
 {
-    // GUESS: a value transformer that cannot reverse makes the binding read-only, as in -[_NSBinder
-    // observeValueForKeyPath:ofObject:change:context:]
+    // A value transformer that cannot reverse makes the binding read-only: the column stays editable but no row
+    // reports editable, no editor starts, nothing is raised and the model is unchanged. Observed on macOS 26.7.3
+    // and 10.14.4 (black-box test); pinned by tests/appkit-table-column-value-transformers.m.
     if (![self allowsReverseTransformation])
         return;
     [[self _objectForRow: row] setValue: [self reverseTransformedObject: [object valueForKeyPath: keypath]]
@@ -148,7 +149,7 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 }
 
 - (BOOL) allowsEditingForRow: (NSInteger) row {
-    if (![self allowsReverseTransformation]) // GUESS, see applyFromObject:inRow:keyPath:
+    if (![self allowsReverseTransformation]) // observed, see applyFromObject:inRow:keyPath:
         return NO;
     if ([[self _objectForRow: row] classForCoder] == [NSDictionary class])
         return NO;
