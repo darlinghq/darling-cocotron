@@ -1,16 +1,13 @@
-// Contract: Apple CoreGraphics documentation pages CGPDFDocument.outline (C name
-// CGPDFDocumentGetOutline: CFDictionaryRef from a CGPDFDocumentRef) and
-// CGPDFContextSetOutline(_:_:) (void, a CGContextRef and a CFDictionaryRef), both
-// with an optional dictionary. Neither page says what the dictionary holds, and both
-// functions are placeholders for now (see the commit message), so this only
-// checks what they promise: the functions exist; a document with no /Outlines entry
-// gives NULL (the optional result); setting an outline, or NULL, on a PDF context
-// leaves the generated file a valid one-page document. What the document function
-// returns for a file that does have an outline, and whether the writer stores one,
-// are GUESS and are not pinned: the NULL result is only checked for the cases where
-// no outline was set.
-// Exit codes: 10 a function is missing, 20 context not created, 30 + i the file of
-// case i is not a one-page document, 40 + i case i (0 or 1) has an outline.
+// Contract: CGPDFDocumentGetOutline (CFDictionaryRef from a CGPDFDocumentRef) and CGPDFContextSetOutline
+// (a CGContextRef and a CFDictionaryRef): the documentation pages give the signatures and the optional
+// dictionary. The behaviour is pinned to what was observed on macOS 26.7.3 and Mac OS X 10.14.4 (identical):
+//  - a PDF written by CGPDFContext without an outline gives NULL; GetOutline(NULL) gives NULL;
+//  - after CGPDFContextSetOutline with a dictionary, even an empty one, the closed document gives a non-NULL
+//    dictionary with one key.
+// Beyond that (not observed, a Darling design): the titles and nesting of kCGPDFOutlineChildren survive a round
+// trip through the file. A NULL outline is only checked to leave a valid one-page document.
+// Exit codes: 10 a function is missing, 20 context not created, 30 + i the file of case i is not a one-page
+// document, 40 + i case i: wrong answer for the outline presence, 50 + i the key count is not one, 60 round trip.
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #include <stdio.h>
@@ -24,9 +21,15 @@ int main(void) {
         return 10;
     }
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
-    // Case 0 never sets an outline, case 1 sets NULL, case 2 sets a dictionary.
-    NSDictionary *outline = [NSDictionary dictionaryWithObject:@"Chapter" forKey:@"Title"];
-    for (unsigned i = 0; i < 3; i++) {
+    NSDictionary *chapter = [NSDictionary dictionaryWithObjectsAndKeys:
+            @"Chapter 1", @"Title",
+            [NSArray arrayWithObject: [NSDictionary dictionaryWithObject: @"Section 1.1" forKey: @"Title"]], @"Children",
+            nil];
+    NSDictionary *outline = [NSDictionary dictionaryWithObject:
+            [NSArray arrayWithObjects: chapter, [NSDictionary dictionaryWithObject: @"Chapter 2" forKey: @"Title"], nil]
+            forKey: @"Children"];
+    // Case 0 never sets an outline, 1 sets NULL, 2 an empty dictionary, 3 the nested outline.
+    for (unsigned i = 0; i < 4; i++) {
         NSMutableData *data = [NSMutableData data];
         CGDataConsumerRef consumer = CGDataConsumerCreateWithCFData((CFMutableDataRef)data);
         CGRect box = CGRectMake(0, 0, 100, 200);
@@ -34,7 +37,8 @@ int main(void) {
         CGDataConsumerRelease(consumer);
         if (!context) return 20;
         if (i == 1) CGPDFContextSetOutline(context, NULL);
-        if (i == 2) CGPDFContextSetOutline(context, (CFDictionaryRef)outline);
+        if (i == 2) CGPDFContextSetOutline(context, (CFDictionaryRef)[NSDictionary dictionary]);
+        if (i == 3) CGPDFContextSetOutline(context, (CFDictionaryRef)outline);
         CGPDFContextBeginPage(context, NULL);
         CGPDFContextEndPage(context);
         CGPDFContextClose(context);
@@ -43,9 +47,23 @@ int main(void) {
         CGPDFDocumentRef document = CGPDFDocumentCreateWithProvider(provider);
         CGDataProviderRelease(provider);
         if (!document || CGPDFDocumentGetNumberOfPages(document) != 1) return 30 + i;
-        if (i < 2 && CGPDFDocumentGetOutline(document) != NULL) return 40 + i;
+        CFDictionaryRef read = CGPDFDocumentGetOutline(document);
+        if (i < 2 && read != NULL) return 40 + i;
+        if (i >= 2 && read == NULL) return 40 + i;
+        if (i >= 2 && CFDictionaryGetCount(read) != 1) return 50 + i;
+        if (i == 3) {
+            NSArray *top = [(NSDictionary *)read objectForKey: (id)kCGPDFOutlineChildren];
+            NSDictionary *first = [top count] == 2 ? [top objectAtIndex: 0] : nil;
+            NSArray *sub = [first objectForKey: (id)kCGPDFOutlineChildren];
+            if (![[first objectForKey: (id)kCGPDFOutlineTitle] isEqual: @"Chapter 1"] ||
+                ![[[top objectAtIndex: 1] objectForKey: (id)kCGPDFOutlineTitle] isEqual: @"Chapter 2"] ||
+                [sub count] != 1 ||
+                ![[[sub objectAtIndex: 0] objectForKey: (id)kCGPDFOutlineTitle] isEqual: @"Section 1.1"])
+                return 60;
+        }
         CGPDFDocumentRelease(document);
     }
+    if (CGPDFDocumentGetOutline(NULL) != NULL) return 61;
     [pool drain];
     puts("PDF outline interface passed");
     return 0;

@@ -44,6 +44,10 @@ COREGRAPHICS_EXPORT const CFStringRef kCGPDFXInfo;
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFXOutputConditionIdentifier;
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFXOutputIntentSubtype;
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFXDestinationOutputProfile;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFOutlineTitle;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFOutlineChildren;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFOutlineDestination;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFOutlineDestinationRect;
 
 typedef struct CF_BRIDGED_TYPE(id) O2PDFContext *CGPDFContextRef;
 
