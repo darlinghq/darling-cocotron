@@ -51,9 +51,16 @@ static void test_preferences(void) {
     CHECK(![mono isEqual: hier]);
     CHECK(![mono isEqual: [NSImageSymbolConfiguration configurationPreferringMulticolor]]);
 
-    // The argument's preference wins (GUESS for two preferences against each other).
+    // The argument's monochrome or hierarchical preference wins; a multicolor argument does not replace a
+    // monochrome or hierarchical receiver (black-box observation on macOS 26.7.3).
+    NSImageSymbolConfiguration *multi = [NSImageSymbolConfiguration configurationPreferringMulticolor];
     CHECK([[mono configurationByApplyingConfiguration: hier] isEqual: hier]);
     CHECK([[hier configurationByApplyingConfiguration: mono] isEqual: mono]);
+    CHECK([[multi configurationByApplyingConfiguration: mono] isEqual: mono]);
+    CHECK([[multi configurationByApplyingConfiguration: hier] isEqual: hier]);
+    CHECK([[mono configurationByApplyingConfiguration: multi] isEqual: mono]);
+    CHECK([[hier configurationByApplyingConfiguration: multi] isEqual: hier]);
+    CHECK([[multi configurationByApplyingConfiguration: multi] isEqual: multi]);
 
     NSImageSymbolConfiguration *size = [NSImageSymbolConfiguration configurationWithPointSize: 20 weight: NSFontWeightBold];
     CHECK([mono configurationByApplyingConfiguration: size] != nil);

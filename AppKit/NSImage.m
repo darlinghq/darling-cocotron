@@ -2603,14 +2603,17 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
             result->_pointSize = 0;
             result->_weight = 0;
         }
-        // The argument's values take priority. GUESS: the documentation does
-        // not say how two different rendering preferences combine, so a
-        // preference in the argument replaces all of the receiver's.
-        if (configuration->_prefersMulticolor || configuration->_prefersMonochrome ||
-            configuration->_prefersHierarchical) {
-            result->_prefersMulticolor = configuration->_prefersMulticolor;
+        // The argument's values take priority, with one exception observed by black-box test on macOS 26.7.3
+        // (rendered output of the receiver/argument pairs): a monochrome or hierarchical preference in the
+        // argument replaces the receiver's preference, but a multicolor preference in the argument applies only
+        // when the receiver has no monochrome, hierarchical or multicolor preference of its own to keep.
+        // Test: appkit-symbol-configuration-factories.m, test_preferences
+        if (configuration->_prefersMonochrome || configuration->_prefersHierarchical) {
+            result->_prefersMulticolor = NO;
             result->_prefersMonochrome = configuration->_prefersMonochrome;
             result->_prefersHierarchical = configuration->_prefersHierarchical;
+        } else if (configuration->_prefersMulticolor && !_prefersMonochrome && !_prefersHierarchical) {
+            result->_prefersMulticolor = YES;
         }
     }
 
