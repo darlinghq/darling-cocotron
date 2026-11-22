@@ -1738,22 +1738,31 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     case KeyPress:
     case KeyRelease:;
 
+        // Xlib wants every event through XFilterEvent(), key events included, and an input method only sees
+        // a key that goes through it: one that is switched by a modifier alone (fcitx's Shift_L alternative
+        // trigger key, a pinyin engine's Shift) never hears of a modifier that is handled first.
+        BOOL filtered = XFilterEvent(ev, None) != False;
+
         NSEventModifierFlags modifierFlags = [self modifierFlagsForState: ev->xkey.state];
         char buf[20] = {0};
         char *text = buf;
         KeySym keySym = NoSymbol;
         int strLen;
 
-        // Ahead of the input method: a modifier is not text, and an IM filter
-        // that swallows it would leave the reported flags permanently stale.
-        // The aggregate mask is also corrected here for the same reason, with
-        // the keycode macOS uses when no single key is responsible.
+        // A modifier is not text. One the input method took is left alone (X11KeyEvent.h): the unfiltered
+        // copy it forwards back updates the flags and is posted as a flagsChanged, and one it keeps is
+        // corrected by the modifier state of the next key or pointer event, with the keycode macOS uses when
+        // no single key is responsible.
         {
             BOOL pressed = ev->type == KeyPress;
             unsigned int keycode = ev->xkey.keycode;
             X11ModifierKey modifier = modifierKeyForKeysym(
                     XKeycodeToKeysym(_display, keycode, 0));
+            X11KeyEventPlan plan = X11KeyEventPlanFor(modifier.carbonKeyCode >= 0, filtered,
+                                                      ev->xany.send_event);
             if (modifier.carbonKeyCode >= 0) {
+                if (!plan.trackModifier)
+                    break;
                 // A lock key changes the state on its press only.
                 if (modifier.toggle && !pressed)
                     break;
@@ -1770,12 +1779,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                               inWindow: window];
                 break; // Modifiers are neither text nor repeatable keys.
             }
-            if (!ev->xany.send_event)
+            if (plan.resyncFromState)
                 [self resyncModifierFlagsWithState: ev->xkey.state window: window];
+            if (!plan.lookUpText)
+                break; // The input method took the key; what it commits comes back as another event.
         }
-
-        if (XFilterEvent(ev, None)) // XIM processing
-            break;
 
         // A window has no input context when the display couldn't open an input method or
         // XCreateIC() failed, and Xutf8LookupString() dereferences its XIC unconditionally.
