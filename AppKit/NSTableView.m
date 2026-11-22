@@ -2647,9 +2647,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return isLocal ? NS_EXTRA(NSTableView, self)->_draggingSourceMaskLocal : NS_EXTRA(NSTableView, self)->_draggingSourceMaskNonLocal;
 }
 
-- (NSInteger) _getDraggedRow: (id<NSDraggingInfo>) info {
-    NSPoint dragPoint = [self convertPoint: [info draggingLocation]
-                                  fromView: nil];
+- (NSInteger) _getDraggedRowForPoint: (NSPoint) dragPoint {
     NSInteger draggedRow = [self rowAtPoint: dragPoint];
     if (-1 == draggedRow) {
         if (dragPoint.y >= [self rectOfRow: [self numberOfRows] - 1].origin.y) {
@@ -2659,20 +2657,50 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return draggedRow;
 }
 
+- (NSInteger) _getDraggedRow: (id<NSDraggingInfo>) info {
+    return [self _getDraggedRowForPoint: [self convertPoint: [info draggingLocation]
+                                                   fromView: nil]];
+}
+
 - (void) setDropRow: (NSInteger) row dropOperation: (NSTableViewDropOperation) operation {
     NS_EXTRA(NSTableView, self)->_draggingRow = row;
     NS_EXTRA(NSTableView, self)->_draggingOperation = operation;
 }
 
-// The table proposes a drop above the row under the pointer; the data source
-// may retarget it with -setDropRow:dropOperation: from validateDrop. The
-// target left in the table afterwards is what acceptDrop receives.
+// The table proposes the drop under the pointer: on the row when the pointer is in the middle of it, above
+// the row or above the next one when it is near the top or bottom edge, above the end of the table when the
+// pointer is below the last row. The data source may retarget it with -setDropRow:dropOperation: from
+// validateDrop. The target left in the table afterwards is what acceptDrop receives.
+// Observed by black-box test on macOS 26.7.3 and 10.14.4 (pointer at 2%, 10%, 25%, 40%..75%, 90% and 98% of a
+// row's height: above, above, on, on, on, next row above, next row above); the edge zones are of a fifth of the
+// row's height here, the observed boundaries lie between 10% and 25% and between 75% and 90%.
+// Test: appkit-table-set-drop-row.m
+- (void) _proposeDropForPoint: (NSPoint) point {
+    NSInteger row = [self rowAtPoint: point];
+    NSTableViewDropOperation operation = NSTableViewDropAbove;
+
+    if (row < 0) {
+        row = [self _getDraggedRowForPoint: point];
+    } else {
+        NSRect rect = [self rectOfRow: row];
+        CGFloat fraction = NSHeight(rect) > 0 ? (point.y - NSMinY(rect)) / NSHeight(rect) : 0.5;
+
+        if (![self isFlipped])
+            fraction = 1.0 - fraction;
+        if (fraction > 0.8)
+            row++;
+        else if (fraction >= 0.2)
+            operation = NSTableViewDropOn;
+    }
+    [self setDropRow: row dropOperation: operation];
+}
+
 - (NSDragOperation) _validateDraggedRow: (id<NSDraggingInfo>) info {
     NSDragOperation result = NSDragOperationNone;
 
-    [self setDropRow: [self _getDraggedRow: info] dropOperation: NSTableViewDropAbove];
+    [self _proposeDropForPoint: [self convertPoint: [info draggingLocation] fromView: nil]];
 
-    // GUESS: a data source without validateDrop refuses every drop
+    // A data source without validateDrop refuses the drag (nothing is proposed to it).
     if ([_dataSource
                 respondsToSelector: @selector
                 (tableView:validateDrop:proposedRow:proposedDropOperation:)]) {
@@ -2720,6 +2748,21 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
+    BOOL validates = [_dataSource respondsToSelector: @selector
+                                  (tableView:validateDrop:proposedRow:proposedDropOperation:)];
+
+    if (!validates) {
+        // QUIRK: a drop that reaches a table whose data source implements no validateDrop (the drag itself
+        // was refused, so this is only a drop forced on the table) still goes to acceptDrop, with the
+        // target row -2 and NSTableViewDropOn; a data source without acceptDrop is not asked.
+        // Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2), identical on both.
+        // Test: appkit-table-set-drop-row.m, test_quirk_drop_without_validate_drop
+        if (![_dataSource respondsToSelector: @selector(tableView:acceptDrop:row:dropOperation:)])
+            return NO;
+        NS_EXTRA(NSTableView, self)->_draggingTargetKnown = NO;
+        return [_dataSource tableView: self acceptDrop: sender row: -2 dropOperation: NSTableViewDropOn];
+    }
+
     if (!NS_EXTRA(NSTableView, self)->_draggingTargetKnown) {
         // Dropped without a preceding validation: validate now; the outline this draws is cleared again at once
         BOOL refused = [self _validateDraggedRow: sender] == NSDragOperationNone;

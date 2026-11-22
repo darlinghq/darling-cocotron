@@ -12,9 +12,10 @@
 //    on the whole table.
 // The row and operation acceptDrop receives are the ones left after validation (the only
 // reading the documentation allows; test_accept_receives_the_retargeted_drop). Beyond the
-// documentation, marked GUESS in the implementation: the table proposes NSTableViewDropAbove, and
-// a data source without validateDrop refuses every drop (test_no_validate_drop_refuses).
-// Written from the documentation; not yet run in a guest.
+// documentation, pinned by black-box observation on macOS 26.7.3 and 10.14.4: the table proposes a drop on the
+// row when the pointer is in the middle of it and above the row (or above the next one) near its edges
+// (test_the_proposal), and a drop forced on a data source without validateDrop reaches acceptDrop with row -2
+// and NSTableViewDropOn (test_quirk_drop_without_validate_drop; the drag itself is refused).
 // Build: clang -framework AppKit appkit-table-set-drop-row.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -112,11 +113,18 @@ static Source *setup(BOOL implementsValidate)
     return source;
 }
 
-// The pointer in the middle of a row, in window coordinates
-static void pointAtRow(NSInteger row)
+// The pointer at a fraction of a row's height from its top edge, in window coordinates
+static void pointAtRowFraction(NSInteger row, CGFloat fraction)
 {
     NSRect cell = [table frameOfCellAtColumn:0 row:row];
-    info->location = [table convertPoint:NSMakePoint(NSMidX(cell), NSMidY(cell)) toView:nil];
+    CGFloat y = [table isFlipped] ? NSMinY(cell) + fraction * NSHeight(cell) : NSMaxY(cell) - fraction * NSHeight(cell);
+    info->location = [table convertPoint:NSMakePoint(NSMidX(cell), y) toView:nil];
+}
+
+// The pointer in the middle of a row
+static void pointAtRow(NSInteger row)
+{
+    pointAtRowFraction(row, 0.5);
 }
 
 static void test_the_proposal(void)
@@ -125,8 +133,21 @@ static void test_the_proposal(void)
     pointAtRow(3);
     NSDragOperation result = [dest() draggingEntered:(id<NSDraggingInfo>)info];
     CHECK(source->proposedRow == 3);
-    CHECK(source->proposedOperation == NSTableViewDropAbove); // GUESS, as the implementation
+    CHECK(source->proposedOperation == NSTableViewDropOn); // the middle of a row is a drop on it
     CHECK(result == NSDragOperationMove); // the data source's operation, not a flag
+
+    pointAtRowFraction(3, 0.02);
+    [dest() draggingUpdated:(id<NSDraggingInfo>)info];
+    CHECK(source->proposedRow == 3 && source->proposedOperation == NSTableViewDropAbove);
+    pointAtRowFraction(3, 0.98);
+    [dest() draggingUpdated:(id<NSDraggingInfo>)info];
+    CHECK(source->proposedRow == 4 && source->proposedOperation == NSTableViewDropAbove);
+
+    // Below the last row: above the end of the table.
+    NSRect last = [table frameOfCellAtColumn:0 row:4];
+    info->location = [table convertPoint:NSMakePoint(NSMidX(last), NSMaxY(last) + 40) toView:nil];
+    [dest() draggingUpdated:(id<NSDraggingInfo>)info];
+    CHECK(source->proposedRow == 5 && source->proposedOperation == NSTableViewDropAbove);
 }
 
 static void test_returned_operation_is_passed_on(void)
@@ -188,7 +209,7 @@ static void test_without_retarget_the_proposal_is_accepted(void)
     [dest() draggingUpdated:(id<NSDraggingInfo>)info];
     CHECK([dest() performDragOperation:(id<NSDraggingInfo>)info]);
     CHECK(source->acceptedRow == 4);
-    CHECK(source->acceptedOperation == NSTableViewDropAbove);
+    CHECK(source->acceptedOperation == NSTableViewDropOn);
 }
 
 static void test_each_update_starts_from_a_fresh_proposal(void)
@@ -203,17 +224,22 @@ static void test_each_update_starts_from_a_fresh_proposal(void)
     pointAtRow(2);
     [dest() draggingUpdated:(id<NSDraggingInfo>)info];
     CHECK(source->proposedRow == 2);
-    CHECK(source->proposedOperation == NSTableViewDropAbove);
+    CHECK(source->proposedOperation == NSTableViewDropOn);
 }
 
-// GUESS (see the file comment): without validateDrop the drop is refused
-static void test_no_validate_drop_refuses(void)
+// The drag is refused without validateDrop (nothing to perform), and a drop forced on the table reaches acceptDrop
+// with row -2 and NSTableViewDropOn (black-box observation on macOS 26.7.3 and 10.14.4)
+static void test_quirk_drop_without_validate_drop(void)
 {
     Source *source = setup(NO);
     pointAtRow(2);
     CHECK([dest() draggingEntered:(id<NSDraggingInfo>)info] == NSDragOperationNone);
     CHECK([dest() draggingUpdated:(id<NSDraggingInfo>)info] == NSDragOperationNone);
     CHECK(source->accepts == 0);
+    CHECK([dest() performDragOperation:(id<NSDraggingInfo>)info]);
+    CHECK(source->accepts == 1);
+    CHECK(source->acceptedRow == -2);
+    CHECK(source->acceptedOperation == NSTableViewDropOn);
 }
 
 int main(void)
@@ -228,7 +254,7 @@ int main(void)
         test_drop_on_the_whole_table();
         test_without_retarget_the_proposal_is_accepted();
         test_each_update_starts_from_a_fresh_proposal();
-        test_no_validate_drop_refuses();
+        test_quirk_drop_without_validate_drop();
     }
     if (failures)
         return 1;
