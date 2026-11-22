@@ -49,9 +49,11 @@ static void note(const char *format, ...) {
 {
     NSMenu *_dynamic;
     NSMenu *_rebuilt;
+    NSMenu *_fileMenu;
     int _updates;
 }
-@property (assign) NSMenu *fileMenu;
+- (NSMenu *) fileMenu;
+- (void) setFileMenu: (NSMenu *) menu;
 @end
 
 @implementation Target
@@ -74,7 +76,7 @@ static void note(const char *format, ...) {
     note("action dynamicItem %s", [[(NSMenuItem *) sender title] UTF8String]);
 }
 - (void) addItem: (id) sender {
-    NSMenuItem *item = [self.fileMenu addItemWithTitle: @"Added item" action: @selector(newDoc:) keyEquivalent: @""];
+    NSMenuItem *item = [_fileMenu addItemWithTitle: @"Added item" action: @selector(newDoc:) keyEquivalent: @""];
     [item setTarget: self];
     note("action addItem");
 }
@@ -92,6 +94,12 @@ static void note(const char *format, ...) {
 - (void) setDynamic: (NSMenu *) menu {
     _dynamic = menu;
     [menu setDelegate: self];
+}
+- (NSMenu *) fileMenu {
+    return _fileMenu;
+}
+- (void) setFileMenu: (NSMenu *) menu {
+    _fileMenu = menu;
 }
 - (void) setRebuilt: (NSMenu *) menu {
     _rebuilt = menu;
@@ -193,7 +201,7 @@ static void buildMenu(Target *target) {
     [item setTarget: target];
 
     submenuItem(main, @"File", &file);
-    target.fileMenu = file;
+    [target setFileMenu: file];
     item = [file addItemWithTitle: @"New_Doc" action: @selector(newDoc:) keyEquivalent: @"n"];
     [item setTarget: target];
     item = [file addItemWithTitle: @"Save" action: @selector(save:) keyEquivalent: @"s"];
