@@ -117,4 +117,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @end
 
+@interface NSMenuItem (NSAccessibility) <NSAccessibility, NSAccessibilityElement>
+@end
+
 NS_ASSUME_NONNULL_END

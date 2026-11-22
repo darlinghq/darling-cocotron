@@ -38,8 +38,8 @@
 
 @end
 
-// The property-based accessibility API (macOS 10.10). NSView, NSWindow, NSCell and
-// NSApplication implement these; there is no assistive-technology backend behind them.
+// The property-based accessibility API (macOS 10.10). NSView, NSWindow, NSCell, NSMenuItem
+// and NSApplication implement these; there is no assistive-technology backend behind them.
 @protocol NSAccessibility <NSObject>
 
 @required
