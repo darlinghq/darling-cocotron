@@ -5,7 +5,9 @@
 // (https://developer.apple.com/documentation/appkit/nsmenudelegate/menu(_:willhighlight:)). The method is
 // optional, so a delegate without it, or a menu without a delegate, is not an error. The view that shows the menu is
 // Darling's NSSubmenuView (private), driven through -setSelectedItemIndex:, the way its tracking loop highlights an
-// item; the index counts the items shown, not the hidden ones. Needs no window server. Build without ARC.
+// item; the index counts the items shown, not the hidden ones. A pop-up menu that is cancelled while an item is
+// highlighted ends with nil before -menuDidClose: (a QUIRK observed on macOS 26.7.3; the test is
+// test_quirk_highlight_cleared_before_did_close). That part needs a window server. Build without ARC.
 #import <AppKit/AppKit.h>
 #import <objc/message.h>
 #include <stdio.h>
@@ -62,9 +64,59 @@ static void highlight(NSView *view, NSUInteger index) {
 @implementation PlainDelegate
 @end
 
+// Records the delegate calls of a pop-up menu that is shown and cancelled.
+static NSMutableArray *trackingEvents;
+
+@interface TrackingRecorder : NSObject <NSMenuDelegate>
+@end
+@implementation TrackingRecorder
+- (void) menu: (NSMenu *) menu willHighlightItem: (NSMenuItem *) item {
+    [trackingEvents addObject: item != nil ? [@"highlight " stringByAppendingString: [item title]] : @"highlight nil"];
+}
+- (void) menuDidClose: (NSMenu *) menu {
+    [trackingEvents addObject: @"didClose"];
+}
+@end
+
 static NSView *viewFor(NSMenu *menu) {
     return [[[NSClassFromString(@"NSSubmenuView") alloc] performSelector: @selector(initWithMenu:)
                                                               withObject: menu] autorelease];
+}
+
+// QUIRK test: with an item highlighted, tracking that ends sends nil before -menuDidClose:.
+static void test_quirk_highlight_cleared_before_did_close(void) {
+    NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(300, 300, 400, 300)
+                                                   styleMask: NSWindowStyleMaskTitled
+                                                     backing: NSBackingStoreBuffered
+                                                       defer: NO];
+    [window makeKeyAndOrderFront: nil];
+    NSMenu *popup = [[NSMenu alloc] initWithTitle: @"Popup"];
+    [popup addItemWithTitle: @"One" action: NULL keyEquivalent: @""];
+    [popup addItemWithTitle: @"Two" action: NULL keyEquivalent: @""];
+    TrackingRecorder *recorder = [[TrackingRecorder alloc] init];
+    [popup setDelegate: recorder];
+    trackingEvents = [[NSMutableArray alloc] init];
+
+    NSTimer *timer = [NSTimer timerWithTimeInterval: 0.5 repeats: NO block: ^(NSTimer *t) {
+        // Highlight the way the tracking loop does, then cancel.
+        for (NSWindow *candidate in [NSApp windows]) {
+            NSView *view = [candidate contentView];
+            if ([view isKindOfClass: NSClassFromString(@"NSMenuView")] &&
+                [[view performSelector: @selector(menu)] isEqual: popup])
+                highlight(view, 1);
+        }
+        [popup cancelTracking];
+    }];
+    [[NSRunLoop currentRunLoop] addTimer: timer forMode: NSRunLoopCommonModes];
+    [popup popUpMenuPositioningItem: nil atLocation: NSMakePoint(40, 200) inView: [window contentView]];
+    NSArray *want = @[ @"highlight Two", @"highlight nil", @"didClose" ];
+    expect([trackingEvents isEqualToArray: want], "tracking that ends with an item highlighted sends nil before didClose");
+    if (![trackingEvents isEqualToArray: want])
+        fprintf(stderr, "  got %s\n", [[trackingEvents description] UTF8String]);
+    [popup setDelegate: nil];
+    [recorder release];
+    [popup release];
+    [window close];
 }
 
 int main(void) {
@@ -110,6 +162,8 @@ int main(void) {
 
         [menu release];
         [recorder release];
+
+        test_quirk_highlight_cleared_before_did_close();
     }
     printf(failures ? "FAIL (%d)\n" : "PASS\n", failures);
     return failures != 0;

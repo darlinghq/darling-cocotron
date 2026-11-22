@@ -39,3 +39,16 @@ and the licence.
   embed and redistribute with the licence text; the font may not be sold by itself).
 - Use: a font with identical data on every platform, so the CoreText metrics tests can compare against
   values measured on macOS.
+
+## SiliconForest cocoa patches (call shape of `-menu:willHighlightItem:`)
+
+- Location: `AppKit/NSMenu.subproj/NSMenuView.m`, `-[NSMenuView _delegateWillHighlightItemAtIndex:]`
+- Source: https://github.com/chriskearney/siliconforest (`integrations/siliconforest/cocoa/patches/0017-appkit-popups.patch`)
+- Use: the few lines that look up the menu's delegate and send it the item at an index, or nil, follow the shape of
+  the same step in that patch. No other code or comment was taken from it.
+- Copyright: 2026 Chris Kearney and the SiliconForest contributors
+- Licence: MIT. Permission is granted, free of charge, to any person obtaining a copy of the software and associated
+  documentation files, to deal in the software without restriction, including without limitation the rights to use,
+  copy, modify, merge, publish, distribute, sublicense, and/or sell copies, subject to the above copyright notice and
+  this permission notice being included in all copies or substantial portions of the software. The software is
+  provided "as is", without warranty of any kind.

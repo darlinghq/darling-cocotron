@@ -134,20 +134,25 @@ void _NSMenuCancelTracking(NSMenu *menu) {
     return _selectedItemIndex;
 }
 
+// Tells the menu's delegate which item is about to be highlighted, nil for none. The index counts the items
+// shown. The method is optional.
+// https://developer.apple.com/documentation/appkit/nsmenudelegate/menu(_:willhighlight:)
+// Shape of the call (delegate lookup, item or nil by index) taken after the SiliconForest cocoa patches, MIT,
+// see THIRD-PARTY-NOTICES.md.
+- (void) _delegateWillHighlightItemAtIndex: (NSUInteger) itemIndex {
+    id delegate = [[self menu] delegate];
+
+    if ([delegate respondsToSelector: @selector(menu:willHighlightItem:)]) {
+        NSArray *items = [self visibleItemArray];
+        [delegate menu: [self menu]
+                willHighlightItem: itemIndex < [items count] ? [items objectAtIndex: itemIndex] : nil];
+    }
+}
+
 - (void) setSelectedItemIndex: (NSUInteger) itemIndex {
     if (_selectedItemIndex != itemIndex) {
-        // The delegate is told before the highlight changes. A nil item means
-        // that nothing is about to be highlighted. GUESS: the documentation
-        // does not say whether the menu bar's delegate hears this too; it does
-        // here, as for any menu. Also GUESS: the reset at the end of tracking
-        // and the closing of submenu views do not go through this setter, so
-        // no nil is sent when a menu closes; the documentation is silent.
-        id delegate = [[self menu] delegate];
-        if ([delegate respondsToSelector: @selector(menu:willHighlightItem:)]) {
-            NSArray *items = [self visibleItemArray];
-            [delegate menu: [self menu]
-                    willHighlightItem: itemIndex < [items count] ? [items objectAtIndex: itemIndex] : nil];
-        }
+        // The delegate hears of the change before it happens, for the menu bar as for any menu.
+        [self _delegateWillHighlightItemAtIndex: itemIndex];
         _selectedItemIndex = itemIndex;
         [self setNeedsDisplay: YES];
         [self displayIfNeeded];
@@ -862,6 +867,13 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
     }
     [viewStack removeLastObject];
     _NSMenuTrackingEnd(session);
+    // QUIRK: when tracking ends with an item highlighted, the delegate is sent -menu:willHighlightItem: with nil
+    // after the submenus have closed and before -menuDidClose:. Not documented. Evidence: black-box observation
+    // on macOS 26.7.3 (tier 2), a pop-up menu positioned on an item, with and without an open submenu. Whether a
+    // call is made when nothing was highlighted was not observed, so none is.
+    // Test: appkit-menu-will-highlight-item (test_quirk_highlight_cleared_before_did_close)
+    if (_selectedItemIndex != NSNotFound)
+        [self _delegateWillHighlightItemAtIndex: NSNotFound];
     [self _didEndTracking];
 
     _selectedItemIndex = NSNotFound;
