@@ -1277,8 +1277,62 @@ static CGFloat pixelsPerUnit(void) {
     glDeleteTextures(1, &pass->texture);
 }
 
+// The depth of a sublayer as used for ordering siblings. A NaN counts as 0, the default
+// zPosition, so every layer has a comparable depth.
+static CGFloat siblingDepth(CALayer *child, CFTimeInterval currentTime) {
+    CGFloat depth = interpolateFloatInLayerKey(child, @"zPosition", currentTime);
+
+    return isnan(depth) ? 0 : depth;
+}
+
+// Returns the sublayers of `layer` back to front: ascending zPosition, so that a layer
+// closer to the viewer is drawn after, and so over, the ones behind it. Layers at the same
+// depth stay in their array order. The depth test is off, so this order alone decides which
+// of two overlapping siblings is visible.
+static NSArray *sublayersBackToFront(CALayer *layer, CFTimeInterval currentTime) {
+    NSArray *sublayers = layer.sublayers;
+    NSUInteger count = [sublayers count];
+    BOOL inOrder = YES;
+    CGFloat previous = 0;
+
+    for (NSUInteger i = 0; i < count && inOrder; i++) {
+        CGFloat depth = siblingDepth([sublayers objectAtIndex: i], currentTime);
+
+        if (i > 0 && depth < previous)
+            inOrder = NO;
+        previous = depth;
+    }
+    if (inOrder)
+        return sublayers;
+
+    NSMutableData *depthStorage = [NSMutableData dataWithLength: count * sizeof(CGFloat)];
+    CGFloat *depths = [depthStorage mutableBytes];
+    NSMutableArray *indexes = [NSMutableArray arrayWithCapacity: count];
+
+    for (NSUInteger i = 0; i < count; i++) {
+        depths[i] = siblingDepth([sublayers objectAtIndex: i], currentTime);
+        [indexes addObject: [NSNumber numberWithUnsignedInteger: i]];
+    }
+    // The array position is the tie-break, which makes the result independent of
+    // whether the sort itself is stable.
+    [indexes sortUsingComparator: ^NSComparisonResult(NSNumber *a, NSNumber *b) {
+        NSUInteger ia = [a unsignedIntegerValue], ib = [b unsignedIntegerValue];
+
+        if (depths[ia] != depths[ib])
+            return depths[ia] < depths[ib] ? NSOrderedAscending : NSOrderedDescending;
+        return ia < ib ? NSOrderedAscending : NSOrderedDescending;
+    }];
+
+    NSMutableArray *result = [NSMutableArray arrayWithCapacity: count];
+
+    for (NSNumber *index in indexes)
+        [result addObject: [sublayers objectAtIndex: [index unsignedIntegerValue]]];
+    return result;
+}
+
 // Layers are composited in painter's order: a layer's background and contents, its
-// sublayers in array order, then its border. Opacity multiplies down the tree.
+// sublayers in ascending zPosition order (array order among equals), then its
+// border. Opacity multiplies down the tree.
 // parentFlipped says whether the parent's coordinate space is y-flipped on screen.
 - (void) _renderLayer: (CALayer *) layer
           currentTime: (CFTimeInterval) currentTime
@@ -1357,7 +1411,7 @@ static CGFloat pixelsPerUnit(void) {
     glPushMatrix();
     applySublayerTransform(layer.sublayerTransform, anchorPoint, bounds);
     glTranslatef(-bounds.origin.x, -bounds.origin.y, 0);
-    for (CALayer *child in layer.sublayers)
+    for (CALayer *child in sublayersBackToFront(layer, currentTime))
         [self _renderLayer: child
                 currentTime: currentTime
               parentOpacity: opacity
