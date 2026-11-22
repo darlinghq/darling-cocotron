@@ -1550,13 +1550,18 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     }
 }
 
+// Whether the window is one of this process's own: an application window, or an overlay of the display.
+- (BOOL) isOwnWindowID: (Window) window {
+    return window != None && ([self windowForID: window] != nil ||
+                              [_overlayWindows containsObject: [NSNumber numberWithUnsignedLong: (unsigned long) window]]);
+}
+
 // The window manager made a window of another client the active one: the application is no longer
 // active, even when none of its own windows ever held the focus and so no focus-out will tell it.
 - (void) noteActiveWindowOfAnotherClient {
     Window active = X11OcclusionActiveWindow(_display);
 
-    if (active != None && [self windowForID: active] == nil &&
-        ![_overlayWindows containsObject: [NSNumber numberWithUnsignedLong: (unsigned long) active]])
+    if (active != None && ![self isOwnWindowID: active])
         [NSApp _systemFocusMovedToAnotherClient];
 }
 
@@ -1625,7 +1630,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     if (!_occlusionActiveKnown) {
         Window focused = X11OcclusionActiveWindow(_display);
         // The application's own windows never cover each other here.
-        if (focused != None && [self windowForID: focused] != nil)
+        if ([self isOwnWindowID: focused])
             focused = None;
         _occlusionActive = focused;
         _occlusionActiveKnown = YES;
@@ -1637,8 +1642,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     // Watch the focused foreign window for size, fullscreen and unmap changes. Selecting input replaces
     // this client's earlier selection on that window.
     if (active != _occlusionWatchWindow) {
-        if (_occlusionWatchWindow != None)
-            XSelectInput(_display, _occlusionWatchWindow, NoEventMask);
+        X11OcclusionStopWatching(_display, _occlusionWatchWindow, [self isOwnWindowID: _occlusionWatchWindow]);
         _occlusionWatchWindow = active;
         if (active != None)
             XSelectInput(_display, active, StructureNotifyMask | PropertyChangeMask);
