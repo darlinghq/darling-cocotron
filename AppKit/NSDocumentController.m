@@ -161,10 +161,17 @@ static NSDocumentController *shared = nil;
 }
 
 - (NSString *) defaultType {
-    if ([_fileTypes count] == 0)
-        return nil;
+    // The type new documents are made of is the first one the application can edit; an application
+    // that declares none has no default.
+    for (NSDictionary *fileType in _fileTypes) {
+        // GUESS: an Editor entry that has neither a content type nor a name cannot be the default
+        // (there is no type name to return), so the search goes on to the next Editor entry.
+        NSString *name = NSDocumentTypeNameForInfo(fileType);
+        if (name != nil && [[fileType objectForKey: @"CFBundleTypeRole"] isEqual: @"Editor"])
+            return name;
+    }
 
-    return NSDocumentTypeNameForInfo((NSDictionary *) [_fileTypes objectAtIndex: 0]);
+    return nil;
 }
 
 - (NSArray *) documentClassNames {
