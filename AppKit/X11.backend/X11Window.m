@@ -446,86 +446,56 @@ static void preeditCaretCallback(XIC ic, XPointer clientData, XPointer callData)
     return ret;
 }
 
-static NSData *makeWindowIcon() {
-    static NSMutableData *res;
+// The edge lengths the window icon is offered at. The window manager picks the one that fits its
+// title bar, task bar or switcher best.
+static const int WindowIconSides[] = {16, 32, 48, 64, 128, 256};
 
-    if (res != nil)
-        return res;
+// _NET_WM_ICON: for each size the width and height, then width * height ARGB pixels (not premultiplied),
+// every value in a long as the property is a 32 bit format. nil when the application has no icon.
+static NSData *makeWindowIcon(X11Display *display) {
+    NSMutableData *res = nil;
 
-    // Figure out the path.
-    NSBundle *bundle = [NSBundle mainBundle];
-    NSString *name = [bundle objectForInfoDictionaryKey: @"CFBundleIconFile"];
-    if (name == nil || [name length] == 0)
-        return nil;
-    NSString *path = [bundle pathForImageResource: name];
-    if (path == nil) {
-        NSLog(@"Cannot find an icon file named %@", name);
-        return nil;
-    }
-    NSURL *url = [NSURL fileURLWithPath: path];
+    for (size_t i = 0; i < sizeof(WindowIconSides) / sizeof(WindowIconSides[0]); i++) {
+        int side = WindowIconSides[i];
+        NSData *pixels = [display applicationIconPixelsOfSide: side];
+        if (pixels == nil)
+            return nil;
+        if (res == nil)
+            res = [NSMutableData data];
 
-    O2ImageSource *imageSource = [O2ImageSource newImageSourceWithURL: url
-                                                              options: nil];
-    if (imageSource == nil) {
-        NSLog(@"Cannot parse the icon");
-        return nil;
-    }
-
-    res = [[NSMutableData alloc] initWithCapacity: 32 * 32 * 4 + 2];
-    O2ColorSpace *colorSpace = O2ColorSpaceCreateDeviceRGB();
-
-    // Go over the images, turning them into the required format
-    // and appending them to res.
-    for (NSUInteger i = 0; i < [imageSource count]; i++) {
-
-        O2Image *image = [imageSource createImageAtIndex: i options: nil];
-        NSUInteger width = O2ImageGetWidth(image);
-        NSUInteger height = O2ImageGetHeight(image);
-
-        // Render the image in ARGB.
-        O2BitmapContext *context = (O2BitmapContext *) O2BitmapContextCreate(
-                NULL, width, height, 8, width * 4, colorSpace,
-                kO2ImageAlphaPremultipliedFirst | kO2BitmapByteOrder32Host);
-
-        [context drawImage: image inRect: O2RectMake(0, 0, width, height)];
-        int *imageData = O2BitmapContextGetData(context);
-
-        // Convert to the format accepted by Xlib.
-        NSMutableData *data =
-                [NSMutableData dataWithLength: width * height * sizeof(long)];
-        long *dataPtr = (long *) [data mutableBytes];
-        int count = width * height;
-        for (int i = 0; i < count; i++) {
-            dataPtr[i] = imageData[i];
+        long header[2] = {side, side};
+        [res appendBytes: header length: sizeof(header)];
+        NSMutableData *data = [NSMutableData dataWithLength: (size_t) side * side * sizeof(long)];
+        long *out = (long *) [data mutableBytes];
+        const uint32_t *in = (const uint32_t *) [pixels bytes];
+        for (int p = 0; p < side * side; p++) {
+            uint32_t argb = in[p];
+            uint32_t alpha = argb >> 24;
+            if (alpha != 0 && alpha != 255) {
+                uint32_t red = MIN(255u, ((argb >> 16) & 0xff) * 255 / alpha);
+                uint32_t green = MIN(255u, ((argb >> 8) & 0xff) * 255 / alpha);
+                uint32_t blue = MIN(255u, (argb & 0xff) * 255 / alpha);
+                argb = (alpha << 24) | (red << 16) | (green << 8) | blue;
+            }
+            out[p] = argb;
         }
-
-        struct {
-            long w, h;
-        } size = {width, height};
-        [res appendBytes: &size length: sizeof(size)];
         [res appendData: data];
-
-        [context release];
-        [image release];
     }
-
-    [colorSpace release];
-    [imageSource release];
-
     return res;
 }
 
+// Sets _NET_WM_ICON from the application icon, or removes it when there is none (so the window manager
+// falls back to its own choice).
 - (void) setWindowIcon {
+    Atom property = XInternAtom(_display, "_NET_WM_ICON", False);
+    NSData *data = makeWindowIcon((X11Display *) [NSDisplay currentDisplay]);
 
-    NSData *data = makeWindowIcon();
-
-    if (data == nil)
+    if (data == nil) {
+        XDeleteProperty(_display, _window, property);
         return;
-
-    XChangeProperty(
-            _display, _window, XInternAtom(_display, "_NET_WM_ICON", False),
-            XInternAtom(_display, "CARDINAL", False), 32, PropModeReplace,
-            [data bytes], [data length] / sizeof(long));
+    }
+    XChangeProperty(_display, _window, property, XInternAtom(_display, "CARDINAL", False), 32, PropModeReplace,
+                    [data bytes], [data length] / sizeof(long));
 }
 
 - (instancetype) initWithDelegate: (NSWindow *) delegate {

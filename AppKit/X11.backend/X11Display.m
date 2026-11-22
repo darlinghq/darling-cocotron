@@ -393,6 +393,17 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     }
 }
 
+// The windows carry the application icon in _NET_WM_ICON: when the application sets another one,
+// the windows already shown are given it too.
+- (void) applicationIconImageChanged {
+    [super applicationIconImageChanged];
+    for (id window in [_windowsByID allValues]) {
+        if ([window isKindOfClass: [X11Window class]])
+            [window setWindowIcon];
+    }
+    XFlush(_display);
+}
+
 // The main monitor's rectangle in root coordinates, device pixels: the origin
 // of the global coordinate space, as on macOS. With one monitor, or without
 // RandR, it is the root window.
