@@ -287,6 +287,19 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
                     lastLineRange: (NSRange *) lastLine
                     hasHiddenText: (BOOL *) hasHiddenText
 {
+    return [self sizeOfAttributedString: astring
+                          fittingInSize: maxSize
+                   maximumNumberOfLines: 0
+                          lastLineRange: lastLine
+                          hasHiddenText: hasHiddenText];
+}
+
+- (NSSize) sizeOfAttributedString: (NSAttributedString *) astring
+                    fittingInSize: (NSSize) maxSize
+             maximumNumberOfLines: (NSUInteger) maximumNumberOfLines
+                    lastLineRange: (NSRange *) lastLine
+                    hasHiddenText: (BOOL *) hasHiddenText
+{
     if (lastLine != NULL)
         *lastLine = NSMakeRange(0, 0);
     if (hasHiddenText != NULL)
@@ -308,6 +321,9 @@ const CGFloat NSStringDrawerLargeDimension = 1000000.;
         NSRect fragment = [_layoutManager lineFragmentRectForGlyphAtIndex: index
                                                            effectiveRange: &lineGlyphs];
         if ([lines count] > 0 && NSMaxY(fragment) > maxSize.height + 0.01)
+            break;
+        // Each line adds two entries to the array.
+        if (maximumNumberOfLines > 0 && [lines count] / 2 >= maximumNumberOfLines)
             break;
         NSRect used = [_layoutManager lineFragmentUsedRectForGlyphAtIndex: index
                                                            effectiveRange: NULL];
