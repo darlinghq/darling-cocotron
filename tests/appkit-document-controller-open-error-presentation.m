@@ -11,11 +11,15 @@
 - (BOOL)application:(id)sender openFile:(NSString *)path;
 @end
 
-@interface OpenController : NSDocumentController
+// The ivar and @synthesize are explicit: the i386 slice uses the legacy runtime, which does not synthesize properties.
+@interface OpenController : NSDocumentController {
+    NSInteger _presented;
+}
 @property(assign) NSInteger presented;
 - (void)setTypes:(NSArray *)types;
 @end
 @implementation OpenController
+@synthesize presented = _presented;
 - (void)setTypes:(NSArray *)types {
     [_fileTypes release];
     _fileTypes = [types copy];
