@@ -51,7 +51,11 @@ int main(void) {
         // Weak: the property does not keep the delegate alive and reads nil after it is deallocated.
         PathDelegate *transient = [[PathDelegate alloc] init];
         [control setDelegate:transient];
-        expect([control delegate] == transient, @"the transient delegate is set");
+        @autoreleasepool {
+            // The getter returns the weak reference retained and autoreleased: keep that in an inner pool, so the
+            // release below really deallocates the delegate.
+            expect([control delegate] == transient, @"the transient delegate is set");
+        }
         [transient release];
         expect([control delegate] == nil, @"the delegate reads nil after the delegate object is deallocated");
 
