@@ -193,6 +193,37 @@ static void opObject(CGPDFScannerRef scanner, void *info) {
     check(state, 191, !CGPDFScannerPopObject(scanner, &object));
 }
 
+// false bf: a false Boolean pops as 0 (the output starts as 9).
+static void opFalse(CGPDFScannerRef scanner, void *info) {
+    struct State *state = begin(scanner, info, "bf");
+    CGPDFBoolean boolean = 9;
+    check(state, 230, CGPDFScannerPopBoolean(scanner, &boolean) && boolean == 0);
+}
+
+// << /A 1 >> ss: a dictionary is not a stream, so the pop fails and leaves its output alone. (A
+// stream cannot be an operand of a content stream, so a successful PopStream cannot be reached
+// from a content stream; the same pop of the other types is checked above.)
+static void opNotStream(CGPDFScannerRef scanner, void *info) {
+    struct State *state = begin(scanner, info, "ss");
+    CGPDFStreamRef stream = (CGPDFStreamRef)state;
+    check(state, 235, !CGPDFScannerPopStream(scanner, &stream) && stream == (CGPDFStreamRef)state);
+}
+
+// 1 2 3 pf: pops only the top operand and leaves the other two unpopped.
+static void opPopOne(CGPDFScannerRef scanner, void *info) {
+    struct State *state = begin(scanner, info, "pf");
+    CGPDFReal real = -1;
+    check(state, 240, CGPDFScannerPopNumber(scanner, &real) && real == 3);
+}
+
+// 4 pg: finds its own operand and none of the two pf left.
+static void opOwnOperands(CGPDFScannerRef scanner, void *info) {
+    struct State *state = begin(scanner, info, "pg");
+    CGPDFReal real = -1, extra = 42;
+    check(state, 241, CGPDFScannerPopNumber(scanner, &real) && real == 4);
+    check(state, 242, !CGPDFScannerPopNumber(scanner, &extra) && extra == 42);
+}
+
 // No operands: every pop fails and none writes its output.
 static void opEmpty(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "ee");
@@ -235,10 +266,11 @@ static void opAfterUnknown(CGPDFScannerRef scanner, void *info) {
 static const char *mainContent =
     "q 0.25 0.5 0.75 rg 10 20 30 40 re f Q\n"
     "/F1 12 Tf <00FF41> Tj [(A) -120 (B)] TJ /Span << /MCID 3 >> BDC\n"
-    "/N true 7 mm 7 nn (s) oo ee (s) ww\n"
+    "/N true 7 mm 7 nn (s) oo ee (s) ww false bf << /A 1 >> ss\n"
+    "1 2 3 pf 4 pg\n"
     "1 2 3 ZZ 9 qq\n";
 
-static const char *mainLog[] = {"q", "rg", "re", "f", "Q", "Tf", "Tj", "TJ", "BDC", "mm", "nn", "oo", "ee", "ww", "qq"};
+static const char *mainLog[] = {"q", "rg", "re", "f", "Q", "Tf", "Tj", "TJ", "BDC", "mm", "nn", "oo", "ee", "ww", "bf", "ss", "pf", "pg", "qq"};
 #define MAIN_COUNT ((int)(sizeof(mainLog) / sizeof(mainLog[0])))
 
 static CGPDFOperatorTableRef makeTable(void) {
@@ -257,6 +289,10 @@ static CGPDFOperatorTableRef makeTable(void) {
     CGPDFOperatorTableSetCallback(table, "oo", opObject);
     CGPDFOperatorTableSetCallback(table, "ee", opEmpty);
     CGPDFOperatorTableSetCallback(table, "ww", opWrongType);
+    CGPDFOperatorTableSetCallback(table, "bf", opFalse);
+    CGPDFOperatorTableSetCallback(table, "ss", opNotStream);
+    CGPDFOperatorTableSetCallback(table, "pf", opPopOne);
+    CGPDFOperatorTableSetCallback(table, "pg", opOwnOperands);
     CGPDFOperatorTableSetCallback(table, "qq", opAfterUnknown);
     return table;
 }
@@ -268,7 +304,10 @@ static bool scan(CGPDFContentStreamRef cs, CGPDFOperatorTableRef table, struct S
     CGPDFScannerRef scanner = CGPDFScannerCreate(cs, table, state);
     if (!scanner)
         return false;
-    *parsed = CGPDFScannerScan(scanner);
+    // Retain returns the same scanner, which then needs two releases.
+    CGPDFScannerRef retained = CGPDFScannerRetain(scanner);
+    *parsed = retained == scanner && CGPDFScannerScan(scanner);
+    CGPDFScannerRelease(retained);
     CGPDFScannerRelease(scanner);
     return true;
 }
@@ -285,6 +324,9 @@ static bool logIs(const struct State *state, const char **expected, int count) {
 int main(void) {
     @autoreleasepool {
         CGPDFOperatorTableRef table = makeTable();
+        // Retain returns the same table; one release then leaves the original reference.
+        if (CGPDFOperatorTableRetain(table) != table) return 9;
+        CGPDFOperatorTableRelease(table);
         struct State state;
         bool parsed = false;
 
@@ -357,6 +399,33 @@ int main(void) {
         }
         if (!scan(cs, table, &state, &parsed) || !parsed || state.failure) return 45;
         if (!logIs(&state, mainLog, 5)) return 46;
+        CGPDFContentStreamRelease(cs);
+        CGPDFDocumentRelease(document);
+
+        // An operator's operands may be in one content stream and the operator in the next.
+        document = makeDocument("q 0.25 0.5", "0.75 rg 10 20 30 40 re f Q", false);
+        page = document ? CGPDFDocumentGetPage(document, 1) : NULL;
+        cs = page ? CGPDFContentStreamCreateWithPage(page) : NULL;
+        if (!cs) return 47;
+        if (!scan(cs, table, &state, &parsed) || !parsed || state.failure) return 48;
+        if (!logIs(&state, mainLog, 5)) return 49;
+        CGPDFContentStreamRelease(cs);
+        CGPDFDocumentRelease(document);
+
+        // An entry of /Contents that refers to an object that does not exist is not a content
+        // stream: GetStreams leaves it out, and the scan reads the streams around it.
+        document = makeDocument("q 0.25 0.5 0.75 rg", "10 20 30 40 re f Q", true);
+        page = document ? CGPDFDocumentGetPage(document, 1) : NULL;
+        cs = page ? CGPDFContentStreamCreateWithPage(page) : NULL;
+        if (!cs) return 70;
+        streams = CGPDFContentStreamGetStreams(cs);
+        if (!streams || CFArrayGetCount(streams) != 2) return 71;
+        for (CFIndex i = 0; i < 2; i++) {
+            CGPDFStreamRef element = (CGPDFStreamRef)CFArrayGetValueAtIndex(streams, i);
+            if (!element || !CGPDFStreamGetDictionary(element)) return 72;
+        }
+        if (!scan(cs, table, &state, &parsed) || !parsed || state.failure) return 73;
+        if (!logIs(&state, mainLog, 5)) return 74;
         CGPDFContentStreamRelease(cs);
         CGPDFDocumentRelease(document);
 
