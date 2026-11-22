@@ -1302,6 +1302,9 @@ BOOL O2PDFScannerPopObject(O2PDFScanner *self, O2PDFObject **value) {
 }
 
 BOOL O2PDFScannerPopBoolean(O2PDFScanner *self, O2PDFBoolean *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result =
             [[self->_stack lastObject] checkForType: kO2PDFObjectTypeBoolean
                                               value: value];
@@ -1312,6 +1315,9 @@ BOOL O2PDFScannerPopBoolean(O2PDFScanner *self, O2PDFBoolean *value) {
 }
 
 BOOL O2PDFScannerPopInteger(O2PDFScanner *self, O2PDFInteger *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result =
             [[self->_stack lastObject] checkForType: kO2PDFObjectTypeInteger
                                               value: value];
@@ -1322,6 +1328,9 @@ BOOL O2PDFScannerPopInteger(O2PDFScanner *self, O2PDFInteger *value) {
 }
 
 BOOL O2PDFScannerPopNumber(O2PDFScanner *self, O2PDFReal *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result = [[self->_stack lastObject] checkForType: kO2PDFObjectTypeReal
                                                     value: value];
 
