@@ -59,6 +59,24 @@ extern BOOL _NSMenuTrackingCancelRequested(id session);
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, showsStateColumn, _showsStateColumn, BOOL, showsStateColumn, setShowsStateColumn:)
 NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
+NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appearance, setAppearance:)
+
++ (NSSet *) keyPathsForValuesAffectingEffectiveAppearance {
+    return [NSSet setWithObject: @"appearance"];
+}
+
+// NSAppearanceCustomization: the menu's own appearance, else the one it
+// inherits. GUESS: the inherited one is the application's, as for a window;
+// the reference says "the nearest ancestor that has set an appearance" and does
+// not say whether a submenu looks at its supermenu first. Menu views do not
+// draw from it yet, and a change of the application's appearance is not
+// reported to observers of a menu that has none.
+// https://developer.apple.com/documentation/appkit/nsappearancecustomization
+- (NSAppearance *) effectiveAppearance {
+    NSAppearance *own = [self appearance];
+
+    return own != nil ? own : [NSApp effectiveAppearance];
+}
 
 + (void) popUpContextMenu: (NSMenu *) menu
                 withEvent: (NSEvent *) event
@@ -344,6 +362,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
                                 withObject: nil];
     [NS_EXTRA(NSMenu, self)->_itemArray release];
     [NS_EXTRA(NSMenu, self)->_identifier release];
+    [NS_EXTRA(NSMenu, self)->_appearance release];
     NS_EXTRA_FREE(NSMenu, self);
     [super dealloc];
 }
@@ -353,6 +372,8 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     NS_EXTRA_COPY(NSMenu, copy, self);
     NS_EXTRA(NSMenu, copy)->_identifier =
         [NS_EXTRA(NSMenu, self)->_identifier copyWithZone: zone];
+    // GUESS: a copy keeps the appearance, as it keeps the identifier.
+    [NS_EXTRA(NSMenu, copy)->_appearance retain];
 
     copy->_title = [_title copyWithZone: zone];
     NS_EXTRA(NSMenu, copy)->_name = [NS_EXTRA(NSMenu, self)->_name copyWithZone: zone];
