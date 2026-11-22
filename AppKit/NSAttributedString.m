@@ -351,6 +351,31 @@ NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
     return 0;
 }
 
+// Only the link attribute is read: the documentation also says text that looks like a URL is
+// recognised, without saying what looks like one.
+// GUESS: an index at or past the end of the string (and so any index of an empty string) raises
+// NSRangeException, as the attribute accessors do; the documentation does not say.
+- (NSURL *) URLAtIndex: (NSUInteger) location effectiveRange: (NSRangePointer) effectiveRange {
+    NSRange range;
+    id link = [self attribute: NSLinkAttributeName
+                      atIndex: location
+        longestEffectiveRange: &range
+                      inRange: NSMakeRange(0, [self length])];
+    NSURL *url = nil;
+
+    // The link attribute holds an NSURL, or an NSString for one.
+    if ([link isKindOfClass: [NSURL class]])
+        url = link;
+    else if ([link isKindOfClass: [NSString class]])
+        url = [NSURL URLWithString: link];
+
+    // The range is that of the link, or of the text around the index without a link when there is
+    // no URL, which is what the documentation of effectiveRange says.
+    if (effectiveRange != NULL)
+        *effectiveRange = range;
+    return url;
+}
+
 /* as usual, the documentation says one thing and the system behaves
  * differently, this is the way i think it should work... (dwy 5/11/2003) */
 - (NSUInteger) nextWordFromIndex: (NSUInteger) location
