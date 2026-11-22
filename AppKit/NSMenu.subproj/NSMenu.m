@@ -66,9 +66,11 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
 }
 
 // NSAppearanceCustomization: the menu's own appearance, else the one it
-// inherits. GUESS: the inherited one is the application's, as for a window;
-// the reference says "the nearest ancestor that has set an appearance" and does
-// not say whether a submenu looks at its supermenu first. Menu views do not
+// inherits. Observed on macOS 26.7.3: the application's for a menu that has no
+// supermenu and is not attached to anything. GUESS: a submenu or a menu of a
+// view or window inherits from its supermenu, view or window first; the
+// reference says "the nearest ancestor that has set an appearance" and the
+// probe did not reach those cases. Menu views do not
 // draw from it yet, and a change of the application's appearance is not
 // reported to observers of a menu that has none.
 // https://developer.apple.com/documentation/appkit/nsappearancecustomization
@@ -372,8 +374,12 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
     NS_EXTRA_COPY(NSMenu, copy, self);
     NS_EXTRA(NSMenu, copy)->_identifier =
         [NS_EXTRA(NSMenu, self)->_identifier copyWithZone: zone];
-    // GUESS: a copy keeps the appearance, as it keeps the identifier.
+    // Observed on macOS 26.7.3: a copy keeps the appearance, as it keeps the identifier.
     [NS_EXTRA(NSMenu, copy)->_appearance retain];
+    // QUIRK: a copy of a submenu has no supermenu. Not documented. Evidence: black-box observation on macOS
+    // 26.7.3 (tier 2): the supermenu of a copy of a submenu, and of a copy of a menu with a supermenu, was nil.
+    // Test: appkit-menu-appearance (test_copy_of_a_hierarchy)
+    copy->_supermenu = nil;
 
     copy->_title = [_title copyWithZone: zone];
     NS_EXTRA(NSMenu, copy)->_name = [NS_EXTRA(NSMenu, self)->_name copyWithZone: zone];

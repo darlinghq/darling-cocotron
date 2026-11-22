@@ -6,9 +6,11 @@
 //  - appearance defaults to nil, which means the receiver uses the appearance it inherits;
 //  - a non-nil appearance is the one the receiver uses (effectiveAppearance returns it);
 //  - effectiveAppearance is never nil.
-// Beyond the reference (marked GUESS in the implementation): a menu without an appearance
-// inherits the application's effective appearance, and a copy of a menu keeps its appearance.
-// Written from the documentation; not yet run in a guest.
+// Observed on macOS 26.7.3 (case numbers of the probe in parentheses): a menu without an appearance has the
+// application's effective appearance (642.*), a copy keeps the appearance, a copy of a hierarchy keeps the
+// appearance of the top menu and of a submenu, a copy of a submenu alone keeps its own, and the copy has no
+// supermenu (test_copy_of_a_hierarchy). Beyond that (marked GUESS in the implementation) the appearance a
+// submenu inherits from its supermenu, or a menu attached to a view or window, was not observed.
 // Build: clang -framework AppKit appkit-menu-appearance.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -70,6 +72,29 @@ static void test_copy(void) {
     CHECK([menu appearance] == dark);
 }
 
+static void test_copy_of_a_hierarchy(void) {
+    NSAppearance *dark = [NSAppearance appearanceNamed: NSAppearanceNameDarkAqua];
+    NSAppearance *aqua = [NSAppearance appearanceNamed: NSAppearanceNameAqua];
+    NSMenu *top = [[[NSMenu alloc] initWithTitle: @"top"] autorelease];
+    NSMenu *sub = [[[NSMenu alloc] initWithTitle: @"sub"] autorelease];
+    NSMenuItem *item = [top addItemWithTitle: @"Sub" action: NULL keyEquivalent: @""];
+
+    [top setSubmenu: sub forItem: item];
+    [top setAppearance: dark];
+    [sub setAppearance: aqua];
+
+    NSMenu *copy = [top copy];
+    CHECK([copy supermenu] == nil);
+    CHECK([copy appearance] == dark);
+    CHECK([[[[copy itemAtIndex: 0] submenu] appearance] isEqual: aqua]);
+    [copy release];
+
+    NSMenu *subCopy = [sub copy];
+    CHECK([subCopy appearance] == aqua);
+    CHECK([subCopy supermenu] == nil);
+    [subCopy release];
+}
+
 #define RUN(t) do { @try { t; } @catch (id e) { fprintf(stderr, "FAIL: %s raised %s\n", #t, [[e description] UTF8String]); failures++; } } while (0)
 
 int main(void) {
@@ -78,6 +103,7 @@ int main(void) {
     RUN(test_default_and_set());
     RUN(test_effective_appearance_is_observable());
     RUN(test_copy());
+    RUN(test_copy_of_a_hierarchy());
     if (failures == 0)
         printf("PASS appkit-menu-appearance\n");
     [pool release];
