@@ -1,3 +1,5 @@
+// Copyright (C) 2026 Lubos Dolezel
+//
 // CARenderer's layer property is declared retain. By the Cocoa memory
 // management rules an object that took ownership by retaining a value gives it
 // up when it is itself deallocated:

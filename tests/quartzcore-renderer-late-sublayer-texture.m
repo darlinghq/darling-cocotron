@@ -1,3 +1,5 @@
+// Copyright (C) 2026 Lubos Dolezel
+//
 // A layer's contents are drawn from a texture the layer owns. CALayerContext names the textures of
 // its tree before it renders, but layout and display code that runs inside the render may add
 // sublayers, which then have no name. CARenderer uploads a layer's image only when it changed since
