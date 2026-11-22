@@ -148,24 +148,38 @@ static BOOL bomVariable(const BOMStore *bom, const char *name, Span *out) {
 
 typedef void (^LeafHandler)(Span key, Span value);
 
-static void bomWalk(const BOMStore *bom, uint32_t node, int depth, LeafHandler handler) {
+// Calls the handler for every entry of a tree's leaves, in order: down the first child of each inner node to
+// the first leaf, then along the leaves' forward links. An inner node's own count is not used. A chain that loops
+// or runs through overlapping blocks is cut off: a walk makes at most as many leaf visits as the store has blocks,
+// and reads at most one entry per 8 bytes of the file, which a well-formed tree stays under.
+static void bomWalk(const BOMStore *bom, uint32_t node, LeafHandler handler) {
     Span n;
-    if (depth > MaxTreeDepth || !bomBlock(bom, node, &n) || n.length < 12)
-        return;
-    BOOL isLeaf = (n.bytes[0] << 8 | n.bytes[1]) != 0;
-    size_t count = n.bytes[2] << 8 | n.bytes[3];
-    if (count > (n.length - 12) / 8)
-        count = (n.length - 12) / 8;
-    for (size_t i = 0; i < count; i++) {
-        const uint8_t *entry = n.bytes + 12 + 8 * i;
-        uint32_t valueBlock = be32(entry), keyBlock = be32(entry + 4);
-        if (!isLeaf) {
-            bomWalk(bom, valueBlock, depth + 1, handler);
-            continue;
+    for (int depth = 0;; depth++) {
+        if (depth > MaxTreeDepth || !bomBlock(bom, node, &n) || n.length < 12)
+            return;
+        if ((n.bytes[0] << 8 | n.bytes[1]) != 0)
+            break;
+        if (n.length < 20)
+            return;
+        node = be32(n.bytes + 12);
+    }
+    size_t budget = bom->file.length / 8;
+    for (uint32_t visits = 0; visits < bom->blockCount && budget > 0; visits++) {
+        size_t count = n.bytes[2] << 8 | n.bytes[3];
+        if (count > (n.length - 12) / 8)
+            count = (n.length - 12) / 8;
+        if (count > budget)
+            count = budget;
+        budget -= count;
+        for (size_t i = 0; i < count; i++) {
+            const uint8_t *entry = n.bytes + 12 + 8 * i;
+            Span key, value;
+            if (bomBlock(bom, be32(entry + 4), &key) && bomBlock(bom, be32(entry), &value))
+                handler(key, value);
         }
-        Span key, value;
-        if (bomBlock(bom, keyBlock, &key) && bomBlock(bom, valueBlock, &value))
-            handler(key, value);
+        uint32_t forward = be32(n.bytes + 4);
+        if (forward == 0 || !bomBlock(bom, forward, &n) || n.length < 12 || (n.bytes[0] << 8 | n.bytes[1]) == 0)
+            return;
     }
 }
 
@@ -173,7 +187,7 @@ static BOOL bomTree(const BOMStore *bom, const char *name, LeafHandler handler) 
     Span tree;
     if (!bomVariable(bom, name, &tree) || tree.length < 12 || memcmp(tree.bytes, "tree", 4) != 0)
         return NO;
-    bomWalk(bom, be32(tree.bytes + 8), 0, handler);
+    bomWalk(bom, be32(tree.bytes + 8), handler);
     return YES;
 }
 
