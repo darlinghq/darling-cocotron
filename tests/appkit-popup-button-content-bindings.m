@@ -9,12 +9,12 @@
 //  - contentObjects: objects returned by selectedObject in place of the matching content objects
 //    (available only when content is bound);
 //  - selectedObject: the object in the content that matches the selected item.
-// The order in which the bindings are made must not matter. Beyond the reference are the
-// assumptions marked GUESS in the implementation: that an item keeps its object as its
-// -representedObject, that every content object gets its own item even when two descriptions are
-// equal (test_equal_descriptions_keep_every_item), and that a bound selection survives a content
-// change (test_bound_selection_survives_a_content_change). Selection behaviour for values outside the items and
-// for several selection bindings follows black-box observation on macOS (the two QUIRK tests).
+// The order in which the bindings are made must not matter. Beyond the reference, black-box observation on macOS
+// 26.7.3 and 10.14.4 gave: an item keeps its content object as its representedObject; every content object gets
+// its own item even when two descriptions are equal (test_equal_descriptions_keep_every_item); a bound selection
+// survives a content change (test_bound_selection_survives_a_content_change); and the QUIRK tests
+// test_quirk_unmatched_selection_gets_an_item, test_quirk_first_bound_selection_wins_on_content_change and
+// test_quirk_content_values_need_the_content_key_path_as_prefix.
 // Build: clang -framework AppKit appkit-popup-button-content-bindings.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -39,6 +39,9 @@ static int failures;
 }
 - (NSString *) description {
     return _name;
+}
+- (NSString *) label {
+    return [@"Label " stringByAppendingString: _name];
 }
 @end
 
@@ -100,6 +103,9 @@ static void test_equal_descriptions_keep_every_item(void) {
     CHECK([[button itemAtIndex: 1] representedObject] == b);
 }
 
+// contentValues are the titles. On macOS they count next to content only when their key path starts with the
+// content key path, as when both come from an array controller (see
+// test_quirk_content_values_need_the_content_key_path_as_prefix); the order of the bindings does not matter.
 static void test_content_values_give_the_titles(void) {
     Thing *a = [[[Thing alloc] initWithName: @"Alpha"] autorelease];
     Thing *b = [[[Thing alloc] initWithName: @"Beta"] autorelease];
@@ -110,19 +116,43 @@ static void test_content_values_give_the_titles(void) {
         NSPopUpButton *button = makeButton();
 
         model.things = [NSArray arrayWithObjects: a, b, nil];
-        model.titles = [NSArray arrayWithObjects: @"First", @"Second", nil];
         if (order == 0) {
             [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
-            [button bind: NSContentValuesBinding toObject: model withKeyPath: @"titles" options: nil];
+            [button bind: NSContentValuesBinding toObject: model withKeyPath: @"things.label" options: nil];
         } else {
-            [button bind: NSContentValuesBinding toObject: model withKeyPath: @"titles" options: nil];
+            [button bind: NSContentValuesBinding toObject: model withKeyPath: @"things.label" options: nil];
             [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
         }
         CHECK([button numberOfItems] == 2);
-        CHECK([[button itemTitleAtIndex: 0] isEqualToString: @"First"]);
-        CHECK([[button itemTitleAtIndex: 1] isEqualToString: @"Second"]);
+        CHECK([[button itemTitleAtIndex: 0] isEqualToString: @"Label Alpha"]);
+        CHECK([[button itemTitleAtIndex: 1] isEqualToString: @"Label Beta"]);
         CHECK([[button itemAtIndex: 1] representedObject] == b);
     }
+}
+
+// Observed on macOS 26.7.3: content "things" with contentValues "titles" (a key path that does not start with
+// "things.") leaves the titles as the descriptions of the content objects; contentValues without content gives
+// the titles (and each title is the item's representedObject).
+static void test_quirk_content_values_need_the_content_key_path_as_prefix(void) {
+    Thing *a = [[[Thing alloc] initWithName: @"Alpha"] autorelease];
+    Thing *b = [[[Thing alloc] initWithName: @"Beta"] autorelease];
+    Model *model = [[Model new] autorelease];
+    NSPopUpButton *button = makeButton();
+
+    model.things = [NSArray arrayWithObjects: a, b, nil];
+    model.titles = [NSArray arrayWithObjects: @"First", @"Second", nil];
+    [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
+    [button bind: NSContentValuesBinding toObject: model withKeyPath: @"titles" options: nil];
+    CHECK([[button itemTitleAtIndex: 0] isEqualToString: @"Alpha"]);
+    CHECK([[button itemTitleAtIndex: 1] isEqualToString: @"Beta"]);
+
+    model = [[Model new] autorelease];
+    button = makeButton();
+    model.titles = [NSArray arrayWithObjects: @"First", @"Second", nil];
+    [button bind: NSContentValuesBinding toObject: model withKeyPath: @"titles" options: nil];
+    CHECK([button numberOfItems] == 2);
+    CHECK([[button itemTitleAtIndex: 1] isEqualToString: @"Second"]);
+    CHECK([[[button itemAtIndex: 1] representedObject] isEqual: @"Second"]);
 }
 
 // The reference makes contentObjects available only with content bound (macOS raises when it is bound alone, so
@@ -286,6 +316,7 @@ int main(void) {
     RUN(test_content_titles_and_objects());
     RUN(test_equal_descriptions_keep_every_item());
     RUN(test_content_values_give_the_titles());
+    RUN(test_quirk_content_values_need_the_content_key_path_as_prefix());
     RUN(test_content_objects_replace_the_selected_object());
     RUN(test_changing_the_content_rebuilds_the_items());
     RUN(test_bound_selection_survives_a_content_change());

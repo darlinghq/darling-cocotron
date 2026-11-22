@@ -414,20 +414,37 @@ static NSString *popUpItemTitle(id value) {
 // selectedObject answers in place of the content objects (see -_selectedObject).
 // https://developer.apple.com/library/archive/documentation/Cocoa/Reference/CocoaBindingsRef/BindingsText/NSPopUpButton.html
 // Observed on macOS 26.7.3 and 10.14.4: an item stands for its content object as its representedObject, and each
-// content object gets an item of its own even when two descriptions are equal. GUESS (not observed): the titles
-// come from contentValues when that is bound together with content; the observed pop-up button showed the
-// descriptions of the content objects for content and contentValues bound together, which this does not follow
-// because the reference documents contentValues as the titles. contentObjects is documented as available only with
-// content bound (macOS raises when it is bound alone); with neither content nor contentValues there is nothing to
-// build items from, so nothing changes.
+// content object gets an item of its own even when two descriptions are equal. contentObjects is documented as
+// available only with content bound (macOS raises when it is bound alone, which is not reproduced); with neither
+// content nor contentValues there is nothing to build items from, so nothing changes.
+// QUIRK: contentValues is honoured next to content only when its key path starts with the content key path
+// (content arrangedObjects, contentValues arrangedObjects.name); any other contentValues is ignored and the
+// titles are the descriptions of the content objects (macOS logs "Binding contentValues ... ignored: Key path
+// ... needs to have the content key path ... as prefix"). Not documented. Evidence: black-box observation on
+// macOS 26.7.3 (tier 2): content "items" with contentValues "values" gave the descriptions, an array controller's
+// arrangedObjects with arrangedObjects.name gave the names. Test: appkit-popup-button-content-bindings
+// (test_quirk_content_values_need_the_content_key_path_as_prefix).
 // Limitation: the other two bindings are read from their destination, so a
 // value transformer or null placeholder on them is not applied.
+// Whether the contentValues binding, if there is one, may name the titles of the items of the content binding.
+- (BOOL) _contentValuesFitContent {
+    id valuesBinder = [self _binderForBinding: @"contentValues"];
+    id contentBinder = [self _binderForBinding: @"content"];
+
+    if (valuesBinder == nil || contentBinder == nil)
+        return YES;
+    return [[valuesBinder keyPath] hasPrefix: [[contentBinder keyPath] stringByAppendingString: @"."]];
+}
+
 - (void) _applyItemsFromContent: (NSArray *) content
                        values: (NSArray *) values
                       objects: (NSArray *) objects
 {
-    NSUInteger count = content != nil ? [content count] : [values count];
     NSUInteger i;
+
+    if (content != nil && ![self _contentValuesFitContent])
+        values = nil;
+    NSUInteger count = content != nil ? [content count] : [values count];
 
     if (content == nil && values == nil)
         return;
