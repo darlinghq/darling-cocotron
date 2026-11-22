@@ -263,20 +263,114 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
     return fontWithCascade(result, cascade);
 }
 
+// GUESS: the documentation does not say which bits of the symbolic traits are compared when
+// looking for a face. Within one family, italic, bold, expanded, condensed and monospace tell
+// faces apart, so a change of traits inside the family compares those. The UI-optimized,
+// composite, color-glyph and vertical flags and the class mask are never compared (the
+// vertical flag is not set for any font here).
+static const CTFontSymbolicTraits sameFamilyStyleTraits =
+        kCTFontTraitItalic | kCTFontTraitBold | kCTFontTraitExpanded | kCTFontTraitCondensed |
+        kCTFontTraitMonoSpace;
+// GUESS: moving to another family keeps only what a face of any family can differ in, the slant
+// and the boldness. Monospace, condensed and expanded describe a whole family (Courier,
+// a narrow family), so requiring them to equal the original's would find nothing across families.
+static const CTFontSymbolicTraits crossFamilyStyleTraits = kCTFontTraitItalic | kCTFontTraitBold;
+
+static CGFloat weightOfFont(CTFontRef font) {
+    CGFloat weight = 0;
+    CFDictionaryRef traits = CTFontCopyTraits(font);
+    CFNumberRef number = traits != NULL ? CFDictionaryGetValue(traits, kCTFontWeightTrait) : NULL;
+    if (number != NULL)
+        CFNumberGetValue(number, kCFNumberCGFloatType, &weight);
+    if (traits != NULL)
+        CFRelease(traits);
+    return weight;
+}
+
+// A new font of `family` whose style traits, over the bits in `compared`, are those of `wanted`,
+// or NULL when the family has no such face. A size of 0 keeps the size of the original. The
+// matrix is handed to the creation call as given: fonts here carry no matrix, so NULL, which
+// stands for the original's matrix, has nothing to preserve. The variation and the cascade list
+// of the original are not carried over: the documentation does not mention them.
+// GUESS: when several faces have the wanted traits (a family with Light, Regular and Medium
+// has three non-bold faces) the one whose weight trait is nearest to `targetWeight` is taken,
+// the first listed among equals. The documentation names no rule.
+static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTransform *matrix,
+                                  CFStringRef family, CTFontSymbolicTraits wanted,
+                                  CTFontSymbolicTraits compared, CGFloat targetWeight)
+{
+    if (ktFont(font) == nil || family == NULL)
+        return NULL;
+    if (size == 0)
+        size = CTFontGetSize(font);
+
+    const void *keys[] = { kCTFontFamilyNameAttribute };
+    const void *values[] = { family };
+    CFDictionaryRef attributes = CFDictionaryCreate(NULL, keys, values, 1,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CTFontDescriptorRef query = CTFontDescriptorCreateWithAttributes(attributes);
+    CFRelease(attributes);
+    CFArrayRef faces = CTFontDescriptorCreateMatchingFontDescriptors(query, NULL);
+    CFRelease(query);
+    if (faces == NULL)
+        return NULL;
+
+    CTFontRef best = NULL;
+    CGFloat bestDistance = 0;
+    for (CFIndex i = 0; i < CFArrayGetCount(faces); i++) {
+        CTFontRef candidate = CTFontCreateWithFontDescriptor(
+                (CTFontDescriptorRef) CFArrayGetValueAtIndex(faces, i), size, matrix);
+        if (candidate == NULL)
+            continue;
+        CGFloat distance = weightOfFont(candidate) - targetWeight;
+        if (distance < 0)
+            distance = -distance;
+        if ((CTFontGetSymbolicTraits(candidate) & compared) != (wanted & compared) ||
+            (best != NULL && distance >= bestDistance)) {
+            CFRelease(candidate);
+            continue;
+        }
+        if (best != NULL)
+            CFRelease(best);
+        best = candidate;
+        bestDistance = distance;
+    }
+    CFRelease(faces);
+    return best;
+}
+
 CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
                                              const CGAffineTransform *matrix,
                                              CTFontSymbolicTraits symTraitValue, 
                                              CTFontSymbolicTraits symTraitMask)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (ktFont(font) == nil)
+        return NULL;
+    // GUESS: the documentation gives "the value of the symbolic traits" and "the mask bits"
+    // without saying how they combine. The mask is taken to select the bits of the value that
+    // replace the original's traits; the original's other bits stay.
+    CTFontSymbolicTraits original = CTFontGetSymbolicTraits(font);
+    CTFontSymbolicTraits wanted = (original & ~symTraitMask) | (symTraitValue & symTraitMask);
+    // GUESS: a request that clears the bold trait aims at the regular weight (0.0 on the scale
+    // of kCTFontWeightTrait). Aiming at the original's weight would turn a Black face into the
+    // heaviest face that is not bold, a Semibold one. Otherwise the original's weight is kept.
+    CGFloat targetWeight = ((original & kCTFontTraitBold) && !(wanted & kCTFontTraitBold))
+            ? 0 : weightOfFont(font);
+    CFStringRef family = CTFontCopyFamilyName(font);
+    CTFontRef result = copyFontInFamily(font, size, matrix, family, wanted,
+                                        sameFamilyStyleTraits, targetWeight);
+    if (family != NULL)
+        CFRelease(family);
+    return result;
 }
 
 CTFontRef CTFontCreateCopyWithFamily(CTFontRef font, CGFloat size,
                                      const CGAffineTransform *matrix, CFStringRef family)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    if (ktFont(font) == nil)
+        return NULL;
+    return copyFontInFamily(font, size, matrix, family, CTFontGetSymbolicTraits(font),
+                            crossFamilyStyleTraits, weightOfFont(font));
 }
 
 CTFontRef CTFontCreateForString(CTFontRef currentFont, CFStringRef string, CFRange range)
