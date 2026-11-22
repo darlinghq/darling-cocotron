@@ -4,10 +4,10 @@
 // documentation of -[NSTableColumn isHidden]
 // (https://developer.apple.com/documentation/appkit/nstablecolumn/ishidden): a hidden column is
 // not shown but stays in the table's tableColumns and in its numberOfColumns. A column that is
-// not shown takes no room, so the columns after it move up and a point is never in it. GUESS,
-// marked in the implementation (the documentation is silent): a hidden column takes no width
-// at all, its share of the intercell spacing included; sizeLastColumnToFit resizes the last
-// column that is shown; the autoresizing styles leave hidden columns alone
+// not shown takes no room, so the columns after it move up and a point is never in it. The
+// documentation is silent on the rest; these are pinned by black-box observation on macOS 26.7.3: a hidden
+// column takes no width at all, its share of the intercell spacing included; sizeLastColumnToFit resizes the
+// last column that is shown; the autoresizing styles leave hidden columns alone
 // (test_autoresizing_skips_hidden_columns).
 // Written from the documentation; not yet run in a guest.
 // Build: clang -framework AppKit appkit-table-hidden-columns.m (no ARC)

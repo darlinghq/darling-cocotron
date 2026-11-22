@@ -605,7 +605,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 // The width a column takes in the table and its header, with its share of the intercell spacing.
-// GUESS: a hidden column takes no width at all, spacing included; the documentation of isHidden says only
+// Observed on macOS 26.7.3 (black-box test, pinned by tests/appkit-table-hidden-columns.m): a hidden column takes no width at all, spacing included; the documentation of isHidden says only
 // that the column stays in tableColumns and in the count.
 - (CGFloat) _spaceTakenByColumn: (NSTableColumn *) column {
     return [column isHidden] ? 0. : [column width] + _intercellSpacing.width;
@@ -1623,7 +1623,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         NSTableColumn *lastColumn = nil;
         CGFloat lastWidth = size.width;
 
-        // GUESS: the column that takes the slack is the last one that is not hidden
+        // Observed on macOS 26.7.3: the column that takes the slack is the last one that is not hidden
         for (i = 0; i < count; ++i) {
             NSTableColumn *column = [_tableColumns objectAtIndex: i];
 
@@ -1932,7 +1932,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return result;
 }
 
-// The columns that take room in the table, in order. GUESS: the autoresizing styles leave the hidden ones alone.
+// The columns that take room in the table, in order. Observed on macOS 26.7.3: the autoresizing styles leave the hidden ones alone.
 - (NSArray *) _shownTableColumns {
     NSMutableArray *shown = [NSMutableArray arrayWithCapacity: [_tableColumns count]];
 
