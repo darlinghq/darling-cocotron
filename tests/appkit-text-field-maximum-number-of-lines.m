@@ -71,9 +71,10 @@ int main(void)
         clip.maximumNumberOfLines = 2;
         CHECK([[clip cell] cellSizeForBounds: bounds].height == clipped);
 
-        // GUESS: a negative cap is no limit.
+        // A negative cap is kept as given and is no limit (macOS 26.7.3 and 10.14.4, black-box observation).
         f.maximumNumberOfLines = -4;
-        CHECK(f.maximumNumberOfLines == 0);
+        CHECK(f.maximumNumberOfLines == -4);
+        CHECK([cell cellSizeForBounds: bounds].height > line * 4);
     }
     if (g_failures) { printf("%d failure(s)\n", g_failures); return 1; }
     printf("ok\n");

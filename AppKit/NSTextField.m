@@ -403,8 +403,10 @@ NS_EXTRA_DEALLOC(NSTextField)
 - (void) setMaximumNumberOfLines: (NSInteger) maximumNumberOfLines {
     if (![_cell respondsToSelector: @selector(_setMaximumNumberOfLines:)])
         return;
-    // GUESS: the documentation gives no meaning to a negative cap; it is taken as no limit.
-    [(NSTextFieldCell *) _cell _setMaximumNumberOfLines: MAX(maximumNumberOfLines, 0)];
+    // A negative cap is kept as given and lays the text out without a limit (the cell only limits for a cap
+    // above zero). Observed by black-box test on macOS 26.7.3 and 10.14.4: the getter returns what was set.
+    // Test: appkit-text-field-maximum-number-of-lines.m
+    [(NSTextFieldCell *) _cell _setMaximumNumberOfLines: maximumNumberOfLines];
     [self invalidateIntrinsicContentSize];
     [self setNeedsDisplay: YES];
 }
