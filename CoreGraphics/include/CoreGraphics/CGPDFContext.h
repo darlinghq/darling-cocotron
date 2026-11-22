@@ -49,6 +49,7 @@ COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self);
 COREGRAPHICS_EXPORT void CGPDFContextBeginPage(CGContextRef self,
                                              CFDictionaryRef pageInfo);
 COREGRAPHICS_EXPORT void CGPDFContextEndPage(CGContextRef self);
+COREGRAPHICS_EXPORT void CGPDFContextSetOutline(CGContextRef context, CFDictionaryRef outline);
 
 CF_IMPLICIT_BRIDGING_DISABLED
 
