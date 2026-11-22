@@ -1,6 +1,7 @@
 // Contract: Apple CoreGraphics documentation for CGPDFObject (CGPDFObjectGetType, CGPDFObjectGetValue) and
 // CGPDFObjectType (https://developer.apple.com/documentation/coregraphics). Exit codes identify the failing check.
 // Only the case names of CGPDFObjectType are used, never their numeric values.
+#import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #include <stdio.h>
 #include <string.h>
