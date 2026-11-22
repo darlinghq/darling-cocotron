@@ -441,6 +441,12 @@ static NSError *TypeLookupError(NSURL *url, NSInteger code) {
     return result;
 }
 
+// GUESS: the documentation says an error is set when the document cannot be made but names no code;
+// NSFileReadUnknownError is the code this controller already uses when a document cannot be read.
+static NSError *UntitledDocumentError(void) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain code: NSFileReadUnknownError userInfo: nil];
+}
+
 - (id) makeUntitledDocumentOfType: (NSString *) type {
     static int nextUntitledNumber = 1;
     id result = nil;
@@ -451,7 +457,7 @@ static NSError *TypeLookupError(NSURL *url, NSInteger code) {
     if (result)
         [result _setUntitledNumber: nextUntitledNumber++];
     else
-        [self presentError: error];
+        [self presentError: error != nil ? error : UntitledDocumentError()];
 
     return result;
 }
@@ -482,6 +488,9 @@ static NSError *TypeLookupError(NSURL *url, NSInteger code) {
     if (result)
         [result _setUntitledNumber: nextUntitledNumber++];
     else {
+        // A type with no document class has no initialiser to report anything.
+        if (error == nil)
+            error = UntitledDocumentError();
         if (outError)
             *outError = error;
         else
