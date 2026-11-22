@@ -31,7 +31,7 @@ typedef struct {
 } FadeRecord;
 
 #define FADE_MAGIC 0x43474644u
-#define FADE_PATH "/private/var/tmp/.CGDisplayFadeReservation"
+#define FADE_PATH "/var/tmp/.CGDisplayFadeReservation"
 
 static int64_t nowNanoseconds(void) {
     struct timespec now;
