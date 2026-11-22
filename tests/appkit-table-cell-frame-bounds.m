@@ -8,7 +8,7 @@
 // NSZeroRect when the column or row index is greater than the number of columns or rows, and takes the column's
 // index in the tableColumns array. An index equal to the count names no column or row, and the siblings
 // -rectOfColumn: and -rectOfRow: document NSZeroRect for any index outside the valid range, so the frame is
-// NSZeroRect there too and no exception is raised. Prints PASS or FAIL. Does not need a window server.
+// NSZeroRect there too and no exception is raised; observed on macOS 26.7.3 and 10.14.4 for column 2 of 2, row 3 of 3 and negative or larger indexes, with rectOfColumn: and rectOfRow: also returning a zero rect there (black-box test). Prints PASS or FAIL. Does not need a window server.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
