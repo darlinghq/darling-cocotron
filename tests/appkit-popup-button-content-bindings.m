@@ -13,7 +13,8 @@
 // assumptions marked GUESS in the implementation: that an item keeps its object as its
 // -representedObject, that every content object gets its own item even when two descriptions are
 // equal (test_equal_descriptions_keep_every_item), and that a bound selection survives a content
-// change (test_bound_selection_survives_a_content_change). Written from the documentation; not yet run in a guest.
+// change (test_bound_selection_survives_a_content_change). Selection behaviour for values outside the items and
+// for several selection bindings follows black-box observation on macOS (the two QUIRK tests).
 // Build: clang -framework AppKit appkit-popup-button-content-bindings.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -46,7 +47,13 @@ static int failures;
     NSArray *_titles;
     NSArray *_stand;
     id _selected;
+    id _value;
+    id _index;
+    id _tag;
 }
+@property(retain) id value;
+@property(retain) id index;
+@property(retain) id tag;
 @property(retain) NSArray *things;
 @property(retain) NSArray *titles;
 @property(retain) NSArray *stand;
@@ -54,6 +61,7 @@ static int failures;
 @end
 @implementation Model
 @synthesize things = _things, titles = _titles, stand = _stand, selected = _selected;
+@synthesize value = _value, index = _index, tag = _tag;
 @end
 
 static NSPopUpButton *makeButton(void) {
@@ -117,34 +125,31 @@ static void test_content_values_give_the_titles(void) {
     }
 }
 
+// The reference makes contentObjects available only with content bound (macOS raises when it is bound alone, so
+// only that order is tested), and makes selectedObject answer the contentObjects entry of the chosen item. The
+// answer is a GUESS: macOS was observed to keep the content objects as the items' representedObjects and to match
+// a model value only against them, but what it writes to the model for a user's choice was not observed.
 static void test_content_objects_replace_the_selected_object(void) {
     Thing *a = [[[Thing alloc] initWithName: @"Alpha"] autorelease];
     Thing *b = [[[Thing alloc] initWithName: @"Beta"] autorelease];
     NSString *x = @"x-object", *y = @"y-object";
-    int order;
+    Model *model = [[Model new] autorelease];
+    NSPopUpButton *button = makeButton();
 
-    for (order = 0; order < 2; order++) {
-        Model *model = [[Model new] autorelease];
-        NSPopUpButton *button = makeButton();
+    model.things = [NSArray arrayWithObjects: a, b, nil];
+    model.stand = [NSArray arrayWithObjects: x, y, nil];
+    model.selected = a;
+    [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
+    [button bind: NSContentObjectsBinding toObject: model withKeyPath: @"stand" options: nil];
+    [button bind: NSSelectedObjectBinding toObject: model withKeyPath: @"selected" options: nil];
 
-        model.things = [NSArray arrayWithObjects: a, b, nil];
-        model.stand = [NSArray arrayWithObjects: x, y, nil];
-        if (order == 0) {
-            [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
-            [button bind: NSContentObjectsBinding toObject: model withKeyPath: @"stand" options: nil];
-        } else {
-            [button bind: NSContentObjectsBinding toObject: model withKeyPath: @"stand" options: nil];
-            [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
-        }
-        [button bind: NSSelectedObjectBinding toObject: model withKeyPath: @"selected" options: nil];
-
-        CHECK([button numberOfItems] == 2);
-        CHECK([[button itemTitleAtIndex: 0] isEqualToString: @"Alpha"]);
-        [button selectItemAtIndex: 1];
-        CHECK(model.selected == y);
-        [button selectItemAtIndex: 0];
-        CHECK(model.selected == x);
-    }
+    CHECK([button numberOfItems] == 2);
+    CHECK([[button itemTitleAtIndex: 0] isEqualToString: @"Alpha"]);
+    CHECK([[button itemAtIndex: 0] representedObject] == a);
+    [button selectItemAtIndex: 1];
+    CHECK(model.selected == y);
+    [button selectItemAtIndex: 0];
+    CHECK(model.selected == x);
 }
 
 static void test_changing_the_content_rebuilds_the_items(void) {
@@ -184,10 +189,93 @@ static void test_bound_selection_survives_a_content_change(void) {
     CHECK(model.selected == b);
     CHECK([button indexOfSelectedItem] == 1);
 
-    // GUESS: an object that is no longer among the items selects none, and the model keeps it.
+    // An object that is no longer among the items is shown by an item of its own (see
+    // test_quirk_unmatched_selection_gets_an_item), and the model keeps it.
     model.things = [NSArray arrayWithObject: a];
     CHECK(model.selected == b);
-    CHECK([button indexOfSelectedItem] == -1);
+    CHECK([button numberOfItems] == 2);
+    CHECK([button indexOfSelectedItem] == 1);
+    CHECK([[button titleOfSelectedItem] isEqualToString: @"Beta"]);
+}
+
+// Observed on macOS 26.7.3 and 10.14.4 (case numbers of the probe in parentheses): content [x,y,z] and a bound
+// selectedObject that matches no item adds an item titled with the value and selects it (641.13, 641.14), nil gives
+// "No Value" (641.15), and the item goes when the value matches an item again (641.16). Content replaced so that
+// the selected object is not among the new items adds the item too (641.13). The model is not written by this.
+static void test_quirk_unmatched_selection_gets_an_item(void) {
+    NSString *x = @"x", *y = @"y", *z = @"z";
+    Model *model = [[Model new] autorelease];
+    NSPopUpButton *button = makeButton();
+
+    model.things = [NSArray arrayWithObjects: x, y, z, nil];
+    [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
+    [button bind: NSSelectedObjectBinding toObject: model withKeyPath: @"selected" options: nil];
+
+    model.selected = @"zzz";
+    CHECK([button numberOfItems] == 4);
+    CHECK([[button itemTitleAtIndex: 3] isEqualToString: @"zzz"]);
+    CHECK([button indexOfSelectedItem] == 3);
+    CHECK([[button itemAtIndex: 3] representedObject] == nil);
+
+    model.selected = nil;
+    CHECK([button numberOfItems] == 4);
+    CHECK([[button itemTitleAtIndex: 3] isEqualToString: @"No Value"]);
+    CHECK([button indexOfSelectedItem] == 3);
+
+    model.selected = y;
+    CHECK([button numberOfItems] == 3);
+    CHECK([button indexOfSelectedItem] == 1);
+    CHECK(model.selected == y);
+
+    // The same for selectedValue, which compares with the titles.
+    Model *other = [[Model new] autorelease];
+    NSPopUpButton *second = makeButton();
+    other.things = [NSArray arrayWithObjects: x, y, z, nil];
+    [second bind: NSContentBinding toObject: other withKeyPath: @"things" options: nil];
+    [second bind: NSSelectedValueBinding toObject: other withKeyPath: @"value" options: nil];
+    other.value = @"B";
+    CHECK([second numberOfItems] == 4);
+    CHECK([[second titleOfSelectedItem] isEqualToString: @"B"]);
+    other.value = @"y";
+    CHECK([second numberOfItems] == 3);
+    CHECK([second indexOfSelectedItem] == 1);
+}
+
+// Observed on macOS 26.7.3 and 10.14.4 (641.26 to 641.29): selection bindings made with disagreeing model
+// values. After a content change the one bound first is applied: selectedObject (c, index 2) when the order was
+// selectedObject, selectedValue, selectedTag, selectedIndex, and selectedIndex (0) when it was the reverse.
+static void test_quirk_first_bound_selection_wins_on_content_change(void) {
+    NSString *a = @"a", *b = @"b", *c = @"c", *d = @"d";
+    int order;
+
+    for (order = 0; order < 2; order++) {
+        Model *model = [[Model new] autorelease];
+        NSPopUpButton *button = makeButton();
+
+        model.things = [NSArray arrayWithObjects: a, b, c, nil];
+        model.selected = c;
+        model.value = @"B";
+        model.index = [NSNumber numberWithInt: 0];
+        model.tag = [NSNumber numberWithInt: 1];
+        [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
+        if (order == 0) {
+            [button bind: NSSelectedObjectBinding toObject: model withKeyPath: @"selected" options: nil];
+            [button bind: NSSelectedValueBinding toObject: model withKeyPath: @"value" options: nil];
+            [button bind: NSSelectedTagBinding toObject: model withKeyPath: @"tag" options: nil];
+            [button bind: NSSelectedIndexBinding toObject: model withKeyPath: @"index" options: nil];
+        } else {
+            [button bind: NSSelectedIndexBinding toObject: model withKeyPath: @"index" options: nil];
+            [button bind: NSSelectedTagBinding toObject: model withKeyPath: @"tag" options: nil];
+            [button bind: NSSelectedValueBinding toObject: model withKeyPath: @"value" options: nil];
+            [button bind: NSSelectedObjectBinding toObject: model withKeyPath: @"selected" options: nil];
+        }
+        model.things = [NSArray arrayWithObjects: a, b, c, d, nil];
+        CHECK([button numberOfItems] == 4);
+        CHECK([button indexOfSelectedItem] == (order == 0 ? 2 : 0));
+        // Neither binding nor the content change writes what the pop-up button shows to the model (641.26 to 641.29).
+        CHECK(model.selected == c && [model.value isEqual: @"B"] && [model.index intValue] == 0 &&
+              [model.tag intValue] == 1);
+    }
 }
 
 #define RUN(t) do { @try { t; } @catch (id e) { fprintf(stderr, "FAIL: %s raised %s\n", #t, [[e description] UTF8String]); failures++; } } while (0)
@@ -201,6 +289,8 @@ int main(void) {
     RUN(test_content_objects_replace_the_selected_object());
     RUN(test_changing_the_content_rebuilds_the_items());
     RUN(test_bound_selection_survives_a_content_change());
+    RUN(test_quirk_unmatched_selection_gets_an_item());
+    RUN(test_quirk_first_bound_selection_wins_on_content_change());
     if (failures == 0)
         printf("PASS appkit-popup-button-content-bindings\n");
     [pool release];
