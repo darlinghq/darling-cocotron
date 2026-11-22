@@ -814,10 +814,12 @@ CFArrayRef CTFontCopyFeatures(CTFontRef font)
     return nil;
 }
 
+// The documented result is the non-default feature settings applied to the font, or NULL when the default
+// settings apply. No font made here has settings applied: creating one from a descriptor does not read the
+// descriptor's feature-settings attribute, so the default settings always apply.
 CFArrayRef CTFontCopyFeatureSettings(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    return NULL;
 }
 
 bool CTFontGetGlyphsForCharacters(CTFontRef font, const UniChar *characters,
