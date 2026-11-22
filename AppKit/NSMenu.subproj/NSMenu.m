@@ -653,11 +653,11 @@ static void askDelegateToUpdate(NSMenu *menu) {
         [delegate menuNeedsUpdate: menu];
 }
 
-// Brings the enabled state of one item in line with its validation, when the
-// menu enables its items itself.
-static void validateItem(NSMenu *menu, NSMenuItem *item) {
+// Brings the enabled state of one item in line with its validation, when the menu enables its items itself,
+// and returns the result of the validation (the item's own state when the menu does not).
+static BOOL validateItem(NSMenu *menu, NSMenuItem *item) {
     if (!NS_EXTRA(NSMenu, menu)->_autoenablesItems)
-        return;
+        return [item isEnabled];
 
     BOOL enabled = itemIsEnabled(item) ? YES : NO;
     BOOL currentlyEnabled = [item isEnabled] ? YES : NO;
@@ -667,6 +667,7 @@ static void validateItem(NSMenu *menu, NSMenuItem *item) {
         [item setEnabled: enabled];
         [menu itemChanged: item];
     }
+    return enabled;
 }
 
 // The delegates -menuNeedsUpdate: and the validation of this menus own
@@ -708,22 +709,58 @@ static void validateItem(NSMenu *menu, NSMenuItem *item) {
                         userInfo: userInfo];
 }
 
-- (BOOL) performKeyEquivalent: (NSEvent *) event {
-    // The delegate may change the items, so it is asked before they are
-    // looked at. Only the item that matches is validated: validating the
-    // others is for a menu that is opened.
-    if (NS_EXTRA(NSMenu, self)->_autoenablesItems)
-        askDelegateToUpdate(self);
+// Asks the delegate of this menu, then those of the submenus below it, in order, whether it has a key
+// equivalent for the event of its own (-menuHasKeyEquivalent:forEvent:target:action:). The first to answer
+// YES has its action sent to its target, from the menu it belongs to, and ends the search.
+- (BOOL) _delegateHandlesKeyEquivalent: (NSEvent *) event {
+    id delegate = NS_EXTRA(NSMenu, self)->_delegate;
+
+    if ([delegate respondsToSelector: @selector(menuHasKeyEquivalent:forEvent:target:action:)]) {
+        id target = nil;
+        SEL action = NULL;
+
+        if ([delegate menuHasKeyEquivalent: self forEvent: event target: &target action: &action]) {
+            if (action != NULL)
+                [NSApp sendAction: action to: target from: self];
+            return YES;
+        }
+    }
 
     for (NSMenuItem *item in [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray]) {
+        if ([[item submenu] _delegateHandlesKeyEquivalent: event])
+            return YES;
+    }
+    return NO;
+}
+
+// QUIRK: the search for a key equivalent never sends -menuNeedsUpdate: to the delegates. It asks them for
+// -menuHasKeyEquivalent:forEvent:target:action: first (this menu's delegate and those below it, then again by each
+// submenu that is searched), then validates the items of the menu that enables its items itself, then walks them
+// in order, a submenu through its own -performKeyEquivalent:. So a delegate that changes the key equivalents of
+// items when it updates has not done so yet. Not documented. Evidence: black-box observation on macOS 26.7.3
+// (tier 2), 22 scenarios including delegates that rewrite a key and delegates that answer; the order of the calls
+// is the one the scenarios of the test pin.
+// Test: appkit-menu-key-equivalent-after-update (test_quirk_key_equivalent_search_*)
+- (BOOL) performKeyEquivalent: (NSEvent *) event {
+    if ([self _delegateHandlesKeyEquivalent: event])
+        return YES;
+
+    // The items are validated first, and an action or a validation may change the menu: the walk goes over a copy.
+    NSArray *items = [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray];
+
+    NSMutableArray *validated = [NSMutableArray arrayWithCapacity: [items count]];
+
+    for (NSMenuItem *item in items)
+        [validated addObject: [NSNumber numberWithBool: validateItem(self, item)]];
+
+    for (NSMenuItem *item in items) {
         if (NSKeyEquivalentMatchesEvent([item keyEquivalent],
                                         [item keyEquivalentModifierMask], event)) {
-            // With automatic enabling the item is validated first. Without
-            // it only isEnabled counts and validation is not consulted.
-            validateItem(self, item);
+            // With automatic enabling the validation above brought isEnabled in line with it. Without it only
+            // isEnabled counts and validation is not consulted.
             BOOL enabled = [item isEnabled];
             if (enabled && NS_EXTRA(NSMenu, self)->_autoenablesItems)
-                enabled = itemIsEnabled(item);
+                enabled = [[validated objectAtIndex: [items indexOfObjectIdenticalTo: item]] boolValue];
             if (enabled)
                 [NSApp sendAction: [item action]
                                to: [item target]
