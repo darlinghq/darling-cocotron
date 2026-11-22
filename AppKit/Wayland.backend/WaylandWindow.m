@@ -247,6 +247,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // (the display maps it then) or is asked to activate; modal windows and sheets are shown, as the
 // application cannot continue without them.
 - (BOOL) mapWouldTakeFocusFromOthers {
+    // The menu bar is a layer surface without keyboard interactivity: it takes no focus.
+    if ([self wantsLayerSurface])
+        return NO;
     if ([NSApp _mayTakeInputFocus] || [_display mappingForActivation])
         return NO;
     NSWindow *window = _delegate;

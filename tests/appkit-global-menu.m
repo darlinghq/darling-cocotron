@@ -181,6 +181,17 @@ static void note(const char *format, ...) {
 }
 @end
 
+// Whether the application's menu bar window is ordered in (see -reportBar for how it is found).
+static BOOL barWindowVisible(void) {
+    @try {
+        id appMenu = [[NSDisplay currentDisplay] valueForKey: @"_appMenu"];
+        NSWindow *bar = [[appMenu valueForKey: @"_bar"] valueForKey: @"_bar"];
+        return bar != nil && [bar isVisible];
+    } @catch (id e) {
+        return NO;
+    }
+}
+
 static NSMenuItem *submenuItem(NSMenu *parent, NSString *title, NSMenu **submenu) {
     NSMenuItem *item = [parent addItemWithTitle: title action: NULL keyEquivalent: @""];
     *submenu = [[NSMenu alloc] initWithTitle: title];
@@ -247,7 +258,7 @@ static void showPanel(void) {
 int main(int argc, char **argv) {
     @autoreleasepool {
         if (argc < 3) {
-            fprintf(stderr, "usage: %s LOG panel|strip|hiding|window|borderless|late|standard|nowindow\n", argv[0]);
+            fprintf(stderr, "usage: %s LOG panel|strip|hiding|window|borderless|churn|late|standard|nowindow\n", argv[0]);
             return 2;
         }
         logFile = fopen(argv[1], "a");
@@ -424,6 +435,61 @@ int main(int argc, char **argv) {
                     note("action about-panel");
                 }
             }];
+        } else if (!strcmp(argv[2], "churn")) {
+            // Windows come and go as they do while an application starts up: ordered out and in again,
+            // the key window changes, a second window closes, and a window is replaced by another in
+            // the same pass of the run loop. The bar has to be shown at the end, and not be recreated
+            // for every step.
+            NSRect rect = NSMakeRect(200, 200, 400, 240);
+            NSWindow *first = [[NSWindow alloc] initWithContentRect: rect styleMask: NSWindowStyleMaskBorderless
+                                                            backing: NSBackingStoreBuffered defer: NO];
+            NSWindow *second = [[NSWindow alloc] initWithContentRect: NSOffsetRect(rect, 100, 50)
+                                                           styleMask: NSWindowStyleMaskTitled
+                                                             backing: NSBackingStoreBuffered defer: NO];
+            [second setReleasedWhenClosed: NO];
+            [first makeKeyAndOrderFront: nil];
+            note("strip window=%d", (int) hasMainMenu(first));
+            static const double times[] = {1.5, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0};
+            for (int i = 0; i < 8; i++) {
+                [NSTimer scheduledTimerWithTimeInterval: times[i] repeats: NO block: ^(NSTimer *t) {
+                    switch (i) {
+                    case 0:
+                        [second makeKeyAndOrderFront: nil];
+                        break;
+                    case 1:
+                        [first orderOut: nil];
+                        [first makeKeyAndOrderFront: nil];
+                        break;
+                    case 2:
+                        [first orderOut: nil];
+                        break;
+                    case 3:
+                        [first makeKeyAndOrderFront: nil];
+                        break;
+                    case 4:
+                        [first orderOut: nil];
+                        [first orderFront: nil];
+                        [second makeKeyWindow];
+                        break;
+                    case 5:
+                        [second close];
+                        break;
+                    case 6: {
+                        // Replaced in the same pass.
+                        NSWindow *third = [[NSWindow alloc] initWithContentRect: rect
+                                                                      styleMask: NSWindowStyleMaskBorderless
+                                                                        backing: NSBackingStoreBuffered defer: NO];
+                        [third makeKeyAndOrderFront: nil];
+                        [first close];
+                        break;
+                    }
+                    default:
+                        note("STEP churn done active=%d barVisible=%d", (int) [NSApp isActive],
+                             (int) barWindowVisible());
+                        break;
+                    }
+                }];
+            }
         } else if (!strcmp(argv[2], "nowindow")) {
             [NSApp activateIgnoringOtherApps: YES];
             note("strip window=0");

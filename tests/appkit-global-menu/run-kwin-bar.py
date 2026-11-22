@@ -20,7 +20,7 @@
 #     window has no strip, and with the pointer a click on a title opens its
 #     menu right below the bar and a click on an item runs its action;
 #   - no global menu and no window at all, or a titled window: the same bar;
-#   - a global menu (fake-registrar.c) from the start: no bar;
+#   - windows ordered out and in, a key window change and windows closing: the\n#     bar stays the same surface and is shown at the end;\n#   - a global menu (fake-registrar.c) from the start: no bar;
 #   - a global menu that appears or goes away while the application runs:
 #     the bar goes away and comes back.
 import argparse
@@ -135,12 +135,12 @@ class Session:
         self.pointer.stdout.readline()
         time.sleep(0.3)
 
-    def guest(self, mode, tag, seconds=60):
+    def guest(self, mode, tag, seconds=60, extra_env=()):
         log = os.path.join(self.work, tag + ".log")
         open(log, "w").close()
         darling = os.environ.get("DARLING", "darling")
         env = ["DBUS_SESSION_BUS_ADDRESS=" + self.bus.address,
-               "WAYLAND_DISPLAY=" + os.path.join(self.runtime, SOCKET), "DARLING_APPKIT_BACKEND=wayland"]
+               "WAYLAND_DISPLAY=" + os.path.join(self.runtime, SOCKET), "DARLING_APPKIT_BACKEND=wayland"] + list(extra_env)
         process = subprocess.Popen(["timeout", "-s", "KILL", "120", darling, "shell", "env"] + env +
                                    ["/Volumes/SystemRoot" + os.path.abspath(self.program),
                                     "/Volumes/SystemRoot" + log, mode, str(seconds)],
@@ -233,6 +233,19 @@ def main():
             check(len(wait_until(session.bars, 10) or []) == 1, mode + ": the bar is shown")
             check("strip window=0" in read(log), mode + ": no strip in the window")
             stop(process)
+
+        # Windows come and go (ordered out and in, the key window changes, one closes, one replaces
+        # another): the bar is not hidden and shown again for each, and it is there at the end.
+        # WAYLAND_DEBUG shows the layer surfaces the application creates.
+        log, process = session.guest("churn", "churn", extra_env=["WAYLAND_DEBUG=client"])
+        wait_for(log, "churn done", 20)
+        time.sleep(1)
+        final = session.bars()
+        check(len(final) == 1, "after the windows came and went the bar is shown")
+        check("churn done active=1 barVisible=1" in read(log), "the application sees its bar ordered in at the end")
+        created = read(os.path.join(work, "churn.out")).count("get_layer_surface(")
+        check(created == 1, "the bar was not hidden and shown again while the windows came and went (%d surfaces)" % created)
+        stop(process)
 
         # A global menu from the start.
         registrar_on()

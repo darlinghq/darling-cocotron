@@ -134,6 +134,7 @@ static NSString *applicationName(void) {
 }
 
 - (void) dealloc {
+    [self cancelHide];
     [self stopRedrawingBar];
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_bar close];
@@ -195,6 +196,26 @@ static BOOL menuBarHiddenByApplication(void) {
            !menuBarHiddenByApplication();
 }
 
+// How long the bar stays after the application stopped being active.
+static const NSTimeInterval barHideDelay = 0.5;
+
+// Whether the bar would be wanted if the application were active.
+- (BOOL) barWantedWhileActive {
+    return _menu != nil && NSApp != nil &&
+           ![_delegate menuBarControllerDesktopShowsMenu: self] &&
+           !menuBarHiddenByApplication();
+}
+
+- (void) cancelHide {
+    [_hideTimer invalidate];
+    _hideTimer = nil;
+}
+
+- (void) hideTimerFired: (NSTimer *) timer {
+    _hideTimer = nil;
+    [self update];
+}
+
 - (void) update {
     // Presentation options and window styles have no notification of their
     // own, so the observer below keeps checking while the application has a
@@ -205,6 +226,19 @@ static BOOL menuBarHiddenByApplication(void) {
         [self startRedrawingBar];
 
     if (![self barWanted]) {
+        if (_barShown && [self barWantedWhileActive]) {
+            // Inactive, which may be a moment between two windows: wait before hiding.
+            if (_hideTimer == nil) {
+                _hideTimer = [NSTimer timerWithTimeInterval: barHideDelay
+                                                     target: self
+                                                   selector: @selector(hideTimerFired:)
+                                                   userInfo: nil
+                                                    repeats: NO];
+                [[NSRunLoop currentRunLoop] addTimer: _hideTimer forMode: NSRunLoopCommonModes];
+            }
+            return;
+        }
+        [self cancelHide];
         [_bar orderOut: nil];
         _barShown = NO;
         // This can run from the run loop observer with no event to flush it.
@@ -212,6 +246,7 @@ static BOOL menuBarHiddenByApplication(void) {
         return;
     }
 
+    [self cancelHide];
     if (_bar == nil)
         _bar = [[NSMenuBarWindow alloc] initWithMenu: _menu
                                      applicationName: applicationName()];

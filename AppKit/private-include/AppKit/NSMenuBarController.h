@@ -57,12 +57,18 @@
 // and keeps the bar current, for every display backend. The bar is shown for
 // as long as the application is active and has a main menu, unless the desktop
 // shows the menu itself or the application hides the menu bar (presentation
-// options, or a window in full screen mode).
+// options, or a window in full screen mode). When only the application's
+// activity ends, the bar stays for a short while: the focus passes between the
+// windows of an application, and while windows are replaced, through states in
+// which no window has it, and hiding and showing the bar for each (a surface
+// created and destroyed on the display server every time) shows as flicker.
 @interface NSMenuBarController : NSObject {
     id<NSMenuBarControllerDelegate> _delegate;
     NSMenu *_menu;
     NSMenuBarWindow *_bar;
     BOOL _barShown;
+    // The bar outlives the application being inactive for a moment (see -update).
+    NSTimer *_hideTimer;
     // The bar is not among the application's windows, so nothing else redraws it.
     CFRunLoopObserverRef _displayObserver;
 }
