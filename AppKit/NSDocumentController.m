@@ -346,25 +346,35 @@ static NSDocumentController *shared = nil;
     return [[window windowController] document];
 }
 
-// GUESS: the documentation says a nil type comes with an error saying the type is unrecognised
-// but names no code; NSFileReadUnknownError is the one this controller already uses for a file
-// that cannot be read.
-static NSError *UnrecognizedTypeError(NSURL *url) {
+// A URL that is not a file URL has no contents to look at here: nil with an error. The error code is
+// not observed (GUESS: NSFileReadUnknownError, the one this controller uses for a file that cannot be
+// read); the only observed failure is a missing file, which NSFileReadNoSuchFileError describes.
+static NSError *TypeLookupError(NSURL *url, NSInteger code) {
     return [NSError errorWithDomain: NSCocoaErrorDomain
-                               code: NSFileReadUnknownError
+                               code: code
                            userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
 }
 
 - (NSString *) typeForContentsOfURL: (NSURL *) url error: (NSError **) error {
     if (![url isFileURL]) {
         if (error != NULL)
-            *error = UnrecognizedTypeError(url);
+            *error = TypeLookupError(url, NSFileReadUnknownError);
+        return nil;
+    }
+
+    // Observed on macOS 26.7.3 and 10.14.4 (black-box test): a file that exists always has a type,
+    // whether or not the application declares it (a type identifier derived from the extension, or
+    // public.data without one, public.folder for a directory), and only a missing file gives
+    // nil, with NSCocoaErrorDomain code 260 (NSFileReadNoSuchFileError).
+    // Test: appkit-document-controller-type-for-contents.m
+    BOOL isDirectory = NO;
+    if (![[NSFileManager defaultManager] fileExistsAtPath: [url path] isDirectory: &isDirectory]) {
+        if (error != NULL)
+            *error = TypeLookupError(url, NSFileReadNoSuchFileError);
         return nil;
     }
 
     NSString *extension = [[url path] pathExtension];
-    if (extension == nil)
-        return nil;
 
     NSString *UTI = nil;
     NSError *resourceError = nil;
@@ -385,9 +395,11 @@ static NSError *UnrecognizedTypeError(NSURL *url) {
             return UTI;
         }
     }
-    NSString *type = [self typeFromFileExtension: extension];
-    if (type == nil && error != NULL)
-        *error = UnrecognizedTypeError(url);
+    NSString *type = isDirectory ? nil : [self typeFromFileExtension: extension];
+    if (type == nil)
+        type = UTI;
+    if (type == nil)
+        type = isDirectory ? @"public.folder" : @"public.data";
     return type;
 }
 
