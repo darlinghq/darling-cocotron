@@ -420,15 +420,34 @@ static NSError *TypeLookupError(NSURL *url, NSInteger code) {
     return result;
 }
 
+// The error for a document that could not be made when its class reported none. The same
+// construction (Cocoa domain, NSFileReadUnknownError, the URL under NSURLErrorKey) is what
+// siliconforest patch 0351 uses for the error of its type lookup; it is the code this controller
+// already uses for an unreadable file (see -openDocumentWithContentsOfURL:display:completionHandler:).
+static NSError *DocumentOpenFailureError(NSURL *url) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain
+                               code: NSFileReadUnknownError
+                           userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
+}
+
 - makeDocumentWithContentsOfURL: (NSURL *) url
                          ofType: (NSString *) type
                           error: (NSError **) error
 {
-    id result;
     Class class = [self documentClassForType: type];
+    NSError *initError = nil;
+    id result = [[[class alloc] initWithContentsOfURL: url
+                                               ofType: type
+                                                error: &initError] autorelease];
 
-    result = [[[class alloc] initWithContentsOfURL: url
-                                            ofType: type] autorelease];
+    if (result == nil && error != NULL) {
+        if (initError == nil) {
+            // GUESS: the documentation promises an error whenever the method returns nil, but the
+            // document readers (or a missing class) do not always set one; a generic one stands in.
+            initError = DocumentOpenFailureError(url);
+        }
+        *error = initError;
+    }
     return result;
 }
 
@@ -773,6 +792,17 @@ static NSError *UntitledDocumentError(void) {
     return paths;
 }
 
+// Tells the user why a document could not be opened. GUESS: the documentation says nothing about who
+// presents a failure to open (the legacy initialiser used to show an alert itself). An error that says
+// the user cancelled is not presented; that is this method's own rule (Darling's -presentError: does
+// not skip such errors).
+- (void) _presentOpenError: (NSError *) error {
+    if (error == nil ||
+        ([[error domain] isEqual: NSCocoaErrorDomain] && [error code] == NSUserCancelledError))
+        return;
+    [self presentError: error];
+}
+
 - (void) _openRecentDocument: sender {
     NSArray *paths = [self _recentDocumentPaths];
     NSMenuItem *item = sender;
@@ -796,6 +826,8 @@ static NSError *UntitledDocumentError(void) {
                 } else if ([appDelegate respondsToSelector: @selector
                                         (application:openFile:)]) {
                     [appDelegate application: NSApp openFile: [url path]];
+                } else {
+                    [self _presentOpenError: error];
                 }
             }
         }
@@ -952,7 +984,8 @@ static NSError *UntitledDocumentError(void) {
         NSError *error = nil;
         NSURL *url = [NSURL fileURLWithPath: [files objectAtIndex: i]];
 
-        [self openDocumentWithContentsOfURL: url display: YES error: &error];
+        if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+            [self _presentOpenError: error];
     }
 }
 
@@ -999,6 +1032,8 @@ static BOOL actionIsDocumentController(SEL selector) {
                                                        display: YES
                                                          error: &error];
 
+    if (document == nil)
+        [self _presentOpenError: error];
     return (document != nil) ? YES : NO;
 }
 
