@@ -75,13 +75,20 @@ static void end(BOOL cancelled) {
     [display pinchEventType: PinchEnd window: xwindow x: 40 y: 30 scale: 1 deltaAngle: 0 cancelled: cancelled modifiers: 0];
 }
 
-@interface GestureView : NSView
+// The ivars are declared because the i386 slice uses the legacy runtime, which does not synthesize them.
+@interface GestureView : NSView {
+    NSInteger _magnifications, _rotations;
+    CGFloat _totalMagnification;
+    float _totalRotation;
+}
 @property NSInteger magnifications, rotations;
 @property CGFloat totalMagnification;
 @property float totalRotation;
 @end
 
 @implementation GestureView
+@synthesize magnifications = _magnifications, rotations = _rotations;
+@synthesize totalMagnification = _totalMagnification, totalRotation = _totalRotation;
 - (void) magnifyWithEvent: (NSEvent *) event {
     self.magnifications++;
     self.totalMagnification += [event magnification];
