@@ -2433,6 +2433,8 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
         if ((error = XNextEvent(_display, &e)) != 0)
             NSLog(@"XNextEvent returned %d", error);
+        else if (e.type != KeyPress && e.type != KeyRelease && XFilterEvent(&e, None))
+            continue; // An input method's reply (Xlib: every event goes through XFilterEvent()).
         else
             [self postXEvent: &e];
     }
