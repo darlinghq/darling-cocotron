@@ -26,8 +26,12 @@
 
 @end
 
+#define _NS_SIDE_NSPathControl 0, 1,
 @interface NSPathControl : NSControl {
     NS_LEGACY_IVAR_PAD(_NSPathControlReserved, 20)
+    NS_EXTRA_IVARS_BEGIN(NSPathControl)
+        id _delegate;
+    NS_SIDE_IVARS_END(NSPathControl)
 }
 
 - (NSPathStyle) pathStyle;

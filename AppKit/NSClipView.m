@@ -252,9 +252,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
 }
 
+// The document view's frame, with a side that is shorter than the clip view's bounds made as long as
+// that side; a scroll view measures its knobs against this and the clip view's bounds.
 - (NSRect) documentRect {
-    NSUnimplementedMethod();
-    return NSMakeRect(0, 0, 0, 0);
+    // GUESS: with no document view there is no frame to adjust, so the rectangle is empty.
+    if (_docView == nil)
+        return NSZeroRect;
+
+    NSRect result = [_docView frame];
+    NSSize size = [self bounds].size;
+
+    result.size.width = MAX(result.size.width, size.width);
+    result.size.height = MAX(result.size.height, size.height);
+    return result;
 }
 
 - (NSRect) documentVisibleRect {

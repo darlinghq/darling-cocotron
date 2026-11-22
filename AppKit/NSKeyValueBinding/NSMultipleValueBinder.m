@@ -67,8 +67,8 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 
 - (void) applyToObject: (id) object inRow: (NSInteger) row keyPath: (id) path {
     @try {
-        [object setValue: [[self _objectForRow: row]
-                                  valueForKeyPath: _valueKeyPath]
+        [object setValue: [self transformedObject: [[self _objectForRow: row]
+                                                           valueForKeyPath: _valueKeyPath]]
                   forKey: path];
     } @catch (id e) {
         NSLog(@"exception %@ while setting value for key path %@ for row %ld", e,
@@ -92,7 +92,12 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
                    inRow: (NSInteger) row
                  keyPath: (id) keypath
 {
-    [[self _objectForRow: row] setValue: [object valueForKeyPath: keypath]
+    // A value transformer that cannot reverse makes the binding read-only: the column stays editable but no row
+    // reports editable, no editor starts, nothing is raised and the model is unchanged. Observed on macOS 26.7.3
+    // and 10.14.4 (black-box test); pinned by tests/appkit-table-column-value-transformers.m.
+    if (![self allowsReverseTransformation])
+        return;
+    [[self _objectForRow: row] setValue: [self reverseTransformedObject: [object valueForKeyPath: keypath]]
                                    forKeyPath: _valueKeyPath];
 }
 
@@ -113,7 +118,7 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 }
 
 - (id) objectAtIndex: (NSUInteger) row {
-    return [[self _objectForRow: row] valueForKeyPath: _valueKeyPath];
+    return [self transformedObject: [[self _objectForRow: row] valueForKeyPath: _valueKeyPath]];
 }
 
 - (void) cacheArrayKeyPath {
@@ -144,6 +149,8 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
 }
 
 - (BOOL) allowsEditingForRow: (NSInteger) row {
+    if (![self allowsReverseTransformation]) // observed, see applyFromObject:inRow:keyPath:
+        return NO;
     if ([[self _objectForRow: row] classForCoder] == [NSDictionary class])
         return NO;
     return YES;
