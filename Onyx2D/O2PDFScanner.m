@@ -1442,13 +1442,11 @@ NSData *O2PDFScannerCreateDataWithLength(O2PDFScanner *self, size_t length) {
             O2PDFOperatorCallback callback = [_operatorTable
                     callbackForName: [(O2PDFObject_identifier *) object name]];
 
-            if (callback != NULL) {
+            // Only operators with a registered callback invoke anything (the
+            // CGPDFScannerScan documentation); one without is passed over, and
+            // its operands are dropped below with the others.
+            if (callback != NULL)
                 callback(self, _info);
-            } else {
-                // PDF 32000-1 7.8.2: a consumer ignores operators it does not
-                // recognize, together with their operands.
-                NSLog(@"unhandled identifier %@", object);
-            }
             // The operands written before an operator are that operator's
             // (PDF 32000-1 7.8.2), so whatever its callback left unpopped does
             // not carry over to the next operator.
