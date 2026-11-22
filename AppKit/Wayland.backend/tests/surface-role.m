@@ -73,6 +73,9 @@ static void expect(BOOL ok, const char *label) {
         break;
     case 4:
         if (now - since < 1) return;
+        // An application that is not active does not map a plain window on Wayland (it would take the
+        // focus from the application that has it), and nothing of this one is on screen any more.
+        [NSApp activateIgnoringOtherApps: YES];
         [popup orderFront: nil];
         stage = 5; since = 0;
         break;
