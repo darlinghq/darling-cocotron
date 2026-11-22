@@ -20,7 +20,7 @@
 #     window has no strip, and with the pointer a click on a title opens its
 #     menu right below the bar and a click on an item runs its action;
 #   - no global menu and no window at all, or a titled window: the same bar;
-#   - windows ordered out and in, a key window change and windows closing: the\n#     bar stays the same surface and is shown at the end;\n#   - a global menu (fake-registrar.c) from the start: no bar;
+#   - windows ordered out and in, a key window change and windows closing: the\n#     bar stays the same surface and is shown at the end;\n#   - no session bus reachable: the bar is shown;\n#   - a global menu (fake-registrar.c) from the start: no bar;
 #   - a global menu that appears or goes away while the application runs:
 #     the bar goes away and comes back.
 import argparse
@@ -245,6 +245,11 @@ def main():
         check("churn done active=1 barVisible=1" in read(log), "the application sees its bar ordered in at the end")
         created = read(os.path.join(work, "churn.out")).count("get_layer_surface(")
         check(created == 1, "the bar was not hidden and shown again while the windows came and went (%d surfaces)" % created)
+        stop(process)
+
+        # No session bus at all (the application cannot reach any registrar): the bar is shown.
+        log, process = session.guest("borderless", "nobus", extra_env=["DBUS_SESSION_BUS_ADDRESS=unix:path=/nonexistent/bus"])
+        check(len(wait_until(session.bars, 10) or []) == 1, "without a session bus: the bar is shown")
         stop(process)
 
         # A global menu from the start.
