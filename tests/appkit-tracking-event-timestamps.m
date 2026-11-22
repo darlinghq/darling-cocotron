@@ -3,7 +3,8 @@
 // The events a tracking area sends to its owner (mouse entered, exited, moved and cursor update) carry a
 // timestamp in seconds since the system started, like every other event
 // (https://developer.apple.com/documentation/appkit/nsevent/timestamp). The mach_absolute_time clock is used as the
-// reference, as in appkit-event-timestamps.m. The pointer is moved with CGWarpMouseCursorPosition. Needs an X server with a window manager. Build without ARC.
+// reference, as in appkit-event-timestamps.m. The area is active in the active application because a
+// cursor-update area is not sent cursorUpdate: with NSTrackingActiveAlways. The pointer is moved with CGWarpMouseCursorPosition. Needs an X server with a window manager. Build without ARC.
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 #include <mach/mach_time.h>
@@ -86,7 +87,7 @@ int main(void) {
         NSTrackingArea *area = [[NSTrackingArea alloc]
                 initWithRect: NSMakeRect(200, 0, 100, 100)
                      options: NSTrackingMouseEnteredAndExited | NSTrackingMouseMoved | NSTrackingCursorUpdate |
-                              NSTrackingActiveAlways
+                              NSTrackingActiveInActiveApp
                        owner: recorder
                     userInfo: nil];
         [view addTrackingArea: area];
