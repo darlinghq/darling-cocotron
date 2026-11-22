@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSFont.h>
+#import <AppKit/NSFontManager.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSRaise.h>
@@ -873,6 +874,50 @@ static void initImageCellState(NSCell *self, NSImage *image) {
     font = [font retain];
     [NS_EXTRA(NSCell, self)->_font release];
     NS_EXTRA(NSCell, self)->_font = font;
+}
+
+// KVC accessors for the fontBold and fontItalic bindings (NSFontBoldBinding, NSFontItalicBinding), which
+// a table column applies to its data cell; without them the binding raises for an undefined key. They are not
+// public NSCell API, so they are left out of the header.
+- (BOOL) _fontHasTrait: (NSFontTraitMask) trait {
+    NSFont *font = [self font];
+
+    return font != nil && ([[NSFontManager sharedFontManager] traitsOfFont: font] & trait) != 0;
+}
+
+// GUESS: a value of NO takes the trait off the font again (the documentation says only that YES adds it).
+// The data cell of a column serves every row, so a row that is not bold must not keep the bold of the row before.
+- (void) _setFont: (NSFont *) font trait: (NSFontTraitMask) trait present: (BOOL) present {
+    NSFontManager *manager = [NSFontManager sharedFontManager];
+    NSFont *converted = present ? [manager convertFont: font toHaveTrait: trait]
+                                : [manager convertFont: font toNotHaveTrait: trait];
+
+    // GUESS: a cell without a font has nothing to change
+    if (converted != nil && converted != font)
+        [self setFont: converted];
+}
+
+// GUESS: only an NSNumber that is true asks for the trait. A row without the key (nil) and the null
+// placeholder or a selection marker (not numbers) ask for none; taking an id keeps key-value coding from
+// raising for nil, which a BOOL parameter would.
+static BOOL bindingValueIsTrue(id value) {
+    return [value isKindOfClass: [NSNumber class]] && [value boolValue];
+}
+
+- (id) fontBold {
+    return [NSNumber numberWithBool: [self _fontHasTrait: NSBoldFontMask]];
+}
+
+- (void) setFontBold: (id) value {
+    [self _setFont: [self font] trait: NSBoldFontMask present: bindingValueIsTrue(value)];
+}
+
+- (id) fontItalic {
+    return [NSNumber numberWithBool: [self _fontHasTrait: NSItalicFontMask]];
+}
+
+- (void) setFontItalic: (id) value {
+    [self _setFont: [self font] trait: NSItalicFontMask present: bindingValueIsTrue(value)];
 }
 
 - (void) setImage: (NSImage *) image {
