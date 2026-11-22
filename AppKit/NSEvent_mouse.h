@@ -80,7 +80,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Marks a scroll wheel event as coming from a device with precise deltas, such as a trackpad:
 // scrollingDeltaX and scrollingDeltaY return the given amounts to scroll by, hasPreciseScrollingDeltas
-// is YES and phase is the given one. Events never marked behave as wheel events: line-based deltas
+// is YES and phase is the given one; deltaX and deltaY become a tenth of the amounts, as on macOS. Events never marked behave as wheel events: line-based deltas
 // and no phase. Raises for any other event type.
 - (void) _setPreciseScrollingDeltaX: (CGFloat) deltaX deltaY: (CGFloat) deltaY phase: (NSEventPhase) phase;
 
