@@ -715,6 +715,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Wayland.backend/WaylandDragIcon.m
 			Wayland.backend/WaylandPasteboard.m
 			Wayland.backend/WaylandWindow.m
+			Wayland.backend/WaylandToplevelIcon.m
 			Wayland.backend/WaylandSubWindow.m
 			${WAYLAND_PROTOCOL_SOURCES}
 		INFO_PLIST

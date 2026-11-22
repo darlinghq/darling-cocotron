@@ -209,6 +209,11 @@ static NSArray *NSApplicationDocumentsInArguments(NSArray *arguments) {
     return documents;
 }
 
+@interface NSDisplay (DarlingApplicationIcon)
+// Implemented by the backends (see DarlingDisplay.h).
+- (void) applicationIconImageChanged;
+@end
+
 @implementation NSApplication
 
 NS_EXTRA_DEALLOC(NSApplication)
@@ -1060,6 +1065,11 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
     NS_EXTRA(NSApplication, self)->_applicationIconImage = image;
 
     [image setName: NSImageNameApplicationIcon];
+
+    // Windows already shown carry the previous icon in the window system.
+    NSDisplay *display = NS_EXTRA(NSApplication, self)->_display;
+    if ([display respondsToSelector: @selector(applicationIconImageChanged)])
+        [(id) display applicationIconImageChanged];
 }
 
 // Until the program sets one, the policy is what the bundle declares (LSUIElement: accessory,

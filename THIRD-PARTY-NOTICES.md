@@ -30,6 +30,15 @@ and the licence.
 - Licence: the permission notice at the top of the file (a permissive notice allowing use, copying,
   modification, distribution and sale without fee, provided the copyright notice is kept).
 
+## xdg-toplevel-icon-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/xdg-toplevel-icon-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols (`staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml`,
+  wayland-protocols 1.50)
+- Copyright: 2023-2024 Matthias Klumpp, 2024 David Edmundson
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
 ## DejaVuSans.ttf
 
 - Location: `tests/fixtures/fonts/DejaVuSans.ttf`, licence text in `tests/fixtures/fonts/DejaVu-LICENSE.txt`

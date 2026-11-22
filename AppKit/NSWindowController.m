@@ -297,12 +297,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSString *) windowTitleForDocumentDisplayName: (NSString *) displayName {
-    NSString *appName = [[[NSBundle mainBundle] infoDictionary]
-            objectForKey: @"CFBundleName"];
-    if (appName)
-        return [NSString stringWithFormat: @"%@ - %@", displayName, appName];
-    else
-        return displayName;
+    return displayName;
 }
 
 @end

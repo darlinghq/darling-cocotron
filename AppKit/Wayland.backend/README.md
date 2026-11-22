@@ -44,6 +44,11 @@ to, such a window is an ordinary toplevel.
   events.
 - Cursors: themed cursors and `NSImage` cursors with their hotspot.
 - Clipboard and drag-and-drop, OpenGL and scale, fullscreen and pointer lock: see below.
+- Window icon: with `xdg_toplevel_icon_manager_v1` (KWin 6.1 and later, others), every toplevel gets the application
+  icon, `-[NSApplication applicationIconImage]` (the bundle icon or what the program set), as wl_shm buffers at the
+  sizes the compositor asks for (16 to 256 when it names none), at scale 1 and 2. It follows
+  `-setApplicationIconImage:`. Without the protocol the compositor picks an icon from the `app_id` (the process
+  name), usually a generic one. Tests: `tests/wayland-toplevel-icon.sh`.
 - Outputs: output batches are applied atomically, rotation and the xdg-output logical layout feed `NSScreen`,
   integer buffer scale follows the outputs a window is on.
 

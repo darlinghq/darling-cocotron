@@ -94,6 +94,7 @@ struct WaylandBuffer {
     // The activation is being reported to the NSWindow; its -becomeKeyWindow asks -makeKey, which is no new request.
     BOOL _reportingActivation;
     BOOL _configured;
+    BOOL _toplevelIconSet; // the compositor was given an icon for the toplevel
     BOOL _needsPresent;
     BOOL _activated;
     NSMutableSet *_surfaceOutputs;
@@ -179,5 +180,8 @@ struct WaylandBuffer {
                 kind: (WaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy
            arguments: (union wl_argument *) args;
+
+// Gives the toplevel the application icon (xdg-toplevel-icon), when the compositor has the protocol.
+- (void) updateToplevelIcon;
 
 @end

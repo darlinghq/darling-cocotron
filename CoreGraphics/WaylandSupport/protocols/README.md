@@ -1,7 +1,7 @@
 # Vendored Wayland protocol XML
 
-The protocols here are not part of wayland-protocols, so they are kept in this tree, byte for byte, with
-their copyright and permission notices.
+The protocols here are not part of the wayland-protocols release every supported system has (or not at all), so they
+are kept in this tree, byte for byte, with their copyright and permission notices.
 
 ## wlr-output-management
 
@@ -55,3 +55,17 @@ anchored along the top edge.
 - Licence: the permission notice at the top of the file (use, copy, modify, distribute and sell without fee,
   provided the copyright notice appears in all copies and supporting documentation; no warranty). It is
   permissive and compatible with this project's MIT licence.
+
+## xdg-toplevel-icon
+
+`xdg-toplevel-icon-v1.xml` is the staging protocol `xdg_toplevel_icon_manager_v1`, with which a client gives a
+toplevel an icon from pixel buffers (or an icon name). It is in wayland-protocols from 1.34 on; the file is kept
+here so that systems with an older release still build the backend.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml`
+  (wayland-protocols 1.50)
+- Copyright: 2023-2024 Matthias Klumpp, 2024 David Edmundson
+- Licence: the MIT permission notice at the top of the file.
+
+The AppKit Wayland backend uses it to show the application icon (`-[NSApplication applicationIconImage]`) on every
+toplevel, so compositors do not have to guess an icon from the `app_id`. See `WaylandToplevelIcon.m`.

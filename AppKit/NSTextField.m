@@ -44,6 +44,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSTextFieldCell (NSTextFieldInset)
 - (NSSize) _textInsetSize;
+- (NSInteger) _maximumNumberOfLines;
+- (void) _setMaximumNumberOfLines: (NSInteger) value;
 @end
 
 @implementation NSTextField
@@ -392,12 +394,21 @@ NS_EXTRA_DEALLOC(NSTextField)
 }
 
 - (NSInteger) maximumNumberOfLines {
-    // TODO
-    return 0;
+    return [_cell respondsToSelector: @selector(_maximumNumberOfLines)]
+            ? [(NSTextFieldCell *) _cell _maximumNumberOfLines]
+            : 0;
 }
 
+// The cap changes how many lines the cell draws and measures, so the size and the drawing are stale.
 - (void) setMaximumNumberOfLines: (NSInteger) maximumNumberOfLines {
-    // TODO
+    if (![_cell respondsToSelector: @selector(_setMaximumNumberOfLines:)])
+        return;
+    // A negative cap is kept as given and lays the text out without a limit (the cell only limits for a cap
+    // above zero). Observed by black-box test on macOS 26.7.3 and 10.14.4: the getter returns what was set.
+    // Test: appkit-text-field-maximum-number-of-lines.m
+    [(NSTextFieldCell *) _cell _setMaximumNumberOfLines: maximumNumberOfLines];
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay: YES];
 }
 
 - (BOOL) acceptsFirstResponder {

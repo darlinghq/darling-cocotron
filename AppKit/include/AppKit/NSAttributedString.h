@@ -231,6 +231,9 @@ typedef NS_ENUM(NSInteger, NSTextScalingType) {
 - (NSUInteger) lineBreakByHyphenatingBeforeIndex: (NSUInteger) index
                                      withinRange: (NSRange) range;
 - (NSUInteger) nextWordFromIndex: (NSUInteger) index forward: (BOOL) forward;
+// Deprecated by Apple in 10.11 (data detectors replace it).
+- (NSURL *) URLAtIndex: (NSUInteger) location
+        effectiveRange: (NSRangePointer) effectiveRange;
 
 #pragma mark -
 #pragma mark Calculating Ranges

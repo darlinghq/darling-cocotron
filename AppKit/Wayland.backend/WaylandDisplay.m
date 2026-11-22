@@ -38,6 +38,7 @@
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
 #import "WaylandAppMenu.h"
+#import "WaylandToplevelIcon.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import "../DarlingWindowLevelPolicy.h"
 #import "../../CoreGraphics/DarlingUnicodeKeyLayout.h"
@@ -169,6 +170,9 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectDataSource:
                 [(WaylandPasteboard *) object handleEvent: opcode kind: objectKind
                                                      proxy: proxy arguments: args];
+                break;
+            case WaylandObjectIconManager:
+                [(WaylandToplevelIcons *) object handleEvent: opcode arguments: args];
                 break;
             case WaylandObjectFractionalScale:
                 if (opcode == WP_FRACTIONAL_EV_PREFERRED && args[0].u != 0)
@@ -445,6 +449,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _outputManager = nil;
     [_appMenu release];
     _appMenu = nil;
+    [_toplevelIcons release];
+    _toplevelIcons = nil;
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
@@ -479,6 +485,18 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 - (void) flush {
     if (_wlDisplay != NULL)
         WL.wl_display_flush(_wlDisplay);
+}
+
+// The windows carry the application icon (see WaylandToplevelIcon.h): when the application sets another
+// one, the windows already shown are given it too.
+- (void) updateWindowIcons {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateToplevelIcon];
+}
+
+- (void) applicationIconImageChanged {
+    [super applicationIconImageChanged];
+    [_toplevelIcons applicationIconChanged];
 }
 
 - (void) connectionFailed {
@@ -620,6 +638,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _appMenuManagerVersion = MIN(version, 2);
         _appMenuManager = [self bindGlobal: name interface: &org_kde_kwin_appmenu_manager_interface
                                    version: _appMenuManagerVersion kind: 0 object: nil];
+    } else if (strcmp(interface, "xdg_toplevel_icon_manager_v1") == 0 && _toplevelIcons == nil) {
+        _toplevelIcons = [[WaylandToplevelIcons alloc] initWithDisplay: self];
+        [_toplevelIcons setManager: [self bindGlobal: name interface: &xdg_toplevel_icon_manager_v1_interface
+                                             version: 1 kind: WaylandObjectIconManager object: _toplevelIcons]
+                              name: name];
     } else if (strcmp(interface, "org_kde_plasma_shell") == 0 && _plasmaShell == NULL) {
         // Version 2 adds set_skip_taskbar, version 5 set_skip_switcher.
         _plasmaShellName = name;
@@ -814,6 +837,13 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             WaylandMarshal(manager, WP_APPMENU_MANAGER_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         else
             WL.wl_proxy_destroy(manager);
+        return;
+    }
+    if (_toplevelIcons && name == [_toplevelIcons name]) {
+        // The windows keep the icons they were given.
+        [_toplevelIcons managerRemoved];
+        [_toplevelIcons release];
+        _toplevelIcons = nil;
         return;
     }
     if (_plasmaShell && name == _plasmaShellName) {

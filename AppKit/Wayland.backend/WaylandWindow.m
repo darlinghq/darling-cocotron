@@ -18,6 +18,7 @@
 
 #import "WaylandWindow.h"
 #import "WaylandSubWindow.h"
+#import "WaylandToplevelIcon.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindowLevel.h"
@@ -401,6 +402,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [self updateDecorationMode];
             [self updateApplicationMenu];
             [self updateTaskbarPresence];
+            _toplevelIconSet = NO;
+            [self updateToplevelIcon];
         }
 
     }
@@ -443,6 +446,17 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_SKIP_TASKBAR, NULL, 0, value);
     if (_display->_plasmaShellVersion >= 5)
         WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_SKIP_SWITCHER, NULL, 0, value);
+}
+
+// Gives the toplevel the application icon the compositor shows for it (xdg-toplevel-icon); the request is
+// double-buffered, so a window that is already showing content commits for it to take effect.
+- (void) updateToplevelIcon {
+    if (_toplevel == NULL || _display->_toplevelIcons == nil)
+        return;
+    if ([_display->_toplevelIcons applyToToplevel: _toplevel hadIcon: &_toplevelIconSet] && _mapped && _configured) {
+        sendRequest(_surface, WP_SURFACE_COMMIT, 0);
+        [_display flush];
+    }
 }
 
 // The window's presentation can change while it is mapped (its collection behavior).

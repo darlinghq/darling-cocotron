@@ -161,19 +161,28 @@ static NSDocumentController *shared = nil;
 }
 
 - (NSString *) defaultType {
-    if ([_fileTypes count] == 0)
-        return nil;
+    // The type new documents are made of is the first one the application can edit; an application
+    // that declares none has no default.
+    for (NSDictionary *fileType in _fileTypes) {
+        // GUESS: an Editor entry that has neither a content type nor a name cannot be the default
+        // (there is no type name to return), so the search goes on to the next Editor entry.
+        NSString *name = NSDocumentTypeNameForInfo(fileType);
+        if (name != nil && [[fileType objectForKey: @"CFBundleTypeRole"] isEqual: @"Editor"])
+            return name;
+    }
 
-    return NSDocumentTypeNameForInfo((NSDictionary *) [_fileTypes objectAtIndex: 0]);
+    return nil;
 }
 
 - (NSArray *) documentClassNames {
     NSMutableSet *result = [NSMutableSet set];
-    int i, count = [_fileTypes count];
 
-    for (i = 0; i < count; i++)
-        [result addObject: [(NSDictionary *) [_fileTypes objectAtIndex: i]
-                                   objectForKey: @"NSDocumentClass"]];
+    for (NSDictionary *fileType in _fileTypes) {
+        // An entry that declares no document class has no name to list.
+        NSString *className = [fileType objectForKey: @"NSDocumentClass"];
+        if (className != nil)
+            [result addObject: className];
+    }
 
     return [result allObjects];
 }
@@ -344,13 +353,35 @@ static NSDocumentController *shared = nil;
     return [[window windowController] document];
 }
 
+// A URL that is not a file URL has no contents to look at here: nil with an error. The error code is
+// not observed (GUESS: NSFileReadUnknownError, the one this controller uses for a file that cannot be
+// read); the only observed failure is a missing file, which NSFileReadNoSuchFileError describes.
+static NSError *TypeLookupError(NSURL *url, NSInteger code) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain
+                               code: code
+                           userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
+}
+
 - (NSString *) typeForContentsOfURL: (NSURL *) url error: (NSError **) error {
-    if (![url isFileURL])
+    if (![url isFileURL]) {
+        if (error != NULL)
+            *error = TypeLookupError(url, NSFileReadUnknownError);
         return nil;
+    }
+
+    // Observed on macOS 26.7.3 and 10.14.4 (black-box test): a file that exists always has a type,
+    // whether or not the application declares it (a type identifier derived from the extension, or
+    // public.data without one, public.folder for a directory), and only a missing file gives
+    // nil, with NSCocoaErrorDomain code 260 (NSFileReadNoSuchFileError).
+    // Test: appkit-document-controller-type-for-contents.m
+    BOOL isDirectory = NO;
+    if (![[NSFileManager defaultManager] fileExistsAtPath: [url path] isDirectory: &isDirectory]) {
+        if (error != NULL)
+            *error = TypeLookupError(url, NSFileReadNoSuchFileError);
+        return nil;
+    }
 
     NSString *extension = [[url path] pathExtension];
-    if (extension == nil)
-        return nil;
 
     NSString *UTI = nil;
     NSError *resourceError = nil;
@@ -371,7 +402,12 @@ static NSDocumentController *shared = nil;
             return UTI;
         }
     }
-    return [self typeFromFileExtension: extension];
+    NSString *type = isDirectory ? nil : [self typeFromFileExtension: extension];
+    if (type == nil)
+        type = UTI;
+    if (type == nil)
+        type = isDirectory ? @"public.folder" : @"public.data";
+    return type;
 }
 
 - makeDocumentWithContentsOfFile: (NSString *) path ofType: (NSString *) type {
@@ -384,15 +420,32 @@ static NSDocumentController *shared = nil;
     return result;
 }
 
+// The error shown to the user for a document that could not be opened although its class reported none.
+// The same construction (Cocoa domain, NSFileReadUnknownError, the URL under NSURLErrorKey) is what
+// siliconforest patch 0351 uses for the error of its type lookup. NSFileReadUnknownError (256) is what
+// macOS 26.7.3 reports in the completion handler of -openDocumentWithContentsOfURL:display:completionHandler:
+// when the class returned nil without an error (black-box observation).
+static NSError *DocumentOpenFailureError(NSURL *url) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain
+                               code: NSFileReadUnknownError
+                           userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
+}
+
 - makeDocumentWithContentsOfURL: (NSURL *) url
                          ofType: (NSString *) type
                           error: (NSError **) error
 {
-    id result;
     Class class = [self documentClassForType: type];
+    NSError *initError = nil;
+    id result = [[[class alloc] initWithContentsOfURL: url
+                                               ofType: type
+                                                error: &initError] autorelease];
 
-    result = [[[class alloc] initWithContentsOfURL: url
-                                            ofType: type] autorelease];
+    // The error is what the initialiser reported. When it returns nil without one, the error stays nil:
+    // observed on macOS 26.7.3 and 10.14.4 (black-box test, class reading nil with no error) and pinned by
+    // appkit-document-controller-make-document-errors.m.
+    if (result == nil && error != NULL)
+        *error = initError;
     return result;
 }
 
@@ -412,6 +465,13 @@ static NSDocumentController *shared = nil;
     return result;
 }
 
+// A type with no document class gives nil with NSCocoaErrorDomain NSFileReadUnknownError (256, empty userInfo),
+// also for a nil, empty or unknown type, and an error already in the caller's variable is replaced. Observed by
+// black-box test on macOS 26.7.3 and 10.14.4 (identical); pinned by appkit-document-controller-make-untitled-error.m.
+static NSError *UntitledDocumentError(void) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain code: NSFileReadUnknownError userInfo: nil];
+}
+
 - (id) makeUntitledDocumentOfType: (NSString *) type {
     static int nextUntitledNumber = 1;
     id result = nil;
@@ -422,7 +482,7 @@ static NSDocumentController *shared = nil;
     if (result)
         [result _setUntitledNumber: nextUntitledNumber++];
     else
-        [self presentError: error];
+        [self presentError: error != nil ? error : UntitledDocumentError()];
 
     return result;
 }
@@ -453,6 +513,9 @@ static NSDocumentController *shared = nil;
     if (result)
         [result _setUntitledNumber: nextUntitledNumber++];
     else {
+        // A type with no document class has no initialiser to report anything.
+        if (error == nil)
+            error = UntitledDocumentError();
         if (outError)
             *outError = error;
         else
@@ -727,6 +790,19 @@ static NSDocumentController *shared = nil;
     return paths;
 }
 
+// Tells the user why a document could not be opened. GUESS: the documentation says nothing about who
+// presents a failure to open (the legacy initialiser used to show an alert itself). An error that says
+// the user cancelled is not presented; that is this method's own rule (Darling's -presentError: does
+// not skip such errors).
+- (void) _presentOpenError: (NSError *) error forURL: (NSURL *) url {
+    // A failure that reported no error is still told to the user, with the generic error.
+    if (error == nil)
+        error = DocumentOpenFailureError(url);
+    if ([[error domain] isEqual: NSCocoaErrorDomain] && [error code] == NSUserCancelledError)
+        return;
+    [self presentError: error];
+}
+
 - (void) _openRecentDocument: sender {
     NSArray *paths = [self _recentDocumentPaths];
     NSMenuItem *item = sender;
@@ -750,6 +826,8 @@ static NSDocumentController *shared = nil;
                 } else if ([appDelegate respondsToSelector: @selector
                                         (application:openFile:)]) {
                     [appDelegate application: NSApp openFile: [url path]];
+                } else {
+                    [self _presentOpenError: error forURL: url];
                 }
             }
         }
@@ -906,7 +984,8 @@ static NSDocumentController *shared = nil;
         NSError *error = nil;
         NSURL *url = [NSURL fileURLWithPath: [files objectAtIndex: i]];
 
-        [self openDocumentWithContentsOfURL: url display: YES error: &error];
+        if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+            [self _presentOpenError: error forURL: url];
     }
 }
 
@@ -953,6 +1032,8 @@ static BOOL actionIsDocumentController(SEL selector) {
                                                        display: YES
                                                          error: &error];
 
+    if (document == nil)
+        [self _presentOpenError: error forURL: url];
     return (document != nil) ? YES : NO;
 }
 

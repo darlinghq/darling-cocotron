@@ -69,6 +69,13 @@ APPKIT_EXPORT const CGFloat NSStringDrawerLargeDimension;
                      lastLineRange: (NSRange *) lastLine
                     hasHiddenText: (BOOL *) hasHiddenText;
 
+// The same, keeping at most maximumNumberOfLines lines (0 keeps as many as fit).
+- (NSSize) sizeOfAttributedString: (NSAttributedString *) astring
+                    fittingInSize: (NSSize) maxSize
+             maximumNumberOfLines: (NSUInteger) maximumNumberOfLines
+                     lastLineRange: (NSRange *) lastLine
+                    hasHiddenText: (BOOL *) hasHiddenText;
+
 @end
 
 // strange we need this frequently yet nothing like it is public

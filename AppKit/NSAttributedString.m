@@ -351,6 +351,42 @@ NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
     return 0;
 }
 
+// Only the link attribute is read: the documentation also says text that looks like a URL is
+// recognised, without saying what looks like one.
+// An index at or past the end of a non-empty string raises NSRangeException (macOS 10.14.4; macOS 26.7.3 raises
+// NSInvalidArgumentException, the older, wider behaviour is followed), and so does a negative one. An empty string
+// is not an error: any index gives nil and the range {0, 0}. Observed by black-box test on both systems; the
+// test appkit-attributed-string-url-at-index.m pins it.
+- (NSURL *) URLAtIndex: (NSUInteger) location effectiveRange: (NSRangePointer) effectiveRange {
+    NSRange range;
+    if ([self length] == 0) {
+        if (effectiveRange != NULL)
+            *effectiveRange = NSMakeRange(0, 0);
+        return nil;
+    }
+    // The attribute lookup below does not check the index itself.
+    if (location >= [self length])
+        [NSException raise: NSRangeException
+                    format: @"-[NSAttributedString URLAtIndex:effectiveRange:]: Range or index out of bounds"];
+    id link = [self attribute: NSLinkAttributeName
+                      atIndex: location
+        longestEffectiveRange: &range
+                      inRange: NSMakeRange(0, [self length])];
+    NSURL *url = nil;
+
+    // The link attribute holds an NSURL, or an NSString for one.
+    if ([link isKindOfClass: [NSURL class]])
+        url = link;
+    else if ([link isKindOfClass: [NSString class]])
+        url = [NSURL URLWithString: link];
+
+    // The range is that of the link, or of the text around the index without a link when there is
+    // no URL, which is what the documentation of effectiveRange says.
+    if (effectiveRange != NULL)
+        *effectiveRange = range;
+    return url;
+}
+
 /* as usual, the documentation says one thing and the system behaves
  * differently, this is the way i think it should work... (dwy 5/11/2003) */
 - (NSUInteger) nextWordFromIndex: (NSUInteger) location
