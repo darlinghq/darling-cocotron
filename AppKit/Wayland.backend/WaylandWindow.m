@@ -298,11 +298,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     args[0].u = WP_LAYER_ANCHOR_TOP | WP_LAYER_ANCHOR_LEFT | WP_LAYER_ANCHOR_RIGHT;
     WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_ANCHOR, NULL, 0, args);
     [self updateLayerSize];
-    // Menus can be navigated with the keyboard once the user focuses the bar.
-    if (WL.wl_proxy_get_version(_layerSurface) >= 4) {
-        args[0].u = WP_LAYER_KEYBOARD_ON_DEMAND;
-        WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_KEYBOARD_INTERACTIVITY, NULL, 0, args);
-    }
+    // The bar never takes the keyboard focus (the protocol default): a compositor that gives an
+    // on-demand surface the focus when the pointer is over it (KWin does as soon as the bar is
+    // mapped under the pointer) would take it from the application's window, which then looks to
+    // AppKit like the application losing the focus, so the bar would hide, and show again once the
+    // focus came back, in a loop. The menus the bar opens grab the keyboard themselves.
 }
 
 #pragma mark - Mapping

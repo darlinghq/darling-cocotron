@@ -15,6 +15,10 @@
 //   appkit-global-menu LOG window [SECONDS]
 //                                  like panel, with a titled window instead,
 //                                  and log whether it carries the strip
+//   appkit-global-menu LOG borderless [SECONDS]
+//                                  like window, with a borderless window
+//   appkit-global-menu LOG nowindow [SECONDS]
+//                                  like window, with no window at all
 //   appkit-global-menu LOG hiding  with a titled window as the key window, go
 //                                  through the states in which the menu bar is
 //                                  hidden or shown, logging "STEP <state>" after
@@ -44,17 +48,21 @@ static void note(const char *format, ...) {
 @interface Target : NSObject <NSMenuDelegate>
 {
     NSMenu *_dynamic;
+    NSMenu *_rebuilt;
     int _updates;
 }
 @property (assign) NSMenu *fileMenu;
 @end
 
 @implementation Target
+- (void) preferences: (id) sender {
+    note("action preferences active=%d key=%d", (int) [NSApp isActive], (int) ([NSApp keyWindow] != nil));
+}
 - (void) newDoc: (id) sender {
     note("action newDoc mainthread=%d", (int) [NSThread isMainThread]);
 }
 - (void) save: (id) sender {
-    note("action save");
+    note("action save active=%d key=%d", (int) [NSApp isActive], (int) ([NSApp keyWindow] != nil));
 }
 - (void) disabledAction: (id) sender {
     note("action disabledAction");
@@ -85,7 +93,20 @@ static void note(const char *format, ...) {
     _dynamic = menu;
     [menu setDelegate: self];
 }
+- (void) setRebuilt: (NSMenu *) menu {
+    _rebuilt = menu;
+}
 - (void) menuNeedsUpdate: (NSMenu *) menu {
+    if (menu == _rebuilt) {
+        note("needsUpdate rebuilt");
+        [menu removeAllItems];
+        NSMenuItem *item = [menu addItemWithTitle: @"Preferences..." action: @selector(preferences:) keyEquivalent: @","];
+        [item setTarget: self];
+        item = [menu addItemWithTitle: @"Targeted" action: @selector(save:) keyEquivalent: @""];
+        [item setTarget: self];
+        [menu addItemWithTitle: @"Hide Test" action: @selector(hide:) keyEquivalent: @"h"];
+        return;
+    }
     if (menu != _dynamic)
         return;
     note("needsUpdate Dynamic");
@@ -112,13 +133,15 @@ static void note(const char *format, ...) {
 // them. The bar is not reachable through public API, so this looks for it
 // through the display and the view it contains.
 - (void) reportBar {
-    id appMenu = [[NSDisplay currentDisplay] respondsToSelector: @selector(appMenu)]
-                         ? [(id) [NSDisplay currentDisplay] performSelector: @selector(appMenu)]
-                         : nil;
+    id display = [NSDisplay currentDisplay];
+    id appMenu = nil;
     NSWindow *bar = nil;
 
+    // The display holds the object that owns the bar (X11AppMenu, WaylandAppMenu), which holds the
+    // NSMenuBarController, which holds the bar window.
     @try {
-        bar = [appMenu valueForKey: @"_bar"];
+        appMenu = [display valueForKey: @"_appMenu"];
+        bar = [[appMenu valueForKey: @"_bar"] valueForKey: @"_bar"];
     } @catch (id e) {
     }
     NSView *view = [bar contentView];
@@ -216,7 +239,7 @@ static void showPanel(void) {
 int main(int argc, char **argv) {
     @autoreleasepool {
         if (argc < 3) {
-            fprintf(stderr, "usage: %s LOG panel|strip|hiding|window\n", argv[0]);
+            fprintf(stderr, "usage: %s LOG panel|strip|hiding|window|borderless|late|standard|nowindow\n", argv[0]);
             return 2;
         }
         logFile = fopen(argv[1], "a");
@@ -244,6 +267,14 @@ int main(int argc, char **argv) {
         }
 
         [NSApp setDelegate: target];
+        [[NSNotificationCenter defaultCenter] addObserverForName: NSMenuDidBeginTrackingNotification object: nil
+                                                           queue: nil usingBlock: ^(NSNotification *n) {
+            note("tracking begin");
+        }];
+        [[NSNotificationCenter defaultCenter] addObserverForName: NSMenuDidEndTrackingNotification object: nil
+                                                           queue: nil usingBlock: ^(NSNotification *n) {
+            note("tracking end");
+        }];
         if (!strcmp(argv[2], "hiding")) {
             NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 300, 200)
                                                            styleMask: NSWindowStyleMaskTitled |
@@ -302,6 +333,92 @@ int main(int argc, char **argv) {
             [window makeKeyAndOrderFront: nil];
             note("strip window=%d extraFrameHeight=%d", (int) hasMainMenu(window),
                  (int) (frame.size.height - 200));
+        } else if (!strcmp(argv[2], "borderless")) {
+            // A window that draws its own chrome: no title bar, so no in-window menu strip.
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
+                                                           styleMask: NSWindowStyleMaskBorderless
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window makeKeyAndOrderFront: nil];
+            note("strip window=%d", (int) hasMainMenu(window));
+        } else if (!strcmp(argv[2], "late")) {
+            // The window exists before the main menu is set; the menu is replaced afterwards, and a
+            // top-level item is added to the replacement.
+            [NSApp setMainMenu: nil];
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
+                                                           styleMask: NSWindowStyleMaskBorderless
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window makeKeyAndOrderFront: nil];
+            note("strip window=%d", (int) hasMainMenu(window));
+            [NSTimer scheduledTimerWithTimeInterval: 1.5 repeats: NO block: ^(NSTimer *t) {
+                buildMenu(target);
+                note("STEP menu set");
+            }];
+            [NSTimer scheduledTimerWithTimeInterval: 4.0 repeats: NO block: ^(NSTimer *t) {
+                buildMenu(target);
+                note("STEP menu replaced");
+            }];
+            [NSTimer scheduledTimerWithTimeInterval: 6.5 repeats: NO block: ^(NSTimer *t) {
+                NSMenuItem *extra = [[NSApp mainMenu] addItemWithTitle: @"Extra" action: NULL keyEquivalent: @""];
+                NSMenu *sub = [[NSMenu alloc] initWithTitle: @"Extra"];
+                [sub addItemWithTitle: @"Extra Item" action: @selector(save:) keyEquivalent: @""];
+                [extra setSubmenu: sub];
+                note("STEP item added");
+            }];
+        } else if (!strcmp(argv[2], "standard")) {
+            // The usual application menu, whose items act on the first responder (no target), with a window.
+            NSMenu *main = [[NSMenu alloc] initWithTitle: @"Main"];
+            NSMenu *app, *services = [[NSMenu alloc] initWithTitle: @"Services"];
+            NSMenuItem *item;
+            submenuItem(main, @"AppItem", &app);
+            [app addItemWithTitle: @"About Test" action: @selector(orderFrontStandardAboutPanel:) keyEquivalent: @""];
+            [app addItem: [NSMenuItem separatorItem]];
+            [app addItemWithTitle: @"Preferences..." action: @selector(preferences:) keyEquivalent: @","];
+            [app addItem: [NSMenuItem separatorItem]];
+            item = [app addItemWithTitle: @"Services" action: NULL keyEquivalent: @""];
+            [item setSubmenu: services];
+            [NSApp setServicesMenu: services];
+            [app addItem: [NSMenuItem separatorItem]];
+            [app addItemWithTitle: @"Hide Test" action: @selector(hide:) keyEquivalent: @"h"];
+            item = [app addItemWithTitle: @"Hide Others" action: @selector(hideOtherApplications:) keyEquivalent: @"h"];
+            [item setKeyEquivalentModifierMask: NSEventModifierFlagCommand | NSEventModifierFlagOption];
+            [app addItemWithTitle: @"Show All" action: @selector(unhideAllApplications:) keyEquivalent: @""];
+            [app addItem: [NSMenuItem separatorItem]];
+            item = [app addItemWithTitle: @"Targeted" action: @selector(save:) keyEquivalent: @""];
+            [item setTarget: target];
+            [app addItemWithTitle: @"Quit Test" action: @selector(terminate:) keyEquivalent: @"q"];
+            if (argc > 4 && !strcmp(argv[4], "rebuild")) {
+                // The application menu is refilled with new items whenever it is about to be shown.
+                [app setDelegate: target];
+                [target setRebuilt: app];
+            }
+            [NSApp setMainMenu: main];
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
+                                                           styleMask: NSWindowStyleMaskTitled
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window makeKeyAndOrderFront: nil];
+            [[NSNotificationCenter defaultCenter] addObserverForName: NSApplicationDidHideNotification object: nil
+                                                               queue: nil usingBlock: ^(NSNotification *n) {
+                note("action hide");
+            }];
+            [[NSNotificationCenter defaultCenter] addObserverForName: NSApplicationWillTerminateNotification object: nil
+                                                               queue: nil usingBlock: ^(NSNotification *n) {
+                note("action terminate");
+            }];
+            [[NSNotificationCenter defaultCenter] addObserverForName: NSWindowDidUpdateNotification object: nil
+                                                               queue: nil usingBlock: ^(NSNotification *n) {
+                static BOOL seen;
+                NSWindow *w = [n object];
+                if (!seen && ![w isEqual: window] && [w isVisible] && [[w title] length] > 0) {
+                    seen = YES;
+                    note("action about-panel");
+                }
+            }];
+        } else if (!strcmp(argv[2], "nowindow")) {
+            [NSApp activateIgnoringOtherApps: YES];
+            note("strip window=0");
         } else
             showPanel();
 
