@@ -353,7 +353,8 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
                      O2PDFInteger *lastPosition, O2PDFObject **objectp)
 {
     O2PDFInteger currentSign = 1, currentInt = 0;
-    O2PDFReal currentReal = 0, currentFraction = 0;
+    O2PDFReal currentReal = 0, wholePart = 0, fractionScale = 1;
+    unsigned long long fractionDigits = 0;
     int inlineLocation = 0;
     O2PDFByteBuffer *byteBuffer = NULL;
 
@@ -429,7 +430,9 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
                 state = STATE_REAL;
                 currentSign = 1;
                 currentReal = 0;
-                currentFraction = 0.1;
+                wholePart = 0;
+                fractionDigits = 0;
+                fractionScale = 1;
                 break;
 
             case '(':
@@ -482,7 +485,9 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
             if (code == '.') {
                 state = STATE_REAL;
                 currentReal = currentInt;
-                currentFraction = 0.1;
+                wholePart = currentInt;
+                fractionDigits = 0;
+                fractionScale = 1;
             } else if (code >= '0' && code <= '9')
                 currentInt = currentInt * 10 + code - '0';
             else {
@@ -495,8 +500,14 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
 
         case STATE_REAL:
             if (code >= '0' && code <= '9') {
-                currentReal += currentFraction * (code - '0');
-                currentFraction *= 0.1;
+                // The fraction is the digits read as one integer over a power of ten, so that a decimal
+                // such as 0.75 that is exact in binary comes out exact (adding digit * 0.1^n is not).
+                // Digits beyond what a double can hold are ignored.
+                if (fractionScale < 1e17) {
+                    fractionDigits = fractionDigits * 10 + (code - '0');
+                    fractionScale *= 10;
+                    currentReal = wholePart + (O2PDFReal) fractionDigits / fractionScale;
+                }
             } else {
                 *objectp = [O2PDFObject_Real
                         pdfObjectWithReal: currentSign * currentReal];
