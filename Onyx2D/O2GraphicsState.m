@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2GraphicsState.h>
 
 #import <Foundation/NSArray.h>
+#import <Onyx2D/O2ClipPhase.h>
 #import <Onyx2D/O2ClipState.h>
 #import <Onyx2D/O2Color.h>
 #import <Onyx2D/O2ColorSpace.h>
@@ -131,7 +132,77 @@ O2AffineTransform O2GStateUserSpaceTransform(O2GState *self) {
     return self->_userSpaceTransform;
 }
 
+// The smallest rectangle, in user space, that holds all points of the clipping path (documented for
+// CGContextGetClipBoundingBox; the box includes the control points of curves). The clip is kept in device
+// space, so the points are moved back through the current transform.
+// Answered here: a clip that is one path, and a clip that is the intersection of rectangles. The documentation
+// does not say what the box is with no clip, with a mask, with several paths (that would need the region they
+// share) or for an empty intersection, so those keep the unimplemented result. So do rectangles that are not
+// axis-aligned in device space, since O2PathIsRect compares coordinates exactly and does not see them as rectangles.
 - (O2Rect) clipBoundingBox {
+    NSArray *phases = [_clipState clipPhases];
+    NSUInteger count = [phases count];
+    BOOL invertible = _deviceSpaceTransform.a * _deviceSpaceTransform.d -
+                              _deviceSpaceTransform.b * _deviceSpaceTransform.c !=
+                      0;
+
+    if (count > 0 && invertible) {
+        O2AffineTransform toUser = O2AffineTransformInvert(_deviceSpaceTransform);
+
+        if (count == 1) {
+            O2ClipPhase *phase = [phases objectAtIndex: 0];
+
+            if (O2ClipPhasePhaseType(phase) != O2ClipPhaseMask) {
+                O2MutablePathRef path = O2PathCreateMutableCopy(O2ClipPhaseObject(phase));
+
+                O2PathApplyTransform(path, toUser);
+                O2Rect box = O2PathGetBoundingBox(path);
+                O2PathRelease(path);
+                return box;
+            }
+        } else {
+            O2Rect shared = O2RectZero;
+            BOOL onlyRects = YES, first = YES;
+
+            for (O2ClipPhase *phase in phases) {
+                O2Rect rect;
+
+                if (O2ClipPhasePhaseType(phase) == O2ClipPhaseMask ||
+                    !O2PathIsRect(O2ClipPhaseObject(phase), &rect)) {
+                    onlyRects = NO;
+                    break;
+                }
+                rect = O2PathGetBoundingBox(O2ClipPhaseObject(phase));
+                shared = first ? rect : O2RectIntersection(shared, rect);
+                first = NO;
+            }
+
+            if (onlyRects && shared.size.width > 0 && shared.size.height > 0) {
+                O2Point corners[4] = {
+                    O2PointMake(O2RectGetMinX(shared), O2RectGetMinY(shared)),
+                    O2PointMake(O2RectGetMaxX(shared), O2RectGetMinY(shared)),
+                    O2PointMake(O2RectGetMaxX(shared), O2RectGetMaxY(shared)),
+                    O2PointMake(O2RectGetMinX(shared), O2RectGetMaxY(shared)),
+                };
+                O2Float minX = 0, minY = 0, maxX = 0, maxY = 0;
+
+                for (int i = 0; i < 4; i++) {
+                    O2Point point = O2PointApplyAffineTransform(corners[i], toUser);
+
+                    if (i == 0 || point.x < minX)
+                        minX = point.x;
+                    if (i == 0 || point.x > maxX)
+                        maxX = point.x;
+                    if (i == 0 || point.y < minY)
+                        minY = point.y;
+                    if (i == 0 || point.y > maxY)
+                        maxY = point.y;
+                }
+                return O2RectMake(minX, minY, maxX - minX, maxY - minY);
+            }
+        }
+    }
+
     O2UnimplementedMethod();
     return O2RectZero;
 }
