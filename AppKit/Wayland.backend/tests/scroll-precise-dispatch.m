@@ -18,7 +18,9 @@
 // (wl_pointer.axis, axis_source, axis_stop, frame), and from the NSEvent documentation of
 // hasPreciseScrollingDeltas, scrollingDeltaX/Y and phase. The began/changed/ended mapping and the
 // sign and line deltas are marked GUESS in WaylandDisplay.m and tested here as the chosen behavior.
-// Not run in a Darling guest here.
+// Run it in a Darling guest with DARLING_APPKIT_BACKEND=wayland on a compositor whose seat has a pointer
+// (a headless sway has none until a virtual pointer exists: keep tests/wayland-virtual-pointer.c running
+// while it runs); the fixture's window must be on that compositor. Prints PASS/FAIL lines and RESULT.
 union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; };
 @interface NSObject (PreciseScrollFixture)
 + (id) currentDisplay;
