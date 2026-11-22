@@ -39,9 +39,11 @@ set_property(SOURCE
 	CGPath.m
 	CGPattern.m
 	CGPDFArray.m
+	CGPDFContentStream.m
 	CGPDFContext.m
 	CGPDFDictionary.m
 	CGPDFDocument.m
+	CGPDFOperatorTable.m
 	CGPDFPage.m
 	CGPDFStream.m
 	CGPDFString.m
@@ -97,9 +99,11 @@ set(CoreGraphics_sources
 	CGPath.m
 	CGPattern.m
 	CGPDFArray.m
+	CGPDFContentStream.m
 	CGPDFContext.m
 	CGPDFDictionary.m
 	CGPDFDocument.m
+	CGPDFOperatorTable.m
 	CGPDFPage.m
 	CGPDFStream.m
 	CGPDFString.m
