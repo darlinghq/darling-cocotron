@@ -41,6 +41,8 @@ typedef unsigned long (*InternAtomFunction)(void *, const char *, int);
 typedef int (*GetPropertyFunction)(void *, unsigned long, unsigned long, long, long, int, unsigned long, unsigned long *,
                                    int *, unsigned long *, unsigned long *, unsigned char **);
 typedef int (*FreeFunction)(void *);
+typedef int (*GetGeometryFunction)(void *, unsigned long, unsigned long *, int *, int *, unsigned *, unsigned *,
+                                   unsigned *, unsigned *);
 typedef int (*SyncFunction)(void *, int);
 
 // The number of values in _NET_WM_OPAQUE_REGION (0 when absent); the four of the first rectangle in values.
@@ -67,6 +69,17 @@ static unsigned long regionOf(void *xdisplay, unsigned long xwindow, long values
         release(data);
     }
     return type == XA_CARDINAL && format == 32 ? count : 0;
+}
+
+// The depth of the window: 32 for the visual with an alpha channel, 24 without.
+static unsigned depthOf(void *xdisplay, unsigned long xwindow) {
+    GetGeometryFunction getGeometry = dlsym(RTLD_DEFAULT, "XGetGeometry");
+    unsigned long root = 0;
+    int x = 0, y = 0;
+    unsigned width = 0, height = 0, border = 0, depth = 0;
+    if (getGeometry)
+        getGeometry(xdisplay, xwindow, &root, &x, &y, &width, &height, &border, &depth);
+    return depth;
 }
 
 int main(void) {
@@ -96,7 +109,7 @@ int main(void) {
         [window setOpaque: YES];
         pump(0.3);
         unsigned long count = regionOf(xdisplay, xwindow, values);
-        if (count == 0)
+        if (count == 0 && depthOf(xdisplay, xwindow) != 32)
             printf("SKIP: the window got the 24-bit visual, the server has no 32-bit one\n");
         else {
             expect(count == 4 && values[0] == 0 && values[1] == 0 && values[2] > 0 && values[3] > 0,
