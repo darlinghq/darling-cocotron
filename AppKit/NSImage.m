@@ -2490,6 +2490,7 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
 - (void) dealloc {
     [_paletteColors release];
     [_hierarchicalColor release];
+    [_textStyle release];
     [super dealloc];
 }
 
@@ -2504,6 +2505,33 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     NSImageSymbolConfiguration *result = [[[self alloc] init] autorelease];
     result->_prefersMulticolor = YES;
     return result;
+}
+
++ (instancetype) configurationPreferringMonochrome {
+    NSImageSymbolConfiguration *result = [[[self alloc] init] autorelease];
+    result->_prefersMonochrome = YES;
+    return result;
+}
+
++ (instancetype) configurationPreferringHierarchical {
+    NSImageSymbolConfiguration *result = [[[self alloc] init] autorelease];
+    result->_prefersHierarchical = YES;
+    return result;
+}
+
++ (instancetype) configurationWithTextStyle: (NSFontTextStyle) style
+                                      scale: (NSImageSymbolScale) scale
+{
+    NSImageSymbolConfiguration *result = [[[self alloc] init] autorelease];
+    // Kept but not used to size the placeholder: the point size of each text
+    // style is not part of the public contract.
+    result->_textStyle = [style copy];
+    result->_scale = scale;
+    return result;
+}
+
++ (instancetype) configurationWithTextStyle: (NSFontTextStyle) style {
+    return [self configurationWithTextStyle: style scale: 0];
 }
 
 + (instancetype) configurationWithPaletteColors: (NSArray<NSColor *> *) colors {
@@ -2546,16 +2574,23 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
             [[[[self class] alloc] init] autorelease];
     NSArray<NSColor *> *paletteColors = _paletteColors;
     NSColor *hierarchicalColor = _hierarchicalColor;
+    NSFontTextStyle textStyle = _textStyle;
 
     result->_pointSize = _pointSize;
     result->_weight = _weight;
     result->_scale = _scale;
     result->_prefersMulticolor = _prefersMulticolor;
+    result->_prefersMonochrome = _prefersMonochrome;
+    result->_prefersHierarchical = _prefersHierarchical;
 
     if (configuration != nil) {
+        // GUESS: a point size and a text style are two ways to give the size,
+        // so the one in the argument replaces the other in the receiver. The
+        // reference says only that the argument's values take priority.
         if (configuration->_pointSize > 0) {
             result->_pointSize = configuration->_pointSize;
             result->_weight = configuration->_weight;
+            textStyle = nil;
         }
         if (configuration->_scale != 0)
             result->_scale = configuration->_scale;
@@ -2563,12 +2598,25 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
             paletteColors = configuration->_paletteColors;
         if (configuration->_hierarchicalColor != nil)
             hierarchicalColor = configuration->_hierarchicalColor;
-        if (configuration->_prefersMulticolor)
-            result->_prefersMulticolor = YES;
+        if (configuration->_textStyle != nil) {
+            textStyle = configuration->_textStyle;
+            result->_pointSize = 0;
+            result->_weight = 0;
+        }
+        // The argument's values take priority. GUESS: the documentation does
+        // not say how two different rendering preferences combine, so a
+        // preference in the argument replaces all of the receiver's.
+        if (configuration->_prefersMulticolor || configuration->_prefersMonochrome ||
+            configuration->_prefersHierarchical) {
+            result->_prefersMulticolor = configuration->_prefersMulticolor;
+            result->_prefersMonochrome = configuration->_prefersMonochrome;
+            result->_prefersHierarchical = configuration->_prefersHierarchical;
+        }
     }
 
     result->_paletteColors = [paletteColors copy];
     result->_hierarchicalColor = [hierarchicalColor retain];
+    result->_textStyle = [textStyle copy];
     return result;
 }
 
@@ -2605,6 +2653,9 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
     return o->_pointSize == _pointSize && o->_weight == _weight &&
            o->_scale == _scale &&
            o->_prefersMulticolor == _prefersMulticolor &&
+           o->_prefersMonochrome == _prefersMonochrome &&
+           o->_prefersHierarchical == _prefersHierarchical &&
+           (o->_textStyle == _textStyle || [o->_textStyle isEqual: _textStyle]) &&
            (o->_paletteColors == _paletteColors ||
             [o->_paletteColors isEqual: _paletteColors]) &&
            (o->_hierarchicalColor == _hierarchicalColor ||

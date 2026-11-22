@@ -262,6 +262,9 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
     NSArray<NSColor *> *_paletteColors;
     NSColor *_hierarchicalColor;
     BOOL _prefersMulticolor;
+    BOOL _prefersMonochrome;
+    BOOL _prefersHierarchical;
+    NSFontTextStyle _textStyle;
 }
 
 + (instancetype) configurationWithPointSize: (CGFloat) pointSize
@@ -269,10 +272,15 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
 + (instancetype) configurationWithPointSize: (CGFloat) pointSize
                                      weight: (NSFontWeight) weight
                                       scale: (NSImageSymbolScale) scale;
++ (instancetype) configurationWithTextStyle: (NSFontTextStyle) style;
++ (instancetype) configurationWithTextStyle: (NSFontTextStyle) style
+                                      scale: (NSImageSymbolScale) scale;
 + (instancetype) configurationWithScale: (NSImageSymbolScale) scale;
 + (instancetype) configurationWithPaletteColors: (NSArray<NSColor *> *) colors;
 + (instancetype) configurationWithHierarchicalColor: (NSColor *) color;
 + (instancetype) configurationPreferringMulticolor;
++ (instancetype) configurationPreferringMonochrome;
++ (instancetype) configurationPreferringHierarchical;
 - (null_unspecified NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 
