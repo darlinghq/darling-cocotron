@@ -58,6 +58,8 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 - (void) _recycleView: (NSView *) view;
 - (void) _recycleCellViewsOutsideRows: (NSRange) rows;
 - (NSView *) _cellViewAtColumn: (NSInteger) column row: (NSInteger) row make: (BOOL) make;
+- (NSRect) _spacedFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row;
+- (NSRect) _drawingFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row;
 - (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row;
 - (BOOL) _delegateMakesCellViews;
 - (NSView *) _delegateCellViewForTableColumn: (NSTableColumn *) column row: (NSInteger) row;
@@ -340,6 +342,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
     [NS_EXTRA(NSTableView, self)->_typeSelectString release];
     [NS_EXTRA(NSTableView, self)->_toolTipSignature release];
     [NS_EXTRA(NSTableView, self)->_indicatorImages release];
+    [NS_EXTRA(NSTableView, self)->_autosaveName release];
     NS_EXTRA_FREE(NSTableView, self);
     [super dealloc];
 }
@@ -398,8 +401,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 }
 
 - (NSString *) autosaveName {
-    NSUnimplementedMethod();
-    return nil;
+    return NS_EXTRA(NSTableView, self)->_autosaveName;
 }
 
 // deprecated in OS X >= 10.3
@@ -485,8 +487,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 }
 
 - (BOOL) autosaveTableColumns {
-    NSUnimplementedMethod();
-    return NO;
+    return NS_EXTRA(NSTableView, self)->_autosaveTableColumns;
 }
 
 // row background and grid attributes for OS X >= 10.3
@@ -739,7 +740,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return column;
 }
 
-- (NSRect) frameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
+// The rectangle of the column and row, including the intercell spacing.
+- (NSRect) _spacedFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
     NSRect frame;
     NSInteger i;
 
@@ -760,6 +762,31 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                        _intercellSpacing.width;
     frame.size.height = rowHeightAtIndex(self, row) + _intercellSpacing.height;
 
+    return frame;
+}
+
+// What the cells draw and edit in: the rectangle of the column and row with the spacing, which is how the
+// table view drew cells before frameOfCellAtColumn:row: followed the platform's frame, the cell's alone.
+- (NSRect) _drawingFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
+    return [self _spacedFrameOfCellAtColumn: column row: row];
+}
+
+// The frame of the cell without the intercell spacing: the column's width and the row's height, placed
+// half the spacing (rounded down) in from the corner of the rectangle of the column and the row.
+// Black-box observation of the frame on macOS 10.14.4 and 26.7.3, for the cells of table and outline views
+// alike (with the default style on 10.14.4, which is the plain one on later systems).
+// Test: tests/appkit-table-cell-frames.m
+- (NSRect) frameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
+    NSRect frame = [self _spacedFrameOfCellAtColumn: column row: row];
+
+    if (NSIsEmptyRect(frame))
+        return frame;
+    CGFloat insetX = floor(_intercellSpacing.width / 2), insetY = floor(_intercellSpacing.height / 2);
+
+    frame.origin.x += insetX;
+    frame.origin.y += insetY;
+    frame.size.width -= _intercellSpacing.width;
+    frame.size.height -= _intercellSpacing.height;
     return frame;
 }
 
@@ -863,8 +890,11 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     _gridColor = color;
 }
 
+// The name is kept and returned. Saving and restoring the columns under it is not done.
 - (void) setAutosaveName: (NSString *) name {
-    NSUnimplementedMethod();
+    name = [name copy];
+    [NS_EXTRA(NSTableView, self)->_autosaveName release];
+    NS_EXTRA(NSTableView, self)->_autosaveName = name;
 }
 
 // deprecated in OS X >= 10.3
@@ -906,7 +936,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) setAutosaveTableColumns: (BOOL) flag {
-    NSUnimplementedMethod();
+    NS_EXTRA(NSTableView, self)->_autosaveTableColumns = flag;
 }
 
 // row background and grid attributes for OS X >= 10.3
@@ -1084,7 +1114,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     _editingCell = nil;
     _editedColumn = column;
     _editedRow = row;
-    NS_EXTRA(NSTableView, self)->_editingFrame = NS_EXTRA(NSTableView, self)->_editingBorder = [self frameOfCellAtColumn: column
+    NS_EXTRA(NSTableView, self)->_editingFrame = NS_EXTRA(NSTableView, self)->_editingBorder = [self _drawingFrameOfCellAtColumn: column
                                                            row: row];
     NS_EXTRA(NSTableView, self)->_editingFrame = [self _adjustedFrame: NS_EXTRA(NSTableView, self)->_editingFrame forCell: editingCell];
     NS_EXTRA(NSTableView, self)->_editingBorder.origin.x--;
@@ -1659,9 +1689,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                 if (!(row == _editedRow && column == _editedColumn))
                     [self drawHighlightedSelectionForColumn: column
                                                         row: row
-                                                     inRect: [self frameOfCellAtColumn:
+                                                     inRect: [self _drawingFrameOfCellAtColumn:
                                                                              column
-                                                                                   row: row]];
+                                                                                           row: row]];
 }
 
 - (NSCell *) preparedCellAtColumn: (NSInteger) columnNumber
@@ -1767,8 +1797,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             NSCell *dataCell = [self preparedCellAtColumn: drawThisColumn
                                                       row: row];
             NSRect cellRect = [self
-                    _adjustedFrame: [self frameOfCellAtColumn: drawThisColumn
-                                                          row: row]
+                    _adjustedFrame: [self _drawingFrameOfCellAtColumn: drawThisColumn
+                                                                  row: row]
                            forCell: dataCell];
 
             [dataCell drawWithFrame: cellRect inView: self];
@@ -3170,38 +3200,46 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     // Making the row view made its cell views
     if (view == nil)
         view = [NS_EXTRA(NSTableView, self)->_cellViews objectForKey: key];
+    // The frame is set once, in the coordinates of the view's superview: setting the table's
+    // coordinates first and the row view's after would report two frame changes (and move a
+    // layer-backed view through the table's coordinates) on every drawing pass.
+    BOOL madeView = NO;
+
     if (view == nil && make) {
-        NSRect frame;
+        view = group ? [self _delegateCellViewForTableColumn: nil row: row]
+                     : [self _delegateCellViewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
+        madeView = view != nil;
+    }
+    if (view != nil) {
+        NSRect frame = [self frameOfCellAtColumn: column row: row];
 
         if (group) {
-            view = [self _delegateCellViewForTableColumn: nil row: row];
+            // A group row's view spans the whole row, less the spacing above and below it
             frame = [self rectOfRow: row];
-        } else {
-            view = [self _delegateCellViewForTableColumn: [_tableColumns objectAtIndex: column] row: row];
-            frame = [self frameOfCellAtColumn: column row: row];
+            frame.origin.y += floor(_intercellSpacing.height / 2);
+            frame.size.height -= _intercellSpacing.height;
         }
-        if (view != nil) {
+
+        if (rowView != nil) {
+            // The row view holds the cell views, in its own coordinates
+            NSRect rowRect = [rowView frame];
+
+            frame.origin.x -= NSMinX(rowRect);
+            frame.origin.y -= NSMinY(rowRect);
+        }
+        if (!NSEqualRects([view frame], frame))
             [view setFrame: frame];
+        if (madeView) {
             [NS_EXTRA(NSTableView, self)->_cellViews setObject: view forKey: key];
             [self _setObjectValueOfCellView: view
                                      column: group ? nil : [_tableColumns objectAtIndex: column]
                                         row: row];
         }
-    } else if (view != nil) {
-        [view setFrame: group ? [self rectOfRow: row] : [self frameOfCellAtColumn: column row: row]];
-    }
-    if (view != nil && rowView != nil) {
-        // The row view holds the cell views, in its own coordinates
-        NSRect frame = [view frame];
-        NSRect rowRect = [rowView frame];
-
-        frame.origin.x -= NSMinX(rowRect);
-        frame.origin.y -= NSMinY(rowRect);
-        [view setFrame: frame];
-        if ([view superview] != rowView)
-            [rowView addSubview: view];
-    } else if (view != nil && [view superview] != self) {
-        [self addSubview: view];
+        if (rowView != nil) {
+            if ([view superview] != rowView)
+                [rowView addSubview: view];
+        } else if ([view superview] != self)
+            [self addSubview: view];
     }
     return view;
 }

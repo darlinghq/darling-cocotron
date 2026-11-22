@@ -76,9 +76,15 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 + (null_unspecified NSZone *) menuZone;
 
++ (BOOL) menuBarVisible;
++ (void) setMenuBarVisible: (BOOL) visible;
+
 - (BOOL) popUpMenuPositioningItem: (nullable NSMenuItem *) item
                        atLocation: (NSPoint) location
                            inView: (nullable NSView *) view;
+
+- (void) cancelTracking;
+- (void) cancelTrackingWithoutAnimation;
 
 - (instancetype) initWithTitle: (NSString *) title;
 

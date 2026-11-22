@@ -459,6 +459,7 @@ static void drawSunkenBorder(NSRect rect) {
         NSMenuItem *item = [items objectAtIndex: _selectedItemIndex];
 
         if ([item hasSubmenu]) {
+            [[item submenu] _updateWithoutSubmenus];
             if ([[[item submenu] itemArray] count] > 0) {
                 NSMenuWindow *branch =
                         [[NSMenuWindow alloc] initWithMenu: [item submenu]];

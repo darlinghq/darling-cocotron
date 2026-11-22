@@ -27,6 +27,7 @@
 #import "../private-include/AppKit/NSEventTime.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
+#import "X11DockSupport.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSScreen.h>
@@ -1104,6 +1105,23 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     }
 }
 
+// The menu bar window is a dock that the window manager has to place at the top of the screen. Under a manager
+// that does not handle docks it would float over the windows of the application (see X11DockSupport.h), so
+// there the menu is outside the windows only when the desktop has a global menu, as on Wayland, and the
+// windows draw it themselves otherwise. -appMenu is not used: it asks +[NSWindow _usesInWindowMenuBar], which
+// is what is being answered.
+- (BOOL) _showsMainMenuOutsideWindows {
+    if (X11WindowManagerPlacesDocks(_display))
+        return YES;
+    if (_appMenu == nil)
+        _appMenu = [[X11AppMenu alloc] initWithDisplay: _display];
+    if ([_appMenu globalMenuPresent])
+        return YES;
+    [_appMenu release];
+    _appMenu = nil;
+    return NO;
+}
+
 - (X11AppMenu *) appMenu {
     if (_appMenu == nil && ![NSWindow _usesInWindowMenuBar])
         _appMenu = [[X11AppMenu alloc] initWithDisplay: _display];
@@ -1532,6 +1550,16 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     }
 }
 
+// The window manager made a window of another client the active one: the application is no longer
+// active, even when none of its own windows ever held the focus and so no focus-out will tell it.
+- (void) noteActiveWindowOfAnotherClient {
+    Window active = X11OcclusionActiveWindow(_display);
+
+    if (active != None && [self windowForID: active] == nil &&
+        ![_overlayWindows containsObject: [NSNumber numberWithUnsignedLong: (unsigned long) active]])
+        [NSApp _systemFocusMovedToAnotherClient];
+}
+
 // Marks the occlusion state for a new judgement when the event can change it. Returns YES for the
 // root window's and the watched foreign window's events, which nothing else is interested in.
 // A ConfigureNotify that repeats the geometry of the previous one for the same window changes
@@ -1546,6 +1574,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         if (atom == XInternAtom(_display, "_NET_ACTIVE_WINDOW", False)) {
             _occlusionActiveKnown = NO;
             _occlusionDirty = YES;
+            [self noteActiveWindowOfAnotherClient];
         } else if (atom == XInternAtom(_display, "_NET_CLIENT_LIST_STACKING", False)) {
             _occlusionDirty = YES;
         }

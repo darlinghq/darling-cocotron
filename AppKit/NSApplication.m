@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSDelegateNotifications.h"
 #import <AppKit/NSAlert.h>
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
@@ -971,76 +972,46 @@ static void _propagateAppearanceChangeToView(NSView *view) {
     NSUnimplementedMethod();
 }
 
+// The delegate is an observer of the application's notifications for the methods it implements.
+static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
+    NSDelegateNotification table[] = {
+        {NSApplicationWillFinishLaunchingNotification, @selector(applicationWillFinishLaunching:)},
+        {NSApplicationDidFinishLaunchingNotification, @selector(applicationDidFinishLaunching:)},
+        {NSApplicationWillBecomeActiveNotification, @selector(applicationWillBecomeActive:)},
+        {NSApplicationDidBecomeActiveNotification, @selector(applicationDidBecomeActive:)},
+        {NSApplicationWillResignActiveNotification, @selector(applicationWillResignActive:)},
+        {NSApplicationDidResignActiveNotification, @selector(applicationDidResignActive:)},
+        {NSApplicationWillHideNotification, @selector(applicationWillHide:)},
+        {NSApplicationDidHideNotification, @selector(applicationDidHide:)},
+        {NSApplicationWillUnhideNotification, @selector(applicationWillUnhide:)},
+        {NSApplicationDidUnhideNotification, @selector(applicationDidUnhide:)},
+        {NSApplicationWillUpdateNotification, @selector(applicationWillUpdate:)},
+        {NSApplicationDidUpdateNotification, @selector(applicationDidUpdate:)},
+        {NSApplicationWillTerminateNotification, @selector(applicationWillTerminate:)},
+        {NSApplicationDidChangeScreenParametersNotification, @selector(applicationDidChangeScreenParameters:)},
+        {NSApplicationDidChangeOcclusionStateNotification, @selector(applicationDidChangeOcclusionState:)},
+        {nil, NULL}};
+    memcpy(notes, table, sizeof table);
+}
+
 - (void) unregisterDelegate {
-    if ([_delegate respondsToSelector: @selector
-                   (applicationWillFinishLaunching:)]) {
-        [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
-                          name: NSApplicationWillFinishLaunchingNotification
-                        object: self];
-    }
-    if ([_delegate respondsToSelector: @selector
-                   (applicationDidFinishLaunching:)]) {
-        [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
-                          name: NSApplicationDidFinishLaunchingNotification
-                        object: self];
-    }
-    if ([_delegate
-                respondsToSelector: @selector(applicationDidBecomeActive:)]) {
-        [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
-                          name: NSApplicationDidBecomeActiveNotification
-                        object: self];
-    }
-    if ([_delegate respondsToSelector: @selector(applicationWillTerminate:)]) {
-        [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
-                          name: NSApplicationWillTerminateNotification
-                        object: self];
-    }
+    NSDelegateNotification notes[16];
+
+    applicationDelegateNotifications(notes);
+    NSDelegateNotificationsRemove(_delegate, self, notes);
 }
 
 - (void) registerDelegate {
-    if ([_delegate respondsToSelector: @selector
-                   (applicationWillFinishLaunching:)]) {
-        [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
-                   selector: @selector(applicationWillFinishLaunching:)
-                       name: NSApplicationWillFinishLaunchingNotification
-                     object: self];
-    }
-    if ([_delegate respondsToSelector: @selector
-                   (applicationDidFinishLaunching:)]) {
-        [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
-                   selector: @selector(applicationDidFinishLaunching:)
-                       name: NSApplicationDidFinishLaunchingNotification
-                     object: self];
-    }
-    if ([_delegate
-                respondsToSelector: @selector(applicationDidBecomeActive:)]) {
-        [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
-                   selector: @selector(applicationDidBecomeActive:)
-                       name: NSApplicationDidBecomeActiveNotification
-                     object: self];
-    }
-    if ([_delegate respondsToSelector: @selector(applicationWillTerminate:)]) {
-        [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
-                   selector: @selector(applicationWillTerminate:)
-                       name: NSApplicationWillTerminateNotification
-                     object: self];
-    }
+    NSDelegateNotification notes[16];
+
+    applicationDelegateNotifications(notes);
+    NSDelegateNotificationsAdd(_delegate, self, notes);
 }
 
 - (void) setDelegate: delegate {
-    if (delegate != _delegate) {
-        [self unregisterDelegate];
-        _delegate = delegate;
-        [self registerDelegate];
-    }
+    [self unregisterDelegate];
+    _delegate = delegate;
+    [self registerDelegate];
 }
 
 - (void) setMainMenu: (NSMenu *) menu {
@@ -1512,6 +1483,8 @@ static void _propagateAppearanceChangeToView(NSView *view) {
         NS_HANDLER [self reportException: localException];
         NS_ENDHANDLER
 
+        // The windows are brought up to date after each event
+        [self updateWindows];
                 [self _checkForReleasedWindows];
         [self _checkForTerminate];
 
@@ -1793,8 +1766,11 @@ static void _propagateAppearanceChangeToView(NSView *view) {
     NSUnimplementedMethod();
 }
 
+// The windows are updated between the two notifications.
 - (void) updateWindows {
+    [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationWillUpdateNotification object: self];
     [_windows makeObjectsPerformSelector: @selector(update)];
+    [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationDidUpdateNotification object: self];
 }
 
 // Whether a window of this application may ask the window system for the input focus now. Ordering a
@@ -2478,6 +2454,8 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 // decision to resign is taken once the current run-loop pass has finished,
 // and is dropped when a window has taken the focus by then.
 static BOOL resignPending;
+// Set when the window system itself reported another client having the focus.
+static BOOL resignForced;
 
 - (void) _windowDidBecomeActive: (NSWindow *) window {
     resignPending = NO;
@@ -2519,17 +2497,33 @@ static BOOL resignPending;
     return NO;
 }
 
+// The window system reports that another client has the input focus. An application becomes active at the
+// end of launching whether or not a window of it ever takes the focus, so for one whose windows never held
+// the focus (they cannot become key, or are never shown) no focus-out arrives that would end it. Without
+// this it would stay active for good and keep asking for the focus when its windows are ordered in. An
+// application one of whose windows still has the focus waits for the focus-out for that window instead.
+- (void) _systemFocusMovedToAnotherClient {
+    if (!NS_EXTRA(NSApplication, self)->_isActive || activationInProgress)
+        return;
+    resignPending = YES;
+    resignForced = YES;
+    [self _resignIfNoWindowIsActive];
+}
+
 // The focus leaving the last window of the application because that window
 // was closed or hidden is not the user activating another application: the
 // application stays active, and keeps its menu bar, until another application
 // is activated. The focus leaving a window that is still shown resigns.
+
 - (void) _resignIfNoWindowIsActive {
     if (!resignPending)
         return;
     resignPending = NO;
+    BOOL forced = resignForced;
+    resignForced = NO;
     if ([self isActiveExcludingWindow: nil])
         return;
-    if (![self _hasOnScreenWindow])
+    if (!forced && ![self _hasOnScreenWindow])
         return;
 
     [[NSNotificationCenter defaultCenter]

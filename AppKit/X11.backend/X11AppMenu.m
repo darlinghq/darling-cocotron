@@ -71,6 +71,11 @@ static NSString *applicationName(void) {
     [_exporter setApplicationName: applicationName()];
 }
 
+- (BOOL) globalMenuPresent {
+    [self connectIfNeeded];
+    return _exporter != nil && [_exporter registrarPresent];
+}
+
 #pragma mark - Windows
 
 - (void) publishMenuOnWindow: (Window) window {

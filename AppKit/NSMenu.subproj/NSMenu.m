@@ -49,6 +49,12 @@ NSString *const _NSRecentDocumentsMenuName = @"Recents";
 NSString *const _NSServicesMenuName = @"Services";
 NSString *const _NSWindowsMenuName = @"Window";
 
+// Defined in NSMenuView.m
+extern void _NSMenuCancelTracking(NSMenu *menu);
+extern id _NSMenuTrackingBegin(NSMenu *menu);
+extern void _NSMenuTrackingEnd(id session);
+extern BOOL _NSMenuTrackingCancelRequested(id session);
+
 @implementation NSMenu
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, showsStateColumn, _showsStateColumn, BOOL, showsStateColumn, setShowsStateColumn:)
@@ -107,9 +113,23 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
 
     if (item != nil && itemIndex == NSNotFound)
         return NO;
-    [self update];
-    if ([self numberOfItems] == 0)
+
+    // As on macOS: the begin notification, then -menuNeedsUpdate:, then
+    // -menuWillOpen:, all before the menu is shown; -menuDidClose: and the end
+    // notification come from the tracking that follows.
+    id session = _NSMenuTrackingBegin(self);
+
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSMenuDidBeginTrackingNotification
+                          object: self];
+    [self _updateWithoutSubmenus];
+    if ([self numberOfItems] == 0) {
+        _NSMenuTrackingEnd(session);
+        [[NSNotificationCenter defaultCenter]
+                postNotificationName: NSMenuDidEndTrackingNotification
+                              object: self];
         return NO;
+    }
 
     NSPoint screenPoint = location;
     if (view != nil) {
@@ -159,6 +179,16 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     if ([delegate respondsToSelector: @selector(menuWillOpen:)])
         [delegate menuWillOpen: self];
 
+    // Cancelled from the delegate: nothing was shown.
+    if (_NSMenuTrackingCancelRequested(session)) {
+        [menuWindow release];
+        _NSMenuTrackingEnd(session);
+        [[NSNotificationCenter defaultCenter]
+                postNotificationName: NSMenuDidEndTrackingNotification
+                              object: self];
+        return NO;
+    }
+
     [menuWindow setReleasedWhenClosed: YES];
     [menuWindow setFrame: frame display: NO];
     [menuWindow orderFront: nil];
@@ -189,12 +219,9 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
                                       clickCount: 1
                                         pressure: 0];
 
-    NSMenuItem *chosen = [menuView trackForEvent: start];
+    NSMenuItem *chosen = [menuView _trackForEvent: start session: session];
 
     [menuWindow close];
-
-    if ([delegate respondsToSelector: @selector(menuDidClose:)])
-        [delegate menuDidClose: self];
 
     if (chosen == nil)
         return NO;
@@ -209,6 +236,37 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     return YES;
 }
 
+// Ends the tracking of this menu, when it is the menu being tracked (a pop-up
+// menu, or the menu bar), as if the user had dismissed it: no item is chosen,
+// so a pop-up menu's popUpMenuPositioningItem:atLocation:inView: returns NO,
+// and NSMenuDidEndTrackingNotification is posted. Animations do not exist
+// here, so both variants end the tracking the same way.
+- (void) cancelTracking {
+    _NSMenuCancelTracking(self);
+}
+
+- (void) cancelTrackingWithoutAnimation {
+    _NSMenuCancelTracking(self);
+}
+
+// The menu bar is visible unless the application's presentation options hide
+// it (or auto-hide it).
++ (BOOL) menuBarVisible {
+    NSApplicationPresentationOptions options = [NSApp presentationOptions];
+
+    return (options & (NSApplicationPresentationHideMenuBar |
+                       NSApplicationPresentationAutoHideMenuBar)) == 0;
+}
+
+// The visibility is the presentation options: NO replaces them all with a
+// hidden Dock and menu bar (the options require the Dock to be hidden too),
+// YES replaces them with the default ones, as on macOS.
++ (void) setMenuBarVisible: (BOOL) visible {
+    [NSApp setPresentationOptions: visible ? NSApplicationPresentationDefault
+                                           : (NSApplicationPresentationHideDock |
+                                              NSApplicationPresentationHideMenuBar)];
+}
+
 + (NSZone *) menuZone {
     return NSDefaultMallocZone();
 }
@@ -218,6 +276,8 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     [coder encodeObject: NS_EXTRA(NSMenu, self)->_name forKey: @"NSName"];
     [coder encodeObject: NS_EXTRA(NSMenu, self)->_itemArray forKey: @"NSMenuItems"];
     [coder encodeBool: !NS_EXTRA(NSMenu, self)->_autoenablesItems forKey: @"NSNoAutoenable"];
+    if (NS_EXTRA(NSMenu, self)->_identifier != nil)
+        [coder encodeObject: NS_EXTRA(NSMenu, self)->_identifier forKey: @"NSMenuIdentifier"];
 }
 
 - (void) setMenuChangedMessagesEnabled: (BOOL) flag {
@@ -237,6 +297,9 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
         NS_EXTRA(NSMenu, self)->_itemArray = [[NSMutableArray alloc]
                 initWithArray: [keyed decodeObjectForKey: @"NSMenuItems"]];
         NS_EXTRA(NSMenu, self)->_autoenablesItems = ![keyed decodeBoolForKey: @"NSNoAutoenable"];
+        // The identifier applications look their menus up by (nibs and archives
+        // store it under this key on macOS).
+        NS_EXTRA(NSMenu, self)->_identifier = [[keyed decodeObjectForKey: @"NSMenuIdentifier"] copy];
     } else {
         // One layout for every class version, as recorded from Mac archives: a flag word
         // (bit 31: no automatic enabling of items, bit 29: no state column), the title,
@@ -543,6 +606,15 @@ BOOL itemIsEnabled(NSMenuItem *item) {
 }
 
 - (void) update {
+    [self _updateWithoutSubmenus];
+
+    for (NSMenuItem *item in [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray])
+        [[item submenu] update];
+}
+
+// The delegates -menuNeedsUpdate: and the validation of this menus own
+// items; a submenu is brought up to date when it is shown.
+- (void) _updateWithoutSubmenus {
     if ([NS_EXTRA(NSMenu, self)->_delegate respondsToSelector: @selector(menuNeedsUpdate:)]) {
         [NS_EXTRA(NSMenu, self)->_delegate menuNeedsUpdate: self];
     }
@@ -563,7 +635,6 @@ BOOL itemIsEnabled(NSMenuItem *item) {
             }
         }
 
-        [[item submenu] update];
     }
 }
 
