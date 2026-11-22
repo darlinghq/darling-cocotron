@@ -30,6 +30,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSInteger _buttonNumber;
     NSInteger _eventNumber;
     NSInteger _keyStateOnArrival;
+    BOOL _hasPreciseScrollingDeltas;
+    CGFloat _scrollingDeltaX;
+    CGFloat _scrollingDeltaY;
+    NSEventPhase _scrollPhase;
 }
 
 - (void) _setTrackingArea: (NSTrackingArea *) area;
@@ -73,6 +77,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void *) userData;
 
 - (void) _setButtonNumber: (NSInteger) num;
+
+// Marks a scroll wheel event as coming from a device with precise deltas, such as a trackpad:
+// scrollingDeltaX and scrollingDeltaY return the given amounts to scroll by, hasPreciseScrollingDeltas
+// is YES and phase is the given one. Events never marked behave as wheel events: line-based deltas
+// and no phase. Raises for any other event type.
+- (void) _setPreciseScrollingDeltaX: (CGFloat) deltaX deltaY: (CGFloat) deltaY phase: (NSEventPhase) phase;
 
 // Whether the window the press was meant for was key when the window system
 // delivered the press. By the time the event is taken from the queue the
