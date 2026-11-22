@@ -272,8 +272,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             if (i == 0)
                 newDescriptor = [desc reversedSortDescriptor];
 
+            // Removed by position, before the insert: removeObject: takes every element that isEqual: the
+            // old descriptor, and that includes the new one when both are the column's own prototype.
+            [allDescs removeObjectAtIndex: i];
             [allDescs insertObject: newDescriptor atIndex: 0];
-            [allDescs removeObject: desc];
             [NS_EXTRA(NSTableColumn, self)->_tableView setSortDescriptors: allDescs];
             return;
         }
