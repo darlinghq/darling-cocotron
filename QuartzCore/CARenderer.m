@@ -52,6 +52,8 @@ NS_EXTRA_SYNTHESIZE_RETAIN(CARenderer, layer, _rootLayer, CALayer *, layer, setL
 - (void) dealloc {
     // The texture goes with the GL context, which may not be current here.
     CGImageRelease(NS_EXTRA(CARenderer, self)->_backdropImage);
+    // The layer property is retain, so the renderer owns one reference.
+    [NS_EXTRA(CARenderer, self)->_rootLayer release];
     NS_EXTRA_FREE(CARenderer, self);
     [super dealloc];
 }
