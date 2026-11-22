@@ -2,7 +2,10 @@
 // sizeToFit makes the content view just enclose its subviews (by the content view's own sizeToFit when it
 // has one), then moves and resizes the box around the content view, wide enough to show its title.
 // The space between the box's edges and its content view is read from the box before the call, so the
-// checks do not depend on the exact insets.
+// checks do not depend on the exact insets. Pinned by black-box observation on macOS 26.7.3 and 10.14.4: the
+// box moves by the offset of the subviews' union so the subviews stay in place on screen, a content view
+// without subviews becomes empty and the box shrinks to its margins and title, and a long title makes the box
+// as wide as the title cell plus 20 points.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
@@ -48,7 +51,7 @@ int main(void)
         CHECK(NSEqualPoints([content frame].origin, NSMakePoint(left, bottom))); // and the content view its place
         CHECK([box frame].size.width == left + 90 + right);                      // the box wraps it, with the
         CHECK([box frame].size.height == bottom + 60 + top);                     // space it had around it
-        CHECK(NSEqualPoints([box frame].origin, NSMakePoint(30, 40)));           // GUESS: its origin stays
+        CHECK(NSEqualPoints([box frame].origin, NSMakePoint(40, 50)));           // it moves by the union's offset (10, 10)
 
         // A content view that answers sizeToFit sizes itself.
         NSBox *fitting = makeBox(@"T");
@@ -75,6 +78,33 @@ int main(void)
         [[plain contentView] addSubview: [[[NSView alloc] initWithFrame: NSMakeRect(0, 0, 20, 20)] autorelease]];
         [plain sizeToFit];
         CHECK([plain frame].size.width < 60);
+
+        // A content view without subviews becomes empty and the box wraps the margins and the title.
+        NSBox *empty = makeBox(@"T");
+        NSView *emptyContent = [empty contentView];
+        NSRect emptyBefore = [emptyContent frame];
+        CGFloat emptyTop = NSHeight([empty bounds]) - NSMaxY(emptyBefore);
+        [empty sizeToFit];
+        CHECK(NSHeight([emptyContent frame]) == 0);
+        CHECK([empty frame].size.height == NSMinY(emptyBefore) + emptyTop);
+        CHECK(NSEqualPoints([empty frame].origin, NSMakePoint(30, 40)));        // no subviews: no offset
+
+        // A subview with a negative origin moves the box and the other subviews by that offset.
+        NSBox *negative = makeBox(@"T");
+        NSView *p = [[[NSView alloc] initWithFrame: NSMakeRect(10, 10, 50, 20)] autorelease];
+        NSView *q = [[[NSView alloc] initWithFrame: NSMakeRect(-20, -10, 10, 10)] autorelease];
+        [[negative contentView] addSubview: p];
+        [[negative contentView] addSubview: q];
+        [negative sizeToFit];
+        CHECK(NSEqualPoints([q frame].origin, NSMakePoint(0, 0)));
+        CHECK(NSEqualPoints([p frame].origin, NSMakePoint(30, 20)));
+        CHECK(NSEqualPoints([negative frame].origin, NSMakePoint(10, 30)));
+
+        // sizeToFit twice changes nothing the second time.
+        NSRect once = [box frame], contentOnce = [content frame];
+        [box sizeToFit];
+        CHECK(NSEqualRects([box frame], once));
+        CHECK(NSEqualRects([content frame], contentOnce));
     }
     if (g_failures) { printf("%d failure(s)\n", g_failures); return 1; }
     printf("ok\n");

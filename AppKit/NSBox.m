@@ -347,13 +347,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [self setAutoresizesSubviews: NO];
     [content setAutoresizesSubviews: NO];
 
+    NSPoint originShift = NSZeroPoint;
     if ([content respondsToSelector: @selector(sizeToFit)]) {
         [content performSelector: @selector(sizeToFit)];
-    } else if ([[content subviews] count] > 0) {
-        // GUESS: the documentation says the content view is moved and resized to enclose its
-        // subviews, and nothing about moving the subviews; here the content view takes the size of
-        // the union of their frames and the subviews are shifted so the union starts at its origin
-        // (a hidden subview counts too).
+    } else {
+        // The content view takes the size of the union of its subviews' frames (a hidden subview counts
+        // too) and the subviews are shifted so the union starts at its origin. The box moves by the same
+        // offset, so the subviews stay where they were on screen. A content view without subviews
+        // becomes empty (zero size), and the box then wraps only the margins and the title.
+        // Observed by black-box test on macOS 26.7.3 and 10.14.4; the test below pins the geometry.
         NSRect enclosing = NSZeroRect;
         BOOL first = YES;
         for (NSView *subview in [content subviews]) {
@@ -363,21 +365,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         for (NSView *subview in [content subviews])
             [subview setFrameOrigin: NSMakePoint(NSMinX([subview frame]) - NSMinX(enclosing),
                                                  NSMinY([subview frame]) - NSMinY(enclosing))];
-        // GUESS: a content view without subviews is left as it is.
+        originShift = first ? NSZeroPoint : enclosing.origin;
         [content setFrameSize: enclosing.size];
     }
 
     NSSize size = NSMakeSize(left + NSWidth([content frame]) + right, bottom + NSHeight([content frame]) + top);
     if (NS_EXTRA(NSBox, self)->_titlePosition != NSNoTitle && [[self title] length] > 0) {
-        // GUESS: the title starts where -titleRect puts it and wants as much room to its right as to
-        // its left (10 points of groove); the documentation only asks for the title to be fully shown.
-        // The title cell's size is used although -titleRect says it gives too low a width.
-        NSRect titleRect = [self titleRect];
-        size.width = MAX(size.width, NSMinX(titleRect) + ceil([_titleCell cellSize].width) + 10);
+        // The box is at least as wide as the title cell plus 10 points on either side.
+        size.width = MAX(size.width, [_titleCell cellSize].width + 20);
     }
 
+    NSPoint origin = [self frame].origin;
+    [self setFrameOrigin: NSMakePoint(origin.x + originShift.x, origin.y + originShift.y)];
     [self setFrameSize: size];
-    [content setFrame: NSMakeRect(left, bottom, size.width - left - right, size.height - bottom - top)];
+    [content setFrame: NSMakeRect(left, bottom, floor(size.width - left - right), size.height - bottom - top)];
     [content setAutoresizesSubviews: contentAutoresizes];
     [self setAutoresizesSubviews: boxAutoresizes];
     [self setNeedsDisplay: YES];
