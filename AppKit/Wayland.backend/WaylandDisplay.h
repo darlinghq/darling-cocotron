@@ -43,7 +43,7 @@ struct xkb_keymap;
 struct xkb_state;
 
 @class WaylandOutputManager;
-@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu;
+@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -80,6 +80,7 @@ typedef enum {
     WaylandObjectOutputConfiguration,
     WaylandObjectActivationToken,
     WaylandObjectTouch,
+    WaylandObjectIconManager,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -126,6 +127,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // window asks it to keep the window out of task lists and switchers (xdg-shell has no way to).
     struct wl_proxy *_plasmaShell;
     uint32_t _plasmaShellName, _plasmaShellVersion;
+    // xdg-toplevel-icon, when the compositor has it: the application icon for every toplevel.
+    WaylandToplevelIcons *_toplevelIcons;
     // The exported main menu; nil while the menu is drawn inside the windows.
     WaylandAppMenu *_appMenu;
     BOOL _eglAvailable;
@@ -232,6 +235,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (uint32_t) dragSerialForEvent: (NSEvent *) event;
 - (void) consumeDragPress;
 - (void) flush;
+// Gives every window the current application icon (see WaylandToplevelIcon.h).
+- (void) updateWindowIcons;
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
