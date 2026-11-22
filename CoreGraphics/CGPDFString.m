@@ -2,6 +2,20 @@
 #import <Onyx2D/O2PDFString.h>
 #include <stdlib.h>
 
+// The documentation gives NULL (and a length of 0) for a NULL string. The pointer is the string's own
+// storage, not a copy made for the caller, and is not NUL-terminated.
+//
+// GUESS: how long the pointer stays valid. O2PDFString may keep no copy: a literal string without
+// escapes read from a content stream points into the decoded data of that stream, so the pointer
+// depends on the stream and its document staying alive; the documentation gives no lifetime.
+size_t CGPDFStringGetLength(CGPDFStringRef string) {
+    return string ? O2PDFStringGetLength((O2PDFStringRef)string) : 0;
+}
+
+const unsigned char *CGPDFStringGetBytePtr(CGPDFStringRef string) {
+    return string ? O2PDFStringGetBytePtr((O2PDFStringRef)string) : NULL;
+}
+
 CFStringRef CGPDFStringCopyTextString(CGPDFStringRef string) {
     NSCParameterAssert(string != NULL);
     O2PDFString *pdfString = (O2PDFString *)string;

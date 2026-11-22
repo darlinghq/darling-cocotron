@@ -1302,6 +1302,9 @@ BOOL O2PDFScannerPopObject(O2PDFScanner *self, O2PDFObject **value) {
 }
 
 BOOL O2PDFScannerPopBoolean(O2PDFScanner *self, O2PDFBoolean *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result =
             [[self->_stack lastObject] checkForType: kO2PDFObjectTypeBoolean
                                               value: value];
@@ -1312,6 +1315,9 @@ BOOL O2PDFScannerPopBoolean(O2PDFScanner *self, O2PDFBoolean *value) {
 }
 
 BOOL O2PDFScannerPopInteger(O2PDFScanner *self, O2PDFInteger *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result =
             [[self->_stack lastObject] checkForType: kO2PDFObjectTypeInteger
                                               value: value];
@@ -1322,6 +1328,9 @@ BOOL O2PDFScannerPopInteger(O2PDFScanner *self, O2PDFInteger *value) {
 }
 
 BOOL O2PDFScannerPopNumber(O2PDFScanner *self, O2PDFReal *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result = [[self->_stack lastObject] checkForType: kO2PDFObjectTypeReal
                                                     value: value];
 
@@ -1433,14 +1442,15 @@ NSData *O2PDFScannerCreateDataWithLength(O2PDFScanner *self, size_t length) {
             O2PDFOperatorCallback callback = [_operatorTable
                     callbackForName: [(O2PDFObject_identifier *) object name]];
 
-            if (callback != NULL) {
+            // Only operators with a registered callback invoke anything (the
+            // CGPDFScannerScan documentation); one without is passed over, and
+            // its operands are dropped below with the others.
+            if (callback != NULL)
                 callback(self, _info);
-            } else {
-                // PDF 32000-1 7.8.2: a consumer ignores operators it does not
-                // recognize, together with their operands.
-                NSLog(@"unhandled identifier %@", object);
-                [_stack removeAllObjects];
-            }
+            // The operands written before an operator are that operator's
+            // (PDF 32000-1 7.8.2), so whatever its callback left unpopped does
+            // not carry over to the next operator.
+            [_stack removeAllObjects];
         }
     }
 
