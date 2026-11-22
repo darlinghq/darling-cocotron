@@ -57,6 +57,8 @@ struct WaylandBuffer {
     struct wl_proxy *_surface;
     struct wl_proxy *_xdgSurface;
     struct wl_proxy *_toplevel;
+    // The menu bar, when the compositor has wlr-layer-shell: it has this role instead of the xdg ones.
+    struct wl_proxy *_layerSurface;
     // org_kde_kwin_appmenu of the toplevel, while the main menu is exported.
     struct wl_proxy *_appMenu;
     // org_kde_plasma_surface of the toplevel while it is not an application window (see
@@ -147,6 +149,7 @@ struct WaylandBuffer {
 // events of the batch (including a configure for the new size) are in.
 - (void) outputsChanged;
 - (BOOL) isPopup;
+- (struct wl_proxy *) layerSurface;
 - (BOOL) isPopupWaitingForParent;
 - (void) ensureMapped;
 // A tool tip window: placed as an ungrabbed popup next to the pointer.
