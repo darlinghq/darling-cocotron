@@ -41,6 +41,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) _sizeColumnToFit: (NSInteger) columnIndex;
 - (void) _moveColumn: (NSInteger) columnIndex toColumn: (NSInteger) newIndex notify: (BOOL) notify;
 - (void) _noteColumnDidMoveFrom: (NSInteger) oldIndex to: (NSInteger) newIndex;
+- (CGFloat) _spaceTakenByColumn: (NSTableColumn *) column;
 @end
 
 @implementation NSTableHeaderView
@@ -95,7 +96,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSRect) headerRectOfColumn: (NSInteger) column {
     NSArray *tableColumns = [_tableView tableColumns];
     NSRect headerRect = _bounds;
-    NSSize spacing = [_tableView intercellSpacing];
 
     if (column < 0 || column >= [[_tableView tableColumns] count]) {
         [NSException raise: NSInternalInconsistencyException
@@ -104,11 +104,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                             (long) column, 0, (unsigned long) [tableColumns count]];
     }
 
-    headerRect.size.width =
-            [[tableColumns objectAtIndex: column--] width] + spacing.width;
+    headerRect.size.width = [_tableView _spaceTakenByColumn: [tableColumns objectAtIndex: column--]];
     while (column >= 0)
-        headerRect.origin.x +=
-                [[tableColumns objectAtIndex: column--] width] + spacing.width;
+        headerRect.origin.x += [_tableView _spaceTakenByColumn: [tableColumns objectAtIndex: column--]];
 
     return headerRect;
 }
@@ -163,6 +161,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         BOOL bold = column == sorted || column == [_tableView highlightedTableColumn];
         NSFont *font = nil;
 
+        if ([column isHidden])
+            continue;
         columnRect.size.width = [column width] + spacing.width;
         // A selected column shows highlighted
         [cell setHighlighted: [_tableView isColumnSelected: i]];
@@ -230,6 +230,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             [[self window] endEditingFor: nil];
 
         for (i = 1; i < count; ++i) {
+            // The edge before a column is the right edge of the one before it; a hidden one has none
+            if ([[[_tableView tableColumns] objectAtIndex: i - 1] isHidden])
+                continue;
             if (NSMouseInRect(location, [self _resizeRectBeforeColumn: i],
                               [self isFlipped])) {
                 NSTableColumn *resizingColumn =
@@ -261,11 +264,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                          fromView: nil];
 
                     newWidth = newPoint.x;
-                    for (q = 0; q < _resizedColumn; ++q) {
-                        newWidth -= [[[_tableView tableColumns]
-                                objectAtIndex: q] width];
-                        newWidth -= [_tableView intercellSpacing].width;
-                    }
+                    for (q = 0; q < _resizedColumn; ++q)
+                        newWidth -= [_tableView _spaceTakenByColumn: [[_tableView tableColumns] objectAtIndex: q]];
 
                     [resizingColumn setWidth: newWidth];
 

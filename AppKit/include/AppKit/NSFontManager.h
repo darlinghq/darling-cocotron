@@ -20,7 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKitIvarLayout.h>
 
-@class NSFont, NSFontDescriptor, NSFontPanel;
+@class NSFont, NSFontDescriptor, NSFontPanel, NSMenu;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -66,7 +66,10 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
     BOOL _isMultiple;
     NSFontAction _currentFontAction;
     int _currentTrait;
-    NS_LEGACY_IVAR_PAD(_NSFontManagerReserved, 16)
+    NS_LEGACY_IVAR_PAD(_NSFontManagerReserved, 12)
+    NS_EXTRA_IVARS_BEGIN(NSFontManager)
+        NSMenu *_fontMenu;
+    NS_EXTRA_IVARS_END(NSFontManager)
 }
 
 @property(class, readonly, retain, nonnull) NSFontManager *sharedFontManager;
@@ -110,6 +113,14 @@ typedef NS_OPTIONS(NSUInteger, NSFontCollectionOptions) {
                                  face: (nullable NSString *) face;
 
 - (nullable NSFontPanel *) fontPanel: (BOOL) create;
+
+// Documented on the AppKit pages of NSFontManager setFontMenu(_:) and
+// fontMenu(_:) (their external identifiers are the selectors setFontMenu: and
+// fontMenu:). Darling only records the menu: it takes no part in the font-menu
+// configuration of the main menu, and -fontMenu:YES does not build a default
+// Font menu.
+- (void) setFontMenu: (NSMenu *) newMenu;
+- (nullable NSMenu *) fontMenu: (BOOL) create;
 
 - (BOOL) sendAction;
 

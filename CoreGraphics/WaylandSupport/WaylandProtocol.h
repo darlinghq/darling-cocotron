@@ -76,6 +76,8 @@ extern const struct wl_interface zwlr_output_head_v1_interface;
 extern const struct wl_interface zwlr_output_mode_v1_interface;
 extern const struct wl_interface zwlr_output_configuration_v1_interface;
 extern const struct wl_interface zwlr_output_configuration_head_v1_interface;
+extern const struct wl_interface zwlr_layer_shell_v1_interface;
+extern const struct wl_interface zwlr_layer_surface_v1_interface;
 extern const struct wl_interface org_kde_kwin_appmenu_manager_interface;
 extern const struct wl_interface org_kde_kwin_appmenu_interface;
 extern const struct wl_interface org_kde_plasma_shell_interface;
@@ -283,6 +285,22 @@ enum {
     WP_TOPLEVEL_SET_MINIMIZED = 13,
     WP_TOPLEVEL_EV_CONFIGURE = 0,
     WP_TOPLEVEL_EV_CLOSE = 1,
+
+    WP_LAYER_SHELL_GET_LAYER_SURFACE = 0,
+    WP_LAYER_SURFACE_SET_SIZE = 0,
+    WP_LAYER_SURFACE_SET_ANCHOR = 1,
+    WP_LAYER_SURFACE_SET_EXCLUSIVE_ZONE = 2,
+    WP_LAYER_SURFACE_SET_KEYBOARD_INTERACTIVITY = 4,
+    WP_LAYER_SURFACE_GET_POPUP = 5,
+    WP_LAYER_SURFACE_ACK_CONFIGURE = 6,
+    WP_LAYER_SURFACE_DESTROY = 7,
+    WP_LAYER_SURFACE_EV_CONFIGURE = 0,
+    WP_LAYER_SURFACE_EV_CLOSED = 1,
+    WP_LAYER_TOP = 2,
+    WP_LAYER_ANCHOR_TOP = 1,
+    WP_LAYER_ANCHOR_LEFT = 4,
+    WP_LAYER_ANCHOR_RIGHT = 8,
+    WP_LAYER_KEYBOARD_ON_DEMAND = 2,
 
     WP_APPMENU_MANAGER_CREATE = 0,
     WP_APPMENU_MANAGER_RELEASE = 1, /* version 2 */

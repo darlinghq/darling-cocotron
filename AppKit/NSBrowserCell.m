@@ -93,8 +93,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSBrowserCell, self)->_isLoaded = value;
 }
 
+// A browser cell stays a text cell with the image beside its title; -[NSCell setImage:] would make it
+// an image cell, so the image is stored without going through it. The control view is refreshed the
+// way -[NSCell setImage:] does it.
 - (void) setImage: (NSImage *) value {
-    NSUnimplementedMethod();
+    value = [value retain];
+    [NS_EXTRA(NSCell, self)->_image release];
+    NS_EXTRA(NSCell, self)->_image = value;
+    if ([[self controlView] respondsToSelector: @selector(updateCell:)])
+        [[self controlView] performSelector: @selector(updateCell:) withObject: self];
+    else
+        [[self controlView] setNeedsDisplay: YES];
 }
 
 - (void) setAlternateImage: (NSImage *) value {

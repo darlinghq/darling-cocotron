@@ -370,17 +370,45 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
     return size;
 }
 
+// The number of lines a wrapping field shows at most; 0 means no limit. NSTextField's
+// maximumNumberOfLines is kept here, where the text is laid out.
+- (NSInteger) _maximumNumberOfLines {
+    return NS_EXTRA(NSTextFieldCell, self)->_maximumNumberOfLines;
+}
+
+- (void) _setMaximumNumberOfLines: (NSInteger) value {
+    NS_EXTRA(NSTextFieldCell, self)->_maximumNumberOfLines = value;
+}
+
 // A cell that wraps its text needs more height as the width shrinks: the width is that of the
 // widest line the text breaks into (never more than offered) and the height that of all the
-// lines, capped at the height offered.
+// lines, capped at the height offered and at the lines the field may show.
 - (NSSize) cellSizeForBounds: (NSRect) rect {
     if (![self wraps])
         return [super cellSizeForBounds: rect];
 
     NSSize inset = [self _textInsetSize];
     NSSize room = NSMakeSize(MAX(rect.size.width - inset.width, 1), NSStringDrawerLargeDimension);
-    NSSize text = [[NSStringDrawer sharedStringDrawer] sizeOfAttributedString: [self attributedStringValue]
-                                                                       inSize: room];
+    NSInteger maximumLines = NS_EXTRA(NSTextFieldCell, self)->_maximumNumberOfLines;
+    NSSize text = NSZeroSize;
+    BOOL capped = NO;
+    if (maximumLines > 0) {
+        // Only text with more lines than the cap is measured as capped; any other is measured as
+        // without a cap, so a cap above the number of lines changes nothing.
+        BOOL hidden = NO;
+        NSSize cappedText = [[NSStringDrawer sharedStringDrawer] sizeOfAttributedString: [self attributedStringValue]
+                                                                          fittingInSize: room
+                                                                   maximumNumberOfLines: maximumLines
+                                                                          lastLineRange: NULL
+                                                                          hasHiddenText: &hidden];
+        if (hidden) {
+            text = cappedText;
+            capped = YES;
+        }
+    }
+    if (!capped)
+        text = [[NSStringDrawer sharedStringDrawer] sizeOfAttributedString: [self attributedStringValue]
+                                                                    inSize: room];
 
     NSSize size = [self _adjustedCellSize: NSMakeSize(text.width + inset.width, ceil(text.height) + inset.height)];
 
@@ -441,6 +469,32 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
                                 range: NSMakeRange(0, [placeString length])];
             drawValue = placeString;
         }
+    }
+    NSInteger maximumLines = NS_EXTRA(NSTextFieldCell, self)->_maximumNumberOfLines;
+    BOOL hidden = NO;
+    NSSize lines = NSZeroSize;
+    if (maximumLines > 0 && [self wraps] && [drawValue length] > 0)
+        lines = [[NSStringDrawer sharedStringDrawer] sizeOfAttributedString: drawValue
+                                                              fittingInSize: NSMakeSize(titleRect.size.width, NSStringDrawerLargeDimension)
+                                                       maximumNumberOfLines: maximumLines
+                                                              lastLineRange: NULL
+                                                              hasHiddenText: &hidden];
+    // Text that fits the cap is drawn as without one.
+    if (hidden) {
+        // Show whole lines only, the first maximumLines of them, with the last one ending in an
+        // ellipsis when the cell truncates its last visible line.
+        NSRect textRect = titleRect;
+        textRect.size.height = MIN(lines.height, titleRect.size.height);
+        // GUESS: the text is anchored at the top edge of the rect it is drawn in, as the
+        // -drawWithRect:options: path does for a context that is not flipped; not checked on a display.
+        if (![[NSGraphicsContext currentContext] isFlipped])
+            textRect.origin.y = NSMaxY(titleRect) - textRect.size.height;
+
+        NSStringDrawingOptions options = NSStringDrawingUsesLineFragmentOrigin;
+        if ([self truncatesLastVisibleLine])
+            options |= NSStringDrawingTruncatesLastVisibleLine;
+        [drawValue drawWithRect: textRect options: options];
+        return;
     }
     [drawValue _clipAndDrawInRect: titleRect
                    lineBreakMode: NS_EXTRA(NSCell, self)->_lineBreakMode];

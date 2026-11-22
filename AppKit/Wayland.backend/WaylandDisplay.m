@@ -29,6 +29,8 @@
 #import "WaylandOutputManager.h"
 #import "WaylandPasteboard.h"
 #import "WaylandDraggingManager.h"
+#import "WaylandAppMenu.h"
+#import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <OpenGL/CGLInternal.h>
 #include <dlfcn.h>
 #import "WaylandLibrary.h"
@@ -146,6 +148,7 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectDecoration:
             case WaylandObjectFrameCallback:
             case WaylandObjectBuffer:
+            case WaylandObjectLayerSurface:
                 [(WaylandWindow *) object handleEvent: opcode
                                                  kind: objectKind
                                                 proxy: proxy
@@ -412,6 +415,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 }
 
 - (void) dealloc {
+    [_appMenu release];
     [_draggingManager invalidate];
     [_draggingManager release];
     [self consumeDragPress];
@@ -713,6 +717,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                           version: 1 kind: WaylandObjectOutputManager
                                            object: _outputManager];
         _outputManager = [_outputManager initWithDisplay: _wlDisplay manager: proxy];
+    } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
+        _layerShellName = name;
+        // Version 4 adds the on-demand keyboard interactivity the bar asks for.
+        _layerShell = [self bindGlobal: name interface: &zwlr_layer_shell_v1_interface
+                               version: MIN(version, 4) kind: 0 object: nil];
     } else if (strcmp(interface, "wl_output") == 0) {
         WaylandOutput *output = [[WaylandOutput new] autorelease];
         output->_globalName = name;
@@ -854,6 +863,12 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WaylandMarshal(_viewporter, WP_VIEWPORTER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _viewporter = NULL; _viewporterName = 0;
         return; // Existing viewport objects remain usable.
+    }
+    if (_layerShell && name == _layerShellName) {
+        // Existing layer surfaces stay usable until the compositor closes them.
+        _layerShell = NULL;
+        _layerShellName = 0;
+        return;
     }
     if (_outputManager && name == _outputManagerName) {
         [_outputManager release];
@@ -2680,10 +2695,13 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 // would show the menu, and a client cannot put a bar of its own along the top
 // of the screen with xdg-shell, so the windows draw it themselves.
 - (BOOL) _showsMainMenuOutsideWindows {
+    // With a layer shell the menu bar window shows the menu when the desktop does not.
+    if (_layerShell != NULL)
+        return YES;
     if (_appMenuManager == NULL)
         return NO;
     if (_appMenu == nil)
-        _appMenu = [WaylandAppMenu new];
+        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self];
     if ([_appMenu globalMenuPresent])
         return YES;
     [_appMenu release];
@@ -2695,7 +2713,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     if ([NSWindow _usesInWindowMenuBar])
         return;
     if (_appMenu == nil)
-        _appMenu = [WaylandAppMenu new];
+        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self];
     [_appMenu setMainMenu: menu];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];

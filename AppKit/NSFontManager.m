@@ -313,6 +313,24 @@ static Class _fontPanelFactory;
     return _panel;
 }
 
+- (void) dealloc {
+    [NS_EXTRA(NSFontManager, self)->_fontMenu release];
+    NS_EXTRA_FREE(NSFontManager, self);
+    [super dealloc];
+}
+
+- (void) setFontMenu: (NSMenu *) newMenu {
+    newMenu = [newMenu retain];
+    [NS_EXTRA(NSFontManager, self)->_fontMenu release];
+    NS_EXTRA(NSFontManager, self)->_fontMenu = newMenu;
+}
+
+- (NSMenu *) fontMenu: (BOOL) create {
+    // GUESS: the documentation says create == YES builds the menu when there is none; Darling
+    // has no default Font menu, so this answers nil then, as it does for create == NO.
+    return NS_EXTRA(NSFontManager, self)->_fontMenu;
+}
+
 - (BOOL) sendAction {
     return [NSApp sendAction: _action
                           to: _target

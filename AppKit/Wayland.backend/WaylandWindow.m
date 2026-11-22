@@ -248,6 +248,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // (the display maps it then) or is asked to activate; modal windows and sheets are shown, as the
 // application cannot continue without them.
 - (BOOL) mapWouldTakeFocusFromOthers {
+    // The menu bar is a layer surface without keyboard interactivity: it takes no focus.
+    if ([self wantsLayerSurface])
+        return NO;
     if ([NSApp _mayTakeInputFocus] || [_display mappingForActivation])
         return NO;
     NSWindow *window = _delegate;
@@ -264,6 +267,47 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (WaylandWindow *) popupParent { return _popupParent; }
 - (uint32_t) popupGrabSerial { return _popupGrabSerial; }
 - (struct wl_proxy *) xdgSurface { return _xdgSurface; }
+- (struct wl_proxy *) layerSurface { return _layerSurface; }
+
+// The menu bar window is a layer surface along the top of the screen when the
+// compositor offers wlr-layer-shell; otherwise it is an ordinary borderless
+// toplevel, which the compositor places.
+- (BOOL) wantsLayerSurface {
+    return _display->_layerShell != NULL &&
+           [_delegate isKindOfClass: NSClassFromString(@"NSMenuBarWindow")];
+}
+
+// The bar is anchored to the top, left and right edges, as tall as the window
+// is, and keeps that strip free of other windows (the exclusive zone).
+- (void) updateLayerSize {
+    int32_t height = MAX(1, (int32_t) ceil(_frame.size.height));
+    union wl_argument args[2] = {{.u = 0}, {.u = (uint32_t) height}};
+
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_SIZE, NULL, 0, args);
+    args[0].i = height;
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_EXCLUSIVE_ZONE, NULL, 0, args);
+}
+
+- (void) createLayerRole {
+    union wl_argument args[5];
+
+    args[0].o = NULL;
+    args[1].o = (struct wl_object *) _surface;
+    args[2].o = NULL; // the compositor picks the output
+    args[3].u = WP_LAYER_TOP;
+    args[4].s = "menubar";
+    _layerSurface = WaylandCreateObject(_display->_layerShell, WP_LAYER_SHELL_GET_LAYER_SURFACE,
+                                        &zwlr_layer_surface_v1_interface, args,
+                                        WaylandObjectLayerSurface, self);
+    args[0].u = WP_LAYER_ANCHOR_TOP | WP_LAYER_ANCHOR_LEFT | WP_LAYER_ANCHOR_RIGHT;
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_ANCHOR, NULL, 0, args);
+    [self updateLayerSize];
+    // The bar never takes the keyboard focus (the protocol default): a compositor that gives an
+    // on-demand surface the focus when the pointer is over it (KWin does as soon as the bar is
+    // mapped under the pointer) would take it from the application's window, which then looks to
+    // AppKit like the application losing the focus, so the bar would hide, and show again once the
+    // focus came back, in a loop. The menus the bar opens grab the keyboard themselves.
+}
 
 #pragma mark - Mapping
 
@@ -325,38 +369,43 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     [self ensureSurface];
 
-    args[0].o = NULL;
-    args[1].o = (struct wl_object *) _surface;
-    _xdgSurface = WaylandCreateObject(_display->_wmBase,
-                                      WP_WM_BASE_GET_XDG_SURFACE,
-                                      &xdg_surface_interface, args,
-                                      WaylandObjectXdgSurface, self);
-
-    if (parent != nil) {
-        _popupParent = [parent retain];
-        [self createPopupRole];
+    if ([self wantsLayerSurface]) {
+        [self createLayerRole];
     } else {
         args[0].o = NULL;
-        _toplevel = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_TOPLEVEL,
-                                    &xdg_toplevel_interface, args,
-                                    WaylandObjectToplevel, self);
+        args[1].o = (struct wl_object *) _surface;
+        _xdgSurface = WaylandCreateObject(_display->_wmBase,
+                                          WP_WM_BASE_GET_XDG_SURFACE,
+                                          &xdg_surface_interface, args,
+                                          WaylandObjectXdgSurface, self);
 
-        [self updateTitle];
-        args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
-        if (args[0].s != NULL)
-            WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, args);
-        _fullscreenRequested = NO;
-        [self updateFullscreen];
-        [self updateSizeLimits];
-        _levelParent = nil;
-        [self updateLevelParent];
+        if (parent != nil) {
+            _popupParent = [parent retain];
+            [self createPopupRole];
+        } else {
+            args[0].o = NULL;
+            _toplevel = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_TOPLEVEL,
+                                        &xdg_toplevel_interface, args,
+                                        WaylandObjectToplevel, self);
 
-        _decorationForcedClient = forceClient;
-        [self updateDecorationMode];
-        [self updateApplicationMenu];
-        [self updateTaskbarPresence];
-        _toplevelIconSet = NO;
-        [self updateToplevelIcon];
+            [self updateTitle];
+            args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
+            if (args[0].s != NULL)
+                WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, args);
+            _fullscreenRequested = NO;
+            [self updateFullscreen];
+            [self updateSizeLimits];
+            _levelParent = nil;
+            [self updateLevelParent];
+
+            _decorationForcedClient = forceClient;
+            [self updateDecorationMode];
+            [self updateApplicationMenu];
+            [self updateTaskbarPresence];
+            _toplevelIconSet = NO;
+            [self updateToplevelIcon];
+        }
+
     }
 
     _pendingWidth = _pendingHeight = 0;
@@ -476,10 +525,16 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     struct wl_proxy *positioner = [self newPopupPositioner];
     union wl_argument args[3];
     args[0].o = NULL;
-    args[1].o = (struct wl_object *) [_popupParent xdgSurface];
+    // A popup of a layer surface has no xdg parent; the layer surface adopts it.
+    BOOL layerParent = [_popupParent layerSurface] != NULL;
+    args[1].o = layerParent ? NULL : (struct wl_object *) [_popupParent xdgSurface];
     args[2].o = (struct wl_object *) positioner;
     _popup = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_POPUP,
             &xdg_popup_interface, args, WaylandObjectPopup, self);
+    if (layerParent) {
+        args[0].o = (struct wl_object *) _popup;
+        WaylandMarshal([_popupParent layerSurface], WP_LAYER_SURFACE_GET_POPUP, NULL, 0, args);
+    }
     sendRequest(positioner, WP_POSITIONER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if ([self isTooltip] || (_genericPopup && [_delegate ignoresMouseEvents])) {
         // No grab, and an empty input region: the pointer keeps its focus on the
@@ -556,7 +611,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
     if (_toplevel != NULL)
         sendRequest(_toplevel, WP_TOPLEVEL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    sendRequest(_xdgSurface, WP_XDG_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (_layerSurface != NULL) {
+        sendRequest(_layerSurface, WP_LAYER_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+        _layerSurface = NULL;
+    }
+    if (_xdgSurface != NULL)
+        sendRequest(_xdgSurface, WP_XDG_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     // Retain the parent wl_surface across hide/show: EGL child surfaces keep
     // their native-window identity. A NULL buffer unmaps the entire subtree.
     union wl_argument detach[] = {{.o = NULL}, {.i = 0}, {.i = 0}};
@@ -922,6 +982,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) updateSizeLimits {
+    if (_layerSurface != NULL) {
+        [self updateLayerSize];
+        return;
+    }
     if (_toplevel == NULL)
         return;
 
@@ -1382,6 +1446,29 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [self configure: args[0].u];
         break;
 
+    case WaylandObjectLayerSurface:
+        if (opcode == WP_LAYER_SURFACE_EV_CONFIGURE) {
+            union wl_argument ack[1] = {{.u = args[0].u}};
+            WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_ACK_CONFIGURE, NULL, 0, ack);
+            // A zero size leaves the choice to the client.
+            _pendingWidth = args[1].u != 0 ? (int32_t) args[1].u : (int32_t) ceil(_frame.size.width);
+            _pendingHeight = args[2].u != 0 ? (int32_t) args[2].u : (int32_t) ceil(_frame.size.height);
+            _pendingActivated = NO;
+            _pendingMaximized = _pendingFullscreen = NO;
+            [self scheduleConfigureApply];
+        } else if (opcode == WP_LAYER_SURFACE_EV_CLOSED) {
+            // The compositor took the bar away (its output is gone): it is not a window the
+            // user closed, so the bar is only hidden.
+            NSUInteger generation = _surfaceGeneration;
+            [_display performAfterDispatch: ^{
+                if (!self->_mapped || self->_surfaceGeneration != generation)
+                    return;
+                [self unmap];
+                [self->_delegate orderOut: nil];
+            }];
+        }
+        break;
+
     case WaylandObjectToplevel:
         if (opcode == WP_TOPLEVEL_EV_CONFIGURE) {
             _pendingWidth = args[0].i;
@@ -1446,7 +1533,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) configure: (uint32_t) serial {
     union wl_argument args[1] = {{.u = serial}};
     WaylandMarshal(_xdgSurface, WP_XDG_SURFACE_ACK_CONFIGURE, NULL, 0, args);
+    [self scheduleConfigureApply];
+}
 
+- (void) scheduleConfigureApply {
     if (_configureUpdatePending)
         return;
     _configureUpdatePending = YES;

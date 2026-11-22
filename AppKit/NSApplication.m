@@ -2464,6 +2464,8 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 // decision to resign is taken once the current run-loop pass has finished,
 // and is dropped when a window has taken the focus by then.
 static BOOL resignPending;
+// Set when the window system itself reported another client having the focus.
+static BOOL resignForced;
 
 - (void) _windowDidBecomeActive: (NSWindow *) window {
     resignPending = NO;
@@ -2493,6 +2495,18 @@ static BOOL resignPending;
     // Resigning, if it happens, is decided by -_resignIfNoWindowIsActive.
 }
 
+// Whether a window of the application, other than the ones AppKit makes for
+// itself (menus, tool tips, the menu bar), is shown or minimized.
+- (BOOL) _hasOnScreenWindow {
+    for (NSWindow *window in _windows) {
+        if ([window styleMask] & NSAppKitPrivateWindow)
+            continue;
+        if ([window isVisible] || [window isMiniaturized])
+            return YES;
+    }
+    return NO;
+}
+
 // The window system reports that another client has the input focus. An application becomes active at the
 // end of launching whether or not a window of it ever takes the focus, so for one whose windows never held
 // the focus (they cannot become key, or are never shown) no focus-out arrives that would end it. Without
@@ -2502,14 +2516,24 @@ static BOOL resignPending;
     if (!NS_EXTRA(NSApplication, self)->_isActive || activationInProgress)
         return;
     resignPending = YES;
+    resignForced = YES;
     [self _resignIfNoWindowIsActive];
 }
+
+// The focus leaving the last window of the application because that window
+// was closed or hidden is not the user activating another application: the
+// application stays active, and keeps its menu bar, until another application
+// is activated. The focus leaving a window that is still shown resigns.
 
 - (void) _resignIfNoWindowIsActive {
     if (!resignPending)
         return;
     resignPending = NO;
+    BOOL forced = resignForced;
+    resignForced = NO;
     if ([self isActiveExcludingWindow: nil])
+        return;
+    if (!forced && ![self _hasOnScreenWindow])
         return;
 
     [[NSNotificationCenter defaultCenter]
