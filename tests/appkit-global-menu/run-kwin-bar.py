@@ -168,9 +168,13 @@ def items(log):
 
 
 def stop(process):
+    # Killing the launcher leaves the application running in the container, with its bar: shut the
+    # container down, so that the next case starts alone.
     process.kill()
     process.wait()
-    time.sleep(2)
+    subprocess.run([os.environ.get("DARLING", "darling"), "shutdown"], stdin=subprocess.DEVNULL,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=60)
+    time.sleep(1)
 
 
 def main():
