@@ -2437,6 +2437,14 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
                   accessibilityDescription: description];
 }
 
++ (instancetype) imageWithSymbolName: (NSString *) name
+                       variableValue: (double) value
+{
+    return [self imageWithSystemSymbolName: name
+                             variableValue: value
+                  accessibilityDescription: nil];
+}
+
 + (instancetype) _imageWithSystemSymbolName: (NSString *) name {
     return [self imageWithSystemSymbolName: name accessibilityDescription: nil];
 }

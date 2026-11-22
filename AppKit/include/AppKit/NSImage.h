@@ -234,6 +234,13 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 + (nullable instancetype) imageWithSystemSymbolName: (NSString *) name
                              variableValue: (double) value
                   accessibilityDescription: (nullable NSString *) description;
+// Documented on the AppKit page of NSImage init(symbolName:variableValue:)
+// (macOS 13), whose Objective-C declaration is this class method. Darling loads
+// no symbols of an application's own, so it answers like
+// imageWithSystemSymbolName:variableValue:accessibilityDescription: with no
+// description.
++ (nullable instancetype) imageWithSymbolName: (NSString *) name
+                             variableValue: (double) value;
 - (nullable NSImage *) imageWithSymbolConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 @property(nonatomic, readonly) NSImageSymbolConfiguration *symbolConfiguration;
