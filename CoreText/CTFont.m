@@ -263,17 +263,19 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
     return fontWithCascade(result, cascade);
 }
 
-// GUESS: the documentation does not say which bits of the symbolic traits are compared when
-// looking for a face. Within one family, italic, bold, expanded, condensed and monospace tell
-// faces apart, so a change of traits inside the family compares those. The UI-optimized,
-// composite, color-glyph and vertical flags and the class mask are never compared (the
-// vertical flag is not set for any font here).
+// Observed on macOS 26.7.3 and Mac OS X 10.14.4 (black-box, through the public API, identical): within one
+// family a copy with the italic, bold, expanded, condensed or color-glyph trait set differently from the
+// original's is looked up among the faces and gives NULL when there is none (Helvetica has no expanded,
+// condensed or color-glyph face); setting the monospace, UI-optimized, composite or class-mask bits leaves the
+// font as it is, so they are not compared. Not reproduced: the vertical trait, which the original reports in the
+// copy. Test: coretext-font-copy-with-traits-and-family.
 static const CTFontSymbolicTraits sameFamilyStyleTraits =
         kCTFontTraitItalic | kCTFontTraitBold | kCTFontTraitExpanded | kCTFontTraitCondensed |
-        kCTFontTraitMonoSpace;
+        kCTFontTraitColorGlyphs;
 // GUESS: moving to another family keeps only what a face of any family can differ in, the slant
-// and the boldness. Monospace, condensed and expanded describe a whole family (Courier,
-// a narrow family), so requiring them to equal the original's would find nothing across families.
+// and the boldness (observed: Helvetica to Courier keeps the slant and bold bits, and the target family's
+// monospace trait is its own). Monospace, condensed and expanded describe a whole family, so requiring them to
+// equal the original's would find nothing across families.
 static const CTFontSymbolicTraits crossFamilyStyleTraits = kCTFontTraitItalic | kCTFontTraitBold;
 
 static CGFloat weightOfFont(CTFontRef font) {
@@ -290,8 +292,9 @@ static CGFloat weightOfFont(CTFontRef font) {
 // A new font of `family` whose style traits, over the bits in `compared`, are those of `wanted`,
 // or NULL when the family has no such face. A size of 0 keeps the size of the original. The
 // matrix is handed to the creation call as given: fonts here carry no matrix, so NULL, which
-// stands for the original's matrix, has nothing to preserve. The variation and the cascade list
-// of the original are not carried over: the documentation does not mention them.
+// stands for the original's matrix, has nothing to preserve. The cascade list of the original is carried over to
+// the copy (observed on macOS 26.7.3 and Mac OS X 10.14.4, together with the feature settings, which fonts here do
+// not have); the variation is not.
 // GUESS: when several faces have the wanted traits (a family with Light, Regular and Medium
 // has three non-bold faces) the one whose weight trait is nearest to `targetWeight` is taken,
 // the first listed among equals. The documentation names no rule.
@@ -336,7 +339,7 @@ static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTr
         bestDistance = distance;
     }
     CFRelease(faces);
-    return best;
+    return fontWithCascade(best, fontCascade(font));
 }
 
 CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,

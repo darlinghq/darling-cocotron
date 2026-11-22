@@ -230,6 +230,53 @@ int main(void)
 		release(copy);
 	}
 
+	// Observed on macOS 26.7.3 and Mac OS X 10.14.4: setting the color-glyph trait on a family without a color
+	// face gives NULL, while the monospace trait is not compared (the font comes back).
+	if (plain != NULL) {
+		CTFontRef copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, kCTFontTraitColorGlyphs,
+				kCTFontTraitColorGlyphs);
+		expect(copy == NULL, "observed: NULL when the color-glyph trait is requested and no face has it");
+		release(copy);
+		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, kCTFontTraitMonoSpace, kCTFontTraitMonoSpace);
+		expect(copy != NULL && sameFamily(plain, copy),
+				"observed: the monospace trait is not compared within a family");
+		release(copy);
+
+		// Observed: the cascade list of the original is carried over to the copy, by both functions.
+		CFStringRef family = CTFontCopyFamilyName(plain);
+		CTFontDescriptorRef fallback = CTFontDescriptorCreateWithNameAndSize(CFSTR("Courier"), 12);
+		CFArrayRef list = CFArrayCreate(NULL, (const void **) &fallback, 1, &kCFTypeArrayCallBacks);
+		CFDictionaryRef attributes = CFDictionaryCreate(NULL, (const void **) &kCTFontCascadeListAttribute,
+				(const void **) &list, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+		CTFontDescriptorRef descriptor = CTFontDescriptorCreateWithAttributes(attributes);
+		CTFontRef withCascade = CTFontCreateWithName(CFSTR("Helvetica"), 14, NULL);
+		CTFontRef carrier = CTFontCreateCopyWithAttributes(withCascade, 14, NULL, descriptor);
+		CTFontRef byTraits = CTFontCreateCopyWithSymbolicTraits(carrier, 20, NULL, 0, 0);
+		CTFontRef byFamily = CTFontCreateCopyWithFamily(carrier, 0, NULL, family);
+		CTFontRef fonts[2] = { byTraits, byFamily };
+		for (int i = 0; i < 2; i++) {
+			CTFontDescriptorRef copied = fonts[i] != NULL ? CTFontCopyFontDescriptor(fonts[i]) : NULL;
+			CFArrayRef cascade = copied != NULL
+					? CTFontDescriptorCopyAttribute(copied, kCTFontCascadeListAttribute) : NULL;
+			expect(cascade != NULL && CFArrayGetCount(cascade) == 1,
+					i == 0 ? "observed: the cascade list is carried over by CreateCopyWithSymbolicTraits"
+					       : "observed: the cascade list is carried over by CreateCopyWithFamily");
+			if (cascade != NULL)
+				CFRelease(cascade);
+			if (copied != NULL)
+				CFRelease(copied);
+		}
+		release(byTraits);
+		release(byFamily);
+		release(carrier);
+		release(withCascade);
+		CFRelease(descriptor);
+		CFRelease(attributes);
+		CFRelease(list);
+		CFRelease(fallback);
+		CFRelease(family);
+	}
+
 	release(plain);
 	release(bold);
 	release(otherPlain);
