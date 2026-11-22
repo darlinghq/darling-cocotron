@@ -7,7 +7,7 @@
 // https://developer.apple.com/documentation/appkit/nsresponder/mouseexited(with:)). A move inside the window
 // sends no exit. The pointer is driven from outside, by tests/appkit-wayland-mouse-exited.sh through a virtual
 // pointer: out of the window, in at its centre, to another point inside, out through the left side, in again, out
-// through the bottom. The test waits for each step. Skipped on other backends. Build without ARC.
+// through the bottom. The script moves the pointer when the test has printed the STEP line of the previous step. Skipped on other backends. Build without ARC.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
@@ -18,8 +18,10 @@
 
 static int failures;
 
+static int currentEntered, currentExited;
+
 static void expect(BOOL condition, const char *what) {
-    printf("%s %s\n", condition ? "PASS" : "FAIL", what);
+    printf("%s %s (entered %d, exited %d so far)\n", condition ? "PASS" : "FAIL", what, currentEntered, currentExited);
     if (!condition)
         failures++;
 }
@@ -59,9 +61,11 @@ static BOOL waitFor(BOOL (^condition)(void), NSTimeInterval timeout) {
 }
 - (void) mouseEntered: (NSEvent *) event {
     entered++;
+    currentEntered = entered;
 }
 - (void) mouseExited: (NSEvent *) event {
     exited++;
+    currentExited = exited;
     exitLocation = [event locationInWindow];
 }
 @end
@@ -92,25 +96,35 @@ int main(void) {
         // Tracking areas are evaluated for the motion the window is sent, which takes this setting.
         [window setAcceptsMouseMovedEvents: YES];
         pump(0.5);
+        // Each STEP line tells the script that the checks of the step are done and the pointer can go on.
         printf("READY\n");
+        pump(1.0); // the pointer is moved to a point outside the window
+        printf("STEP 1\n");
 
         expect(waitFor(^BOOL { return view->entered == 1; }, 10.0), "moving into the window sends mouseEntered:");
         expect(view->exited == 0, "and no exit");
+        printf("STEP 2\n");
 
-        pump(1.5); // the pointer moves to another point of the window
+        pump(1.0); // the pointer moves to another point of the window
         expect(view->entered == 1 && view->exited == 0, "moving inside the window sends neither");
+        printf("STEP 3\n");
 
         expect(waitFor(^BOOL { return view->exited == 1; }, 10.0),
                "the pointer leaving through the left side sends mouseExited:");
-        expect(view->exitLocation.x < 0, "the exit is located outside the window, beyond the left side");
+        // The compositor does not say where the pointer went: the exit is located just outside the nearest edge.
+        NSRect frame = NSMakeRect(0, 0, [window frame].size.width, [window frame].size.height);
+        expect(!NSPointInRect(view->exitLocation, frame), "the exit is located outside the window");
+        printf("STEP 4\n");
 
         expect(waitFor(^BOOL { return view->entered == 2; }, 10.0), "moving back in sends mouseEntered: again");
+        printf("STEP 5\n");
+
         expect(waitFor(^BOOL { return view->exited == 2; }, 10.0),
                "the pointer leaving through the bottom sends mouseExited: again");
-        expect(view->exitLocation.y < 0, "the exit is located outside the window, below it");
-
+        expect(!NSPointInRect(view->exitLocation, frame), "the second exit is located outside the window too");
         pump(1.0);
         expect(view->entered == 2 && view->exited == 2, "each crossing was sent once");
+        printf("STEP 6\n");
     }
     printf(failures ? "FAILED\n" : "OK\n");
     return failures ? 1 : 0;
