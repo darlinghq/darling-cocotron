@@ -922,20 +922,26 @@ static void initImageCellState(NSCell *self, NSImage *image) {
     }
 }
 
+// An editable cell is selectable, and one that isn't selectable isn't editable, as the NSCell reference says
+// (also observed on macOS 10.14.4 and 26.7.3; test: appkit-cell-editable-selectable.m)
 - (void) setEditable: (BOOL) flag {
-    if (NS_EXTRA(NSCell, self)->_isEditable != flag) {
-        NS_EXTRA(NSCell, self)->_isEditable = flag;
+    BOOL changed = NS_EXTRA(NSCell, self)->_isEditable != flag || (flag && !NS_EXTRA(NSCell, self)->_isSelectable);
+    NS_EXTRA(NSCell, self)->_isEditable = flag;
+    if (flag)
+        NS_EXTRA(NSCell, self)->_isSelectable = YES;
+    if (changed)
         [[[self controlView] window]
                 invalidateCursorRectsForView: [self controlView]];
-    }
 }
 
 - (void) setSelectable: (BOOL) flag {
-    if (NS_EXTRA(NSCell, self)->_isSelectable != flag) {
-        NS_EXTRA(NSCell, self)->_isSelectable = flag;
+    BOOL changed = NS_EXTRA(NSCell, self)->_isSelectable != flag || (!flag && NS_EXTRA(NSCell, self)->_isEditable);
+    NS_EXTRA(NSCell, self)->_isSelectable = flag;
+    if (!flag)
+        NS_EXTRA(NSCell, self)->_isEditable = NO;
+    if (changed)
         [[[self controlView] window]
                 invalidateCursorRectsForView: [self controlView]];
-    }
 }
 
 - (void) setScrollable: (BOOL) flag {

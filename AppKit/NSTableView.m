@@ -1624,8 +1624,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return [super becomeFirstResponder];
 }
 
+// A table gives way to the field editor of the cell it edits. NSControl checks its selected cell while it has an
+// editor; a table's editor belongs to the cell being edited (test: appkit-tableview-edit-column.m).
 - (BOOL) resignFirstResponder {
     [self setNeedsDisplay: YES];
+    if (NS_EXTRA(NSControl, self)->_currentEditor != nil)
+        return _editingCell == nil || [_editingCell hasValidObjectValue];
     return [super resignFirstResponder];
 }
 
