@@ -1243,17 +1243,22 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self performAfterDispatch: ^{ [self applyCursor]; }];
         break;
 
-    case WP_POINTER_EV_LEAVE:
+    case WP_POINTER_EV_LEAVE: {
+        WaylandWindow *left = _pointerWindow;
+
         _pressedButtons = 0;
         [_buttonClickCounts removeAllObjects];
         [self consumeDragPress];
         _lastMouseLocation = [self mouseLocation];
+        if (left != nil && !_pointerLocked)
+            [self performAfterDispatch: ^{ [self pointerLeftWindow: left]; }];
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
         _pendingScrollX = _pendingScrollY = 0;
         _pendingScrollWindow = nil;
         _pendingScrollActive = NO;
         break;
+    }
 
     case WP_POINTER_EV_MOTION:
         [self pointerMotionToX: wl_fixed_to_double(args[1].f)
@@ -1297,6 +1302,31 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self postPendingScroll];
         break;
     }
+}
+
+// The pointer left the window's surface. The compositor does not say where it went, so it is taken to be just
+// outside the edge of the window nearest to where it last was (the X11 backend gets the real position in its
+// crossing event). The window re-evaluates its tracking areas there, as it does for a motion, and sends the exits
+// for the areas the pointer was in. The AppKit work runs outside libwayland's listener.
+- (void) pointerLeftWindow: (WaylandWindow *) window {
+    if (![self windowIsKnown: window] || [window delegate] == nil)
+        return;
+
+    NSSize size = [[window delegate] frame].size;
+    NSPoint point = [window mouseLocationOutsideOfEventStream];
+    CGFloat toLeft = point.x, toRight = size.width - point.x, toBottom = point.y, toTop = size.height - point.y;
+    CGFloat nearest = MIN(MIN(toLeft, toRight), MIN(toBottom, toTop));
+
+    if (nearest == toLeft)
+        point.x = -1;
+    else if (nearest == toRight)
+        point.x = size.width + 1;
+    else if (nearest == toBottom)
+        point.y = -1;
+    else
+        point.y = size.height + 1;
+    [window setLastKnownCursorPosition: point];
+    [[window delegate] platformWindowSetCursorEvent: window];
 }
 
 - (void) pointerMotionToX: (CGFloat) x y: (CGFloat) y {
