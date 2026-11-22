@@ -34,6 +34,14 @@ struct WaylandBuffer {
     BOOL busy; // attached and not yet released by the compositor
 };
 
+// The role (xdg-shell or layer-shell) a window's wl_surface was given.
+typedef enum {
+    WaylandSurfaceRoleNone,
+    WaylandSurfaceRoleToplevel,
+    WaylandSurfaceRolePopup,
+    WaylandSurfaceRoleLayer,
+} WaylandSurfaceRole;
+
 // A top-level window: an xdg_toplevel whose content is Onyx2D's CPU rendering,
 // copied into wl_shm buffers.
 @interface WaylandWindow : CGWindow {
@@ -55,6 +63,8 @@ struct WaylandBuffer {
     BOOL _hasShadow;
 
     struct wl_proxy *_surface;
+    // The role of _surface (see -prepareSurfaceForRole:): a wl_surface keeps its role for life.
+    WaylandSurfaceRole _surfaceRole;
     struct wl_proxy *_xdgSurface;
     struct wl_proxy *_toplevel;
     // The menu bar, when the compositor has wlr-layer-shell: it has this role instead of the xdg ones.

@@ -99,10 +99,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) dealloc {
     [self invalidate];
-    if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    if (_surface)
-        sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    [self destroySurface];
     [_subwindows release];
     [_display release];
     [_deviceDictionary release];
@@ -161,6 +158,33 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
     return _surface;
 }
+
+// The surface with the objects that are tied to it. The role objects must be gone first.
+- (void) destroySurface {
+    if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (_surface)
+        sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    _fractionalScale = _viewport = _surface = NULL;
+}
+
+// The core protocol makes the role of a wl_surface permanent for its lifetime, and xdg_toplevel and
+// xdg_popup are different roles, so a surface that was a toplevel cannot be given a popup role
+// (or the other way round) once its role objects are gone: a strict compositor ends the connection
+// with a protocol error. -unmap keeps the surface so that the subsurfaces of EGL and Metal children
+// stay attached to it, which is right while the role stays the same. When the window is about to
+// be shown with the other role, the surface is replaced instead, and the children move to the new
+// one. Returns whether it was replaced.
+- (BOOL) prepareSurfaceForRole: (WaylandSurfaceRole) role {
+    if (_surface == NULL || _surfaceRole == WaylandSurfaceRoleNone || _surfaceRole == role)
+        return NO;
+    for (NSValue *value in _subwindows)
+        [(WaylandSubWindow *) [value pointerValue] parentSurfaceWillBeReplaced];
+    [self destroySurface];
+    _surfaceRole = WaylandSurfaceRoleNone;
+    return YES;
+}
+
 - (WaylandDisplay *) waylandDisplay { return _display; }
 - (BOOL) isInvalidated { return _invalidated; }
 - (void) addSubwindow: (WaylandSubWindow *) child {
@@ -367,10 +391,15 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     union wl_argument args[4];
 
+    BOOL layerRole = [self wantsLayerSurface];
+    BOOL surfaceRenewed = [self prepareSurfaceForRole: layerRole ? WaylandSurfaceRoleLayer
+                                                       : parent != nil ? WaylandSurfaceRolePopup
+                                                                       : WaylandSurfaceRoleToplevel];
     [self ensureSurface];
 
-    if ([self wantsLayerSurface]) {
+    if (layerRole) {
         [self createLayerRole];
+        _surfaceRole = WaylandSurfaceRoleLayer;
     } else {
         args[0].o = NULL;
         args[1].o = (struct wl_object *) _surface;
@@ -382,11 +411,13 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         if (parent != nil) {
             _popupParent = [parent retain];
             [self createPopupRole];
+            _surfaceRole = WaylandSurfaceRolePopup;
         } else {
             args[0].o = NULL;
             _toplevel = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_TOPLEVEL,
                                         &xdg_toplevel_interface, args,
                                         WaylandObjectToplevel, self);
+            _surfaceRole = WaylandSurfaceRoleToplevel;
 
             [self updateTitle];
             args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
@@ -419,6 +450,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_subwindowRedrawNeeded) [self scheduleSubwindowRedraw];
     _configured = NO;
     _needsPresent = _context != nil;
+    if (surfaceRenewed) {
+        for (NSValue *value in _subwindows)
+            [(WaylandSubWindow *) [value pointerValue] parentSurfaceReplaced];
+        if ([_subwindows count] > 0) [self scheduleSubwindowRedraw];
+    }
     [_display flush];
 }
 
