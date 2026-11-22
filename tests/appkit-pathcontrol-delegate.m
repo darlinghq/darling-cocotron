@@ -33,8 +33,10 @@ int main(void) {
         PathDelegate *delegate = [[PathDelegate alloc] init];
         NSUInteger retainsBefore = [delegate retainCount];
         [control setDelegate:delegate];
-        expect([control delegate] == delegate, @"the delegate is the one set");
+        // Measured before the getter: loading a weak reference returns the object retained and autoreleased,
+        // which raises the count until the pool drains.
         expect([delegate retainCount] == retainsBefore, @"setting the delegate does not retain it");
+        expect([control delegate] == delegate, @"the delegate is the one set");
 
         PathDelegate *other = [[PathDelegate alloc] init];
         [control setDelegate:other];
