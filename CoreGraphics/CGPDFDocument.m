@@ -50,6 +50,18 @@ CGPDFDictionaryRef CGPDFDocumentGetInfo(CGPDFDocumentRef self) {
     return (CGPDFDictionaryRef)[(O2PDFDocument *)self infoDictionary];
 }
 
+// GUESS: placeholder, not an outline reader. The documentation page gives the
+// signature (the result may be NULL) but neither the meaning of NULL nor the
+// layout of the dictionary, and the keys of that layout are separate constants
+// that are not declared here. This returns NULL for every document, including
+// one whose catalog has an /Outlines entry, so a NULL result does not mean the
+// file has no outline. Replace it with a reader once the dictionary format is
+// confirmed on a real Mac.
+CFDictionaryRef CGPDFDocumentGetOutline(CGPDFDocumentRef document) {
+    (void)document;
+    return NULL;
+}
+
 bool CGPDFDocumentIsEncrypted(CGPDFDocumentRef self) {
     return [(O2PDFDocument *)self encryptDictionary] != nil;
 }

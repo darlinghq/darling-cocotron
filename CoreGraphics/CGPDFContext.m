@@ -99,3 +99,13 @@ void CGPDFContextBeginPage(CGContextRef self, CFDictionaryRef pageInfo) {
 void CGPDFContextEndPage(CGContextRef self) {
     O2ContextEndPage((O2ContextRef)self);
 }
+
+// GUESS: limitation, not an outline writer. The documentation page gives the
+// signature (the outline may be NULL) but not the dictionary layout, and the
+// keys of that layout are separate constants that are not declared here. The
+// function returns nothing, so the writer has no way to report this: the
+// outline is accepted and NOT written, and the PDF has no /Outlines entry.
+void CGPDFContextSetOutline(CGContextRef context, CFDictionaryRef outline) {
+    (void)context;
+    (void)outline;
+}
