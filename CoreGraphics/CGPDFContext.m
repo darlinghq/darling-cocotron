@@ -34,6 +34,30 @@ const CFStringRef kCGPDFContextBleedBox = CFSTR("BleedBox");
 const CFStringRef kCGPDFContextTrimBox = CFSTR("TrimBox");
 const CFStringRef kCGPDFContextArtBox = CFSTR("ArtBox");
 
+// GUESS: the documentation pages of these keys (kCGPDFContextSubject,
+// kCGPDFContextCreatePDFA, kCGPDFContextOutputIntent, kCGPDFXInfo,
+// kCGPDFXOutputConditionIdentifier, kCGPDFXOutputIntentSubtype,
+// kCGPDFXDestinationOutputProfile) do not state the string value of the
+// constant, so each value is the symbol name. The sibling keys above are mixed:
+// Title, Author and the like use the symbol name, the page box keys use the
+// PDF dictionary key name. An alternative guess for the four kCGPDFX* keys is
+// the PDF key names of the output intent dictionary (/S,
+// /OutputConditionIdentifier, /Info, /DestOutputProfile): the
+// kCGPDFContextOutputIntent page says that dictionary's keys and values must
+// match section 9.10.4 of the PDF 1.4 specification. Nothing in the tree
+// reads these strings. Replace with the values printed on a real Mac.
+// The keys are declared so callers can bind them; CGPDFContextCreate accepts
+// them and does not write them: the subject (like the keywords) is dropped
+// because only the title, author and creator reach the file, and the PDF/A and
+// PDF/X keys have no effect.
+const CFStringRef kCGPDFContextSubject = CFSTR("kCGPDFContextSubject");
+const CFStringRef kCGPDFContextCreatePDFA = CFSTR("kCGPDFContextCreatePDFA");
+const CFStringRef kCGPDFContextOutputIntent = CFSTR("kCGPDFContextOutputIntent");
+const CFStringRef kCGPDFXInfo = CFSTR("kCGPDFXInfo");
+const CFStringRef kCGPDFXOutputConditionIdentifier = CFSTR("kCGPDFXOutputConditionIdentifier");
+const CFStringRef kCGPDFXOutputIntentSubtype = CFSTR("kCGPDFXOutputIntentSubtype");
+const CFStringRef kCGPDFXDestinationOutputProfile = CFSTR("kCGPDFXDestinationOutputProfile");
+
 CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                                 const CGRect *mediaBox,
                                 CFDictionaryRef auxiliaryInfo)
