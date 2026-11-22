@@ -10,7 +10,11 @@
  * the renderer's, and at the layer's size after a resize. A layer that is not
  * opaque composites with its alpha channel; an opaque one does not look at it.
  * Frames drawn by another thread are composited whole (each half of a frame is
- * drawn separately, with a pause between them).
+ * drawn separately, with a pause between them). Into a drawable that starts out
+ * transparent (the layers of a native subwindow are drawn that way, and a Wayland
+ * compositor takes the drawable's alpha as the surface's alpha), an opaque layer
+ * leaves alpha 1 (times its opacity) and every pixel stays a valid premultiplied
+ * colour (no colour channel above alpha), whatever alpha the layer's frame holds.
  *
  * Needs a display (Xvfb or a Wayland compositor) and OpenGL. Darling-specific:
  * on macOS the system compositor, not CARenderer, draws these layers (a
@@ -28,6 +32,11 @@
 #include <pthread.h>
 
 enum { kSize = 64 };
+
+// Private to QuartzCore: the renderer of a native subwindow clears to alpha 0.
+@interface CARenderer (TransparentClear)
+- (void) _setClearsToTransparent: (BOOL) value;
+@end
 
 @interface OwnContextLayer : CAOpenGLLayer {
 @public
@@ -93,13 +102,14 @@ static BOOL isColor(const GLubyte *p, int r, int g, int b)
 }
 
 static float background; // grey level of the root layer's background; 0 for none
+static float clearAlpha = 1; // alpha the drawable is cleared to before the layers are drawn
 
 static void render(CARenderer *renderer, GLubyte *pixels)
 {
 	glMatrixMode(GL_PROJECTION);
 	glLoadIdentity();
 	glOrtho(0, kSize, 0, kSize, -1, 1);
-	glClearColor(0, 0, 0, 1);
+	glClearColor(0, 0, 0, clearAlpha);
 	glClear(GL_COLOR_BUFFER_BIT);
 	[renderer render];
 	glReadPixels(0, 0, kSize, kSize, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
@@ -147,6 +157,8 @@ static Scene makeScene(CGLContextObj host, Kind kind)
 	scene.renderer = [CARenderer rendererWithCGLContext: host options: nil];
 	scene.renderer.layer = root;
 	scene.renderer.bounds = CGRectMake(0, 0, kSize, kSize);
+	if (clearAlpha == 0)
+		[scene.renderer _setClearsToTransparent: YES];
 	scene.gl = gl;
 	scene.pixels = malloc(4 * kSize * kSize);
 	return scene;
@@ -243,6 +255,58 @@ static void checkAlpha(CGLContextObj host, const char *what, Kind kind)
 	background = 0;
 }
 
+// Drawn into a drawable cleared to alpha 0, an opaque layer is opaque whatever
+// alpha its frame holds, and a fade only lowers the alpha it leaves.
+static void checkOpaqueLeavesAlpha(CGLContextObj host, const char *what, Kind kind)
+{
+	background = 0;
+	clearAlpha = 0;
+	Scene scene = makeScene(host, kind);
+	OwnContextLayer *gl = scene.gl;
+	GLubyte *pixels = scene.pixels;
+	char name[200];
+
+	gl.opaque = YES;
+	gl->color[0] = 0; gl->color[1] = 1; gl->color[2] = 0; gl->color[3] = 0;
+	[gl setNeedsDisplay];
+	render(scene.renderer, pixels);
+	const GLubyte *p = pixelAt(pixels, 32, 32);
+	snprintf(name, sizeof name, "%s: an opaque layer drawn into a transparent drawable leaves alpha 1 (%d,%d,%d,%d)",
+		what, p[0], p[1], p[2], p[3]);
+	expect(isColor(p, 0, 255, 0) && p[3] > 250, name);
+	p = pixelAt(pixels, 4, 4);
+	snprintf(name, sizeof name, "%s: the drawable stays transparent outside the layer", what);
+	expect(p[3] == 0, name);
+
+	gl->color[3] = 1;
+	[gl setNeedsDisplay];
+	render(scene.renderer, pixels);
+	p = pixelAt(pixels, 32, 32);
+	snprintf(name, sizeof name, "%s: the same with a frame of alpha 1 (%d,%d,%d,%d)", what, p[0], p[1], p[2], p[3]);
+	expect(isColor(p, 0, 255, 0) && p[3] > 250, name);
+
+	gl->color[3] = 0;
+	gl.opacity = 0.5;
+	[gl setNeedsDisplay];
+	render(scene.renderer, pixels);
+	p = pixelAt(pixels, 32, 32);
+	snprintf(name, sizeof name, "%s: a half faded opaque layer leaves half alpha and a valid premultiplied colour (%d,%d,%d,%d)",
+		what, p[0], p[1], p[2], p[3]);
+	expect(abs(p[3] - 128) < 8 && p[1] <= p[3] + 2 && isColor(p, 0, 128, 0), name);
+	gl.opacity = 1;
+
+	// A layer that is not opaque keeps what its premultiplied frame says.
+	gl.opaque = NO;
+	gl->color[0] = 0; gl->color[1] = 0.5; gl->color[2] = 0; gl->color[3] = 0.5;
+	[gl setNeedsDisplay];
+	render(scene.renderer, pixels);
+	p = pixelAt(pixels, 32, 32);
+	snprintf(name, sizeof name, "%s: a half transparent layer leaves its own alpha (%d,%d,%d,%d)", what, p[0], p[1], p[2], p[3]);
+	expect(abs(p[3] - 128) < 8 && isColor(p, 0, 128, 0), name);
+	clearAlpha = 1;
+	free(pixels);
+}
+
 static volatile int stopDrawing;
 
 static void *drawFrames(void *argument)
@@ -331,6 +395,10 @@ int main(void)
 		checkAlpha(host, "own context without a share context", kUnshared);
 		checkAlpha(host, "own context sharing with the renderer's context", kShared);
 		checkAlpha(host, "default context", kDefault);
+
+		checkOpaqueLeavesAlpha(host, "own context without a share context", kUnshared);
+		checkOpaqueLeavesAlpha(host, "own context sharing with the renderer's context", kShared);
+		checkOpaqueLeavesAlpha(host, "default context", kDefault);
 
 		checkWholeFrames(host, "own context without a share context", kUnshared);
 		checkWholeFrames(host, "own context sharing with the renderer's context", kShared);
