@@ -13,10 +13,14 @@
 static int failures;
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); failures++; } } while (0)
 
-@interface PriorityDelegate : NSObject <NSToolbarDelegate>
+// The ivar and @synthesize are explicit: the i386 slice uses the legacy runtime, which does not synthesize properties.
+@interface PriorityDelegate : NSObject <NSToolbarDelegate> {
+    NSDictionary *_priorities;
+}
 @property(copy) NSDictionary *priorities;
 @end
 @implementation PriorityDelegate
+@synthesize priorities = _priorities;
 - (NSArray *) toolbarDefaultItemIdentifiers: (NSToolbar *) toolbar {
     return @[ @"A", @"B", @"C", @"D" ];
 }
