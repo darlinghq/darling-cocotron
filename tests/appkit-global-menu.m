@@ -49,6 +49,7 @@ static void note(const char *format, ...) {
 {
     NSMenu *_dynamic;
     NSMenu *_rebuilt;
+    BOOL _rebuildOnOpen;
     NSMenu *_fileMenu;
     int _updates;
 }
@@ -101,18 +102,25 @@ static void note(const char *format, ...) {
 - (void) setFileMenu: (NSMenu *) menu {
     _fileMenu = menu;
 }
+// The application menu is filled again with new items; the quit item is the usual terminate:.
+- (void) refillRebuilt {
+    NSMenu *menu = _rebuilt;
+    [menu removeAllItems];
+    NSMenuItem *item = [menu addItemWithTitle: @"Preferences..." action: @selector(preferences:) keyEquivalent: @","];
+    [item setTarget: self];
+    item = [menu addItemWithTitle: @"Targeted" action: @selector(save:) keyEquivalent: @""];
+    [item setTarget: self];
+    [menu addItemWithTitle: @"Hide Test" action: @selector(hide:) keyEquivalent: @"h"];
+    [menu addItemWithTitle: @"Quit Test" action: @selector(terminate:) keyEquivalent: @"q"];
+}
 - (void) setRebuilt: (NSMenu *) menu {
     _rebuilt = menu;
+    _rebuildOnOpen = YES;
 }
 - (void) menuNeedsUpdate: (NSMenu *) menu {
     if (menu == _rebuilt) {
         note("needsUpdate rebuilt");
-        [menu removeAllItems];
-        NSMenuItem *item = [menu addItemWithTitle: @"Preferences..." action: @selector(preferences:) keyEquivalent: @","];
-        [item setTarget: self];
-        item = [menu addItemWithTitle: @"Targeted" action: @selector(save:) keyEquivalent: @""];
-        [item setTarget: self];
-        [menu addItemWithTitle: @"Hide Test" action: @selector(hide:) keyEquivalent: @"h"];
+        [self refillRebuilt];
         return;
     }
     if (menu != _dynamic)
@@ -125,6 +133,10 @@ static void note(const char *format, ...) {
     [item setTarget: self];
 }
 - (void) menuWillOpen: (NSMenu *) menu {
+    if (menu == _rebuilt && _rebuildOnOpen) {
+        note("willOpen rebuilt");
+        [self refillRebuilt];
+    }
     if (menu == _dynamic)
         note("willOpen Dynamic");
 }
