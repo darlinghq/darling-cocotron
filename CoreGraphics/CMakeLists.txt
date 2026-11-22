@@ -45,6 +45,7 @@ set_property(SOURCE
 	CGPDFDocument.m
 	CGPDFOperatorTable.m
 	CGPDFPage.m
+	CGPDFScanner.m
 	CGPDFStream.m
 	CGPDFString.m
 	CGPSConverter.m
@@ -105,6 +106,7 @@ set(CoreGraphics_sources
 	CGPDFDocument.m
 	CGPDFOperatorTable.m
 	CGPDFPage.m
+	CGPDFScanner.m
 	CGPDFStream.m
 	CGPDFString.m
 	CGScreenRefresh.m

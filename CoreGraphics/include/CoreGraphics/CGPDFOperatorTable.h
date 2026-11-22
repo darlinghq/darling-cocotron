@@ -1,10 +1,12 @@
 #ifndef COREGRAPHICS_CGPDFOPERATORTABLE_H
 #define COREGRAPHICS_CGPDFOPERATORTABLE_H
 
-#include <CoreGraphics/CoreGraphicsExport.h>
-
 typedef struct CGPDFOperatorTable *CGPDFOperatorTableRef;
-typedef struct CGPDFScanner *CGPDFScannerRef;
+
+// Each header declares its own reference type before including the other, so the two
+// headers can be included in any order.
+#include <CoreGraphics/CGPDFScanner.h>
+#include <CoreGraphics/CoreGraphicsExport.h>
 
 // Called by a scanner when it reaches an operator the table has a callback for. The callback
 // reads the operator's operands from the scanner and gets the info pointer given to
