@@ -65,7 +65,7 @@ struct State {
     CGPDFContentStreamRef cs;
 };
 
-static void check(struct State *state, int code, bool ok) {
+static void expect_ok(struct State *state, int code, bool ok) {
     if (!ok && !state->failure)
         state->failure = code;
 }
@@ -77,7 +77,7 @@ static struct State *begin(CGPDFScannerRef scanner, void *info, const char *name
     if (state->count < 32)
         state->log[state->count] = name;
     state->count++;
-    check(state, 100, CGPDFScannerGetContentStream(scanner) == state->cs);
+    expect_ok(state, 100, CGPDFScannerGetContentStream(scanner) == state->cs);
     return state;
 }
 
@@ -104,10 +104,10 @@ static void opFill(CGPDFScannerRef scanner, void *info) {
 static void opRg(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "rg");
     CGPDFReal blue = -1, green = -1, red = -1, extra = 42;
-    check(state, 110, CGPDFScannerPopNumber(scanner, &blue) && blue == 0.75);
-    check(state, 111, CGPDFScannerPopNumber(scanner, &green) && green == 0.5);
-    check(state, 112, CGPDFScannerPopNumber(scanner, &red) && red == 0.25);
-    check(state, 113, !CGPDFScannerPopNumber(scanner, &extra) && extra == 42);
+    expect_ok(state, 110, CGPDFScannerPopNumber(scanner, &blue) && blue == 0.75);
+    expect_ok(state, 111, CGPDFScannerPopNumber(scanner, &green) && green == 0.5);
+    expect_ok(state, 112, CGPDFScannerPopNumber(scanner, &red) && red == 0.25);
+    expect_ok(state, 113, !CGPDFScannerPopNumber(scanner, &extra) && extra == 42);
 }
 
 // 10 20 30 40 re: integers read as numbers, and as integers.
@@ -115,10 +115,10 @@ static void opRect(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "re");
     CGPDFReal height = -1, width = -1;
     CGPDFInteger y = -1, x = -1;
-    check(state, 120, CGPDFScannerPopNumber(scanner, &height) && height == 40);
-    check(state, 121, CGPDFScannerPopNumber(scanner, &width) && width == 30);
-    check(state, 122, CGPDFScannerPopInteger(scanner, &y) && y == 20);
-    check(state, 123, CGPDFScannerPopInteger(scanner, &x) && x == 10);
+    expect_ok(state, 120, CGPDFScannerPopNumber(scanner, &height) && height == 40);
+    expect_ok(state, 121, CGPDFScannerPopNumber(scanner, &width) && width == 30);
+    expect_ok(state, 122, CGPDFScannerPopInteger(scanner, &y) && y == 20);
+    expect_ok(state, 123, CGPDFScannerPopInteger(scanner, &x) && x == 10);
 }
 
 // /F1 12 Tf: a number, then a name.
@@ -126,34 +126,34 @@ static void opFont(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "Tf");
     CGPDFReal size = -1;
     const char *name = NULL;
-    check(state, 130, CGPDFScannerPopNumber(scanner, &size) && size == 12);
-    check(state, 131, CGPDFScannerPopName(scanner, &name) && name && strcmp(name, "F1") == 0);
+    expect_ok(state, 130, CGPDFScannerPopNumber(scanner, &size) && size == 12);
+    expect_ok(state, 131, CGPDFScannerPopName(scanner, &name) && name && strcmp(name, "F1") == 0);
 }
 
 // <00FF41> Tj: the bytes of a string, which are not text.
 static void opShow(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "Tj");
     CGPDFStringRef string = NULL;
-    check(state, 140, CGPDFScannerPopString(scanner, &string) && string);
+    expect_ok(state, 140, CGPDFScannerPopString(scanner, &string) && string);
     if (!string) return;
     const unsigned char expected[] = {0x00, 0xFF, 0x41};
-    check(state, 141, CGPDFStringGetLength(string) == 3);
-    check(state, 142, CGPDFStringGetBytePtr(string) && memcmp(CGPDFStringGetBytePtr(string), expected, 3) == 0);
+    expect_ok(state, 141, CGPDFStringGetLength(string) == 3);
+    expect_ok(state, 142, CGPDFStringGetBytePtr(string) && memcmp(CGPDFStringGetBytePtr(string), expected, 3) == 0);
 }
 
 // [(A) -120 (B)] TJ
 static void opShowArray(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "TJ");
     CGPDFArrayRef array = NULL;
-    check(state, 150, CGPDFScannerPopArray(scanner, &array) && array);
+    expect_ok(state, 150, CGPDFScannerPopArray(scanner, &array) && array);
     if (!array) return;
-    check(state, 151, CGPDFArrayGetCount(array) == 3);
+    expect_ok(state, 151, CGPDFArrayGetCount(array) == 3);
     CGPDFStringRef string = NULL;
     CGPDFReal adjust = 0;
-    check(state, 152, CGPDFArrayGetString(array, 0, &string) && CGPDFStringGetLength(string) == 1 &&
+    expect_ok(state, 152, CGPDFArrayGetString(array, 0, &string) && CGPDFStringGetLength(string) == 1 &&
                           CGPDFStringGetBytePtr(string)[0] == 'A');
-    check(state, 153, CGPDFArrayGetNumber(array, 1, &adjust) && adjust == -120);
-    check(state, 154, CGPDFArrayGetString(array, 2, &string) && CGPDFStringGetBytePtr(string)[0] == 'B');
+    expect_ok(state, 153, CGPDFArrayGetNumber(array, 1, &adjust) && adjust == -120);
+    expect_ok(state, 154, CGPDFArrayGetString(array, 2, &string) && CGPDFStringGetBytePtr(string)[0] == 'B');
 }
 
 // /Span << /MCID 3 >> BDC: a dictionary, then a name.
@@ -162,9 +162,9 @@ static void opBeginMarked(CGPDFScannerRef scanner, void *info) {
     CGPDFDictionaryRef properties = NULL;
     CGPDFInteger identifier = -1;
     const char *tag = NULL;
-    check(state, 160, CGPDFScannerPopDictionary(scanner, &properties) && properties);
-    check(state, 161, properties && CGPDFDictionaryGetInteger(properties, "MCID", &identifier) && identifier == 3);
-    check(state, 162, CGPDFScannerPopName(scanner, &tag) && tag && strcmp(tag, "Span") == 0);
+    expect_ok(state, 160, CGPDFScannerPopDictionary(scanner, &properties) && properties);
+    expect_ok(state, 161, properties && CGPDFDictionaryGetInteger(properties, "MCID", &identifier) && identifier == 3);
+    expect_ok(state, 162, CGPDFScannerPopName(scanner, &tag) && tag && strcmp(tag, "Span") == 0);
 }
 
 // /N true 7 mm: an integer, a Boolean, and then a pop of the wrong type, which fails and leaves
@@ -173,31 +173,31 @@ static void opMixed(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "mm");
     CGPDFInteger integer = -1, wrong = 123;
     CGPDFBoolean boolean = 9;
-    check(state, 170, CGPDFScannerPopInteger(scanner, &integer) && integer == 7);
-    check(state, 171, CGPDFScannerPopBoolean(scanner, &boolean) && boolean == 1);
-    check(state, 172, !CGPDFScannerPopInteger(scanner, &wrong) && wrong == 123);
+    expect_ok(state, 170, CGPDFScannerPopInteger(scanner, &integer) && integer == 7);
+    expect_ok(state, 171, CGPDFScannerPopBoolean(scanner, &boolean) && boolean == 1);
+    expect_ok(state, 172, !CGPDFScannerPopInteger(scanner, &wrong) && wrong == 123);
     drain(scanner);
 }
 
 // 7 nn: the output pointer is optional (the documentation marks it nullable).
 static void opNoOutput(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "nn");
-    check(state, 180, CGPDFScannerPopInteger(scanner, NULL));
+    expect_ok(state, 180, CGPDFScannerPopInteger(scanner, NULL));
 }
 
 // (s) oo: any operand pops as an object.
 static void opObject(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "oo");
     CGPDFObjectRef object = NULL;
-    check(state, 190, CGPDFScannerPopObject(scanner, &object) && object);
-    check(state, 191, !CGPDFScannerPopObject(scanner, &object));
+    expect_ok(state, 190, CGPDFScannerPopObject(scanner, &object) && object);
+    expect_ok(state, 191, !CGPDFScannerPopObject(scanner, &object));
 }
 
 // false bf: a false Boolean pops as 0 (the output starts as 9).
 static void opFalse(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "bf");
     CGPDFBoolean boolean = 9;
-    check(state, 230, CGPDFScannerPopBoolean(scanner, &boolean) && boolean == 0);
+    expect_ok(state, 230, CGPDFScannerPopBoolean(scanner, &boolean) && boolean == 0);
 }
 
 // << /A 1 >> ss: a dictionary is not a stream, so the pop fails and leaves its output alone. (A
@@ -206,22 +206,22 @@ static void opFalse(CGPDFScannerRef scanner, void *info) {
 static void opNotStream(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "ss");
     CGPDFStreamRef stream = (CGPDFStreamRef)state;
-    check(state, 235, !CGPDFScannerPopStream(scanner, &stream) && stream == (CGPDFStreamRef)state);
+    expect_ok(state, 235, !CGPDFScannerPopStream(scanner, &stream) && stream == (CGPDFStreamRef)state);
 }
 
 // 1 2 3 pf: pops only the top operand and leaves the other two unpopped.
 static void opPopOne(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "pf");
     CGPDFReal real = -1;
-    check(state, 240, CGPDFScannerPopNumber(scanner, &real) && real == 3);
+    expect_ok(state, 240, CGPDFScannerPopNumber(scanner, &real) && real == 3);
 }
 
 // 4 pg: finds its own operand and none of the two pf left.
 static void opOwnOperands(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "pg");
     CGPDFReal real = -1, extra = 42;
-    check(state, 241, CGPDFScannerPopNumber(scanner, &real) && real == 4);
-    check(state, 242, !CGPDFScannerPopNumber(scanner, &extra) && extra == 42);
+    expect_ok(state, 241, CGPDFScannerPopNumber(scanner, &real) && real == 4);
+    expect_ok(state, 242, !CGPDFScannerPopNumber(scanner, &extra) && extra == 42);
 }
 
 // No operands: every pop fails and none writes its output.
@@ -236,22 +236,22 @@ static void opEmpty(CGPDFScannerRef scanner, void *info) {
     CGPDFArrayRef array = (CGPDFArrayRef)state;
     CGPDFDictionaryRef dictionary = (CGPDFDictionaryRef)state;
     CGPDFStreamRef stream = (CGPDFStreamRef)state;
-    check(state, 200, !CGPDFScannerPopObject(scanner, &object) && object == (CGPDFObjectRef)state);
-    check(state, 201, !CGPDFScannerPopBoolean(scanner, &boolean) && boolean == 9);
-    check(state, 202, !CGPDFScannerPopInteger(scanner, &integer) && integer == 9);
-    check(state, 203, !CGPDFScannerPopNumber(scanner, &real) && real == 9);
-    check(state, 204, !CGPDFScannerPopName(scanner, &name) && name == (const char *)state);
-    check(state, 205, !CGPDFScannerPopString(scanner, &string) && string == (CGPDFStringRef)state);
-    check(state, 206, !CGPDFScannerPopArray(scanner, &array) && array == (CGPDFArrayRef)state);
-    check(state, 207, !CGPDFScannerPopDictionary(scanner, &dictionary) && dictionary == (CGPDFDictionaryRef)state);
-    check(state, 208, !CGPDFScannerPopStream(scanner, &stream) && stream == (CGPDFStreamRef)state);
+    expect_ok(state, 200, !CGPDFScannerPopObject(scanner, &object) && object == (CGPDFObjectRef)state);
+    expect_ok(state, 201, !CGPDFScannerPopBoolean(scanner, &boolean) && boolean == 9);
+    expect_ok(state, 202, !CGPDFScannerPopInteger(scanner, &integer) && integer == 9);
+    expect_ok(state, 203, !CGPDFScannerPopNumber(scanner, &real) && real == 9);
+    expect_ok(state, 204, !CGPDFScannerPopName(scanner, &name) && name == (const char *)state);
+    expect_ok(state, 205, !CGPDFScannerPopString(scanner, &string) && string == (CGPDFStringRef)state);
+    expect_ok(state, 206, !CGPDFScannerPopArray(scanner, &array) && array == (CGPDFArrayRef)state);
+    expect_ok(state, 207, !CGPDFScannerPopDictionary(scanner, &dictionary) && dictionary == (CGPDFDictionaryRef)state);
+    expect_ok(state, 208, !CGPDFScannerPopStream(scanner, &stream) && stream == (CGPDFStreamRef)state);
 }
 
 // (s) ww: a string is not a number, so the pop fails and leaves its output alone.
 static void opWrongType(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "ww");
     CGPDFReal real = 5;
-    check(state, 210, !CGPDFScannerPopNumber(scanner, &real) && real == 5);
+    expect_ok(state, 210, !CGPDFScannerPopNumber(scanner, &real) && real == 5);
     drain(scanner);
 }
 
@@ -259,8 +259,8 @@ static void opWrongType(CGPDFScannerRef scanner, void *info) {
 static void opAfterUnknown(CGPDFScannerRef scanner, void *info) {
     struct State *state = begin(scanner, info, "qq");
     CGPDFReal real = -1, extra = 42;
-    check(state, 220, CGPDFScannerPopNumber(scanner, &real) && real == 9);
-    check(state, 221, !CGPDFScannerPopNumber(scanner, &extra) && extra == 42);
+    expect_ok(state, 220, CGPDFScannerPopNumber(scanner, &real) && real == 9);
+    expect_ok(state, 221, !CGPDFScannerPopNumber(scanner, &extra) && extra == 42);
 }
 
 static const char *mainContent =
