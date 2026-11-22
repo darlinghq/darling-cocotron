@@ -316,6 +316,12 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
         [NS_EXTRA(NSMenu, self)->_itemArray release];
         NS_EXTRA(NSMenu, self)->_itemArray = items;
     }
+    // The items do not archive their menu (a nib does not store it either): the menu that
+    // decoded them is the one they belong to, as if they had been added to it.
+    for (NSMenuItem *item in NS_EXTRA(NSMenu, self)->_itemArray) {
+        [item performSelector: @selector(_setMenu:) withObject: self];
+        [[item submenu] setSupermenu: self];
+    }
     return self;
 }
 
