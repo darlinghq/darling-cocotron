@@ -321,8 +321,8 @@ static BOOL _mouseCoalescingEnabled = YES;
     return 0;
 }
 
-// Only magnify and rotate events (NSEvent_gesture) carry a phase. No backend
-// produces precise (trackpad) scrolling yet: every scroll event is a wheel
+// Only magnify and rotate events (NSEvent_gesture) and scroll events marked as
+// precise (NSEvent_mouse) carry a phase. Every other scroll event is a wheel
 // notch measured in lines, with no phase, as a mouse wheel reports on macOS.
 - (NSEventPhase) phase {
     return NSEventPhaseNone;
