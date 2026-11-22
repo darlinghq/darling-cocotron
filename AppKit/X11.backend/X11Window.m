@@ -48,9 +48,9 @@
 #import "X11RoundedShape.h"
 #import "X11InvisibleWindow.h"
 #import "X11PointerMotion.h"
-#import "X11OpaqueRegion.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
+#import "X11OpaqueRegion.h"
 #import "X11AppMenu.h"
 #import <X11/Xatom.h>
 #import <X11/Xutil.h>
