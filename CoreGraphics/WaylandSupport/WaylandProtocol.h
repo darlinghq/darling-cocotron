@@ -285,6 +285,8 @@ enum {
     WP_TOPLEVEL_SET_MINIMIZED = 13,
     WP_TOPLEVEL_EV_CONFIGURE = 0,
     WP_TOPLEVEL_EV_CLOSE = 1,
+    WP_TOPLEVEL_EV_WM_CAPABILITIES = 3, /* xdg_toplevel version 5 */
+    WP_TOPLEVEL_CAPABILITY_MINIMIZE = 4, /* wm_capabilities: set_minimized is available */
 
     WP_LAYER_SHELL_GET_LAYER_SURFACE = 0,
     WP_LAYER_SURFACE_SET_SIZE = 0,

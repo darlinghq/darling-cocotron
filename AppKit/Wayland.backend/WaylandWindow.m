@@ -418,6 +418,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                                         &xdg_toplevel_interface, args,
                                         WaylandObjectToplevel, self);
             _surfaceRole = WaylandSurfaceRoleToplevel;
+            _minimizeAdvertised = _pendingMinimizeAdvertised = NO;
 
             [self updateTitle];
             args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
@@ -663,6 +664,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self destroyBuffers];
 
     _mapped = NO;
+    // The toplevel is gone, and so is what the compositor did to it.
+    [self endMinimized];
     _levelParent = nil;
     _configureUpdatePending = NO;
     _configured = NO;
@@ -761,20 +764,60 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) captureEvents {
 }
 
-- (void) miniaturize {
-    if (_toplevel != NULL) {
-        sendRequest(_toplevel, WP_TOPLEVEL_SET_MINIMIZED, 0);
-        [_display flush];
-    }
+// xdg-shell has no request to undo set_minimized and no event that says a toplevel is minimized,
+// so the window keeps the state itself. GUESS: the compositor minimizes the window when asked (it
+// may ignore the request, and then the window is reported miniaturized until it is shown again).
+// The state is kept only when something can bring the window back (xdg-activation) and the
+// compositor advertised that it minimizes (a compositor that did not ignores the request, so the
+// window would be reported miniaturized while it stays on screen). Otherwise the request is sent as
+// before and the window keeps being reported as not miniaturized. GUESS: a compositor that
+// predates the capabilities event (xdg_toplevel before version 5) minimizes.
+- (BOOL) compositorMinimizes {
+    return WL.wl_proxy_get_version(_toplevel) < 5 || _minimizeAdvertised;
 }
 
+- (void) miniaturize {
+    if (_toplevel == NULL || _minimized)
+        return;
+    sendRequest(_toplevel, WP_TOPLEVEL_SET_MINIMIZED, 0);
+    [_display flush];
+    if (_display->_activation == NULL || ![self compositorMinimizes])
+        return;
+    _minimized = YES;
+    [_display performAfterDispatch: ^{
+        if (self->_minimized && !self->_invalidated)
+            [self->_delegate platformWindowMiniaturized: self];
+    }];
+}
+
+// The only client-side way to bring a minimized toplevel back is to ask for its activation
+// (xdg-activation-v1); the compositor decides, and may only mark the window as wanting attention.
+// The window counts as shown again from the request on. If no request could be made (one is waiting
+// for its token) the state stays, and asking again later works. A restore the compositor does itself
+// (its task bar) ends the state when a configure changes the window to activated (see
+// -applyConfigure); a compositor that never reports the window deactivated cannot be told.
 - (void) deminiaturize {
+    if (_minimized && [_display requestActivationOfWindow: self])
+        [self endMinimized];
     [self ensureMapped];
 }
 
 - (BOOL) isMiniaturized {
-    // xdg-shell doesn't report whether a toplevel is minimized.
-    return NO;
+    return _minimized;
+}
+
+// The window is shown again (activated by the compositor, or mapped anew): tell the NSWindow.
+- (void) endMinimized {
+    if (!_minimized)
+        return;
+    _minimized = NO;
+    // A window being invalidated (-dealloc does it) has no NSWindow to tell, and must not be retained.
+    if (_invalidated)
+        return;
+    [_display performAfterDispatch: ^{
+        if (!self->_minimized && !self->_invalidated)
+            [self->_delegate platformWindowDeminiaturized: self];
+    }];
 }
 
 // What xdg-shell offers of occlusion is the suspended state, sent by compositors that stop repainting a
@@ -1516,6 +1559,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _pendingSuspended = WaylandStatesContain(states, WP_TOPLEVEL_STATE_SUSPENDED);
         } else if (opcode == WP_TOPLEVEL_EV_CLOSE) {
             [self closeRequested];
+        } else if (opcode == WP_TOPLEVEL_EV_WM_CAPABILITIES) {
+            _pendingMinimizeAdvertised = WaylandStatesContain(args[0].a, WP_TOPLEVEL_CAPABILITY_MINIMIZE);
         }
         break;
 
@@ -1656,6 +1701,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;
     _activated = activated;
+    _minimizeAdvertised = _pendingMinimizeAdvertised;
+    // Only the change to activated shows a restore: a configure that repeats the state of a window
+    // that was active when it was minimized may already be on its way.
+    if (activationChanged && activated)
+        [self endMinimized];
 
     BOOL suspendedChanged = _pendingSuspended != _suspended;
     _suspended = _pendingSuspended;

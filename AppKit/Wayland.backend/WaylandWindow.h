@@ -88,6 +88,13 @@ typedef enum {
     // for instance because it is covered or its workspace is not shown.
     BOOL _pendingSuspended, _suspended;
     BOOL _mapped;
+    // The window was sent -miniaturize (xdg_toplevel.set_minimized) and has not been shown again
+    // since; xdg-shell cannot tell a client whether a toplevel is minimized (see -miniaturize).
+    BOOL _minimized;
+    // Whether the compositor advertised that it minimizes toplevels (xdg_toplevel wm_capabilities,
+    // version 5): one that did not ignores set_minimized. The event applies with the configure that
+    // follows it.
+    BOOL _minimizeAdvertised, _pendingMinimizeAdvertised;
     // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
     BOOL _shouldBeMapped;
     BOOL _fullyTransparent;
