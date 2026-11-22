@@ -1532,6 +1532,16 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if ([_tableColumns count] > 0)
         size.height = [self rectOfColumn: 0].size.height;
 
+    // The table is at least as wide and as tall as its clip view, whatever its columns and rows add up to: observed
+    // on macOS 26.7.3, where after -reloadData a table of 4 rows and 296 points of columns in a 400 by 300 point
+    // clip view is 400 by 300 points, so that a click beside the columns or below the rows still reaches the table.
+    // Test: appkit-table-click-beside-columns.
+    if ([[self superview] isKindOfClass: [NSClipView class]]) {
+        NSSize clipSize = [[self superview] bounds].size;
+        size.width = MAX(size.width, clipSize.width);
+        size.height = MAX(size.height, clipSize.height);
+    }
+
     headerSize.width = size.width;
 
     [self setFrameSize: size];

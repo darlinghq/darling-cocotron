@@ -4,10 +4,13 @@
 // the documentation of -[NSTableView clickedColumn]
 // (https://developer.apple.com/documentation/appkit/nstableview/clickedcolumn), which reports -1
 // for a click where no column lies. Such a click must not raise (it used to index the column
-// array with -1), and clickedRow is still the row. GUESS, marked in the implementation (the
-// documentation is silent on what such a click does): the row is selected and the action is sent
-// as for any click on the row; a double click sends the double action and starts no edit.
-// Written from the documentation; not yet run in a guest.
+// array with -1), and clickedRow is still the row. The rest was observed on macOS 26.7.3 by delivering
+// clicks to a table in a borderless window with -[NSWindow sendEvent:]: a click beside the columns
+// selects the row and sends the action (clickedRow the row, clickedColumn -1); a double click also sends the
+// double action and starts no edit; the delegate is not asked whether to track a cell there, while a click in a
+// column asks once per click; a click below the last row clears the selection. That is possible because the
+// table is as wide and as tall as its clip view after -reloadData, however narrow its columns are.
+// Build: clang -framework AppKit appkit-table-click-beside-columns.m (no ARC)
 // Build: clang -framework AppKit appkit-table-click-beside-columns.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -74,6 +77,7 @@ static Source *setup(void)
     [column setWidth:100];
     [column setEditable:YES];
     [table addTableColumn:column];
+    [table setColumnAutoresizingStyle:NSTableViewNoColumnAutoresizing];
     Source *source = [[[Source alloc] init] autorelease];
     [table setDataSource:source];
     [table setDelegate:source];
@@ -96,6 +100,14 @@ static NSPoint beside(NSInteger row)
     return NSMakePoint(250, NSMidY(r));
 }
 
+static void test_the_table_is_as_wide_as_its_clip_view(void)
+{
+    setup();
+    NSRect clip = [[[table enclosingScrollView] contentView] bounds];
+    CHECK(NSWidth([table frame]) >= NSWidth(clip) && NSHeight([table frame]) >= NSHeight(clip));
+    CHECK(NSWidth([table frame]) > [[[table tableColumns] objectAtIndex:0] width]);
+}
+
 static void test_click_beside_the_columns(void)
 {
     Source *source = setup();
@@ -103,8 +115,8 @@ static void test_click_beside_the_columns(void)
     click(beside(2), 1);
     CHECK([table clickedColumn] == -1);
     CHECK([table clickedRow] == 2);
-    CHECK([table selectedRow] == 2); // GUESS
-    CHECK(source->actions == 1 && source->actionColumn == -1 && source->actionRow == 2); // GUESS
+    CHECK([table selectedRow] == 2);
+    CHECK(source->actions == 1 && source->actionColumn == -1 && source->actionRow == 2);
 }
 
 static void test_the_delegate_is_not_asked_to_track_a_missing_cell(void)
@@ -139,7 +151,7 @@ static void test_a_click_below_the_rows_still_clears_the_selection(void)
 {
     setup();
     [table selectRowIndexes:[NSIndexSet indexSetWithIndex:1] byExtendingSelection:NO];
-    click(NSMakePoint(50, 240), 1);
+    click(NSMakePoint(50, NSMaxY([table rectOfRow:4]) + 20), 1);
     CHECK([table selectedRow] == -1);
 }
 
@@ -148,6 +160,7 @@ int main(void)
     @autoreleasepool
     {
         [NSApplication sharedApplication];
+        test_the_table_is_as_wide_as_its_clip_view();
         test_click_beside_the_columns();
         test_the_delegate_is_not_asked_to_track_a_missing_cell();
         test_double_click_beside_the_columns();
