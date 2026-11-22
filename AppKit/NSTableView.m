@@ -2382,8 +2382,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         return;
     }
 
-    NSTableColumn *clickedColumnObject =
-            [_tableColumns objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn];
+    // Where no column lies the documented clickedColumn is -1, which names no column object. The nil column
+    // and its nil cell make the lookups below no-ops and leave nothing to track or edit.
+    NSInteger clickedColumn = NS_EXTRA(NSTableView, self)->_clickedColumn;
+    NSTableColumn *clickedColumnObject = clickedColumn >= 0 ? [_tableColumns objectAtIndex: clickedColumn] : nil;
 
     NSCell *clickedCell = [clickedColumnObject dataCellForRow: NS_EXTRA(NSTableView, self)->_clickedRow];
 
@@ -2392,7 +2394,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     // Button cells track the mouse by default; the delegate can change that for any cell
     BOOL tracksCell = [clickedCell isKindOfClass: [NSButtonCell class]];
 
-    if ([_delegate respondsToSelector: @selector(tableView:shouldTrackCell:forTableColumn:row:)])
+    if (clickedColumnObject != nil &&
+        [_delegate respondsToSelector: @selector(tableView:shouldTrackCell:forTableColumn:row:)])
         tracksCell = [_delegate tableView: self
                           shouldTrackCell: clickedCell
                            forTableColumn: clickedColumnObject
@@ -2583,17 +2586,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     } else if ([event clickCount] == 2) {
         // nb this logic was backwards previously
 
-        id binder = [[_tableColumns objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn]
-                _binderForBinding: @"value"
-                           create: NO];
+        id binder = [clickedColumnObject _binderForBinding: @"value"
+                                                    create: NO];
         BOOL interpretedAsEdit = NO;
-        if ([[_tableColumns objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn] isEditable]) {
+        if ([clickedColumnObject isEditable]) {
             if ([self dataSourceCanSetObjectValue] ||
                 [binder allowsEditingForRow: NS_EXTRA(NSTableView, self)->_clickedRow]) {
                 if (NS_EXTRA(NSTableView, self)->_clickedColumn != -1 && NS_EXTRA(NSTableView, self)->_clickedRow != -1) {
-                    if ([self delegateShouldEditTableColumn:
-                                        [_tableColumns
-                                                objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn]
+                    if ([self delegateShouldEditTableColumn: clickedColumnObject
                                                         row: NS_EXTRA(NSTableView, self)->_clickedRow]) {
                         interpretedAsEdit = YES;
                         [self editColumn: [self clickedColumn]
