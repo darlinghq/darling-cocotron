@@ -575,6 +575,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // from before fullscreen would be lost if the next map saved it again.
     _fullscreenRequested = _pendingFullscreen = _fullscreenRecheckPending = NO;
     _fullscreenReported = NO;
+    _fullscreenSettling = NO;
     [_display windowUnmapped: self];
     [_display flush];
 }
@@ -806,7 +807,28 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         WaylandToplevelSetFullscreen(_toplevel, output);
     else
         WaylandToplevelUnsetFullscreen(_toplevel);
+    if (_configured)
+        [self beginFullscreenSettle];
     [_display flush];
+}
+
+// After set_fullscreen or unset_fullscreen the client waits for the configure that
+// answers it before it commits again: the compositor decides the size. A commit
+// sent before the answer arrives has the size the window gets from the
+// application's own side of the change (the title bar goes away, for instance),
+// and a compositor that lets a client's size count for a floating window (sway)
+// then sends one more configure with that size and the fullscreen state, which
+// wins over the real fullscreen size. Drawing resumes when a configure brings the
+// requested state, or after a second when the compositor answers nothing.
+- (void) beginFullscreenSettle {
+    _fullscreenSettling = YES;
+    NSUInteger token = ++_fullscreenSettleToken;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (self->_fullscreenSettleToken != token || !self->_fullscreenSettling)
+            return;
+        self->_fullscreenSettling = NO;
+        [self presentIfPossible];
+    });
 }
 
 - (void) outputsChanged {
@@ -1267,7 +1289,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // per frame callback.
 - (void) presentIfPossible {
     if (!_needsPresent || !_mapped || !_configured || _configureUpdatePending || _frameCallback != NULL ||
-        _context == nil)
+        _fullscreenSettling || _context == nil)
         return;
 
     O2Surface *surface = [_context surface];
@@ -1453,6 +1475,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // Tell the delegate when the compositor's fullscreen state changes.
     BOOL fullscreenChanged = _pendingFullscreen != _fullscreenReported;
     _fullscreenReported = _pendingFullscreen;
+    if (_fullscreenSettling && _fullscreenReported == _fullscreenRequested)
+        _fullscreenSettling = NO;
 
     BOOL sized = NO;
     BOOL moved = NO;
