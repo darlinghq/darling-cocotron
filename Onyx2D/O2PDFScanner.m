@@ -1448,8 +1448,11 @@ NSData *O2PDFScannerCreateDataWithLength(O2PDFScanner *self, size_t length) {
                 // PDF 32000-1 7.8.2: a consumer ignores operators it does not
                 // recognize, together with their operands.
                 NSLog(@"unhandled identifier %@", object);
-                [_stack removeAllObjects];
             }
+            // The operands written before an operator are that operator's
+            // (PDF 32000-1 7.8.2), so whatever its callback left unpopped does
+            // not carry over to the next operator.
+            [_stack removeAllObjects];
         }
     }
 
