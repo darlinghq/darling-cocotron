@@ -441,8 +441,9 @@ static NSError *TypeLookupError(NSURL *url, NSInteger code) {
     return result;
 }
 
-// GUESS: the documentation says an error is set when the document cannot be made but names no code;
-// NSFileReadUnknownError is the code this controller already uses when a document cannot be read.
+// A type with no document class gives nil with NSCocoaErrorDomain NSFileReadUnknownError (256, empty userInfo),
+// also for a nil, empty or unknown type, and an error already in the caller's variable is replaced. Observed by
+// black-box test on macOS 26.7.3 and 10.14.4 (identical); pinned by appkit-document-controller-make-untitled-error.m.
 static NSError *UntitledDocumentError(void) {
     return [NSError errorWithDomain: NSCocoaErrorDomain code: NSFileReadUnknownError userInfo: nil];
 }
