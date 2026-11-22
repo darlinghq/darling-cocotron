@@ -37,6 +37,17 @@ COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextCropBox;
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextBleedBox;
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextTrimBox;
 COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextArtBox;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextSubject;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextCreatePDFA;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFContextOutputIntent;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFXInfo;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFXOutputConditionIdentifier;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFXOutputIntentSubtype;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFXDestinationOutputProfile;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFOutlineTitle;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFOutlineChildren;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFOutlineDestination;
+COREGRAPHICS_EXPORT const CFStringRef kCGPDFOutlineDestinationRect;
 
 typedef struct CF_BRIDGED_TYPE(id) O2PDFContext *CGPDFContextRef;
 
@@ -49,6 +60,7 @@ COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self);
 COREGRAPHICS_EXPORT void CGPDFContextBeginPage(CGContextRef self,
                                              CFDictionaryRef pageInfo);
 COREGRAPHICS_EXPORT void CGPDFContextEndPage(CGContextRef self);
+COREGRAPHICS_EXPORT void CGPDFContextSetOutline(CGContextRef context, CFDictionaryRef outline);
 
 CF_IMPLICIT_BRIDGING_DISABLED
 

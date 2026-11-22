@@ -34,6 +34,28 @@ const CFStringRef kCGPDFContextBleedBox = CFSTR("BleedBox");
 const CFStringRef kCGPDFContextTrimBox = CFSTR("TrimBox");
 const CFStringRef kCGPDFContextArtBox = CFSTR("ArtBox");
 
+// The string values of these keys were read on macOS 26.7.3 and Mac OS X 10.14.4 through their public symbols
+// (black-box observation, identical on both): Subject and OutputIntent are the symbol names, while the four
+// PDF/X keys are the PDF key names of the output intent dictionary (PDF 32000-1 14.11.5), and the PDF/A key
+// is the string "CGPDFContextCreatePDFA" (the symbol is absent from 10.14.4, which has no such key; it is
+// provided anyway). Test: coregraphics-pdf-context-keys.
+// The keys are declared so callers can use them; CGPDFContextCreate accepts them and does not write them: the
+// subject (like the keywords) is dropped because only the title, author and creator reach the file, and the
+// PDF/A and PDF/X keys have no effect.
+const CFStringRef kCGPDFContextSubject = CFSTR("kCGPDFContextSubject");
+const CFStringRef kCGPDFContextCreatePDFA = CFSTR("CGPDFContextCreatePDFA");
+const CFStringRef kCGPDFContextOutputIntent = CFSTR("kCGPDFContextOutputIntent");
+const CFStringRef kCGPDFXInfo = CFSTR("Info");
+const CFStringRef kCGPDFXOutputConditionIdentifier = CFSTR("OutputConditionIdentifier");
+const CFStringRef kCGPDFXOutputIntentSubtype = CFSTR("S");
+const CFStringRef kCGPDFXDestinationOutputProfile = CFSTR("DestOutputProfile");
+
+// The keys of the outline dictionary of CGPDFContextSetOutline and CGPDFDocumentGetOutline (same observation).
+const CFStringRef kCGPDFOutlineTitle = CFSTR("Title");
+const CFStringRef kCGPDFOutlineChildren = CFSTR("Children");
+const CFStringRef kCGPDFOutlineDestination = CFSTR("Destination");
+const CFStringRef kCGPDFOutlineDestinationRect = CFSTR("DestinationRect");
+
 CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                                 const CGRect *mediaBox,
                                 CFDictionaryRef auxiliaryInfo)
@@ -74,4 +96,17 @@ void CGPDFContextBeginPage(CGContextRef self, CFDictionaryRef pageInfo) {
 
 void CGPDFContextEndPage(CGContextRef self) {
     O2ContextEndPage((O2ContextRef)self);
+}
+
+// The outline is kept by the context and written into the file when the context is closed (the PDF has
+// /Outlines then; documents made without an outline have none). Observed on macOS 26.7.3 and Mac OS X
+// 10.14.4: after setting any dictionary, even an empty one, the generated document answers
+// CGPDFDocumentGetOutline with a non-NULL dictionary of one key. Test: coregraphics-pdf-outline.
+// Limitation: only the titles and the nesting of kCGPDFOutlineChildren are written; the destinations are
+// not (the layout of a destination dictionary was not observed).
+// A NULL outline, or a context that is not a PDF context, is ignored.
+void CGPDFContextSetOutline(CGContextRef context, CFDictionaryRef outline) {
+    if (context == NULL || ![(id)context isKindOfClass: [O2PDFContext class]])
+        return;
+    [(O2PDFContext *)context setOutline: (NSDictionary *)outline];
 }

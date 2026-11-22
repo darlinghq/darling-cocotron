@@ -50,8 +50,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         O2PDFArray *array = (O2PDFArray *) contents;
         int i, count = [array count];
 
-        for (i = 0; i < count; i++)
-            [streams addObject: [array objectAtIndex: i]];
+        // An element that is not a stream once resolved (a reference to a missing or
+        // unreadable object reads as null, PDF 32000-1 7.3.9) is left out.
+        for (i = 0; i < count; i++) {
+            O2PDFObject *element = [[array objectAtIndex: i] realObject];
+
+            if ([element objectType] == kO2PDFObjectTypeStream)
+                [streams addObject: element];
+        }
     } else if ([contents objectType] == kO2PDFObjectTypeStream)
         [streams addObject: contents];
     else {

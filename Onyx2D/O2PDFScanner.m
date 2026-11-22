@@ -353,7 +353,8 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
                      O2PDFInteger *lastPosition, O2PDFObject **objectp)
 {
     O2PDFInteger currentSign = 1, currentInt = 0;
-    O2PDFReal currentReal = 0, currentFraction = 0;
+    O2PDFReal currentReal = 0, wholePart = 0, fractionScale = 1;
+    unsigned long long fractionDigits = 0;
     int inlineLocation = 0;
     O2PDFByteBuffer *byteBuffer = NULL;
 
@@ -429,7 +430,9 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
                 state = STATE_REAL;
                 currentSign = 1;
                 currentReal = 0;
-                currentFraction = 0.1;
+                wholePart = 0;
+                fractionDigits = 0;
+                fractionScale = 1;
                 break;
 
             case '(':
@@ -482,7 +485,9 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
             if (code == '.') {
                 state = STATE_REAL;
                 currentReal = currentInt;
-                currentFraction = 0.1;
+                wholePart = currentInt;
+                fractionDigits = 0;
+                fractionScale = 1;
             } else if (code >= '0' && code <= '9')
                 currentInt = currentInt * 10 + code - '0';
             else {
@@ -495,8 +500,14 @@ BOOL O2PDFScanObject(const char *bytes, unsigned length, O2PDFInteger position,
 
         case STATE_REAL:
             if (code >= '0' && code <= '9') {
-                currentReal += currentFraction * (code - '0');
-                currentFraction *= 0.1;
+                // The fraction is the digits read as one integer over a power of ten, so that a decimal
+                // such as 0.75 that is exact in binary comes out exact (adding digit * 0.1^n is not).
+                // Digits beyond what a double can hold are ignored.
+                if (fractionScale < 1e17) {
+                    fractionDigits = fractionDigits * 10 + (code - '0');
+                    fractionScale *= 10;
+                    currentReal = wholePart + (O2PDFReal) fractionDigits / fractionScale;
+                }
             } else {
                 *objectp = [O2PDFObject_Real
                         pdfObjectWithReal: currentSign * currentReal];
@@ -1302,6 +1313,9 @@ BOOL O2PDFScannerPopObject(O2PDFScanner *self, O2PDFObject **value) {
 }
 
 BOOL O2PDFScannerPopBoolean(O2PDFScanner *self, O2PDFBoolean *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result =
             [[self->_stack lastObject] checkForType: kO2PDFObjectTypeBoolean
                                               value: value];
@@ -1312,6 +1326,9 @@ BOOL O2PDFScannerPopBoolean(O2PDFScanner *self, O2PDFBoolean *value) {
 }
 
 BOOL O2PDFScannerPopInteger(O2PDFScanner *self, O2PDFInteger *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result =
             [[self->_stack lastObject] checkForType: kO2PDFObjectTypeInteger
                                               value: value];
@@ -1322,6 +1339,9 @@ BOOL O2PDFScannerPopInteger(O2PDFScanner *self, O2PDFInteger *value) {
 }
 
 BOOL O2PDFScannerPopNumber(O2PDFScanner *self, O2PDFReal *value) {
+    if ([self->_stack count] == 0)
+        return NO;
+
     BOOL result = [[self->_stack lastObject] checkForType: kO2PDFObjectTypeReal
                                                     value: value];
 
@@ -1433,14 +1453,15 @@ NSData *O2PDFScannerCreateDataWithLength(O2PDFScanner *self, size_t length) {
             O2PDFOperatorCallback callback = [_operatorTable
                     callbackForName: [(O2PDFObject_identifier *) object name]];
 
-            if (callback != NULL) {
+            // Only operators with a registered callback invoke anything (the
+            // CGPDFScannerScan documentation); one without is passed over, and
+            // its operands are dropped below with the others.
+            if (callback != NULL)
                 callback(self, _info);
-            } else {
-                // PDF 32000-1 7.8.2: a consumer ignores operators it does not
-                // recognize, together with their operands.
-                NSLog(@"unhandled identifier %@", object);
-                [_stack removeAllObjects];
-            }
+            // The operands written before an operator are that operator's
+            // (PDF 32000-1 7.8.2), so whatever its callback left unpopped does
+            // not carry over to the next operator.
+            [_stack removeAllObjects];
         }
     }
 

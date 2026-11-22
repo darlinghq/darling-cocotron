@@ -46,6 +46,7 @@ extern const NSString *kO2PDFContextCreator;
     size_t _length;
     O2Rect _defaultBoxes[5];
     BOOL _defaultBoxPresent[5];
+    NSDictionary *_outline;
 }
 
 - initWithConsumer: (O2DataConsumer *) consumer
@@ -55,6 +56,10 @@ extern const NSString *kO2PDFContextCreator;
 - (void) beginPDFPage: (NSDictionary *) pageInfo;
 - (void) beginPageWithInfo: (NSDictionary *) pageInfo
                 mediaBox: (const O2Rect *) mediaBox;
+
+// Sets the document outline (a dictionary whose "Children" array holds dictionaries with a "Title" and
+// optional "Children"), written into the catalog when the context is closed. nil removes it.
+- (void) setOutline: (NSDictionary *) outline;
 
 - (NSUInteger) length;
 

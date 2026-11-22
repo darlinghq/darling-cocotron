@@ -86,7 +86,7 @@ O2GState *O2GStateCopyWithZone(O2GState *self, NSZone *zone);
 
 - (O2AffineTransform) userSpaceToDeviceSpaceTransform;
 O2AffineTransform O2GStateUserSpaceTransform(O2GState *self);
-- (O2Rect) clipBoundingBox;
+- (O2Rect) clipBoundingBoxWithinDeviceBounds: (O2Rect) bounds;
 - (O2InterpolationQuality) interpolationQuality;
 - (O2Point) convertPointToDeviceSpace: (O2Point) point;
 - (O2Point) convertPointToUserSpace: (O2Point) point;

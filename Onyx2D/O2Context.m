@@ -552,7 +552,10 @@ O2Rect O2ContextGetClipBoundingBox(O2ContextRef self) {
     if (self == nil)
         return O2RectZero;
 
-    return [O2ContextCurrentGState(self) clipBoundingBox];
+    O2Size size = [self size];
+
+    return [O2ContextCurrentGState(self)
+            clipBoundingBoxWithinDeviceBounds: O2RectMake(0, 0, size.width, size.height)];
 }
 
 O2AffineTransform O2ContextGetTextMatrix(O2ContextRef self) {
