@@ -1,13 +1,17 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
-// The menu of a pop-up button tells its delegate about a tracking session: -menuNeedsUpdate: first, then
-// -menuWillOpen:, and -menuDidClose: once the menu is gone, each once and each with the button's own menu
+// The menu of a pop-up button tells its delegate about a tracking session: -menuNeedsUpdate:, then -menuWillOpen:,
+// and -menuDidClose: once the menu is gone, each once and each with the button's own menu
 // (https://developer.apple.com/documentation/appkit/nsmenudelegate/menuneedsupdate(_:),
 // https://developer.apple.com/documentation/appkit/nsmenudelegate/menuwillopen(_:),
 // https://developer.apple.com/documentation/appkit/nsmenudelegate/menudidclose(_:)). All three are optional
 // (@optional in NSMenuDelegate), so a delegate that implements only some of them is called for those only. The
-// tracking is ended with Escape, queued before it starts. The list of a pop-up button shows no submenus, so a
-// submenu's delegate is not called. Needs a window server. Build without ARC.
+// session is also bracketed by NSMenuDidBeginTrackingNotification and NSMenuDidEndTrackingNotification, posted
+// whatever the delegate. Observed on macOS 26.7.3 for a pop-up button: needsUpdate, begin, willOpen, ..., didClose,
+// end; for a pull-down button: begin, needsUpdate, willOpen, ..., didClose, end. The two orders differ, which is a
+// QUIRK (test_quirk_pop_up_updates_before_begin_notification, the pop-up and pull-down runs below).
+// The tracking is ended with Escape, queued before it starts. The list of a pop-up button opens no submenus here
+// (macOS updates and opens them): not tested. Needs a window server. Build without ARC.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
@@ -118,32 +122,25 @@ int main(void) {
         FullDelegate *full = [[FullDelegate alloc] init];
         PlainDelegate *plain = [[PlainDelegate alloc] init];
         OpenCloseDelegate *openClose = [[OpenCloseDelegate alloc] init];
-        NSArray *all = @[ @"needsUpdate", @"willOpen", @"didClose" ];
+        NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+        id begin = [center addObserverForName: NSMenuDidBeginTrackingNotification object: nil queue: nil
+                                   usingBlock: ^(NSNotification *n) { note(@"begin", [n object]); }];
+        id end = [center addObserverForName: NSMenuDidEndTrackingNotification object: nil queue: nil
+                                 usingBlock: ^(NSNotification *n) { note(@"end", [n object]); }];
 
         for (int pullsDown = 0; pullsDown <= 1; pullsDown++) {
-            run(pullsDown, full, all, "needsUpdate, willOpen, didClose, once each, in that order");
-            run(pullsDown, plain, @[], "a delegate without the optional methods is not called (and does not raise)");
-            run(pullsDown, openClose, @[ @"willOpen", @"didClose" ], "a delegate without menuNeedsUpdate: gets the other two");
+            // test_quirk_pop_up_updates_before_begin_notification: the update comes before the begin notification
+            // for a pop-up and after it for a pull-down.
+            NSArray *all = pullsDown ? @[ @"begin", @"needsUpdate", @"willOpen", @"didClose", @"end" ]
+                                     : @[ @"needsUpdate", @"begin", @"willOpen", @"didClose", @"end" ];
+            run(pullsDown, full, all, "the update, begin, willOpen, didClose and end calls, once each, in macOS order");
+            run(pullsDown, plain, @[ @"begin", @"end" ],
+                "a delegate without the optional methods is not called (and does not raise), the notifications are posted");
+            run(pullsDown, openClose, @[ @"begin", @"willOpen", @"didClose", @"end" ],
+                "a delegate without menuNeedsUpdate: gets the other two");
         }
-
-        // A submenu of the button's menu is not updated or opened by the list: its delegate hears nothing.
-        NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 300, 200)
-                                                       styleMask: NSWindowStyleMaskTitled
-                                                         backing: NSBackingStoreBuffered
-                                                           defer: NO];
-        NSPopUpButton *button = [[NSPopUpButton alloc] initWithFrame: NSMakeRect(20, 100, 120, 26) pullsDown: NO];
-        [button addItemsWithTitles: @[ @"One", @"Two" ]];
-        NSMenu *submenu = [[NSMenu alloc] initWithTitle: @"Sub"];
-        [submenu addItemWithTitle: @"Inner" action: NULL keyEquivalent: @""];
-        [submenu setDelegate: full];
-        [[button menu] setSubmenu: submenu forItem: [button itemAtIndex: 1]];
-        [[window contentView] addSubview: button];
-        [window makeKeyAndOrderFront: nil];
-        [events removeAllObjects];
-        trackAndCancel(button, window);
-        expect([events count] == 0, "a submenu's delegate is not asked to update for a pop-up button");
-        [submenu setDelegate: nil];
-        [window close];
+        [center removeObserver: begin];
+        [center removeObserver: end];
 
         [full release];
         [plain release];

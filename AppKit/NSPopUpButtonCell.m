@@ -747,12 +747,24 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     origin = [controlView convertPoint: origin toView: nil];
     origin = [[controlView window] convertBaseToScreen: origin];
 
-    // The delegate calls are optional, and go to the menu itself, not to the
-    // copy shown for a pull-down: the update (-menuNeedsUpdate: once, then the
-    // validation of the items) comes first, then -menuWillOpen:; -menuDidClose:
-    // follows the tracking. The list shows no submenus, so their delegates are
-    // not asked.
-    [_menu _updateWithoutSubmenus];
+    // The delegate calls are optional, and go to the menu itself, not to the copy shown for a pull-down: the
+    // update (-menuNeedsUpdate: once, then the validation of the items), the tracking notification and
+    // -menuWillOpen:, in the order macOS makes them; after the tracking come -menuDidClose: and the end
+    // notification. The list of items does not open submenus, so a submenu's delegate is not asked: macOS
+    // updates and opens a submenu of a pop-up, which is not implemented here.
+    // QUIRK: a pop-up (not pull-down) button's menu is updated before NSMenuDidBeginTrackingNotification is
+    // posted, a pull-down's after it. Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2).
+    // Test: appkit-popupbuttoncell-menu-delegate (test_quirk_pop_up_updates_before_begin_notification)
+    BOOL pullsDown = NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown;
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+
+    if (pullsDown) {
+        [center postNotificationName: NSMenuDidBeginTrackingNotification object: _menu];
+        [_menu _updateWithoutSubmenus];
+    } else {
+        [_menu _updateWithoutSubmenus];
+        [center postNotificationName: NSMenuDidBeginTrackingNotification object: _menu];
+    }
     if ([[_menu delegate] respondsToSelector: @selector(menuWillOpen:)])
         [[_menu delegate] menuWillOpen: _menu];
     NSMenu *menu = _menu;
@@ -791,6 +803,7 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     [window close]; // release when closed=YES
     if ([[_menu delegate] respondsToSelector: @selector(menuDidClose:)])
         [[_menu delegate] menuDidClose: _menu];
+    [center postNotificationName: NSMenuDidEndTrackingNotification object: _menu];
 
     return itemIndex != NSNotFound;
 }
