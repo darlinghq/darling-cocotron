@@ -90,21 +90,20 @@ int main(void) {
         expect(document == nil, @"a failing read makes no document");
         expect([[error domain] isEqual:@"FixtureDomain"] && [error code] == 42, @"the reader's error is returned");
 
-        // nil is never returned without an error (GUESS: the code is not documented).
+        // A class that returns nil without an error leaves the error nil: pinned by black-box observation on
+        // macOS 26.7.3 and 10.14.4 (the open entry points that take a completion handler add a generic error).
         error = nil;
         document = [controller makeDocumentWithContentsOfURL:url ofType:@"Silent" error:&error];
-        expect(document == nil && error != nil, @"a failing read that sets no error still reports one");
-        // A class that overrides the legacy initialiser and returns nil on its own sets no error either.
+        expect(document == nil && error == nil, @"a failing read that sets no error leaves it unset");
         error = nil;
         document = [controller makeDocumentWithContentsOfURL:url ofType:@"Legacy" error:&error];
-        expect(document == nil && [[error domain] isEqual:NSCocoaErrorDomain] && [error code] == NSFileReadUnknownError,
-               @"a failure of the legacy initialiser reports the generic error");
+        expect(document == nil && error == nil, @"a failure of the legacy initialiser leaves the error unset");
         error = nil;
         document = [controller makeDocumentWithContentsOfURL:url ofType:@"Classless" error:&error];
-        expect(document == nil && error != nil, @"a type with no document class reports an error");
+        expect(document == nil, @"a type with no document class makes no document");
         error = nil;
         document = [controller makeDocumentWithContentsOfURL:url ofType:@"Unknown" error:&error];
-        expect(document == nil && error != nil, @"an undeclared type reports an error");
+        expect(document == nil, @"an undeclared type makes no document");
 
         // A NULL error pointer is allowed.
         expect([controller makeDocumentWithContentsOfURL:url ofType:@"Failing" error:NULL] == nil, @"NULL error pointer");

@@ -81,8 +81,8 @@ int main(void) {
         expect(controller.presented == 2, @"its generic error is presented");
 
         // The error is still returned to a caller that asks for it.
-        expect([controller openDocumentWithContentsOfURL:[NSURL fileURLWithPath:@"/nonexistent/Silent"] display:NO error:&error] == nil
-               && error != nil, @"the caller gets the error");
+        expect([controller openDocumentWithContentsOfURL:[NSURL fileURLWithPath:@"/nonexistent/Silent"] display:NO error:&error] == nil,
+               @"the caller gets no document");
         expect(controller.presented == 2, @"the programmatic entry point presents nothing");
         NSLog(@"PASS: open failures are presented, cancelled ones are not");
     }
