@@ -1,4 +1,5 @@
 #import <AppKit/AppKit.h>
+#include <math.h>
 #include <stdlib.h>
 
 // Scroll wheel events from a device with precise deltas (a trackpad) differ from legacy wheel
@@ -6,11 +7,12 @@
 //   hasPreciseScrollingDeltas  https://developer.apple.com/documentation/appkit/nsevent/hasprecisescrollingdeltas
 //   scrollingDeltaX/Y          https://developer.apple.com/documentation/appkit/nsevent/scrollingdeltax
 //   phase                      https://developer.apple.com/documentation/appkit/nsevent/phase-swift.property
-// For a precise event the scrolling deltas are the amounts to scroll by (the pages name no unit) and
-// the event has a gesture phase; a legacy wheel event has no phase and its scrolling deltas are
-// multiplied by a line height by the receiver. Backends mark events through this private method of
+// For a precise event the scrolling deltas are the amounts to scroll by, in points (observed on macOS 26.7.3
+// and 10.14.4: a pixel-unit scroll of 10 reports scrollingDeltaY 10) and the event has a gesture phase; a
+// legacy wheel event has no phase and its scrolling deltas are in lines, multiplied by a line height by the
+// receiver. On a precise event the legacy deltaX and deltaY are a tenth of the scrolling deltas (a QUIRK, observed
+// on the same systems: test_quirk_precise_legacy_deltas_are_a_tenth). Backends mark events through this private method of
 // the class that scroll wheel events are made from.
-// Not run in a Darling guest or on macOS; the expectations come from the pages above.
 @interface NSEvent_mouse : NSEvent
 - (void)_setPreciseScrollingDeltaX:(CGFloat)deltaX deltaY:(CGFloat)deltaY phase:(NSEventPhase)phase;
 @end
@@ -56,6 +58,9 @@ int main(void)
             expect(precise.hasPreciseScrollingDeltas, @"marked event has precise deltas");
             expect(precise.scrollingDeltaX == 12.5 && precise.scrollingDeltaY == -37.25,
                    @"scrolling deltas are the amounts given");
+            // test_quirk_precise_legacy_deltas_are_a_tenth
+            expect(fabs(precise.deltaX - 1.25) < 1e-6 && fabs(precise.deltaY + 3.725) < 1e-6,
+                   @"the legacy deltas of a precise event are a tenth of the scrolling deltas");
             expect(precise.phase == phases[i], @"phase is the one given");
             expect(precise.momentumPhase == NSEventPhaseNone, @"no momentum phase is reported");
             expect(precise.type == NSScrollWheel, @"marking keeps the type");

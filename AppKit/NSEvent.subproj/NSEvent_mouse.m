@@ -262,6 +262,13 @@ static NSInteger defaultButtonNumber(NSEventType type) {
     _hasPreciseScrollingDeltas = YES;
     _scrollingDeltaX = deltaX;
     _scrollingDeltaY = deltaY;
+    // QUIRK: the legacy deltaX and deltaY of a precise scroll event are a tenth of the scrolling deltas (the
+    // deltas are in points, the legacy ones in lines of ten points). Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 and 10.14.4 (tier 2), scroll events made with CGEventCreateScrollWheelEvent2 in
+    // pixel units: 10 points gave deltaY 1, 25 gave deltaX 2.5.
+    // Test: appkit-precise-scroll-events (test_quirk_precise_legacy_deltas_are_a_tenth)
+    _deltaX = deltaX / 10;
+    _deltaY = deltaY / 10;
     _scrollPhase = phase;
 }
 
