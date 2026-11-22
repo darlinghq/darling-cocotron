@@ -364,6 +364,10 @@ NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
             *effectiveRange = NSMakeRange(0, 0);
         return nil;
     }
+    // The attribute lookup below does not check the index itself.
+    if (location >= [self length])
+        [NSException raise: NSRangeException
+                    format: @"-[NSAttributedString URLAtIndex:effectiveRange:]: Range or index out of bounds"];
     id link = [self attribute: NSLinkAttributeName
                       atIndex: location
         longestEffectiveRange: &range
