@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuView.h>
 #import <AppKit/NSPopUpButtonCell.h>
 #import <AppKit/NSPopUpWindow.h>
 #import <AppKit/NSRaise.h>
@@ -746,15 +747,20 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     origin = [controlView convertPoint: origin toView: nil];
     origin = [[controlView window] convertBaseToScreen: origin];
 
-    [[_menu delegate] menuNeedsUpdate: _menu];
-    //	[[_menu delegate] menuWillOpen: _menu];
+    // The delegate calls are optional, and go to the menu itself, not to the
+    // copy shown for a pull-down: the update (-menuNeedsUpdate: once, then the
+    // validation of the items) comes first, then -menuWillOpen:; -menuDidClose:
+    // follows the tracking. The list shows no submenus, so their delegates are
+    // not asked.
+    [_menu _updateWithoutSubmenus];
+    if ([[_menu delegate] respondsToSelector: @selector(menuWillOpen:)])
+        [[_menu delegate] menuWillOpen: _menu];
     NSMenu *menu = _menu;
     if (NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown && [_menu numberOfItems]) {
         // Don't display the first item for pullDowns controls
         menu = [[_menu copy] autorelease];
         [menu removeItemAtIndex: 0];
     }
-    [menu update];
 
     NSPopUpWindow *window = [[NSPopUpWindow alloc]
             initWithFrame: NSMakeRect(origin.x, origin.y, cellFrame.size.width,
@@ -783,7 +789,8 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     }
     _selectedIndex = (itemIndex == NSNotFound) ? -1 : itemIndex;
     [window close]; // release when closed=YES
-                    //	[[_menu delegate] menuDidClose: _menu];
+    if ([[_menu delegate] respondsToSelector: @selector(menuDidClose:)])
+        [[_menu delegate] menuDidClose: _menu];
 
     return itemIndex != NSNotFound;
 }
