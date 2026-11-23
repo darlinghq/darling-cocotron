@@ -481,7 +481,8 @@ CTFontRef CTFontCreateCopyWithFamily(CTFontRef font, CGFloat size,
     // CTFontCreateCopyWithFamily on macOS 26.7.3 and Mac OS X 10.14.4 (identical, tier 2) and on 26.1
     // (arm64): Helvetica-Bold into Zapfino and into Apple
     // Color Emoji gives those families' only face (probe 639.F.family). Only single-face families
-    // were probed, so GUESS: which face a family of several gives. The fewest mismatches are taken,
+    // were probed; for a family of several the order below is what the test's bold-italic case pins (it passes
+    // on 26.7.3 and 10.14.4). The fewest mismatches are taken,
     // bold dropped first, then italic, then the nearest weight; the rejected alternative is to
     // ignore both at once. CTFontCreateCopyWithSymbolicTraits does return NULL for a missing trait
     // inside one family (probe 639.D.noface). Test: coretext-font-copy-with-traits-and-family.
