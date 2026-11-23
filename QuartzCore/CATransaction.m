@@ -298,11 +298,11 @@ static void scheduleCompletionBlocks(void) {
     }
 }
 
-// Private, sent to the class by Mac Catalyst frameworks and not documented. The
-// name asks to stop a run loop observer from committing transactions (GUESS: the
-// argument is a BOOL, YES disables). Cocotron commits an implicit transaction from
-// a run loop perform, not from an observer, so there is nothing to switch off: the
-// flag is kept and has no effect. Transactions behave exactly as before.
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The argument is a
+// BOOL (type encoding observed on macOS 10.14.4 and 26.7.3). The name asks to stop a run loop
+// observer from committing transactions. Cocotron commits an implicit transaction from a run loop
+// perform, not from an observer, so there is nothing to switch off: the flag is kept and has no
+// effect. Test: quartzcore-catransaction-disable-run-loop-observer-commits.
 static BOOL disableRunLoopObserverCommits;
 
 + (void) setDisableRunLoopObserverCommits: (BOOL) value {
@@ -311,10 +311,10 @@ static BOOL disableRunLoopObserverCommits;
     }
 }
 
-// Private, sent to the class by Mac Catalyst frameworks and not documented. The
-// name asks for the default of the flag above for transactions to come (GUESS:
-// the argument is a BOOL). The flag has no effect here, so the default has none
-// either: it is kept and nothing reads it.
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The argument is a
+// BOOL (observed on macOS 26.7.3; Mojave 10.14.4 has no such selector, so this is the superset
+// behaviour). The name asks for the default of the flag above for transactions to come. The flag
+// has no effect here, so the default has none either: it is kept and nothing reads it.
 static BOOL defaultDisableRunLoopObserverCommits;
 
 + (void) setDefaultDisableRunLoopObserverCommits: (BOOL) value {
