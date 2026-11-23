@@ -9,6 +9,7 @@
 #include <setjmp.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 @implementation O2ImageDecoder_JPEG_libjpeg
 
@@ -65,20 +66,27 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
                                                  int len, int *x, int *y)
 {
     struct jpeg_decompress_struct cinfo;
-    jpeg_create_decompress(&cinfo);
-
     o2jpg_error_mgr jerr;
 
+    // Zeroed so that jpeg_destroy_decompress is safe (mem is NULL) if
+    // jpeg_create_decompress fails before it initializes the struct.
+    memset(&cinfo, 0, sizeof(cinfo));
+    // libjpeg reports errors from jpeg_create_decompress through cinfo.err,
+    // so it has to be set up first.
     cinfo.err = jpeg_std_error(&jerr.err);
     // Use our own exit routine - we don't want to exit the app when something
     // goes wrong
     jerr.err.error_exit = o2error_exit;
     // We need to use setjmp since the error exit method must no return
+    // Modified after setjmp and read after longjmp, so it must live in memory
+    unsigned char *volatile outputImage = NULL;
     if (setjmp(jerr.jmp)) {
         // Do some cleaning and return an empty image
         jpeg_destroy_decompress(&cinfo);
+        free(outputImage);
         return 0;
     }
+    jpeg_create_decompress(&cinfo);
 
     /// Read the data from our memory buffer
     jpeg_mem_src(&cinfo, (unsigned char *) buffer, len);
@@ -112,8 +120,7 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     int bytesPerRow = cinfo.output_width * wantedPixelSize;
 
     // Buffer for the final decompressed data
-    unsigned char *outputImage =
-            (unsigned char *) malloc(bytesPerRow * cinfo.output_height);
+    outputImage = (unsigned char *) malloc(bytesPerRow * cinfo.output_height);
     if (outputImage) {
 #ifdef JCS_ALPHA_EXTENSIONS
         // Scanline buffers pointers - they'll point directly to the final image
@@ -203,6 +210,10 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     _dataProvider = [dataProvider retain];
 
     CFDataRef encodedData = O2DataProviderCopyData(dataProvider);
+    if (encodedData == NULL) {
+        [self release];
+        return nil;
+    }
     CFIndex encodedLength = CFDataGetLength(encodedData);
     const uint8_t *encodedBytes = CFDataGetBytePtr(encodedData);
 
@@ -217,7 +228,7 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     CFRelease(encodedData);
 
     if (bitmap == NULL) {
-        [self dealloc];
+        [self release];
         return nil;
     }
 
@@ -241,7 +252,8 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
 - (void) dealloc {
     [_dataProvider release];
     [_colorSpace release];
-    CFRelease(_pixelData);
+    if (_pixelData != NULL)
+        CFRelease(_pixelData);
     [super dealloc];
 }
 

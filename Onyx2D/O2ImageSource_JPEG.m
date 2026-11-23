@@ -142,6 +142,8 @@ NSData *O2DCTDecode(NSData *data, size_t *pBytesPerRow) {
                           options: (CFDictionaryRef) options
 {
     O2ImageDecoderRef decoder = createImageDecoderWithDataProvider(_provider);
+    if (decoder == nil)
+        return NULL;
     O2DataProviderRef provider = O2ImageDecoderCreatePixelDataProvider(decoder);
 
     O2Image *image = [[O2Image alloc]
