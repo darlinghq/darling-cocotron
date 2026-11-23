@@ -14,6 +14,7 @@
 #import <QuartzCore/CAGradientLayer.h>
 #import <QuartzCore/CAMetalDrawable.h>
 #import <QuartzCore/CAMetalLayer.h>
+#import <QuartzCore/CAEAGLLayer.h>
 #import <QuartzCore/CAOpenGLLayer.h>
 #import <QuartzCore/CAReplicatorLayer.h>
 #import <QuartzCore/CAScrollLayer.h>
