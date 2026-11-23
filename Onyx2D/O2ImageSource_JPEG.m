@@ -31,9 +31,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #ifdef LIBJPEG_PRESENT
 #import <Onyx2D/O2ImageDecoder_JPEG_libjpeg.h>
-#else
-#import <Onyx2D/O2ImageDecoder_JPEG_stb.h>
 #endif
+#import <Onyx2D/O2ImageDecoder_JPEG_stb.h>
 
 #import <Onyx2D/O2EXIFDecoder.h>
 
@@ -46,11 +45,14 @@ static O2ImageDecoder *
 createImageDecoderWithDataProvider(O2DataProviderRef dataProvider)
 {
 #ifdef LIBJPEG_PRESENT
-    return [[O2ImageDecoder_JPEG_libjpeg alloc]
+    // libjpeg fails on images it cannot read, and when the library loaded
+    // is not the version Onyx2D was built against.
+    O2ImageDecoder *decoder = [[O2ImageDecoder_JPEG_libjpeg alloc]
             initWithDataProvider: dataProvider];
-#else
-    return [[O2ImageDecoder_JPEG_stb alloc] initWithDataProvider: dataProvider];
+    if (decoder != nil)
+        return decoder;
 #endif
+    return [[O2ImageDecoder_JPEG_stb alloc] initWithDataProvider: dataProvider];
 }
 
 NSData *O2DCTDecode(NSData *data, size_t *pBytesPerRow) {
