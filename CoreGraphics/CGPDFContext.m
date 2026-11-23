@@ -21,6 +21,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <CoreFoundation/CFString.h>
 
+// The PDF writer cannot encrypt yet. A request for encryption is refused
+// instead of writing an unprotected file the caller believes is protected.
+static bool requestsEncryption(NSDictionary *info) {
+    return [info objectForKey:(id)kCGPDFContextUserPassword] ||
+           [info objectForKey:(id)kCGPDFContextOwnerPassword] ||
+           [info objectForKey:(id)kCGPDFContextEncryptionKeyLength];
+}
+
 const CFStringRef kCGPDFContextTitle = CFSTR("kCGPDFContextTitle");
 const CFStringRef kCGPDFContextAuthor = CFSTR("kCGPDFContextAuthor");
 const CFStringRef kCGPDFContextCreator = CFSTR("kCGPDFContextCreator");
@@ -61,11 +69,7 @@ CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                                 CFDictionaryRef auxiliaryInfo)
 {
     NSDictionary *info = (NSDictionary *)auxiliaryInfo;
-    // The PDF writer cannot encrypt yet. Refuse a request for encryption
-    // instead of writing an unprotected file the caller believes is protected.
-    if ([info objectForKey:(id)kCGPDFContextUserPassword] ||
-        [info objectForKey:(id)kCGPDFContextOwnerPassword] ||
-        [info objectForKey:(id)kCGPDFContextEncryptionKeyLength])
+    if (requestsEncryption(info))
         return NULL;
     const CFStringRef publicKeys[] = {kCGPDFContextTitle, kCGPDFContextAuthor, kCGPDFContextCreator};
     const NSString *backendKeys[] = {kO2PDFContextTitle, kO2PDFContextAuthor, kO2PDFContextCreator};
@@ -84,6 +88,26 @@ CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
             initWithConsumer: (O2DataConsumer*)consumer
                     mediaBox: mediaBox
                auxiliaryInfo: info];
+}
+
+CGContextRef CGPDFContextCreateWithURL(CFURLRef url,
+                                       const CGRect *mediaBox,
+                                       CFDictionaryRef auxiliaryInfo)
+{
+    if (!url)
+        return NULL;
+    // Refuse before the consumer exists: creating it creates the file, replacing
+    // the contents of any file already at the URL.
+    if (requestsEncryption((NSDictionary *)auxiliaryInfo))
+        return NULL;
+    // The consumer is the lower layer that owns the file: it creates the file
+    // and fails for a URL that is not a file URL or cannot be written.
+    CGDataConsumerRef consumer = CGDataConsumerCreateWithURL(url);
+    if (!consumer)
+        return NULL;
+    CGContextRef context = CGPDFContextCreate(consumer, mediaBox, auxiliaryInfo);
+    CGDataConsumerRelease(consumer);
+    return context;
 }
 
 COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self) {

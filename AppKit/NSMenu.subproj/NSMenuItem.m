@@ -27,6 +27,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSKeyedArchiver.h>
 #import <AppKit/NSButtonCell.h>
 #import <objc/runtime.h>
+#import <AppKit/NSAccessibility.h>
+#import "../NSAccessibilityStorage.h"
 
 // Not declared in a public header.
 APPKIT_EXPORT NSString *const NSAppleMenuName;
@@ -214,6 +216,13 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
     NS_EXTRA(NSMenuItem, copy)->_toolTip = [NS_EXTRA(NSMenuItem, self)->_toolTip copyWithZone: zone];
     NS_EXTRA(NSMenuItem, copy)->_badge = [NS_EXTRA(NSMenuItem, self)->_badge retain];
     NS_EXTRA(NSMenuItem, copy)->_actionImage = [NS_EXTRA(NSMenuItem, self)->_actionImage retain];
+    // QUIRK: a copy keeps the accessibility label that was set on the original and none of the
+    // other accessibility values. Not documented. Evidence: black-box observation on macOS 26.7.3
+    // (tier 2): after setting every accessibility property of an item, its copy had the label only.
+    // Test: appkit-menuitem-accessibility (quirk: a copy keeps the label)
+    id label;
+    if (_NSAccessibilityStoredValue(self, NSAccessibilityDescriptionAttribute, &label))
+        _NSAccessibilitySetStoredValue(copy, NSAccessibilityDescriptionAttribute, label);
     return copy;
 }
 
@@ -266,7 +275,8 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 }
 
 - (NSString *) title {
-    return _title;
+    // _title is nil for separators; the property is non-optional, so report an empty title.
+    return _title ?: @"";
 }
 
 - (NSAttributedString *) attributedTitle {

@@ -42,6 +42,11 @@ CGRect CGPDFPageGetBoxRect(CGPDFPageRef self, CGPDFBox box) {
     return result;
 }
 
+// The page's own dictionary, not retained for the caller; NULL for a NULL page.
+CGPDFDictionaryRef CGPDFPageGetDictionary(CGPDFPageRef page) {
+    return (CGPDFDictionaryRef)[(O2PDFPage *)page dictionary];
+}
+
 CGAffineTransform CGPDFPageGetDrawingTransform(CGPDFPageRef self, CGPDFBox box,
                                                CGRect rect,
                                                int clockwiseDegrees,
