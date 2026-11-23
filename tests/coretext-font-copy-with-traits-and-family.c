@@ -164,12 +164,10 @@ static int hasPostScriptName(CTFontRef a, CFStringRef nameOfB)
 	return same;
 }
 
-// QUIRK (macOS 26.1, probes 639.E.bold-off, only the Avenir and Hoefler Text rows isolate this): among
-// faces equal on the compared traits and on the distance of their weight, the original face itself is
-// returned. A request that changes nothing (CreateCopyWithSymbolicTraits, and CreateCopyWithFamily into
-// the face's own family) is made for every installed face that has such an equal in its family
-// (Avenir-Roman and Avenir-Book); SKIP when no installed family has one.
-static void checkOriginalWinsTies(const FaceInfo *infos, CFIndex count)
+// QUIRK (macOS 26.7.3 and 10.14.4, probe 639.E.nochange): a request that changes no trait (value 0, mask 0)
+// returns the original face itself, even where another face of the family has the same traits and weight
+// (Avenir-Roman and Avenir-Book). SKIP when no installed family has such an equal.
+static void checkEmptyMaskKeepsTheFace(const FaceInfo *infos, CFIndex count)
 {
 	int tied = 0, wrong = 0;
 	for (CFIndex i = 0; i < count; i++) {
@@ -189,16 +187,12 @@ static void checkOriginalWinsTies(const FaceInfo *infos, CFIndex count)
 			if (copy == NULL || !hasPostScriptName(copy, f->postScriptName))
 				wrong++;
 			release(copy);
-			copy = CTFontCreateCopyWithFamily(f->font, 0, NULL, f->family);
-			if (copy == NULL || !hasPostScriptName(copy, f->postScriptName))
-				wrong++;
-			release(copy);
 		}
 	}
 	if (tied == 0)
 		printf("SKIP no installed family has two faces equal in traits and weight\n");
 	else
-		expect(wrong == 0, "QUIRK: of faces equal in traits and weight the original face is returned");
+		expect(wrong == 0, "QUIRK: an empty mask returns the original face among faces equal in traits and weight");
 }
 
 int main(void)
@@ -270,23 +264,34 @@ int main(void)
 		expect(copy != NULL && CTFontGetSize(copy) == 21, "an explicit size is used");
 		release(copy);
 
-		// QUIRK (macOS 26.1, probe 639.B.size): a negative size keeps the original's size.
+		// QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 639.B.size): a negative size keeps the original's size.
 		copy = CTFontCreateCopyWithSymbolicTraits(plain, -5, NULL, kCTFontTraitBold, kCTFontTraitBold);
 		expect(copy != NULL && CTFontGetSize(copy) == CTFontGetSize(plain),
 				"QUIRK: a negative size keeps the original size");
 		release(copy);
 
-		// QUIRK (macOS 26.1, probe 639.C.set-vertical): the vertical bit is not looked for but is
-		// carried into the copy's traits. Clearing it on a face that has it was not probed (every
-		// 639.C.clear-vertical row clears it on a face without it); GUESS: it is removed.
+		// QUIRK (macOS 26.7.3 and 10.14.4, probe ctvert.c): the vertical bit is not looked for but is
+		// carried into the copy's traits, and no later copy loses it, except a copy into another family.
 		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, kCTFontTraitVertical, kCTFontTraitVertical);
 		expect(copy != NULL && sameFamily(plain, copy)
 				&& (CTFontGetSymbolicTraits(copy) & kCTFontTraitVertical),
 				"QUIRK: setting the vertical trait reaches the copy's traits");
 		CTFontRef again = copy != NULL
 				? CTFontCreateCopyWithSymbolicTraits(copy, 0, NULL, 0, kCTFontTraitVertical) : NULL;
-		expect(again != NULL && !(CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
-				"GUESS: clearing the vertical trait removes it from a copy that has it");
+		expect(again != NULL && (CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"QUIRK: clearing the vertical trait does not remove it from a copy that has it");
+		release(again);
+		again = copy != NULL ? CTFontCreateCopyWithSymbolicTraits(copy, 0, NULL, 0, 0) : NULL;
+		expect(again != NULL && (CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"QUIRK: an empty mask keeps the vertical trait");
+		release(again);
+		again = copy != NULL ? CTFontCreateCopyWithSymbolicTraits(copy, 14, NULL, kCTFontTraitBold, kCTFontTraitBold) : NULL;
+		expect(again != NULL && (CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"QUIRK: a copy with a new size and the bold trait keeps the vertical trait");
+		release(again);
+		again = copy != NULL ? CTFontCreateCopyWithAttributes(copy, 0, NULL, NULL) : NULL;
+		expect(again != NULL && (CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"QUIRK: CTFontCreateCopyWithAttributes keeps the vertical trait");
 		release(again);
 		release(copy);
 		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, 0, kCTFontTraitVertical);
@@ -418,9 +423,9 @@ int main(void)
 	}
 
 	FaceInfo *infos = collectFaces(faces, count);
-	checkOriginalWinsTies(infos, count);
+	checkEmptyMaskKeepsTheFace(infos, count);
 
-	// QUIRK (macOS 26.1, probe 639.F.family): a family without a face of the original's boldness
+	// QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 639.F.family): a family without a face of the original's boldness
 	// still gives a face; only a family that does not exist gives NULL. The structure is checked, not
 	// which face a family of several gives. GUESS: italic is kept when the family has it, then
 	// the nearest weight.
