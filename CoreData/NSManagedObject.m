@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSManagedObjectSet.h"
 #import "NSManagedObjectSetEnumerator.h"
 #import <CoreData/NSAtomicStoreCacheNode.h>
+#import <CoreData/CoreDataErrors.h>
 #import <CoreData/NSAttributeDescription.h>
 #import <CoreData/NSManagedObject.h>
 #import <CoreData/NSManagedObjectModel.h>
@@ -37,6 +38,140 @@ NSString *const NSValidationKeyErrorKey = @"NSValidationErrorKey";
 NSString *const NSValidationObjectErrorKey = @"NSValidationErrorObject";
 NSString *const NSValidationPredicateErrorKey = @"NSValidationErrorPredicate";
 NSString *const NSValidationValueErrorKey = @"NSValidationErrorValue";
+
+// GUESS: the localized description of a validation error is a plain English sentence; the page
+// names only the user info keys (NSValidationKeyErrorKey, NSValidationObjectErrorKey,
+// NSValidationValueErrorKey, NSDetailedErrorsKey) and the codes, not the text.
+static NSError *DarlingValidationError(NSInteger code, NSManagedObject *object, NSString *key, id value, NSString *reason) {
+    NSMutableDictionary *info = [NSMutableDictionary dictionary];
+
+    [info setObject: [NSString stringWithFormat: @"The property %@ is not valid: %@.", key, reason]
+             forKey: NSLocalizedDescriptionKey];
+    [info setObject: object forKey: NSValidationObjectErrorKey];
+    if (key != nil)
+        [info setObject: key forKey: NSValidationKeyErrorKey];
+    if (value != nil)
+        [info setObject: value forKey: NSValidationValueErrorKey];
+    return [NSError errorWithDomain: NSCocoaErrorDomain code: code userInfo: info];
+}
+
+// GUESS: one failure is returned as it is, not wrapped (the pages only speak of the detailed-errors
+// array for "more than one error"); several are collected under NSDetailedErrorsKey in an error
+// of the "multiple errors" code. An error output of NULL is the caller's way of asking to stop
+// at the first failure, so the loops that call this stop themselves.
+static BOOL DarlingReportErrors(NSArray *errors, NSManagedObject *object, NSError **error) {
+    if ([errors count] == 0)
+        return YES;
+    if (error != NULL) {
+        if ([errors count] == 1)
+            *error = [errors objectAtIndex: 0];
+        else
+            *error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                         code: NSValidationMultipleErrorsError
+                                     userInfo: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                     errors, NSDetailedErrorsKey,
+                                                                     object, NSValidationObjectErrorKey,
+                                                                     @"Multiple validation errors occurred.",
+                                                                     NSLocalizedDescriptionKey, nil]];
+    }
+    return NO;
+}
+
+// The class a value of the attribute type has to be; Nil where the type does not fix one (the
+// tree's NSAttributeType has no UUID or object ID type, and transformable values are open).
+static Class DarlingClassForAttributeType(NSAttributeType type) {
+    switch (type) {
+    case NSInteger16AttributeType:
+    case NSInteger32AttributeType:
+    case NSInteger64AttributeType:
+    case NSDecimalAttributeType:
+    case NSDoubleAttributeType:
+    case NSFloatAttributeType:
+    case NSBooleanAttributeType:
+        return [NSNumber class];
+    case NSStringAttributeType:
+        return [NSString class];
+    case NSDateAttributeType:
+        return [NSDate class];
+    case NSBinaryDataAttributeType:
+        return [NSData class];
+    case NSURIAttributeType:
+        return [NSURL class];
+    default:
+        return Nil;
+    }
+}
+
+// The checks the property description itself settles: a missing value for a non-optional
+// property, a value of the wrong kind for an attribute, and the count limits of a to-many
+// relationship. Returns nil when the value is acceptable.
+//
+// GUESS: the value is not coerced to the attribute's type (the page says coercion happens but not
+// how), a value of the wrong class is a failure with NSManagedObjectValidationError, and the text
+// of the failures is not specified. GUESS: for a to-many relationship the optional flag only
+// decides whether an empty relationship skips the count limits (the page for minCount and
+// maxCount says the limits are enforced for an optional relationship only when it is not nil); an
+// empty non-optional to-many relationship is checked against minCount and nothing else.
+static NSError *DarlingBasicValidationFailure(NSManagedObject *object, NSPropertyDescription *property, id value) {
+    NSString *key = [property name];
+
+    if ([property isKindOfClass: [NSAttributeDescription class]]) {
+        if (value == nil || value == [NSNull null])
+            return [property isOptional] ? nil
+                                         : DarlingValidationError(NSValidationMissingMandatoryPropertyError,
+                                                                  object, key, nil, @"a value is required");
+
+        Class expected = DarlingClassForAttributeType([(NSAttributeDescription *) property attributeType]);
+
+        if (expected != Nil && ![value isKindOfClass: expected])
+            return DarlingValidationError(NSManagedObjectValidationError, object, key, value,
+                                          @"the value is of the wrong class for the attribute type");
+        return nil;
+    }
+
+    if ([property isKindOfClass: [NSRelationshipDescription class]]) {
+        NSRelationshipDescription *relationship = (NSRelationshipDescription *) property;
+
+        if (![relationship isToMany])
+            return (value == nil && ![relationship isOptional])
+                    ? DarlingValidationError(NSValidationMissingMandatoryPropertyError, object, key, nil,
+                                             @"a destination object is required")
+                    : nil;
+
+        NSUInteger count = [value respondsToSelector: @selector(count)] ? [value count] : 0;
+
+        if (count == 0 && [relationship isOptional])
+            return nil;
+        if (count < [relationship minCount])
+            return DarlingValidationError(NSValidationRelationshipLacksMinimumCountError, object, key, nil,
+                                          @"too few destination objects");
+        if ([relationship maxCount] > 0 && count > [relationship maxCount])
+            return DarlingValidationError(NSValidationRelationshipExceedsMaximumCountError, object, key, nil,
+                                          @"too many destination objects");
+    }
+    return nil;
+}
+
+// The documented behaviour of validateForUpdate:. Each property goes through the object's own
+// validateValue:forKey:error:, so overrides take part.
+static BOOL DarlingValidateAllProperties(NSManagedObject *object, NSError **error) {
+    NSMutableArray *errors = [NSMutableArray array];
+    NSDictionary *properties = [[object entity] propertiesByName];
+
+    for (NSString *key in [[properties allKeys] sortedArrayUsingSelector: @selector(compare:)]) {
+        id value = [object valueForKey: key];
+        NSError *failure = nil;
+
+        if (![object validateValue: &value forKey: key error: &failure]) {
+            [errors addObject: failure != nil ? failure
+                                              : DarlingValidationError(NSManagedObjectValidationError, object,
+                                                                       key, value, @"the value was rejected")];
+            if (error == NULL)
+                break;
+        }
+    }
+    return DarlingReportErrors(errors, object, error);
+}
 
 @implementation NSManagedObject
 
@@ -463,23 +598,73 @@ NSString *const NSValidationValueErrorKey = @"NSValidationErrorValue";
                 forKey: (NSString *) key
                  error: (NSError **) error
 {
-    NSUnimplementedMethod();
+    NSPropertyDescription *property = [[[self entity] propertiesByName] objectForKey: key];
+
+    if (property != nil) {
+        NSError *failure = DarlingBasicValidationFailure(self, property, *value);
+
+        if (failure != nil) {
+            if (error != NULL)
+                *error = failure;
+            return NO;
+        }
+    }
+
+    // The documented hook: a method validate<Key>:error: of the object is invoked when there is one.
+    // GUESS: it is only asked when the model checks above passed (the page says the default
+    // implementation checks "then searches"; it does not say whether a failed check stops the
+    // search). GUESS: a key that is not a modeled property has no model checks and still reaches
+    // the hook, as plain KVC validation does.
+    if ([key length] > 0) {
+        SEL hook = NSSelectorFromString([NSString stringWithFormat: @"validate%@%@:error:",
+                                                  [[key substringToIndex: 1] uppercaseString],
+                                                  [key substringFromIndex: 1]]);
+
+        if ([self respondsToSelector: hook]) {
+            BOOL (*validator)(id, SEL, id *, NSError **) = (BOOL (*)(id, SEL, id *, NSError **)) [self methodForSelector: hook];
+
+            return validator(self, hook, value, error);
+        }
+    }
     return YES;
 }
 
-- (BOOL) validateForDelete: (NSError **) error {
-    NSUnimplementedMethod();
-    return YES;
-}
-
+// GUESS: validateForInsert: checks the same things validateForUpdate: does. The page for insert
+// only says subclasses call super; the documented update behaviour (every property validated in
+// turn) is the closest statement of what the superclass does.
 - (BOOL) validateForInsert: (NSError **) error {
-    NSUnimplementedMethod();
-    return YES;
+    return DarlingValidateAllProperties(self, error);
 }
 
 - (BOOL) validateForUpdate: (NSError **) error {
-    NSUnimplementedMethod();
-    return YES;
+    return DarlingValidateAllProperties(self, error);
+}
+
+// Documented: an object cannot be deleted while a relationship with the deny delete rule has a
+// destination object.
+- (BOOL) validateForDelete: (NSError **) error {
+    NSMutableArray *errors = [NSMutableArray array];
+
+    NSDictionary *relationships = [[self entity] relationshipsByName];
+
+    for (NSString *name in [[relationships allKeys] sortedArrayUsingSelector: @selector(compare:)]) {
+        NSRelationshipDescription *relationship = [relationships objectForKey: name];
+
+        if ([relationship deleteRule] != NSDenyDeleteRule)
+            continue;
+
+        id value = [self primitiveValueForKey: [relationship name]];
+        BOOL hasDestination = [relationship isToMany] ? [value count] > 0 : value != nil;
+
+        if (hasDestination) {
+            [errors addObject: DarlingValidationError(NSValidationRelationshipDeniedDeleteError, self,
+                                                      [relationship name], nil,
+                                                      @"a relationship with the deny delete rule still has destination objects")];
+            if (error == NULL)
+                break;
+        }
+    }
+    return DarlingReportErrors(errors, self, error);
 }
 
 + (BOOL) automaticallyNotifiesObserversForKey: (NSString *) key {
