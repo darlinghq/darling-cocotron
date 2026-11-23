@@ -37,6 +37,47 @@ id _NSTabViewFloatingCell = nil;
 - (void) setTabState: (NSTabState) tabState;
 @end
 
+// Whether the border (the bezel, the pane or the frame) is drawn at all. The documentation gives no
+// behaviour for -tabViewBorderType. GUESS: NSTabViewBorderTypeNone takes the border away from every
+// tab view type; Line and Bezel are only stored (Known limitation: the drawn border still follows
+// -tabViewType alone). Test: appkit-tabview-border-type.m
+static BOOL NSTabViewDrawsBorder(NSTabView *view) {
+    return [view tabViewBorderType] != NSTabViewBorderTypeNone;
+}
+
+// GUESS: the documentation states no default for -tabPosition or -tabViewBorderType. They are
+// inferred from the names of the tab view type constants, which each name a tab position and a
+// border (top tabs with a bezel border, ..., no tabs with no border), and so follow the type the
+// view starts with. -setTabViewType: derives them again from the new type, so that showing the
+// tabs of a tab view without a border brings the border back; as a consequence a position or
+// border type set explicitly before a type change is replaced. Not measured on macOS.
+// Test: appkit-tabview-border-type.m
+static NSTabPosition NSTabViewDefaultPosition(NSTabViewType type) {
+    switch (type) {
+    case NSTopTabsBezelBorder:
+        return NSTabPositionTop;
+    case NSLeftTabsBezelBorder:
+        return NSTabPositionLeft;
+    case NSBottomTabsBezelBorder:
+        return NSTabPositionBottom;
+    case NSRightTabsBezelBorder:
+        return NSTabPositionRight;
+    default:
+        return NSTabPositionNone;
+    }
+}
+
+static NSTabViewBorderType NSTabViewDefaultBorderType(NSTabViewType type) {
+    switch (type) {
+    case NSNoTabsNoBorder:
+        return NSTabViewBorderTypeNone;
+    case NSNoTabsLineBorder:
+        return NSTabViewBorderTypeLine;
+    default:
+        return NSTabViewBorderTypeBezel;
+    }
+}
+
 @implementation NSTabView
 
 // Operated at once: the click that activates the window is delivered to it
@@ -98,6 +139,12 @@ id _NSTabViewFloatingCell = nil;
         _drawsBackground = drawsBackground != 0;
     }
 
+    // Known limitation: the nib key (or class-version field) that carries the tab position and the
+    // border type is not documented, so neither is decoded; a decoded tab view has the defaults
+    // that -initWithFrame: gives for its tab view type.
+    _position = NSTabViewDefaultPosition(_type);
+    NS_EXTRA(NSTabView, self)->_borderType = NSTabViewDefaultBorderType(_type);
+
     return self;
 }
 
@@ -113,7 +160,8 @@ id _NSTabViewFloatingCell = nil;
     // that way; evidence: black-box render, tier 2). Test: appkit-tabview-aqua.m
     _font = [[NSFont systemFontOfSize: [NSFont systemFontSizeForControlSize: NSRegularControlSize]] retain];
     _type = NSTopTabsBezelBorder;
-    _position = NSTabPositionTop;
+    _position = NSTabViewDefaultPosition(_type);
+    NS_EXTRA(NSTabView, self)->_borderType = NSTabViewDefaultBorderType(_type);
     _allowsTruncatedLabels = NO;
     return self;
 }
@@ -287,6 +335,10 @@ static const CGFloat NSTabViewBoxBottomInset = 10;
     return _position;
 }
 
+- (NSTabViewBorderType) tabViewBorderType {
+    return NS_EXTRA(NSTabView, self)->_borderType;
+}
+
 - (BOOL) drawsBackground {
     return _drawsBackground;
 }
@@ -307,13 +359,20 @@ static const CGFloat NSTabViewBoxBottomInset = 10;
 
 - (void) setTabViewType: (NSTabViewType) type {
     _type = type;
+    _position = NSTabViewDefaultPosition(type);
+    NS_EXTRA(NSTabView, self)->_borderType = NSTabViewDefaultBorderType(type);
     [self setNeedsDisplay: YES];
 }
 
+// Known limitation: the position is stored and read back, but the tabs are still laid out and
+// drawn as top tabs; the layout follows -tabViewType alone.
 - (void) setTabPosition: (NSTabPosition) position {
-    // TODO: Implement
-    NSLog(@"-[NSTabView tabPosition] Is Currently Unimplemented");
     _position = position;
+    [self setNeedsDisplay: YES];
+}
+
+- (void) setTabViewBorderType: (NSTabViewBorderType) borderType {
+    NS_EXTRA(NSTabView, self)->_borderType = borderType;
     [self setNeedsDisplay: YES];
 }
 
@@ -547,7 +606,8 @@ static const CGFloat NSTabViewBoxBottomInset = 10;
         NSRect strip = [self _stripRect];
         BOOL active = [[self window] isKeyWindow];
 
-        [style drawTabViewBoxInRect: [self rectForBorder]];
+        if (NSTabViewDrawsBorder(self))
+            [style drawTabViewBoxInRect: [self rectForBorder]];
         if (count > 0) {
             NSInteger selected = [_items indexOfObjectIdenticalTo: _selectedItem];
 
@@ -574,12 +634,15 @@ static const CGFloat NSTabViewBoxBottomInset = 10;
     }
 
     case NSNoTabsBezelBorder:
-        NSDrawButton([self rectForBorder], rect);
+        if (NSTabViewDrawsBorder(self))
+            NSDrawButton([self rectForBorder], rect);
         break;
 
     case NSNoTabsLineBorder:
-        [[NSColor blackColor] setStroke];
-        NSFrameRect([self rectForBorder]);
+        if (NSTabViewDrawsBorder(self)) {
+            [[NSColor blackColor] setStroke];
+            NSFrameRect([self rectForBorder]);
+        }
         break;
 
     case NSNoTabsNoBorder:
