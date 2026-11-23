@@ -80,6 +80,19 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSToolbarItemGroup, self)->_controlRepresentation = representation;
 }
 
+// The documentation says this is the index of the most recently selected subitem, and that with selectAny or
+// momentary it is not the selected subitem. It states no default and nothing about an index outside the subitems.
+// GUESS: the default is 0 (the side storage starts zeroed); the setter stores any value, a negative one or one
+// past the last subitem included, and neither the setter nor -setSubitems: checks it against the subitems.
+// Nothing selects a subitem yet, so the value is only stored.
+- (NSInteger) selectedIndex {
+    return NS_EXTRA(NSToolbarItemGroup, self)->_selectedIndex;
+}
+
+- (void) setSelectedIndex: (NSInteger) index {
+    NS_EXTRA(NSToolbarItemGroup, self)->_selectedIndex = index;
+}
+
 // NSToolbarItem copies with NSCopyObject, which shares _subitems without retaining it and does not copy
 // side storage.
 - (id) copyWithZone: (NSZone *) zone {

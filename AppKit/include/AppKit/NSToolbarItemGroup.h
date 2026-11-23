@@ -43,6 +43,7 @@ NS_ASSUME_NONNULL_BEGIN
     NS_EXTRA_IVARS_BEGIN(NSToolbarItemGroup)
         NSToolbarItemGroupSelectionMode _selectionMode;
         NSToolbarItemGroupControlRepresentation _controlRepresentation;
+        NSInteger _selectedIndex;
     NS_SIDE_IVARS_END(NSToolbarItemGroup)
 }
 
@@ -58,6 +59,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic) NSToolbarItemGroupSelectionMode selectionMode API_AVAILABLE(macos(10.15));
 // How the toolbar displays the group; stored only. The default is automatic.
 @property(nonatomic) NSToolbarItemGroupControlRepresentation controlRepresentation API_AVAILABLE(macos(10.15));
+
+// The index of the most recently selected subitem; stored only. The default is 0.
+@property(nonatomic) NSInteger selectedIndex API_AVAILABLE(macos(10.15));
 
 - (NSArray *) subitems;
 - (void) setSubitems: (NSArray *) subitems;
