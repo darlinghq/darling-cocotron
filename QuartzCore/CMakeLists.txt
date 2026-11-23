@@ -71,6 +71,7 @@ set(QuartzCore_sources
 	CAScrollLayer.m
 	CAOpenGLLayer.m
 	CAMetalLayer.mm
+	CAEAGLLayer.m
 	CAMetalDrawable.mm
 	CASpringAnimation.m
 	CATransformLayer.m
