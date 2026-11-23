@@ -62,6 +62,33 @@ static id cascadeOfAttributes(CTFontDescriptorRef attributes) {
             autorelease];
 }
 
+// The transformation matrix a font was created with, kept with the font object as the bytes of a
+// CGAffineTransform. A font made without one has none stored and reads as the identity matrix.
+static char fontMatrixKey;
+
+static CGAffineTransform fontMatrix(CTFontRef font) {
+    CGAffineTransform matrix = CGAffineTransformIdentity;
+    NSData *data = objc_getAssociatedObject(ktFont(font), &fontMatrixKey);
+    if ([data length] == sizeof(matrix))
+        [data getBytes: &matrix length: sizeof(matrix)];
+    return matrix;
+}
+
+// Observed on macOS 10.14.4 (x86_64, i386) and 26.7.3 (black-box, tier 2; probe 8 of the cristim
+// batch10b evidence): CTFontGetMatrix returns the matrix the font was created with without its
+// translation (tx and ty read 0). Test: coretext-font-matrix.
+static CTFontRef fontWithMatrix(CTFontRef font, const CGAffineTransform *matrix) {
+    if (font != NULL && matrix != NULL) {
+        CGAffineTransform linear = *matrix;
+        linear.tx = linear.ty = 0;
+        if (!CGAffineTransformIsIdentity(linear))
+            objc_setAssociatedObject(ktFont(font), &fontMatrixKey,
+                                     [NSData dataWithBytes: &linear length: sizeof(linear)],
+                                     OBJC_ASSOCIATION_RETAIN);
+    }
+    return font;
+}
+
 static O2Font_freetype *copyFreeTypeFont(CTFontRef font) {
     CGFontRef graphicsFont = CTFontCopyGraphicsFont(font, NULL);
     if ([(id) graphicsFont isKindOfClass: [O2Font_freetype class]])
@@ -94,6 +121,8 @@ static CTFontRef fontWithVariationOfAttributes(CTFontRef font, CTFontDescriptorR
     if (result == NULL)
         return font;
     fontWithCascade(result, fontCascade(font));
+    CGAffineTransform matrix = fontMatrix(font);
+    fontWithMatrix(result, &matrix);
     CFRelease(font);
     return result;
 }
@@ -156,7 +185,9 @@ CTFontRef CTFontCreateWithName(CFStringRef name, CGFloat size, const CGAffineTra
         return NULL;
     CTFontRef result = createFont(graphicsFont, size);
     CGFontRelease(graphicsFont);
-    return result;
+    // The documentation gives the identity matrix for NULL and CTFontGetMatrix returns what was given. It
+    // does not say that the matrix changes the font's metrics or glyph outlines, so only the matrix is kept.
+    return fontWithMatrix(result, matrix);
 }
 
 CTFontRef CTFontCreateWithNameAndOptions(CFStringRef name, CGFloat size,
@@ -190,7 +221,7 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
                 (O2DataProviderRef) provider, KTFontDescriptorGetFaceIndex(descriptor));
         CGDataProviderRelease(provider);
         if (graphicsFont != NULL) {
-            CTFontRef result = createFont(graphicsFont, size);
+            CTFontRef result = fontWithMatrix(createFont(graphicsFont, size), matrix);
             CGFontRelease(graphicsFont);
             result = fontWithVariationOfAttributes(result, descriptor);
             return fontWithCascade(result, cascadeOfAttributes(descriptor));
@@ -240,6 +271,10 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
         return NULL;
     if (size == 0)
         size = [object pointSize];
+    // A NULL matrix keeps the original font's matrix.
+    CGAffineTransform originalMatrix = fontMatrix(font);
+    if (matrix == NULL)
+        matrix = &originalMatrix;
 
     // The copy keeps the cascade list unless the attributes supply another.
     id cascade = cascadeOfAttributes(attributes) ?: fontCascade(font);
@@ -257,7 +292,7 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
     }
 
     CGFontRef graphicsFont = [object copyGraphicsFont];
-    CTFontRef result = createFont(graphicsFont, size);
+    CTFontRef result = fontWithMatrix(createFont(graphicsFont, size), matrix);
     CGFontRelease(graphicsFont);
     result = fontWithVariationOfAttributes(result, attributes);
     return fontWithCascade(result, cascade);
@@ -290,15 +325,14 @@ static CGFloat weightOfFont(CTFontRef font) {
 }
 
 // A new font of `family` whose style traits, over the bits in `compared`, are those of `wanted`,
-// or NULL when the family has no such face. A size of 0 keeps the size of the original. The
-// matrix is handed to the creation call as given: fonts here carry no matrix, so NULL, which
-// stands for the original's matrix, has nothing to preserve. The cascade list of the original is carried over to
+// or NULL when the family has no such face. A size of 0 keeps the size of the original and (with keepMatrix) a NULL
+// matrix keeps the original's matrix. The cascade list of the original is carried over to
 // the copy (observed on macOS 26.7.3 and Mac OS X 10.14.4, together with the feature settings, which fonts here do
 // not have); the variation is not.
 // GUESS: when several faces have the wanted traits (a family with Light, Regular and Medium
 // has three non-bold faces) the one whose weight trait is nearest to `targetWeight` is taken,
 // the first listed among equals. The documentation names no rule.
-static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTransform *matrix,
+static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTransform *matrix, BOOL keepMatrix,
                                   CFStringRef family, CTFontSymbolicTraits wanted,
                                   CTFontSymbolicTraits compared, CGFloat targetWeight)
 {
@@ -306,6 +340,9 @@ static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTr
         return NULL;
     if (size == 0)
         size = CTFontGetSize(font);
+    CGAffineTransform originalMatrix = fontMatrix(font);
+    if (matrix == NULL && keepMatrix)
+        matrix = &originalMatrix;
 
     const void *keys[] = { kCTFontFamilyNameAttribute };
     const void *values[] = { family };
@@ -360,7 +397,7 @@ CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
     CGFloat targetWeight = ((original & kCTFontTraitBold) && !(wanted & kCTFontTraitBold))
             ? 0 : weightOfFont(font);
     CFStringRef family = CTFontCopyFamilyName(font);
-    CTFontRef result = copyFontInFamily(font, size, matrix, family, wanted,
+    CTFontRef result = copyFontInFamily(font, size, matrix, YES, family, wanted,
                                         sameFamilyStyleTraits, targetWeight);
     if (family != NULL)
         CFRelease(family);
@@ -372,7 +409,11 @@ CTFontRef CTFontCreateCopyWithFamily(CTFontRef font, CGFloat size,
 {
     if (ktFont(font) == nil)
         return NULL;
-    return copyFontInFamily(font, size, matrix, family, CTFontGetSymbolicTraits(font),
+    // QUIRK: a NULL matrix gives the identity matrix here, not the original's (unlike
+    // CTFontCreateCopyWithSymbolicTraits and CTFontCreateCopyWithAttributes, which keep it).
+    // Evidence: black-box observation on macOS 10.14.4 (x86_64, i386) and 26.7.3 (tier 2); the
+    // documentation says NULL keeps the original's matrix. Test: coretext-font-matrix.
+    return copyFontInFamily(font, size, matrix, NO, family, CTFontGetSymbolicTraits(font),
                             crossFamilyStyleTraits, weightOfFont(font));
 }
 
@@ -520,8 +561,9 @@ CGFloat CTFontGetSize(CTFontRef self) {
 
 CGAffineTransform CTFontGetMatrix(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return CGAffineTransformIdentity;
+    if (ktFont(font) == nil)
+        return CGAffineTransformIdentity;
+    return fontMatrix(font);
 }
 
 static uint16_t readUInt16(const UInt8 *bytes) {
@@ -1018,7 +1060,8 @@ CTFontCreateWithGraphicsFont(CGFontRef cgFont, CGFloat size,
 {
     if (cgFont == NULL)
         return NULL;
-    return fontWithCascade(createFont(cgFont, size), cascadeOfAttributes(attributes));
+    CTFontRef result = fontWithMatrix(createFont(cgFont, size), xform);
+    return fontWithCascade(result, cascadeOfAttributes(attributes));
 }
 
 ATSFontRef CTFontGetPlatformFont(CTFontRef font, CTFontDescriptorRef  _Nullable *attributes)

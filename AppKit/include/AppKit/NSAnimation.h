@@ -39,6 +39,9 @@ typedef NS_ENUM(NSUInteger, NSAnimationBlockingMode) {
 typedef float NSAnimationProgress;
 
 APPKIT_EXPORT NSString *const NSAnimationProgressMarkNotification;
+// the key of the single entry in the notification's userInfo: an NSNumber
+// holding the mark that was reached
+APPKIT_EXPORT NSString *NSAnimationProgressMark;
 
 APPKIT_EXPORT NSString *NSAnimationTriggerOrderIn;
 APPKIT_EXPORT NSString *NSAnimationTriggerOrderOut;
@@ -56,6 +59,7 @@ APPKIT_EXPORT NSString *NSAnimationTriggerOrderOut;
 
 @end
 
+#define _NS_SIDE_NSAnimation 0, 1,
 @interface NSAnimation : NSObject <NSCopying> {
     NSTimeInterval _duration;
     NSAnimationCurve _curve;
@@ -70,6 +74,17 @@ APPKIT_EXPORT NSString *NSAnimationTriggerOrderOut;
     NSTimer *_timer;
     NSTimeInterval _startTime;
     NS_LEGACY_IVAR_PAD(_NSAnimationReserved, 16)
+    NS_EXTRA_IVARS_BEGIN(NSAnimation)
+    // links between animations; none of these references is retained, the
+    // animations remove themselves from each other's links in -dealloc
+    NSAnimation *_startAnimation;
+    NSAnimation *_stopAnimation;
+    NSMutableArray *_linkedAnimations;
+    // the progress up to which the marks and links were reported in the running pass, and whether
+    // a mark exactly at it still counts
+    float _markLow;
+    BOOL _markLowInclusive;
+    NS_SIDE_IVARS_END(NSAnimation)
 }
 
 - initWithDuration: (NSTimeInterval) duration

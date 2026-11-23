@@ -653,6 +653,17 @@ static NSMutableArray *pendingOpenURLs = nil;
     return window;
 }
 
+// Private. The argument is an NSInteger (type encoding q on 64-bit, i on i386, observed on
+// macOS 26.7.3 and 10.14.4). AppKit-hosting frameworks (Mac Catalyst) ask the application which
+// window owns a rendering context id. Cocotron has no per-window context ids:
+// -contextID is the process's one CGS connection id, a counter apart from window
+// numbers, so no id can be mapped to a window honestly. Answering with the window
+// of the same number would return a wrong window for a caller's context id, so
+// no window is ever found.
+- (NSWindow *) _findWindowUsingContextID: (NSInteger) contextID {
+    return nil;
+}
+
 - (NSMenu *) mainMenu {
     return _mainMenu;
 }
@@ -962,6 +973,20 @@ static void _propagateAppearanceChangeToView(NSView *view) {
 
     while (--count >= 0)
         [[_windows objectAtIndex: count] miniaturize: sender];
+}
+
+// Private, required by Mac Catalyst frameworks and not documented. It restores one minimized
+// window, as a click on the application's Dock tile does: the first miniaturized window in
+// -orderedWindows order, and none when no window is miniaturized. It returns nothing (type
+// encoding v on macOS 10.14.4 and 26.7.3, where a probe with real windows restored the first
+// miniaturized one in -orderedWindows order on each call). Test: appkit-application-catalyst-methods.
+- (void) _restoreMiniaturizedWindow {
+    for (NSWindow *window in [self orderedWindows]) {
+        if ([window isMiniaturized]) {
+            [window deminiaturize: nil];
+            return;
+        }
+    }
 }
 
 - (NSArray *) orderedDocuments {

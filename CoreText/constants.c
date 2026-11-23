@@ -28,9 +28,10 @@ const CFStringRef kCTForegroundColorAttributeName = CFSTR("CTForegroundColor");
 const CFStringRef kCTParagraphStyleAttributeName = CFSTR("NSParagraphStyle");
 const CFStringRef kCTGlyphInfoAttributeName = CFSTR("NSGlyphInfo");
 const CFStringRef kCTKernAttributeName = CFSTR("CTKernAttributeName");
-const CFStringRef kCTLanguageAttributeName = CFSTR("CTLanguageAttributeName");
+// the string values of the next two are those of macOS 10.14.4 and 26.7.3 (printed from the constants)
+const CFStringRef kCTLanguageAttributeName = CFSTR("NSLanguage");
 const CFStringRef kCTTypesetterOptionForcedEmbeddingLevel = CFSTR("CTTypesetterOptionForcedEmbeddingLevel");
-const CFStringRef kCTVerticalFormsAttributeName = CFSTR("CTVerticalFormsAttributeName");
+const CFStringRef kCTVerticalFormsAttributeName = CFSTR("CTVerticalForms");
 
 // Documented attribute names (CTStringAttributes.h, CTTextTab.h) that were missing. The SDK headers give the names
 // and types but not the strings; the strings were read from the exported constants on macOS 26.7.3 and on 10.14.4

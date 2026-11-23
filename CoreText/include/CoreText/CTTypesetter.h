@@ -6,6 +6,8 @@ CF_IMPLICIT_BRIDGING_ENABLED
 
 typedef struct __CTTypesetter* CTTypesetterRef;
 
+CORETEXT_EXPORT const CFStringRef kCTTypesetterOptionForcedEmbeddingLevel;
+
 CORETEXT_EXPORT CFTypeID CTTypesetterGetTypeID(void);
 
 CORETEXT_EXPORT CTTypesetterRef CTTypesetterCreateWithAttributedString(CFAttributedStringRef string);

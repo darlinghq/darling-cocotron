@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSManagedObjectModel *_model;
     NSMutableDictionary *_properties;
     NSMutableDictionary *_subentities;
+    NSArray *_subentityOrder;
     NSEntityDescription *_superentity;
     NSDictionary *_userInfo;
     id _versionHashModifier;
