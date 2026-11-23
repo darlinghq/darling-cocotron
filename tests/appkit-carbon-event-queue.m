@@ -292,6 +292,44 @@ static void testInputCoalescing(void) {
     expect(coalescing && [got isEqual: @"7/2"],
           [[NSString stringWithFormat: @"input mouse moves coalesce into one with both deltas (%@)", got] UTF8String]);
 
+    // Moves coalesce only with the move at the end of the queue: moves, click, moves keeps the
+    // click between the two moves that come out, each with its own position and summed deltas
+    drain();
+    CGEventType types[5] = { kCGEventMouseMoved, kCGEventMouseMoved, kCGEventLeftMouseDown, kCGEventMouseMoved, kCGEventMouseMoved };
+    for (int i = 0; i < 5; i++) {
+        CGEventRef e = CGEventCreateMouseEvent(NULL, types[i], CGPointMake(100 + 10 * i, 100), kCGMouseButtonLeft);
+        CGEventSetIntegerValueField(e, kCGMouseEventDeltaX, types[i] == kCGEventMouseMoved ? i + 1 : 0);
+        CGEventSetIntegerValueField(e, kCGMouseEventDeltaY, types[i] == kCGEventMouseMoved ? 1 : 0);
+        CGEventPost(kCGSessionEventTap, e);
+        CFRelease(e);
+    }
+    NSMutableArray *order = [NSMutableArray array];
+    while ((event = [NSApp nextEventMatchingMask: NSEventMaskMouseMoved | NSEventMaskLeftMouseDown
+                                       untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.5]
+                                          inMode: NSDefaultRunLoopMode
+                                         dequeue: YES]) != nil)
+        [order addObject: [NSString stringWithFormat: @"%d@%g(%g/%g)", (int)[event type], [event CGEvent] ? CGEventGetLocation([event CGEvent]).x : -1, [event deltaX], [event deltaY]]];
+    NSString *gotOrder = [order componentsJoinedByString: @" "];
+    // type 5 = moved, 1 = left mouse down; the click is between the moves
+    expect([gotOrder isEqual: @"5@110(3/2) 1@120(0/0) 5@140(9/2)"],
+          [[NSString stringWithFormat: @"moves, click, moves: order, positions and deltas are kept (%@)", gotOrder] UTF8String]);
+
+    // Without coalescing every move arrives, in order
+    [NSEvent setMouseCoalescingEnabled: NO];
+    for (int i = 0; i < 3; i++) {
+        CGEventRef e = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, CGPointMake(100 + 10 * i, 100), kCGMouseButtonLeft);
+        CGEventPost(kCGSessionEventTap, e);
+        CFRelease(e);
+    }
+    int uncoalesced = 0;
+    while ([NSApp nextEventMatchingMask: NSEventMaskMouseMoved
+                              untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.5]
+                                 inMode: NSDefaultRunLoopMode
+                                dequeue: YES] != nil)
+        uncoalesced++;
+    [NSEvent setMouseCoalescingEnabled: YES];
+    expect(uncoalesced == 3 && [NSEvent isMouseCoalescingEnabled], "with coalescing disabled every move is delivered");
+
     // Posted moves are not coalesced (P8)
     for (int i = 0; i < 2; i++)
         [NSApp postEvent: [NSEvent mouseEventWithType: NSEventTypeMouseMoved

@@ -30,7 +30,14 @@ xdotool mousemove $((X + WIDTH / 2)) $((Y + HEIGHT / 2))
 sleep 0.2
 xdotool click 1
 
-for _ in $(seq 100); do grep -q -E '^(ALL PASSED|FAILED)' "$out" && break; sleep 0.1; done
+# Part two: while the program does not read, move twice, click, and move twice again
+for _ in $(seq 100); do grep -q '^PHASE2' "$out" && break; sleep 0.1; done
+grep -q '^PHASE2' "$out" || { echo "FAIL: no second part"; cat "$out"; exit 1; }
+mx=$((X + WIDTH / 2)) my=$((Y + HEIGHT / 2))
+xdotool mousemove $((mx - 60)) $my mousemove $((mx - 45)) $my mousemove $((mx - 30)) $my click 1 \
+    mousemove $((mx + 30)) $my mousemove $((mx + 60)) $my
+
+for _ in $(seq 150); do grep -q -E '^(ALL PASSED|FAILED)' "$out" && break; sleep 0.1; done
 wait $pid
 status=$?
 cat "$out"

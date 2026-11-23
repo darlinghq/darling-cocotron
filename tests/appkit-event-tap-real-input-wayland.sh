@@ -47,7 +47,14 @@ sleep 0.3
 # wtype's keyboard is new to the seat: the client binds it during the pause, then gets the key
 wtype -s 200 a
 
-for _ in $(seq 100); do grep -q -E '^(ALL PASSED|FAILED)' "$out" && break; sleep 0.1; done
+# Part two: while the program does not read, move twice, click, and move twice again
+for _ in $(seq 100); do grep -q '^PHASE2' "$out" && break; sleep 0.1; done
+grep -q '^PHASE2' "$out" || { echo "FAIL: no second part"; cat "$out"; exit 1; }
+set -- $middle
+{ echo "move $(($1 - 60)) $2"; echo "move $(($1 - 45)) $2"; echo "$(($1 - 30)) $2"
+  echo "move $(($1 + 30)) $2"; echo "move $(($1 + 60)) $2"; } >&3
+
+for _ in $(seq 150); do grep -q -E '^(ALL PASSED|FAILED)' "$out" && break; sleep 0.1; done
 wait $pid
 status=$?
 cat "$out"
