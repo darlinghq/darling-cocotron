@@ -103,18 +103,17 @@
     return 0;
 }
 
-// Per the documentation this is the part of a menu item cell's drawing that covers whatever
-// frames or backs the item, and it runs ahead of the cell's other drawing steps; whole-cell drawing
-// is described as the border first and then the interior. So the cell draws the border and
-// background, then the interior, and for a button-based cell the border and background is its
-// bezel (-drawBezelWithFrame:inView:, which a pop-up cell extends with its arrows).
-// -drawWithFrame:inView: is NSButtonCell's, with the bezel step made this method, so a
-// cell that overrides neither draws what it did before and a subclass that overrides this method,
-// or calls super from it, gets the bezel once.
-// GUESS: "borders and background" means the bezel for a button-based cell; a menu item's own
-// background (highlight) is not drawn.
+// QUIRK: whole-cell drawing is the border and background step and then the interior; the border and background of
+// a plain menu item cell is empty (the highlight of a menu item is not drawn here, menus draw their items
+// themselves), and the step does not go through -drawBezelWithFrame:inView:, so a bordered menu item cell has no
+// bezel. A subclass sees the call order border, interior. Not documented beyond the step existing, ahead of the
+// others, on this class (and on NSPopUpButtonCell, which has its own, see there) and not on NSButtonCell or NSCell.
+// Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (x86_64 and i386), probe p767.m of batch 12a in
+// mac-probes/cristim (tier 2): the method is found on NSMenuItemCell and NSPopUpButtonCell and not on NSButtonCell,
+// NSCell or NSActionCell; a menu item cell subclass is called border and then interior by -drawWithFrame:inView:
+// and draws no pixels in either step, whether or not it is bordered and has a menu item.
+// Test: appkit-menuitemcell-draw-border-background (test_quirk_menu_item_cell_border_is_empty)
 - (void) drawBorderAndBackgroundWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
-    [self drawBezelWithFrame: cellFrame inView: controlView];
 }
 
 - (void) drawWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {

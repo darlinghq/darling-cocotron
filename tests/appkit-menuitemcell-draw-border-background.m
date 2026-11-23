@@ -5,10 +5,12 @@
 // item; the page says it runs ahead of the cell's other drawing steps, and the page for
 // -drawWithFrame:inView: describes whole-cell drawing as the border first and then the interior.
 // The docs also say NSMenuItemCell no longer draws menus, and NSPopUpButtonCell inherits from it.
-// Everything marked GUESS pins this implementation's choice, not a documented or measured value:
-// for a button-based cell the border and background is the cell's bezel
-// (-drawBezelWithFrame:inView:, the pop-up cell's arrows included), and a menu item's own
-// background is not drawn.
+// What the Macs do (macOS 26.7.3 and 10.14.4, x86_64 and i386; mac-probes/cristim/batch12a/p767.m): the
+// method is found on NSMenuItemCell and on NSPopUpButtonCell, not on NSButtonCell, NSCell or NSActionCell;
+// a pop-up button cell draws the border and background and then the interior, and its border and background
+// is its bezel (a subclass sees border, bezel, interior, and the step draws the pixels of the bezel); a
+// plain menu item cell draws nothing in the step and does not go through the bezel (a subclass sees border,
+// interior), whether or not the cell is bordered and has a menu item.
 // Build: clang -fobjc-arc -framework AppKit appkit-menuitemcell-draw-border-background.m
 // Needs the Darling guest with a display (the cells are drawn into bitmaps through a window).
 // On master the selector does not exist: with ARC the test does not compile against master's
@@ -132,9 +134,15 @@ int main(void) {
         // a bordered pop-up cell draws a bezel, and the arrows are part of it
         CHECK(![render(popUp, DrawBorderAndBackground) isEqualToData:render(popUp, DrawNothing)]);
 
+        // test_quirk_menu_item_cell_border_is_empty: the step of a menu item cell draws nothing, bordered or not
         NSMenuItemCell *itemCell = [[NSMenuItemCell alloc] initTextCell:@"Item"];
         [itemCell setBordered:YES];
-        checkCell(itemCell);
+        NSData *blank = render(itemCell, DrawNothing);
+        (void)render(itemCell, DrawWhole);
+        CHECK([render(itemCell, DrawBorderAndBackground) isEqualToData:blank]);
+        [itemCell setTransparent:YES];
+        CHECK([render(itemCell, DrawWhole) isEqualToData:blank]);
+        [itemCell setTransparent:NO];
 
         // an override that calls super reaches the bezel once; whole drawing goes through it once
         MyPopUpCell *mine = [[MyPopUpCell alloc] initTextCell:@"Title" pullsDown:NO];
@@ -165,7 +173,7 @@ int main(void) {
         [mineItem setBordered:YES];
         borderCalls = bezelCalls = 0;
         (void)render(mineItem, DrawWhole);
-        CHECK(borderCalls == 1 && bezelCalls == 1);
+        CHECK(borderCalls == 1 && bezelCalls == 0);
     }
     if (failures) return 1;
     printf("PASS\n");
