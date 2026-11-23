@@ -174,6 +174,26 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     return [predicate evaluateWithObject: object] ? DarlingPredicateTrue : DarlingPredicateFalse;
 }
 
+// The target of the undo actions the context records. It is not the context: an undo manager that
+// retains its targets (the tree's Foundation does today) would own a context that owns the
+// manager, and one that keeps an unowned reference (the documented contract) would need the
+// context to outlive its actions. This object carries no reference to the context, is owned by it,
+// and is what the context removes its actions by, so no action can outlive it.
+@interface DarlingContextUndoTarget : NSObject
+- (void) undoChange: (NSDictionary *) change;
+@end
+
+@implementation DarlingContextUndoTarget
+
+- (void) undoChange: (NSDictionary *) change {
+    id value = [change objectForKey: @"value"];
+
+    [[change objectForKey: @"object"] setValue: (value == [NSNull null] ? nil : value)
+                                        forKey: [change objectForKey: @"key"]];
+}
+
+@end
+
 @implementation NSManagedObjectContext
 
 - init {
@@ -205,7 +225,6 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     _pendingRefreshed = [NSMutableSet new];
     _lock = [[NSLock alloc] init];
     _storeCoordinator = nil;
-    _undoManager = [[NSUndoManager alloc] init];
     _registeredObjects = [[NSMutableSet alloc] init];
     _insertedObjects = [[NSMutableSet alloc] init];
     _updatedObjects = [[NSMutableSet alloc] init];
@@ -260,7 +279,9 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     [_parentContext release];
     [_name release];
     [_pendingRefreshed release];
+    [_undoManager removeAllActionsWithTarget: _undoTarget];
     [_undoManager release];
+    [_undoTarget release];
     [_registeredObjects release];
     [_insertedObjects release];
     [_updatedObjects release];
@@ -506,9 +527,14 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
         [self performBlockAndWait:^{ [self setUndoManager:value]; }];
         return;
     }
+    if (value == _undoManager)
+        return;
     value = [value retain];
+    [_undoManager removeAllActionsWithTarget: _undoTarget];
     [_undoManager release];
     _undoManager = value;
+    if (_undoManager != nil && _undoTarget == nil)
+        _undoTarget = [[DarlingContextUndoTarget alloc] init];
 }
 
 - (void) setRetainsRegisteredObjects: (BOOL) value {
@@ -583,8 +609,20 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     return [_lock tryLock];
 }
 
+// Documented: sends undo to the context's undo manager. The context records the changes of
+// attribute values there (see observeValueForKeyPath:ofObject:change:context:); an undo then sets
+// the previous value again, which the redo records in turn. GUESS: only attribute value changes
+// are recorded, so inserting and deleting objects and changing relationships cannot be undone
+// yet. GUESS: a successful save, a rollback and a new undo manager end the context's undo
+// history (the page speaks of "uncommitted" changes), without touching actions of other targets
+// in a shared undo manager. GUESS: an object whose changes were all undone stays among the
+// updated objects.
 - (void) undo {
-    NSUnimplementedMethod();
+    if (_contextQueue && ![self _isOnContextQueue]) {
+        [self performBlockAndWait: ^{ [self undo]; }];
+        return;
+    }
+    [_undoManager undo];
 }
 
 - (void) redo {
@@ -634,6 +672,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     [_insertedObjects removeAllObjects]; [_updatedObjects removeAllObjects]; [_deletedObjects removeAllObjects];
     [_pendingInserted removeAllObjects]; [_pendingUpdated removeAllObjects]; [_pendingDeleted removeAllObjects];
     _hasChanges = NO;
+    [_undoManager removeAllActionsWithTarget: _undoTarget];
 }
 
 - (NSAtomicStoreCacheNode *) _cacheNodeForObjectID:
@@ -1142,6 +1181,15 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
         }
         if (![_pendingInserted containsObject:object])
             [_pendingUpdated addObject:object];
+        if (_undoManager != nil && [[[object entity] attributesByName] objectForKey: keyPath] != nil) {
+            id old = [change objectForKey: NSKeyValueChangeOldKey];
+
+            [_undoManager registerUndoWithTarget: _undoTarget
+                                        selector: @selector(undoChange:)
+                                          object: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                        object, @"object", keyPath, @"key",
+                                                                        old ?: [NSNull null], @"value", nil]];
+        }
         _hasChanges = YES;
         [self _requestProcessPendingChanges];
     }
@@ -1261,6 +1309,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     [_updatedObjects removeAllObjects];
     [_deletedObjects removeAllObjects];
     _hasChanges = NO;
+    [_undoManager removeAllActionsWithTarget: _undoTarget];
     [[NSNotificationCenter defaultCenter] postNotificationName: NSManagedObjectContextDidSaveNotification
                                                         object: self
                                                       userInfo: _DarlingChangeNotificationInfo(inserted, updated, deleted, nil)];
@@ -1319,6 +1368,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
             }
             [_insertedObjects removeAllObjects]; [_updatedObjects removeAllObjects]; [_deletedObjects removeAllObjects];
             _hasChanges = NO;
+            [_undoManager removeAllActionsWithTarget: _undoTarget];
         }
     } @finally { [_storeCoordinator unlock]; }
     if (!success) return NO;
