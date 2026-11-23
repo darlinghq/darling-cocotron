@@ -13,9 +13,11 @@ and the element's other accessibility state (identifier, help, placeholder value
 overwriting one another, two windows not sharing it, the window's title not standing in for it,
 and `respondsToSelector:` and protocol conformance on `NSWindow`.
 
-Marked GUESS in the source: the default is `nil`; `nil` is accepted and reads back as `nil`;
-the string is not parsed or checked as a URL. On master the selectors do not exist: with ARC
-the test does not compile against master's header, without ARC the first call raises an
-unrecognized-selector exception. The value is only stored: it has no effect on the
-accessibility tree, and neither the `copy` semantics nor the attribute-based reading
-(`accessibilityAttributeValue:` with the document attribute) are tested.
+Observed on macOS 26.7.3 and 10.14.4 (x86_64 and i386; probe `p764.m` of batch 12a): the default is
+`nil`, except for a window, which answers the URL string of its represented URL until a value is set
+(marked `QUIRK` in the source, tested); the string is copied; the empty string is kept; `nil` is kept
+and replaces the window's default; the string is not parsed. On master the selectors do not exist:
+with ARC the test does not compile against master's header, without ARC the first call raises an
+unrecognized-selector exception. The value is only stored: it has no effect on the accessibility
+tree, and the attribute-based reading (`accessibilityAttributeValue:` with the document attribute)
+is not tested.

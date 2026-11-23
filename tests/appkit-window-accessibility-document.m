@@ -5,9 +5,10 @@
 // the file that the accessibility element represents" (the setter: "sets the URL for the
 // file"); it states no default and no further semantics. NSWindow conforms to the protocol,
 // so it has the accessors; so do the other conformers that share this implementation.
-// Everything marked GUESS pins this implementation's choice, not a documented or measured
-// value: the default is nil, nil is accepted and reads back as nil, and the string is not
-// parsed or checked as a URL.
+// What the Macs do (macOS 26.7.3 and 10.14.4, x86_64 and i386; mac-probes/cristim/batch12a/p764.m):
+// the default is nil, except for a window, which answers the URL string of its represented URL until a
+// value is set; the set string is copied (a mutable one changes nothing afterwards), the empty string is
+// kept as it is, nil is kept and replaces the window's default, and the string is not parsed.
 // Build: clang -fobjc-arc -framework AppKit appkit-window-accessibility-document.m
 // Not covered: any effect on the accessibility tree (the value is only stored), the copy
 // semantics of the property, and the attribute-based reading
@@ -39,20 +40,27 @@ static int failures;
 static BOOL same(NSString *a, NSString *b) { return a == b || [a isEqualToString:b]; }
 
 static void checkDocument(id<NSAccessibility> element) {
-    CHECK([element accessibilityDocument] == nil);   // GUESS: the default
+    CHECK([element accessibilityDocument] == nil);   // the default
 
     NSString *url = @"file:///Users/someone/Documents/Report.txt";
     [element setAccessibilityDocument:url];
     CHECK(same([element accessibilityDocument], url));
 
-    // another value replaces it; the string is not interpreted (GUESS)
+    // another value replaces it; the string is not interpreted
     [element setAccessibilityDocument:@"not a url"];
     CHECK(same([element accessibilityDocument], @"not a url"));
     [element setAccessibilityDocument:@""];
     CHECK([element accessibilityDocument] != nil);
     CHECK([[element accessibilityDocument] length] == 0);
 
-    // nil is allowed by the declaration and clears it (GUESS: reads back as nil)
+    // the property is copied
+    NSMutableString *mutable = [NSMutableString stringWithString:@"abc"];
+    [element setAccessibilityDocument:mutable];
+    [mutable appendString:@"d"];
+    CHECK(same([element accessibilityDocument], @"abc"));
+    CHECK([element accessibilityDocument] != (NSString *)mutable);
+
+    // nil is allowed by the declaration and clears it
     [element setAccessibilityDocument:url];
     [element setAccessibilityDocument:nil];
     CHECK([element accessibilityDocument] == nil);
@@ -107,6 +115,35 @@ int main(void) {
         CHECK(same([first accessibilityDocument], @"file:///first"));
         CHECK(same([first title], @"First"));
         CHECK(same([first accessibilityTitle], @"First"));
+
+        // test_quirk_window_document_defaults_to_represented_url: a window with a represented URL answers it
+        // until a value is set; a set value, nil included, replaces it for good
+        NSWindow *represented = newWindow([NSWindow class]);
+        NSURL *file = [NSURL fileURLWithPath:@"/tmp/accessibility-document.txt"];
+        CHECK([represented accessibilityDocument] == nil);
+        [represented setRepresentedURL:file];
+        CHECK(same([represented accessibilityDocument], [[represented representedURL] absoluteString]));
+        CHECK([[represented accessibilityDocument] length] > 0);
+        [represented setRepresentedURL:[NSURL fileURLWithPath:@"/tmp/other.txt"]];
+        CHECK(same([represented accessibilityDocument], [[represented representedURL] absoluteString]));
+        [represented setAccessibilityDocument:@"explicit"];
+        [represented setRepresentedURL:file];
+        CHECK(same([represented accessibilityDocument], @"explicit"));
+        [represented setAccessibilityDocument:nil];
+        CHECK([represented accessibilityDocument] == nil);
+        [represented setRepresentedURL:[NSURL fileURLWithPath:@"/tmp/third.txt"]];
+        CHECK([represented accessibilityDocument] == nil);
+        NSWindow *emptied = newWindow([NSWindow class]);
+        [emptied setRepresentedURL:file];
+        [emptied setAccessibilityDocument:@""];
+        CHECK([emptied accessibilityDocument] != nil && [[emptied accessibilityDocument] length] == 0);
+        NSWindow *cleared = newWindow([NSWindow class]);
+        [cleared setRepresentedURL:file];
+        [cleared setRepresentedURL:nil];
+        CHECK([cleared accessibilityDocument] == nil);
+        // only a window has a default
+        NSView *plain = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)];
+        CHECK([plain accessibilityDocument] == nil);
 
         // the other conformers that share the implementation
         NSView *view = [[NSView alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)];

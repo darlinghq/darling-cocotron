@@ -75,6 +75,18 @@ void _NSAccessibilityRemoveStoredValue(id element, NSString *key) {
     [objc_getAssociatedObject(element, &storedValuesKey) removeObjectForKey: key];
 }
 
+// QUIRK: a window that has not been given a document answers the URL string of its represented URL (nil when it has
+// none); a value set explicitly, nil and the empty string included, replaces it, and clearing the represented URL
+// afterwards does not restore it. Not documented (the documentation gives no default). Evidence: black-box
+// observation on macOS 26.7.3 and 10.14.4 (x86_64 and i386) (tier 2), probe p764.m of batch 12a in
+// mac-probes/cristim. Every other class answers nil.
+// Test: appkit-window-accessibility-document (test_quirk_window_document_defaults_to_represented_url)
+NSString *_NSAccessibilityDefaultDocument(id element) {
+    if (![element isKindOfClass: [NSWindow class]])
+        return nil;
+    return [[(NSWindow *) element representedURL] absoluteString];
+}
+
 id _NSAccessibilityStoredObject(id element, NSString *key, id fallback) {
     id value;
     return _NSAccessibilityStoredValue(element, key, &value) ? value : fallback;
