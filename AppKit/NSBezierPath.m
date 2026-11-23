@@ -26,6 +26,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSBezierPath
 
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
 static CGFloat _defaultLineWidth = 1.0;
 static CGFloat _defaultMiterLimit = 10.0;
 static CGFloat _defaultFlatness = 0.6;
