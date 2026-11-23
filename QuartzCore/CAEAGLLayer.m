@@ -11,29 +11,54 @@
 
 #import <QuartzCore/CAEAGLLayer.h>
 
+#define EX(self) NS_EXTRA(CAEAGLLayer, self)
+
 @implementation CAEAGLLayer
 
+// Shared by -init and -initWithLayer:, which does not call -init. Unlike
+// CALayer, a CAEAGLLayer starts opaque: the public QuartzCore header says so,
+// and macOS 26.7.3 gives YES from -init, +layer and -initWithLayer: (also
+// for a non-opaque source layer). Test: tests/quartzcore-caeagllayer.m
+- (void) _setEAGLDefaults {
+    [self setOpaque: YES];
+}
+
+- init {
+    self = [super init];
+    if (self != nil)
+        [self _setEAGLDefaults];
+    return self;
+}
+
+- initWithLayer: (id) layer {
+    self = [super initWithLayer: layer];
+    if (self != nil)
+        [self _setEAGLDefaults];
+    return self;
+}
+
 - (void) dealloc {
-    [_drawableProperties release];
+    [EX(self)->_drawableProperties release];
+    NS_EXTRA_FREE(CAEAGLLayer, self);
     [super dealloc];
 }
 
 - (NSDictionary *) drawableProperties {
-    return [[_drawableProperties retain] autorelease];
+    return [[EX(self)->_drawableProperties retain] autorelease];
 }
 
 - (void) setDrawableProperties: (NSDictionary *) properties {
     properties = [properties copy];
-    [_drawableProperties release];
-    _drawableProperties = properties;
+    [EX(self)->_drawableProperties release];
+    EX(self)->_drawableProperties = properties;
 }
 
 - (BOOL) presentsWithTransaction {
-    return _presentsWithTransaction;
+    return EX(self)->_presentsWithTransaction;
 }
 
 - (void) setPresentsWithTransaction: (BOOL) value {
-    _presentsWithTransaction = value;
+    EX(self)->_presentsWithTransaction = value;
 }
 
 @end

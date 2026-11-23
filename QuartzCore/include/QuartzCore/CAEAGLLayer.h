@@ -10,6 +10,7 @@
 */
 
 #import <QuartzCore/CALayer.h>
+#import <QuartzCore/LegacyIvarLayout.h>
 #import <Foundation/Foundation.h>
 
 /* CAEAGLLayer conforms to EAGLDrawable, which belongs to the OpenGLES framework along with the
@@ -29,10 +30,13 @@
 /*
  * iOS's OpenGL ES layer. An EAGLContext sizes a renderbuffer to it, and
  * presenting the renderbuffer makes its pixels the layer's contents.
+ * Unlike CALayer, the layer starts opaque.
  */
 @interface CAEAGLLayer : CALayer <EAGLDrawable> {
-    NSDictionary *_drawableProperties;
-    BOOL _presentsWithTransaction;
+    NS_EXTRA_IVARS_BEGIN(CAEAGLLayer)
+        NSDictionary *_drawableProperties;
+        BOOL _presentsWithTransaction;
+    NS_EXTRA_IVARS_END(CAEAGLLayer)
 }
 
 @property (copy) NSDictionary *drawableProperties;
