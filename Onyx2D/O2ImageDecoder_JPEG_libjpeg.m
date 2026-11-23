@@ -203,6 +203,10 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     _dataProvider = [dataProvider retain];
 
     CFDataRef encodedData = O2DataProviderCopyData(dataProvider);
+    if (encodedData == NULL) {
+        [self release];
+        return nil;
+    }
     CFIndex encodedLength = CFDataGetLength(encodedData);
     const uint8_t *encodedBytes = CFDataGetBytePtr(encodedData);
 
@@ -217,7 +221,7 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     CFRelease(encodedData);
 
     if (bitmap == NULL) {
-        [self dealloc];
+        [self release];
         return nil;
     }
 
@@ -241,7 +245,8 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
 - (void) dealloc {
     [_dataProvider release];
     [_colorSpace release];
-    CFRelease(_pixelData);
+    if (_pixelData != NULL)
+        CFRelease(_pixelData);
     [super dealloc];
 }
 
