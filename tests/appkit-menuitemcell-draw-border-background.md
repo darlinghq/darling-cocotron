@@ -5,11 +5,11 @@ the other drawing tests.
 
 The documentation lists `drawBorderAndBackground(withFrame:in:)`
 (`drawBorderAndBackgroundWithFrame:inView:`) on `NSMenuItemCell`, not on `NSButtonCell`. It is
-the method that draws the borders and background tied to the cell's menu item, and the cell
-invokes it before the methods that draw the other components; the page for
-`-drawWithFrame:inView:` says that draws the border and then the interior.
-`NSMenuItemCell` is documented as no longer used to draw menus, and `NSPopUpButtonCell`
-inherits from it. The test checks, for a bordered pop-up cell and a bordered menu item cell:
+the step that covers whatever frames or backs a menu item, which runs ahead of the cell's other
+drawing steps; the page for `-drawWithFrame:inView:` describes whole-cell drawing as the border
+first and then the interior. The docs also say `NSMenuItemCell` no longer draws menus, and
+`NSPopUpButtonCell` inherits from it. The test checks, for a bordered pop-up cell and a bordered
+menu item cell:
 
 - the selector exists on both classes;
 - the method draws the same pixels as `-drawBezelWithFrame:inView:` (the pop-up cell's arrows

@@ -1,12 +1,12 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
 // -[NSMenuItemCell drawBorderAndBackgroundWithFrame:inView:]. The documentation (macOS) lists it
-// on NSMenuItemCell, not on NSButtonCell, as the method that draws the borders and background tied
-// to the cell's menu item; its page adds that the cell invokes it before the methods that draw the
-// other components, and the page for -drawWithFrame:inView: says that draws the border and then
-// the interior. NSMenuItemCell is documented as no longer used to draw menus, and NSPopUpButtonCell
-// inherits from it. Everything marked GUESS pins this implementation's choice, not a documented or
-// measured value: for a button-based cell the border and background is the cell's bezel
+// on NSMenuItemCell, not on NSButtonCell, as the step that covers whatever frames or backs a menu
+// item; the page says it runs ahead of the cell's other drawing steps, and the page for
+// -drawWithFrame:inView: describes whole-cell drawing as the border first and then the interior.
+// The docs also say NSMenuItemCell no longer draws menus, and NSPopUpButtonCell inherits from it.
+// Everything marked GUESS pins this implementation's choice, not a documented or measured value:
+// for a button-based cell the border and background is the cell's bezel
 // (-drawBezelWithFrame:inView:, the pop-up cell's arrows included), and a menu item's own
 // background is not drawn.
 // Build: clang -fobjc-arc -framework AppKit appkit-menuitemcell-draw-border-background.m
