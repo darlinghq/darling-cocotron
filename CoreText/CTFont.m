@@ -692,7 +692,17 @@ static CTFontSymbolicTraits fontTraits(CTFontRef font, CGFloat *weight,
     *weight = weights[index];
     if (index < 8)
         *weight += (weights[index + 1] - weights[index]) * (weightClass % 100) / 100.0;
-    if (weightClass >= 700)
+    // QUIRK: a face of weight class 600 (Semibold, Demibold: weight trait 0.3) and above has the
+    // bold trait, not only from class 700. The documentation says only that the trait has more
+    // detail in kCTFontWeightTrait. Evidence: black-box observation of the symbolic and weight traits
+    // on macOS 26.1 (arm64), 98 faces printed by probe 639: every face reporting weight 0.3,
+    // 0.4, 0.56 or 0.62 has the bold bit (AvenirNext-DemiBold and GillSans-SemiBold, both 0.3, report
+    // 80000002) and every face at 0.23 or less lacks it. Which fonts those are is machine specific;
+    // only the threshold is taken from it. The probe only brackets the macOS
+    // threshold above 0.23 and at or below 0.3, so class 600 is a GUESS at that boundary (classes 500
+    // to 599 were never observed). A face's own bold flag in the OS/2 table still counts.
+    // Test: coretext-font-copy-with-traits-and-family.
+    if (weightClass >= 600)
         traits |= kCTFontTraitBold;
 
     if (widthClass < 1 || widthClass > 9)

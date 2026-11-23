@@ -195,6 +195,26 @@ static void checkEmptyMaskKeepsTheFace(const FaceInfo *infos, CFIndex count)
 		expect(wrong == 0, "QUIRK: an empty mask returns the original face among faces equal in traits and weight");
 }
 
+// QUIRK (macOS 26.1, probe 639): every installed face whose weight trait is 0.3 or more has the bold
+// trait (a Semibold or Demibold face has it). SKIP when no installed face weighs between 0.3 and 0.4,
+// the faces this threshold decides.
+static void checkBoldThreshold(const FaceInfo *infos, CFIndex count)
+{
+	int semibold = 0, wrong = 0;
+	for (CFIndex i = 0; i < count; i++) {
+		if (infos[i].font == NULL || infos[i].weight < 0.3 - 1e-6)
+			continue;
+		if (infos[i].weight < 0.4 - 1e-6)
+			semibold++;
+		if (!(infos[i].traits & kCTFontTraitBold))
+			wrong++;
+	}
+	if (semibold == 0)
+		printf("SKIP no installed face has a weight between 0.3 and 0.4\n");
+	else
+		expect(wrong == 0, "QUIRK: faces of weight 0.3 and more have the bold trait");
+}
+
 int main(void)
 {
 	CTFontCollectionRef collection = CTFontCollectionCreateFromAvailableFonts(NULL);
@@ -424,6 +444,7 @@ int main(void)
 
 	FaceInfo *infos = collectFaces(faces, count);
 	checkEmptyMaskKeepsTheFace(infos, count);
+	checkBoldThreshold(infos, count);
 
 	// QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 639.F.family): a family without a face of the original's boldness
 	// still gives a face; only a family that does not exist gives NULL. The structure is checked, not
