@@ -23,6 +23,7 @@
 //   CHOSE <title>         a menu item was chosen
 // The program exits after SECONDS.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <objc/message.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -167,6 +168,7 @@ int main(int argc, char **argv) {
         [NSTimer scheduledTimerWithTimeInterval: seconds repeats: NO block: ^(NSTimer *t) {
             exit(0);
         }];
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     return 0;

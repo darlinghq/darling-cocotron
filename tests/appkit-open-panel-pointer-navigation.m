@@ -14,6 +14,7 @@
 // entered: a double-click enters exactly one level, a folder is never accepted as a file, and what is selected in
 // a listing reached by double-click is nothing.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -127,6 +128,7 @@ int main(int argc, char **argv) {
         D *d = [D new];
         [NSApp setDelegate: d];
         [NSApp performSelector: @selector(terminate:) withObject: nil afterDelay: seconds];
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     return 0;

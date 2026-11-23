@@ -22,6 +22,7 @@
 //   call:   front | regardless | key | relative
 //   kind:   inert (windows that cannot become key) | keyable | titled
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <fcntl.h>
 #include <signal.h>
 #include <spawn.h>
@@ -276,6 +277,7 @@ static int runOther(double seconds, const char *policy) {
         [NSTimer scheduledTimerWithTimeInterval: seconds repeats: NO block: ^(NSTimer *t) {
             [NSApp terminate: nil];
         }];
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     return 0;
@@ -434,6 +436,7 @@ static int runBackground(const char *self, const char *policy, const char *when,
                 [NSApp terminate: nil];
             }];
         }
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     if (childPid > 0) {
