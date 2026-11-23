@@ -155,6 +155,11 @@
 - (id) windowForID: (XID) i;
 - (void) windowHoldsFocus: (X11Window *) window;
 
+// YES while a cursor hidden until the pointer moves waits for that motion. The server only reports
+// a motion to a window that selected PointerMotionMask, which a window does for mouse-moved events,
+// so every window selects it while this is YES.
+- (BOOL) cursorAwaitsPointerMotion;
+
 // Re-reads the backing scale and, when it changed, resizes the windows to the
 // new scale and notifies them.
 - (void) reevaluateBackingScale;
