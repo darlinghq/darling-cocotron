@@ -295,7 +295,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([_tableView allowsColumnReordering]) {
         id delegate = [_tableView delegate];
         BOOL dragged = NO, mayMove = YES;
-        NSInteger current = clickedColumn;
+        NSInteger target = clickedColumn;
         NSPoint start = location;
 
         do {
@@ -313,20 +313,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                     mayMove = [delegate tableView: _tableView shouldReorderColumn: clickedColumn toColumn: -1];
             }
             if (mayMove) {
-                NSInteger target = [self columnAtPoint: point];
+                NSInteger column = [self columnAtPoint: point];
 
-                if (target != NSNotFound && target != current &&
-                    (![delegate respondsToSelector: @selector(tableView:shouldReorderColumn:toColumn:)] ||
-                     [delegate tableView: _tableView shouldReorderColumn: current toColumn: target])) {
-                    [_tableView _moveColumn: current toColumn: target notify: NO];
-                    current = target;
-                }
+                if (column != NSNotFound)
+                    target = column;
             }
         } while ([theEvent type] != NSLeftMouseUp);
 
         if (dragged) {
-            if (current != clickedColumn)
-                [_tableView _noteColumnDidMoveFrom: clickedColumn to: current];
+            // The column goes where the mouse went up, the delegate being asked once more, with the column's original
+            // index and that position; a column dragged back to its place is not asked about. Observed on macOS 26.7.3
+            // (a drag across two columns asks only about the last one; out and back asks nothing more).
+            // Test: tests/appkit-table-header-delegate.m
+            if (mayMove && target != clickedColumn &&
+                (![delegate respondsToSelector: @selector(tableView:shouldReorderColumn:toColumn:)] ||
+                 [delegate tableView: _tableView shouldReorderColumn: clickedColumn toColumn: target])) {
+                [_tableView _moveColumn: clickedColumn toColumn: target notify: NO];
+                [_tableView _noteColumnDidMoveFrom: clickedColumn to: target];
+            }
             return;
         }
     }
