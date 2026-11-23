@@ -40,6 +40,41 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
 
 @implementation NSAnimation
 
+// The animation that triggers keeps one entry per animation linked to it:
+// the linked animation (not retained), the progress and whether it stops
+// (YES) or starts (NO) at that progress.
+static void addLink(NSAnimation *trigger, NSAnimation *dependent,
+        NSAnimationProgress progress, BOOL stop)
+{
+    NSMutableArray *links = NS_EXTRA(NSAnimation, trigger)->_linkedAnimations;
+
+    if (links == nil)
+        links = NS_EXTRA(NSAnimation, trigger)->_linkedAnimations =
+                [NSMutableArray new];
+
+    [links addObject:
+                   [NSDictionary dictionaryWithObjectsAndKeys:
+                                         [NSValue valueWithNonretainedObject: dependent], @"animation",
+                                         [NSNumber numberWithFloat: progress], @"progress",
+                                         [NSNumber numberWithBool: stop], @"stop",
+                                         nil]];
+}
+
+static void removeLink(NSAnimation *trigger, NSAnimation *dependent, BOOL stop) {
+    if (trigger == nil)
+        return;
+
+    NSMutableArray *links = NS_EXTRA(NSAnimation, trigger)->_linkedAnimations;
+
+    for (NSInteger i = [links count] - 1; i >= 0; i--) {
+        NSDictionary *link = [links objectAtIndex: i];
+
+        if ([[link objectForKey: @"animation"] nonretainedObjectValue] == dependent &&
+                [[link objectForKey: @"stop"] boolValue] == stop)
+            [links removeObjectAtIndex: i];
+    }
+}
+
 - initWithDuration: (NSTimeInterval) duration
         animationCurve: (NSAnimationCurve) curve
 {
@@ -55,6 +90,21 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
 }
 
 - (void) dealloc {
+    if (NS_EXTRA_ALLOCATED(NSAnimation, self)) {
+        [self clearStartAnimation];
+        [self clearStopAnimation];
+
+        // animations linked to this one must not keep pointing at it
+        for (NSDictionary *link in NS_EXTRA(NSAnimation, self)->_linkedAnimations) {
+            NSAnimation *dependent = [[link objectForKey: @"animation"] nonretainedObjectValue];
+            if ([[link objectForKey: @"stop"] boolValue])
+                NS_EXTRA(NSAnimation, dependent)->_stopAnimation = nil;
+            else
+                NS_EXTRA(NSAnimation, dependent)->_startAnimation = nil;
+        }
+        [NS_EXTRA(NSAnimation, self)->_linkedAnimations release];
+    }
+    NS_EXTRA_FREE(NSAnimation, self);
     [_progressMarks release];
     [_runLoopModes release];
     [super dealloc];
@@ -69,6 +119,14 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
     result->_runLoopModes = [_runLoopModes copy];
     result->_isAnimating = NO;
     result->_timer = nil;
+
+    // GUESS: the documentation does not say whether a copy keeps the links
+    // of the original; it starts without any (rejected alternative: link the
+    // copy to the same animations)
+    NS_EXTRA_COPY(NSAnimation, result, self);
+    NS_EXTRA(NSAnimation, result)->_startAnimation = nil;
+    NS_EXTRA(NSAnimation, result)->_stopAnimation = nil;
+    NS_EXTRA(NSAnimation, result)->_linkedAnimations = nil;
 
     return result;
 }
@@ -201,14 +259,58 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
                             userInfo: [NSDictionary dictionaryWithObject: entry
                                                                   forKey: NSAnimationProgressMark]];
     }
+
+    // animations linked to this one start or stop when it reaches the progress
+    // they asked for.
+    // GUESS: a link stays in place after it triggered, until it is cleared or
+    // replaced (rejected alternative: a link triggers once).
+    // GUESS: a link is not a progress mark of this animation, so it does not
+    // show in -progressMarks and does not reach the delegate (the page says
+    // the progress "specifies a progress mark of the other animation"; the
+    // rejected alternative adds a real mark to the other animation).
+    // GUESS: the crossing rule of the marks applies, so a link at 0.0 never
+    // triggers (rejected alternative: it triggers when this animation starts).
+    // A dependent in NSAnimationBlocking mode runs its own run loop inside
+    // this call, as -startAnimation does for any caller; a dependent that is
+    // not meant to hold up this animation needs a non-blocking mode.
+    // A delegate that stopped this animation from a mark callback ends the
+    // step here, as it does for the marks: a stopped animation does not
+    // reach the linked progress.
+    if (!_isAnimating || !NS_EXTRA_ALLOCATED(NSAnimation, self))
+        return;
+    for (NSDictionary *link in [[NS_EXTRA(NSAnimation, self)->_linkedAnimations copy] autorelease]) {
+        if (!_isAnimating)
+            break;
+
+        float trigger = [[link objectForKey: @"progress"] floatValue];
+        if (trigger <= previous || trigger > reached)
+            continue;
+        // an earlier dependent's delegate may have cleared this link or freed
+        // its animation, which removes the link
+        if (![NS_EXTRA(NSAnimation, self)->_linkedAnimations containsObject: link])
+            continue;
+
+        NSAnimation *dependent = [[[link objectForKey: @"animation"] nonretainedObjectValue] retain];
+        if ([[link objectForKey: @"stop"] boolValue])
+            [dependent stopAnimation];
+        else
+            [dependent startAnimation];
+        [dependent release];
+    }
 }
 
 - (void) clearStartAnimation {
-    NSUnimplementedMethod();
+    NSAnimation *trigger = NS_EXTRA(NSAnimation, self)->_startAnimation;
+
+    NS_EXTRA(NSAnimation, self)->_startAnimation = nil;
+    removeLink(trigger, self, NO);
 }
 
 - (void) clearStopAnimation {
-    NSUnimplementedMethod();
+    NSAnimation *trigger = NS_EXTRA(NSAnimation, self)->_stopAnimation;
+
+    NS_EXTRA(NSAnimation, self)->_stopAnimation = nil;
+    removeLink(trigger, self, YES);
 }
 
 - (void) _setCurrentProgressAndEndIfNeeded: (NSAnimationProgress) progress {
@@ -297,13 +399,33 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
 - (void) startWhenAnimation: (NSAnimation *) animation
             reachesProgress: (NSAnimationProgress) progress
 {
-    NSUnimplementedMethod();
+    // documented: a new start animation replaces the previous one
+    [self clearStartAnimation];
+    // GUESS: nil only clears the link (rejected alternative: raise)
+    if (animation == nil)
+        return;
+
+    // GUESS: the progress is pinned to 0.0 ... 1.0 like a progress mark is
+    // (the page does not say; rejected alternative: raise for a value outside)
+    progress = MAX(0.0f, MIN(1.0f, progress));
+    NS_EXTRA(NSAnimation, self)->_startAnimation = animation;
+    addLink(animation, self, progress, NO);
 }
 
 - (void) stopWhenAnimation: (NSAnimation *) animation
            reachesProgress: (NSAnimationProgress) progress
 {
-    NSUnimplementedMethod();
+    // documented: a new stop animation replaces the previous one
+    [self clearStopAnimation];
+    // GUESS: nil only clears the link (rejected alternative: raise)
+    if (animation == nil)
+        return;
+
+    // GUESS: the progress is pinned to 0.0 ... 1.0 like a progress mark is
+    // (the page does not say; rejected alternative: raise for a value outside)
+    progress = MAX(0.0f, MIN(1.0f, progress));
+    NS_EXTRA(NSAnimation, self)->_stopAnimation = animation;
+    addLink(animation, self, progress, YES);
 }
 
 @end
