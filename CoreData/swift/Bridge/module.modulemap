@@ -1,0 +1,4 @@
+module DarlingCoreDataSupplementBridge {
+    header "CoreDataBridge.h"
+    export *
+}
