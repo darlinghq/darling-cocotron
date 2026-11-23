@@ -11,11 +11,12 @@ extern CGContextRef CGPDFContextCreateWithURL(CFURLRef, const CGRect *, CFDictio
 // It returns a new PDF context that stores the PDF at the URL, or NULL if a
 // context could not be created; mediaBox is the default page media box (NULL
 // means 612 by 792); the context is released with CGContextRelease.
-// The page does not say which inputs make creation fail. The checks that a NULL
-// URL, an unwritable location, a non-file URL and a request for encryption
-// (which CGPDFContextCreate refuses in this implementation) each return NULL, and
-// that a refused encryption request neither creates a file nor touches an existing
-// one, are placeholder pins of this implementation, not documented behaviour.
+// The page does not say which inputs make creation fail. A URL in a missing directory
+// gives NULL on macOS 26.7.3 and 10.14.4 (observed). The checks that a NULL URL (a crash
+// on macOS) and a request for encryption (macOS creates the context; here
+// CGPDFContextCreate refuses it, the PDF writer cannot encrypt) return NULL, and that a
+// refused encryption request neither creates a file nor touches an existing one, are
+// placeholder pins of this implementation, not macOS behaviour.
 
 static int drawOnePage(CGContextRef context) {
     CGPDFContextBeginPage(context, NULL);
@@ -70,8 +71,8 @@ static int run(NSString *dir) {
         NSURL *missingDir = [NSURL fileURLWithPath:
             [dir stringByAppendingPathComponent:@"no-such-dir/out.pdf"]];
         if (CGPDFContextCreateWithURL((CFURLRef)missingDir, &box, NULL)) return 31;
-        NSURL *remote = [NSURL URLWithString:@"http://example.invalid/out.pdf"];
-        if (CGPDFContextCreateWithURL((CFURLRef)remote, &box, NULL)) return 32;
+        // A non-file URL is not pinned: macOS 26.7.3 and 10.14.4 return a context for an http URL, this
+        // implementation returns NULL (the data consumer is for files only).
         NSDictionary *secret = [NSDictionary dictionaryWithObject:@"secret"
                                     forKey:(id)kCGPDFContextUserPassword];
         NSString *encPath = [dir stringByAppendingPathComponent:@"enc.pdf"];
