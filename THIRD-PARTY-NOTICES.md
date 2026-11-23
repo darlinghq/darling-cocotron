@@ -61,3 +61,12 @@ and the licence.
   copy, modify, merge, publish, distribute, sublicense, and/or sell copies, subject to the above copyright notice and
   this permission notice being included in all copies or substantial portions of the software. The software is
   provided "as is", without warranty of any kind.
+
+## stb_image.h
+
+- Location: `Onyx2D/stb_image.h`
+- Source: https://github.com/nothings/stb (`stb_image.h`, v2.34)
+- Commit: 1da9ade1e66195252114f5da497f244704a6c58d
+- Copyright: 2017 Sean Barrett
+- Licence: MIT or public domain (the Unlicense), at the user's choice. The text of both is at the end of the file.
+  The file is kept unmodified; `O2ImageDecoder_JPEG_stb.m` configures it with `STBI_*` macros before including it.
