@@ -13,8 +13,8 @@
 // 26.7.3 and 10.14.4 gave: an item keeps its content object as its representedObject; every content object gets
 // its own item even when two descriptions are equal (test_equal_descriptions_keep_every_item); a bound selection
 // survives a content change (test_bound_selection_survives_a_content_change); and the QUIRK tests
-// test_quirk_unmatched_selection_gets_an_item, test_quirk_first_bound_selection_wins_on_content_change and
-// test_quirk_content_values_need_the_content_key_path_as_prefix.
+// test_quirk_unmatched_selection_gets_an_item, test_quirk_first_bound_selection_wins_on_content_change,
+// test_quirk_content_values_need_the_content_key_path_as_prefix and test_quirk_bound_items_are_tagged_by_index.
 // Build: clang -framework AppKit appkit-popup-button-content-bindings.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -308,6 +308,42 @@ static void test_quirk_first_bound_selection_wins_on_content_change(void) {
     }
 }
 
+// QUIRK (macOS 26.1, probe 641.1, 641.3, 641.25, 641.35): the items the content bindings build are tagged with their
+// index, so a bound selectedTag selects the item with that index; a pull-down's items are tagged the same way.
+static void test_quirk_bound_items_are_tagged_by_index(void) {
+    NSString *a = @"a", *b = @"b", *c = @"c";
+    Model *model = [[Model new] autorelease];
+    NSPopUpButton *button = makeButton();
+
+    model.things = [NSArray arrayWithObjects: a, b, c, nil];
+    model.tag = [NSNumber numberWithInt: 1];
+    [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
+    CHECK([[button itemAtIndex: 0] tag] == 0 && [[button itemAtIndex: 1] tag] == 1 && [[button itemAtIndex: 2] tag] == 2);
+    [button bind: NSSelectedTagBinding toObject: model withKeyPath: @"tag" options: nil];
+    CHECK([button indexOfSelectedItem] == 1);
+    CHECK([[button titleOfSelectedItem] isEqual: @"b"]);
+
+    // Rebuilt items are tagged afresh.
+    model.things = [NSArray arrayWithObjects: c, b, a, @"d", nil];
+    CHECK([[button itemAtIndex: 3] tag] == 3);
+    CHECK([button indexOfSelectedItem] == 1);
+
+    // contentValues alone (no content) tags them too
+    Model *valuesModel = [[Model new] autorelease];
+    NSPopUpButton *valuesButton = makeButton();
+
+    valuesModel.titles = [NSArray arrayWithObjects: @"A", @"B", nil];
+    [valuesButton bind: NSContentValuesBinding toObject: valuesModel withKeyPath: @"titles" options: nil];
+    CHECK([[valuesButton itemAtIndex: 1] tag] == 1);
+
+    NSPopUpButton *pullDown = [[[NSPopUpButton alloc] initWithFrame: NSMakeRect(0, 0, 100, 22) pullsDown: YES] autorelease];
+    Model *pullModel = [[Model new] autorelease];
+
+    pullModel.things = [NSArray arrayWithObjects: @"t", @"a", @"b", nil];
+    [pullDown bind: NSContentBinding toObject: pullModel withKeyPath: @"things" options: nil];
+    CHECK([pullDown numberOfItems] == 3 && [[pullDown itemAtIndex: 2] tag] == 2);
+}
+
 #define RUN(t) do { @try { t; } @catch (id e) { fprintf(stderr, "FAIL: %s raised %s\n", #t, [[e description] UTF8String]); failures++; } } while (0)
 
 int main(void) {
@@ -322,6 +358,7 @@ int main(void) {
     RUN(test_bound_selection_survives_a_content_change());
     RUN(test_quirk_unmatched_selection_gets_an_item());
     RUN(test_quirk_first_bound_selection_wins_on_content_change());
+    RUN(test_quirk_bound_items_are_tagged_by_index());
     if (failures == 0)
         printf("PASS appkit-popup-button-content-bindings\n");
     [pool release];
