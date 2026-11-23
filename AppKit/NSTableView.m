@@ -646,8 +646,16 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     }
 
     rect.origin.x = 0.;
-    for (i = 0; i < column; i++)
-        rect.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
+    // QUIRK: the rectangle of a hidden column is an empty one at x 0, wherever the column is in the table; the
+    // documentation of isHidden does not say. Observed on macOS 26.1 (arm64), probe 657.1: with 5 columns of
+    // widths 50, 60, 70, 80 and 90 "hidden=1 ... rectOfColumn x+w=[10+65 0+0 75+87 162+97 259+74]" and
+    // "hidden=4 ... [10+65 75+77 152+87 239+94 0+0]"; the probe printed x and width only, so y and height of
+    // that rectangle are unchanged here. The header rect and the cell frame of a hidden column agree
+    // (headerRect in 657.1, frameOfCellAtColumn:row: in probe 657.3).
+    // Test: tests/appkit-table-hidden-columns.m (test_rects_close_the_gap)
+    if (![[_tableColumns objectAtIndex: column] isHidden])
+        for (i = 0; i < column; i++)
+            rect.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
     rect.origin.y = 0.;
 
     rect.size.width = [self _spaceTakenByColumn: [_tableColumns objectAtIndex: column]];
@@ -759,9 +767,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         row >= [self numberOfRows])
         return NSZeroRect;
 
+    // QUIRK: x 0 for a hidden column, as in -rectOfColumn: (probe 657.3 "hidden=1 ... frameOfCellAtColumn:row:1
+    // -> 16+50 0+0 83+70 170+80 267+60").
     frame.origin.x = 0.;
-    for (i = 0; i < column; i++)
-        frame.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
+    if (![[_tableColumns objectAtIndex: column] isHidden])
+        for (i = 0; i < column; i++)
+            frame.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
 
     frame.origin.y = 0.;
     for (i = 0; i < row; i++)

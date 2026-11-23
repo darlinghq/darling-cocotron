@@ -7,7 +7,8 @@
 // position (a refusal stops the move; a column dragged back to its place is not asked about), moveColumn:toColumn: posts the move notification and
 // rejects out-of-range indexes, and double-clicking the divider after a column fits it, taking
 // the width from tableView:sizeToFitWidthOfColumn: when the delegate has it. Observed on macOS 26
-// and Mojave; the program passes on both.
+// and Mojave; the program passes on both, except for the block about a hidden column below, which holds
+// Darling's own expectations (a hidden column's rectangle is at x 0, which must not make a divider).
 #import <AppKit/AppKit.h>
 #include <stdlib.h>
 
@@ -204,6 +205,19 @@ int main(void)
         expect([[[source->resizeInfo objectForKey:@"NSTableColumn"] identifier] isEqualToString:@"a"],
                @"the resize notification names the column");
         expect([[source->resizeInfo objectForKey:@"NSOldWidth"] floatValue] == 100, @"and the old width");
+
+        // DARLING-ONLY expectations, not observed on macOS: with a hidden column after the first, the divider is
+        // still the first column's right edge, and a click in the first column's own header, near x 0, does not
+        // grab it (the hidden column's rectangle is at x 0, see appkit-table-hidden-columns.m)
+        source = setup();
+        [[[table tableColumns] objectAtIndex:1] setHidden:YES];
+        first = [(NSTableHeaderView *)[table headerView] headerRectOfColumn:0];
+        clickHeader(NSMakePoint(NSMinX(first) + 2, NSMidY(first)), 2);
+        expect(![source->log containsObject:@"fit 0"] && [[[table tableColumns] objectAtIndex:0] width] == 100,
+               @"a click near x 0 does not resize the column before a hidden one");
+        clickHeader(NSMakePoint(NSMaxX(first) - 1, NSMidY(first)), 2);
+        expect([source->log containsObject:@"fit 0"] && [[[table tableColumns] objectAtIndex:0] width] == 150,
+               @"the divider before a hidden column still resizes the column left of it");
 
         // Programmatic move
         source = setup();

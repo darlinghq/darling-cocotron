@@ -88,6 +88,16 @@ static void test_rects_close_the_gap(void)
     NSRect cell = [table frameOfCellAtColumn:2 row:0];
     CHECK(NSMinX(cell) >= 103 && NSMinX(cell) < 106);
     CHECK([table frameOfCellAtColumn:1 row:0].size.width == 0);
+    // QUIRK (macOS 26.1, probes 657.1 and 657.3): a hidden column's rectangle and cell frame are empty ones at
+    // x 0 wherever the column sits; its neighbours are unaffected
+    CHECK(NSMinX([table rectOfColumn:1]) == 0);
+    CHECK(NSMinX([table frameOfCellAtColumn:1 row:0]) == 0);
+    CHECK(NSMinX([table frameOfCellAtColumn:1 row:1]) == 0 && NSWidth([table frameOfCellAtColumn:1 row:1]) == 0);
+    [column(1) setHidden:NO];
+    [column(2) setHidden:YES];
+    CHECK(NSMinX([table rectOfColumn:2]) == 0 && NSWidth([table rectOfColumn:2]) == 0);
+    CHECK(NSMinX([table frameOfCellAtColumn:2 row:0]) == 0);
+    CHECK(NSMinX([table rectOfColumn:1]) == 103 && NSWidth([table rectOfColumn:1]) == 53);
 }
 
 static void test_a_point_is_never_in_a_hidden_column(void)
@@ -205,6 +215,7 @@ static void test_header(void)
     NSTableHeaderView *header = (NSTableHeaderView *)[table headerView];
     [column(1) setHidden:YES];
     CHECK(NSWidth([header headerRectOfColumn:1]) == 0);
+    CHECK(NSMinX([header headerRectOfColumn:1]) == 0); // QUIRK (macOS 26.1, probe 657.1): a hidden column's header rect is at x 0
     CHECK(NSMinX([header headerRectOfColumn:2]) == 103);
     CHECK(NSWidth([header headerRectOfColumn:2]) == 83);
     CHECK([header columnAtPoint:NSMakePoint(120, 5)] == 2);
