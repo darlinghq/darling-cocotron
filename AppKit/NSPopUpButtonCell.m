@@ -303,7 +303,15 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
 - (void) _addItemWithTitle: (NSString *) title {
 
-    NSMenuItem *duplicate = [_menu itemWithTitle: title];
+    // A separator item has an empty title, so it is never the duplicate to remove: look for the
+    // first item that is not a separator.
+    NSMenuItem *duplicate = nil;
+    for (NSMenuItem *candidate in [_menu itemArray]) {
+        if (![candidate isSeparatorItem] && [[candidate title] isEqualToString: title]) {
+            duplicate = candidate;
+            break;
+        }
+    }
     if (duplicate != nil) {
         // don't allow items with duplicate titles by default
         [_menu removeItem: duplicate];
@@ -646,7 +654,7 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     for (NSMenuItem *item in [self itemArray]) {
         NSString *title = [item title];
 
-        if (title != nil)
+        if (![item isSeparatorItem])
             widest = MAX(widest, [title sizeWithAttributes: attributes].width);
     }
     return widest;

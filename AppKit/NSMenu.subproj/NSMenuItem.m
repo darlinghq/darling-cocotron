@@ -266,7 +266,8 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 }
 
 - (NSString *) title {
-    return _title;
+    // _title is nil for separators; the property is non-optional, so report an empty title.
+    return _title ?: @"";
 }
 
 - (NSAttributedString *) attributedTitle {
