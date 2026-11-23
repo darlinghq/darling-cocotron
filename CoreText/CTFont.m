@@ -465,8 +465,23 @@ CTFontRef CTFontCreateCopyWithFamily(CTFontRef font, CGFloat size,
     // CTFontCreateCopyWithSymbolicTraits and CTFontCreateCopyWithAttributes, which keep it).
     // Evidence: black-box observation on macOS 10.14.4 (x86_64, i386) and 26.7.3 (tier 2); the
     // documentation says NULL keeps the original's matrix. Test: coretext-font-matrix.
-    return copyFontInFamily(font, size, matrix, NO, family, CTFontGetSymbolicTraits(font),
-                            crossFamilyStyleTraits, weightOfFont(font));
+    CTFontSymbolicTraits original = CTFontGetSymbolicTraits(font);
+    CTFontRef result = copyFontInFamily(font, size, matrix, NO, family, original,
+                                        crossFamilyStyleTraits, weightOfFont(font));
+    // QUIRK, against the documented return value (a font with the original's traits in the family,
+    // or NULL when none is found; flagged for the maintainer): when the family has no face with the
+    // original's italic and bold traits (a bold original and a family of one regular face) the
+    // family's closest face is returned, not NULL. Evidence: black-box observation of
+    // CTFontCreateCopyWithFamily on macOS 26.1 (arm64): Helvetica-Bold into Zapfino and into Apple
+    // Color Emoji gives those families' only face (probe 639.F.family). Only single-face families
+    // were probed, so GUESS: which face a family of several gives. The fewest mismatches are taken,
+    // bold dropped first, then italic, then the nearest weight; the rejected alternative is to
+    // ignore both at once. CTFontCreateCopyWithSymbolicTraits does return NULL for a missing trait
+    // inside one family (probe 639.D.noface). Test: coretext-font-copy-with-traits-and-family.
+    static const CTFontSymbolicTraits relaxed[] = { kCTFontTraitItalic, 0 };
+    for (size_t i = 0; result == NULL && i < sizeof(relaxed) / sizeof(relaxed[0]); i++)
+        result = copyFontInFamily(font, size, matrix, NO, family, original, relaxed[i], weightOfFont(font));
+    return result;
 }
 
 CTFontRef CTFontCreateForString(CTFontRef currentFont, CFStringRef string, CFRange range)
