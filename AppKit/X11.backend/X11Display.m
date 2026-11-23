@@ -24,6 +24,7 @@
 #import "X11DraggingManager.h"
 #import "X11Pasteboard.h"
 #import "X11LevelStacking.h"
+#import "X11Crossing.h"
 #import "../private-include/AppKit/NSEventTime.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
@@ -2206,6 +2207,18 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case LeaveNotify:
+        // The pointer left the window (X11Crossing.h says which crossings mean that), and the event carries where it
+        // was. The window re-evaluates its tracking areas at that position, as it does for a motion, and sends the
+        // exits for the areas the position is outside. A leave that comes with the pointer still inside the window's
+        // rectangle (another window mapped over it) finds the areas still containing it and sends nothing. A pointer
+        // on another screen has no usable position here.
+        if (window == nil || _relativeMouse.active || !ev->xcrossing.same_screen ||
+            !X11LeaveNotifyMeansPointerLeft(ev->xcrossing.mode, ev->xcrossing.detail))
+            break;
+        [window setLastKnownCursorPosition:
+                        [window logicalPoint: NSMakePoint(ev->xcrossing.x,
+                                                          ev->xcrossing.y)]];
+        [delegate platformWindowSetCursorEvent: window];
         break;
 
     case FocusIn:
