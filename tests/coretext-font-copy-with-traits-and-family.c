@@ -18,7 +18,9 @@
  * Prints PASS/FAIL/SKIP lines; exit status 1 on failure.
  */
 #include <ApplicationServices/ApplicationServices.h>
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static int failures;
 
@@ -83,6 +85,110 @@ static void release(CTFontRef f)
 {
 	if (f != NULL)
 		CFRelease(f);
+}
+
+static CGFloat weightOf(CTFontRef f)
+{
+	CGFloat weight = 0;
+	CFDictionaryRef traits = CTFontCopyTraits(f);
+	CFNumberRef number = traits != NULL ? CFDictionaryGetValue(traits, kCTFontWeightTrait) : NULL;
+	if (number != NULL)
+		CFNumberGetValue(number, kCFNumberCGFloatType, &weight);
+	if (traits != NULL)
+		CFRelease(traits);
+	return weight;
+}
+
+// The bits CTFontCreateCopyWithSymbolicTraits compares inside a family.
+static const CTFontSymbolicTraits comparedBits = kCTFontTraitItalic | kCTFontTraitBold
+		| kCTFontTraitExpanded | kCTFontTraitCondensed | kCTFontTraitColorGlyphs;
+
+// What the checks over all installed faces need of each face, read once so that the checks do not
+// create a font for every pair of faces.
+typedef struct {
+	CTFontRef font;
+	CFStringRef family, postScriptName;
+	CTFontSymbolicTraits traits;
+	CGFloat weight;
+} FaceInfo;
+
+static FaceInfo *collectFaces(CFArrayRef faces, CFIndex count)
+{
+	FaceInfo *infos = calloc(count > 0 ? count : 1, sizeof(FaceInfo));
+	for (CFIndex i = 0; i < count; i++) {
+		CTFontRef f = faceFont(faces, i);
+		infos[i].font = f;
+		if (f != NULL) {
+			infos[i].family = CTFontCopyFamilyName(f);
+			infos[i].postScriptName = CTFontCopyPostScriptName(f);
+			infos[i].traits = CTFontGetSymbolicTraits(f);
+			infos[i].weight = weightOf(f);
+		}
+	}
+	return infos;
+}
+
+static void releaseFaces(FaceInfo *infos, CFIndex count)
+{
+	for (CFIndex i = 0; i < count; i++) {
+		release(infos[i].font);
+		if (infos[i].family != NULL)
+			CFRelease(infos[i].family);
+		if (infos[i].postScriptName != NULL)
+			CFRelease(infos[i].postScriptName);
+	}
+	free(infos);
+}
+
+static int sameFamilyInfo(const FaceInfo *a, const FaceInfo *b)
+{
+	return a->family != NULL && b->family != NULL && CFEqual(a->family, b->family);
+}
+
+static int hasPostScriptName(CTFontRef a, CFStringRef nameOfB)
+{
+	CFStringRef na = CTFontCopyPostScriptName(a);
+	int same = na != NULL && nameOfB != NULL && CFEqual(na, nameOfB);
+	if (na != NULL)
+		CFRelease(na);
+	return same;
+}
+
+// QUIRK (macOS 26.1, probes 639.E.bold-off, only the Avenir and Hoefler Text rows isolate this): among
+// faces equal on the compared traits and on the distance of their weight, the original face itself is
+// returned. A request that changes nothing (CreateCopyWithSymbolicTraits, and CreateCopyWithFamily into
+// the face's own family) is made for every installed face that has such an equal in its family
+// (Avenir-Roman and Avenir-Book); SKIP when no installed family has one.
+static void checkOriginalWinsTies(const FaceInfo *infos, CFIndex count)
+{
+	int tied = 0, wrong = 0;
+	for (CFIndex i = 0; i < count; i++) {
+		const FaceInfo *f = &infos[i];
+		int hasEqual = 0;
+		for (CFIndex j = 0; f->font != NULL && j < count && !hasEqual; j++) {
+			const FaceInfo *g = &infos[j];
+			hasEqual = j != i && g->font != NULL && sameFamilyInfo(f, g)
+					&& !(f->postScriptName != NULL && g->postScriptName != NULL
+							&& CFEqual(f->postScriptName, g->postScriptName))
+					&& (g->traits & comparedBits) == (f->traits & comparedBits)
+					&& fabs(g->weight - f->weight) < 1e-6;
+		}
+		if (hasEqual) {
+			tied++;
+			CTFontRef copy = CTFontCreateCopyWithSymbolicTraits(f->font, 0, NULL, 0, 0);
+			if (copy == NULL || !hasPostScriptName(copy, f->postScriptName))
+				wrong++;
+			release(copy);
+			copy = CTFontCreateCopyWithFamily(f->font, 0, NULL, f->family);
+			if (copy == NULL || !hasPostScriptName(copy, f->postScriptName))
+				wrong++;
+			release(copy);
+		}
+	}
+	if (tied == 0)
+		printf("SKIP no installed family has two faces equal in traits and weight\n");
+	else
+		expect(wrong == 0, "QUIRK: of faces equal in traits and weight the original face is returned");
 }
 
 int main(void)
@@ -282,6 +388,10 @@ int main(void)
 		CFRelease(fallback);
 		CFRelease(family);
 	}
+
+	FaceInfo *infos = collectFaces(faces, count);
+	checkOriginalWinsTies(infos, count);
+	releaseFaces(infos, count);
 
 	release(plain);
 	release(bold);

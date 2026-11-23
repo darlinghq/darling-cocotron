@@ -324,6 +324,14 @@ static CGFloat weightOfFont(CTFontRef font) {
     return weight;
 }
 
+static BOOL fontHasPostScriptName(CTFontRef font, CFStringRef name) {
+    CFStringRef own = CTFontCopyPostScriptName(font);
+    BOOL same = own != NULL && name != NULL && CFEqual(own, name);
+    if (own != NULL)
+        CFRelease(own);
+    return same;
+}
+
 // A new font of `family` whose style traits, over the bits in `compared`, are those of `wanted`,
 // or NULL when the family has no such face. A size of 0 keeps the size of the original and (with keepMatrix) a NULL
 // matrix keeps the original's matrix. The cascade list of the original is carried over to
@@ -332,6 +340,16 @@ static CGFloat weightOfFont(CTFontRef font) {
 // GUESS: when several faces have the wanted traits (a family with Light, Regular and Medium
 // has three non-bold faces) the one whose weight trait is nearest to `targetWeight` is taken,
 // the first listed among equals. The documentation names no rule.
+// QUIRK: of faces equally near in weight the original face itself is returned when it qualifies.
+// Not documented. Evidence: black-box observation of CTFontCreateCopyWithSymbolicTraits on macOS
+// 26.1 (arm64): Avenir-Roman with bold cleared gives Avenir-Roman though Avenir-Book has the same
+// weight and traits (probe 639.E.bold-off); 14 rows of that probe are consistent with it. Only the Avenir
+// rows isolate this rule: HelveticaNeue-CondensedBold copied to its own family also gives itself
+// (probe 639.F.family), but the nearest width would explain that row too. Only copies into the
+// original's own family were probed; the rule is applied to copies to another family as well, where
+// the original is never among the faces. Other preferences the same data shows (Book over Roman,
+// Regular over Ornaments when neither is the original; the nearest width) are not reproduced.
+// Test: coretext-font-copy-with-traits-and-family.
 static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTransform *matrix, BOOL keepMatrix,
                                   CFStringRef family, CTFontSymbolicTraits wanted,
                                   CTFontSymbolicTraits compared, CGFloat targetWeight)
@@ -357,16 +375,21 @@ static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTr
 
     CTFontRef best = NULL;
     CGFloat bestDistance = 0;
+    CFStringRef originalName = CTFontCopyPostScriptName(font);
     for (CFIndex i = 0; i < CFArrayGetCount(faces); i++) {
         CTFontRef candidate = CTFontCreateWithFontDescriptor(
                 (CTFontDescriptorRef) CFArrayGetValueAtIndex(faces, i), size, matrix);
         if (candidate == NULL)
             continue;
-        CGFloat distance = weightOfFont(candidate) - targetWeight;
-        if (distance < 0)
-            distance = -distance;
-        if ((CTFontGetSymbolicTraits(candidate) & compared) != (wanted & compared) ||
-            (best != NULL && distance >= bestDistance)) {
+        if ((CTFontGetSymbolicTraits(candidate) & compared) != (wanted & compared)) {
+            CFRelease(candidate);
+            continue;
+        }
+        CGFloat distance = fabs(weightOfFont(candidate) - targetWeight);
+        BOOL wins = best == NULL || distance < bestDistance - 1e-9;
+        if (!wins && distance <= bestDistance + 1e-9)
+            wins = fontHasPostScriptName(candidate, originalName);
+        if (!wins) {
             CFRelease(candidate);
             continue;
         }
@@ -376,6 +399,8 @@ static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTr
         bestDistance = distance;
     }
     CFRelease(faces);
+    if (originalName != NULL)
+        CFRelease(originalName);
     return fontWithCascade(best, fontCascade(font));
 }
 
