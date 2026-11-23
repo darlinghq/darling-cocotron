@@ -55,24 +55,6 @@ extern id _NSMenuTrackingBegin(NSMenu *menu);
 extern void _NSMenuTrackingEnd(id session);
 extern BOOL _NSMenuTrackingCancelRequested(id session);
 
-// The state of one search for a key equivalent (-performKeyEquivalent:): the first item that matched only because
-// Shift is not compared and whether it is enabled, and the submenu the walk has just handed the search to.
-typedef struct NSMenuKeyEquivalentSearch {
-    NSMenuItem *fallback;
-    BOOL fallbackEnabled;
-    NSMenu *nested;
-} NSMenuKeyEquivalentSearch;
-
-// The search being run, so that a submenu asked through its own -performKeyEquivalent: (which a subclass may
-// override) continues it instead of starting another. Only the main thread runs menus.
-static NSMenuKeyEquivalentSearch *activeKeyEquivalentSearch;
-
-// A matching item consumes the key equivalent whether or not it is performed.
-static void performKeyEquivalentItem(NSMenuItem *item, BOOL enabled) {
-    if (enabled)
-        [NSApp sendAction: [item action] to: [item target] from: item];
-}
-
 @implementation NSMenu
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, showsStateColumn, _showsStateColumn, BOOL, showsStateColumn, setShowsStateColumn:)
@@ -759,44 +741,7 @@ static BOOL validateItem(NSMenu *menu, NSMenuItem *item) {
 // (tier 2), 22 scenarios including delegates that rewrite a key and delegates that answer; the order of the calls
 // is the one the scenarios of the test pin.
 // Test: appkit-menu-key-equivalent-after-update (test_quirk_key_equivalent_search_*)
-//
-// QUIRK: an item that matches only because Shift is not compared (a lowercase equivalent, see
-// NSKeyEquivalentMatchesEvent) gives way to a later item of the same menu that agrees with the event on Shift, so
-// that Undo ("z" with Command) listed before Redo ("Z" with Command, or "z" with Command and Shift) does not take
-// Shift+Command+Z. Not documented as such. Evidence: the stock macOS Edit menu, where Undo (Command+Z) is listed
-// before Redo (Shift+Command+Z) and Shift+Command+Z performs Redo (public, documented shortcuts and behaviour;
-// tier 1 and 2); all versions. The extension to items in other submenus ("wins wherever it is") and the rule that
-// a lone lenient match is still performed are inference only (tier 3, the weakest) and need maintainer approval.
-// Test: appkit-menu-key-equivalent-shift-preference.m
 - (BOOL) performKeyEquivalent: (NSEvent *) event {
-    NSMenuKeyEquivalentSearch *outer = activeKeyEquivalentSearch;
-
-    // Asked by the walk of a search over a menu above this one: take part in it.
-    if (outer != NULL && outer->nested == self) {
-        outer->nested = nil;
-        return [self _searchKeyEquivalent: event inSearch: outer];
-    }
-
-    NSMenuKeyEquivalentSearch search = {nil, NO, nil};
-
-    activeKeyEquivalentSearch = &search;
-    BOOL handled = [self _searchKeyEquivalent: event inSearch: &search];
-    activeKeyEquivalentSearch = outer;
-
-    if (handled)
-        return YES;
-    // Nothing agreed on Shift: the first item that matched with Shift ignored.
-    if (search.fallback == nil)
-        return NO;
-    performKeyEquivalentItem(search.fallback, search.fallbackEnabled);
-    return YES;
-}
-
-// The walk of -performKeyEquivalent: over this menu and the submenus below it, each asked through its own
-// -performKeyEquivalent:. An item that matches and agrees with the event on Shift is performed and ends the search;
-// one that matches only because Shift is not compared is kept in the search (the first only) while it goes on for
-// one that agrees, which wins wherever it is. A submenu that answers YES without searching ends it too.
-- (BOOL) _searchKeyEquivalent: (NSEvent *) event inSearch: (NSMenuKeyEquivalentSearch *) search {
     if ([self _delegateHandlesKeyEquivalent: event])
         return YES;
 
@@ -816,7 +761,10 @@ static BOOL validateItem(NSMenu *menu, NSMenuItem *item) {
             BOOL enabled = [item isEnabled];
             if (enabled && NS_EXTRA(NSMenu, self)->_autoenablesItems)
                 enabled = [[validated objectAtIndex: [items indexOfObjectIdenticalTo: item]] boolValue];
-
+            if (enabled)
+                [NSApp sendAction: [item action]
+                               to: [item target]
+                             from: item];
             // QUIRK: a matching item consumes the key equivalent even when it
             // is disabled or has no target to perform the action; the
             // result is YES in every case. Not documented. Evidence:
@@ -824,23 +772,10 @@ static BOOL validateItem(NSMenu *menu, NSMenuItem *item) {
             // MC11.12 and MC11.13 of the upstreaming evidence notes.
             // Test: appkit-menu-key-equivalents.m
             // (disabled_matching_item_consumes_the_key)
-            if (NSKeyEquivalentAgreesOnShift([item keyEquivalent],
-                                             [item keyEquivalentModifierMask], event)) {
-                performKeyEquivalentItem(item, enabled);
-                return YES;
-            }
-            if (search->fallback == nil) {
-                search->fallback = [[item retain] autorelease];
-                search->fallbackEnabled = enabled;
-            }
+            return YES;
         }
 
-        NSMenu *submenu = [item submenu];
-
-        search->nested = submenu;
-        BOOL handled = [submenu performKeyEquivalent: event];
-        search->nested = nil;
-        if (handled)
+        if ([[item submenu] performKeyEquivalent: event])
             return YES;
     }
 
