@@ -540,7 +540,11 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                 break;
             case 27: // Escape = pop unless we're done then it's cancel
             {
-                if ([viewStack count] > 1) {
+                // A bar left tracking with no menu open would take the next
+                // click: the menu of its title is the outermost one.
+                NSUInteger outermost = [self _isMenuBar] ? 2 : 1;
+
+                if ([viewStack count] > outermost) {
                     NSView *view = [viewStack lastObject];
                     MENUDEBUG(@"popping cascading view: %@", view);
                     [self _popBranch: viewStack];
