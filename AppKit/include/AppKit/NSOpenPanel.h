@@ -43,6 +43,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic) BOOL canChooseDirectories;
 @property(nonatomic) BOOL canChooseFiles;
 @property(nonatomic) BOOL resolvesAliases;
+// Whether the open panel shows its accessory view; NO until the user presses the panel's Options button or this is set.
+@property(getter=isAccessoryViewDisclosed) BOOL accessoryViewDisclosed API_AVAILABLE(macos(10.11));
 
 
 - (void) beginSheetForDirectory: (nullable NSString *) path
