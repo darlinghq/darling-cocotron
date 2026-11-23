@@ -430,8 +430,18 @@ static BOOL DarlingValidateAllProperties(NSManagedObject *object, NSError **erro
 - (long long)_storeVersion { return _storeVersion; }
 
 - (void)_mergeCommittedValues {
+    [self _reloadCommittedValuesDiscardingChanges:NO];
+}
+
+// Reloads the committed values from the store's cache, optionally dropping the object's own
+// changes (and its updated and deleted state) in the same observed step.
+- (void)_reloadCommittedValuesDiscardingChanges:(BOOL)discard {
     NSArray *keys = [[[self entity] propertiesByName] allKeys];
     for (NSString *key in keys) [self willChangeValueForKey:key];
+    if (discard) {
+        [_changedValues removeAllObjects];
+        _isUpdated = _isDeleted = NO;
+    }
     [_committedValues release]; _committedValues = nil;
     [self _committedValues];
     if ([[_objectID persistentStore] isKindOfClass:[NSSQLitePersistentStore class]])

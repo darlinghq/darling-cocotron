@@ -1026,9 +1026,37 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     NSUnimplementedMethod();
 }
 
+// Documented: the object's values are reloaded from the store (here the atomic store's cache, the
+// only place such a store keeps its values, so the staleness interval has nothing to decide).
+// With flag NO the object's own changes, including those to transient properties, are discarded;
+// with YES they are kept on top of the reloaded values and transient properties are untouched.
+// GUESS: an object that is not registered with this context, or that is inserted and not yet
+// saved (it has no stored values), is left alone. GUESS: with flag NO a pending delete of the
+// object is dropped too (it is one of the changes). GUESS: only the object's own values are
+// restored; changes the object caused in the inverse of a relationship stay. GUESS: the object is
+// reported in the change notification's refreshed objects in both cases. Not done: the object does
+// not become a fault again (the tree does not track that state reliably).
 - (void) refreshObject: (NSManagedObject *) object mergeChanges: (BOOL) flag {
-    // NEEDED
-    NSUnimplementedMethod();
+    if ([self objectRegisteredForID: [object objectID]] != object || [_insertedObjects containsObject: object])
+        return;
+
+    BOOL wasMerging = _mergingChanges;
+
+    _mergingChanges = YES;
+    @try {
+        [object _reloadCommittedValuesDiscardingChanges: !flag];
+    } @finally {
+        _mergingChanges = wasMerging;
+    }
+    if (!flag) {
+        [_updatedObjects removeObject: object];
+        [_deletedObjects removeObject: object];
+        [_pendingUpdated removeObject: object];
+        [_pendingDeleted removeObject: object];
+        _hasChanges = [_insertedObjects count] || [_updatedObjects count] || [_deletedObjects count];
+    }
+    [_pendingRefreshed addObject: object];
+    [self _requestProcessPendingChanges];
 }
 
 - (void) _requestProcessPendingChanges {
