@@ -189,6 +189,10 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
         NSApplicationPresentationOptions _presentationOptions;
         BOOL _finishedLaunching;
         BOOL _windowClosedSinceTerminateCheck;
+        // A window was closed on behalf of the user since the check.
+        BOOL _windowClosedByUserSinceTerminateCheck;
+        // -terminate: is waiting for the documents or the delegate to answer.
+        BOOL _terminateInProgress;
         BOOL _automaticCustomizeTouchBarMenuItemEnabled;
         BOOL _defaultHelpBookSearchEnabled;
         // The occlusion state last reported, so a change is notified once.

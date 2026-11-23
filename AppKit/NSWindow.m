@@ -421,6 +421,10 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
 
 @end
 
+@interface NSApplication (DarlingTerminateCheck)
+- (void) _windowWasOrderedOut: (NSWindow *) window;
+@end
+
 @implementation NSWindow
 
 static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen);
@@ -3225,6 +3229,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         appearance = [self _willChangeViewAppearanceForVisible: NO];
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
+        // A window that the application closes reports through its close
+        // notification instead.
+        if (wasVisible && !NS_EXTRA(NSWindow, self)->_isClosed)
+            [NSApp _windowWasOrderedOut: self];
         if (![self isKindOfClass: [NSPanel class]]) {
             [NSApp removeWindowsItem: self];
         }
@@ -3982,7 +3990,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         if ([NSApp modalWindow] == self) {
             [NSApp abortModal];
         } else {
-            [self close];
+            [self _closeOnBehalfOfUser];
         }
     }
 }
@@ -3993,8 +4001,22 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 {
     // Callback used by performClose:
     if (shouldClose) {
-        [self close];
+        [self _closeOnBehalfOfUser];
     }
+}
+
+// Closes the window as a result of the user asking for it (the close button,
+// the window manager's close request, the Close menu item), as opposed to the
+// application closing it by itself. NSApplication tells the two apart when it
+// decides whether closing the last window should end the application.
+- (void) _closeOnBehalfOfUser {
+    NS_EXTRA(NSWindow, self)->_closingByUser = YES;
+    [self close];
+    NS_EXTRA(NSWindow, self)->_closingByUser = NO;
+}
+
+- (BOOL) _isClosingByUser {
+    return NS_EXTRA(NSWindow, self)->_closingByUser;
 }
 
 - (void) performMiniaturize: (id) sender {

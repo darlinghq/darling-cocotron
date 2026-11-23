@@ -44,6 +44,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (CGContextRef) cgContext;
 - (BOOL) _isActive;
 - (BOOL) _isHiddenForDeactivation;
+// Whether the window is being closed on behalf of the user (see
+// -_closeOnBehalfOfUser) at this moment.
+- (BOOL) _isClosingByUser;
+- (void) _closeOnBehalfOfUser;
 - (void) _setVisible: (BOOL) visible;
 // Whether the window is shown and not miniaturized, which is when the views
 // in it count as appeared for their view controllers.
