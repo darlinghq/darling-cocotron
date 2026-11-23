@@ -79,6 +79,8 @@ __attribute__((visibility("hidden"))) void _NSAccessibilityLegacySetAttributeVal
     ACCESSIBILITY_STORED_OBJECT(NSString *, accessibilityPlaceholderValue,                          \
                                 setAccessibilityPlaceholderValue:,                                  \
                                 NSAccessibilityPlaceholderValueAttribute)                           \
+    ACCESSIBILITY_STORED_OBJECT(NSString *, accessibilityDocument, setAccessibilityDocument:,       \
+                                NSAccessibilityDocumentAttribute)                                   \
     ACCESSIBILITY_STORED_OBJECT(NSArray *, accessibilitySelectedChildren,                           \
                                 setAccessibilitySelectedChildren:,                                  \
                                 NSAccessibilitySelectedChildrenAttribute)                           \
