@@ -169,7 +169,10 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
     // observation on macOS 26.7.3 (tier 2): in a window-hosted layer tree,
     // position, bounds, opacity, cornerRadius, transform and hidden set to
     // their current values gave no -actionForLayer:forKey: call and no animation
-    // key, while a different value gave one call and one animation key.
+    // key, while a different value gave one call and one animation key. On
+    // macOS 10.14.4 (no window server, so no hosted tree and no animation
+    // keys): same values gave no -actionForLayer:forKey: call, different
+    // values gave one.
     // Test: tests/quartzcore-layer-idle-frames.m (same-value cases).
     if (CGPointEqualToPoint(NS_EXTRA(CALayer, self)->_position, value))
         return;
