@@ -55,9 +55,20 @@ static NSImage *solidImage(double red, double green, double blue) {
     return image;
 }
 
+// The program's own arguments (a mode, a number) are not documents. As on macOS, a word in the process arguments is
+// offered to the application's delegate, and one that nobody takes is reported to the user by the document
+// controller with an alert that would stop the program; a delegate that takes -application:openFiles: ends it.
+@interface ArgumentSink : NSObject <NSApplicationDelegate>
+@end
+@implementation ArgumentSink
+- (void) application: (NSApplication *) application openFiles: (NSArray *) files {
+}
+@end
+
 static int showWindow(const char *mode, double seconds) {
     @autoreleasepool {
         [NSApplication sharedApplication];
+        [NSApp setDelegate: [[ArgumentSink alloc] init]];
         [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
         if (strcmp(mode, "runtime") == 0 || strcmp(mode, "change") == 0)
             [NSApp setApplicationIconImage: solidImage(1, 0, 0)];
