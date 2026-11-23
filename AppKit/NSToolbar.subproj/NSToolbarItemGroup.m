@@ -70,6 +70,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSToolbarItemGroup, self)->_selectionMode = mode;
 }
 
+// GUESS: the documentation gives no default; it is automatic, the first case. Like the mode, the value is only
+// stored: the group is not yet displayed as a control, so no representation changes anything.
+- (NSToolbarItemGroupControlRepresentation) controlRepresentation {
+    return NS_EXTRA(NSToolbarItemGroup, self)->_controlRepresentation;
+}
+
+- (void) setControlRepresentation: (NSToolbarItemGroupControlRepresentation) representation {
+    NS_EXTRA(NSToolbarItemGroup, self)->_controlRepresentation = representation;
+}
+
 // NSToolbarItem copies with NSCopyObject, which shares _subitems without retaining it and does not copy
 // side storage.
 - (id) copyWithZone: (NSZone *) zone {

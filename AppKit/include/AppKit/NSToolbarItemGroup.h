@@ -42,6 +42,7 @@ NS_ASSUME_NONNULL_BEGIN
     NS_LEGACY_IVAR_PAD(_NSToolbarItemGroupReserved, 8)
     NS_EXTRA_IVARS_BEGIN(NSToolbarItemGroup)
         NSToolbarItemGroupSelectionMode _selectionMode;
+        NSToolbarItemGroupControlRepresentation _controlRepresentation;
     NS_SIDE_IVARS_END(NSToolbarItemGroup)
 }
 
@@ -55,6 +56,8 @@ NS_ASSUME_NONNULL_BEGIN
                                   action: (nullable SEL) action API_AVAILABLE(macos(10.15));
 
 @property(nonatomic) NSToolbarItemGroupSelectionMode selectionMode API_AVAILABLE(macos(10.15));
+// How the toolbar displays the group; stored only. The default is automatic.
+@property(nonatomic) NSToolbarItemGroupControlRepresentation controlRepresentation API_AVAILABLE(macos(10.15));
 
 - (NSArray *) subitems;
 - (void) setSubitems: (NSArray *) subitems;
