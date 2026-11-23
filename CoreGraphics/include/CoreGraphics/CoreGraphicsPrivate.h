@@ -298,6 +298,24 @@ extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRe
 extern CGError CGEventSetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
 extern uint32_t CGEventGetEventRecordSize(CGEventRef event);
 
+// The event stream of the process: the events that are for this process once they have been
+// through the event taps (CGEventPost() and friends deliver here), in the order they came, for
+// the frameworks above CoreGraphics to read. Thread safe. There is no Mach message, port or
+// thread behind it.
+//
+// The stream keeps events only while a reader is registered with _CGSEventStreamSetReadySource().
+// _CGSEventStreamPost() is for the window system: it enters the event at the first tap, as an
+// event of the hardware, and retains it until it has been delivered.
+extern void _CGSEventStreamPost(CGEventRef event);
+// The oldest event, which the caller releases, or NULL once the stream is empty. A reader that was
+// woken has to call this until it returns NULL: the source is signalled again only after that.
+extern CGEventRef _CGSEventStreamCopyNextEvent(void);
+// Registers the run loop source that is signalled, and its run loop woken, when an event arrives
+// at an empty stream. For the thread that waits for events: it reads the stream from where it
+// waits (before each wait, and after each wake up). A new registration replaces the old one;
+// NULL for both stops the stream and drops what is waiting.
+extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef _Nullable source, CFRunLoopRef _Nullable runLoop);
+
 // Registers the 'uchr' keyboard layout (a UCKeyboardLayout blob of `length` bytes, copied) of the
 // window system's current keymap, for a backend that cannot read the keymap itself. The Text Input
 // Sources API returns it. NULL or a zero length removes it.

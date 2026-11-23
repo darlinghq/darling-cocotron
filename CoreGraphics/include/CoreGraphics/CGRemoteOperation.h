@@ -73,6 +73,13 @@ CGError CGWaitForScreenUpdateRects(CGScreenUpdateOperation requestedOperations, 
 
 COREGRAPHICS_EXPORT boolean_t CGCursorIsDrawnInFramebuffer(void);
 
+// Obsolete event posting functions, which CGEventPost() replaces. They post to the combined
+// session state. Each CGButtonCount button value is the state the button is to have (the first
+// is the left button, then right, then the others).
+CGError CGPostMouseEvent(CGPoint mouseCursorPosition, boolean_t updateMouseCursorPosition, CGButtonCount buttonCount, boolean_t mouseButtonDown, ...);
+CGError CGPostScrollWheelEvent(CGWheelCount wheelCount, int32_t wheel1, ...);
+CGError CGPostKeyboardEvent(CGCharCode keyChar, CGKeyCode virtualKey, boolean_t keyDown);
+
 CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
 CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
 // The mouse motion since the last call, in the global display space's units (pixels, y down).
