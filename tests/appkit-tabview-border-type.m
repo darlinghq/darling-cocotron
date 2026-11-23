@@ -2,18 +2,13 @@
 //
 // NSTabView -tabViewBorderType and -tabPosition. The documentation (macOS 10.12 and later) only
 // declares both as read-write properties, of the types NSTabViewBorderType (none, line, bezel) and
-// NSTabPosition (none, top, left, bottom, right); it states no default and no behaviour. So the
-// round trip of every case, the absence of a raise and the presence of the accessors are the
-// documented contract. Everything marked GUESS pins this implementation's choice, not a documented
-// or measured value: the defaults (inferred from the names of the tab view type constants: top tabs
-// with a bezel border for the default type, no tab position and a line or no border for the no-tab
-// types), the same defaults on a tab view decoded from a keyed archive of each type, the same
-// values taken again by -setTabViewType: (replacing values set before), and
-// NSTabViewBorderTypeNone removing the drawn border.
+// NSTabPosition (none, top, left, bottom, right). Everything else here is black-box behaviour of
+// macOS 26.7.3 and Mac OS X 10.14.4 (x86_64 and i386, identical): the tab view type fixes both values
+// (QUIRK below), and setting either one can change the type. The test is built from those
+// observations and passes on both Macs (on Mojave without a window server).
 // Build: clang -fobjc-arc -framework AppKit appkit-tabview-border-type.m
-// Not covered: the "Is Currently Unimplemented" log line of -setTabPosition: (NSLog cannot be
-// captured here); on master the position round trip already passes, the border type accessors do not
-// exist (unrecognized selector), and the decoded tab view has position none instead of top.
+// Not covered: the "Is Currently Unimplemented" log line of -setTabPosition: that master printed (NSLog
+// cannot be captured here); on master the border type accessors do not exist (unrecognized selector).
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
@@ -55,6 +50,34 @@ static NSTabView *decoded(NSTabViewType type) {
     return [unarchiver decodeObjectForKey:@"root"];
 }
 
+static const NSTabViewBorderType borders[] = { NSTabViewBorderTypeNone, NSTabViewBorderTypeLine, NSTabViewBorderTypeBezel };
+static const NSTabPosition positions[] = { NSTabPositionNone, NSTabPositionTop, NSTabPositionLeft, NSTabPositionBottom,
+                                           NSTabPositionRight };
+
+// QUIRK (macOS 26.7.3 and 10.14.4, probes tabview.m and tabview2.m): the tab view type fixes the tab position
+// and the border type: the four types with tabs give their position and a bezel border; the types without
+// tabs give position none and a bezel, line or no border.
+static const struct {
+    NSTabViewType type;
+    NSTabPosition position;
+    NSTabViewBorderType border;
+} byType[] = {
+    { NSTopTabsBezelBorder, NSTabPositionTop, NSTabViewBorderTypeBezel },
+    { NSLeftTabsBezelBorder, NSTabPositionLeft, NSTabViewBorderTypeBezel },
+    { NSBottomTabsBezelBorder, NSTabPositionBottom, NSTabViewBorderTypeBezel },
+    { NSRightTabsBezelBorder, NSTabPositionRight, NSTabViewBorderTypeBezel },
+    { NSNoTabsBezelBorder, NSTabPositionNone, NSTabViewBorderTypeBezel },
+    { NSNoTabsLineBorder, NSTabPositionNone, NSTabViewBorderTypeLine },
+    { NSNoTabsNoBorder, NSTabPositionNone, NSTabViewBorderTypeNone },
+};
+#define NTYPES (sizeof byType / sizeof *byType)
+
+static NSTabView *viewOfType(NSTabViewType type) {
+    NSTabView *view = [[NSTabView alloc] initWithFrame:NSMakeRect(0, 0, 100, 100)];
+    [view setTabViewType:type];
+    return view;
+}
+
 static void checkAccessors(NSTabView *view) {
     CHECK([view respondsToSelector:@selector(tabViewBorderType)]);
     CHECK([view respondsToSelector:@selector(setTabViewBorderType:)]);
@@ -62,11 +85,8 @@ static void checkAccessors(NSTabView *view) {
     CHECK([view respondsToSelector:@selector(setTabPosition:)]);
 }
 
+// Documented: both are read-write properties of the enumerated types. Every value reads back.
 static void checkRoundTrips(NSTabView *view) {
-    const NSTabViewBorderType borders[] = { NSTabViewBorderTypeNone, NSTabViewBorderTypeLine, NSTabViewBorderTypeBezel };
-    const NSTabPosition positions[] = { NSTabPositionNone, NSTabPositionTop, NSTabPositionLeft, NSTabPositionBottom,
-                                        NSTabPositionRight };
-
     for (size_t i = 0; i < sizeof borders / sizeof *borders; i++) {
         @try {
             [view setTabViewBorderType:borders[i]];
@@ -93,20 +113,22 @@ static void checkRoundTrips(NSTabView *view) {
     CHECK([view tabPosition] == NSTabPositionBottom);
     [view setTabViewBorderType:NSTabViewBorderTypeNone];
     CHECK([view tabPosition] == NSTabPositionBottom);
+    [view setTabPosition:NSTabPositionNone];
+    CHECK([view tabViewBorderType] == NSTabViewBorderTypeNone);
 }
 
-// Alpha of the top-left pixel of a view rendered at 40x40; opaque for a no-tabs line border.
-static CGFloat cornerAlpha(NSTabView *view, BOOL *rendered) {
-    [view setFrame:NSMakeRect(0, 0, 40, 40)];
+// Sum of the alpha of every pixel of the view rendered at 60x60; negative when it cannot be rendered.
+static double alphaSum(NSTabView *view) {
+    [view setFrame:NSMakeRect(0, 0, 60, 60)];
     NSBitmapImageRep *rep = [view bitmapImageRepForCachingDisplayInRect:[view bounds]];
-    if (rep == nil) {
-        *rendered = NO;
-        return 0;
-    }
+    if (rep == nil)
+        return -1;
     [view cacheDisplayInRect:[view bounds] toBitmapImageRep:rep];
-    NSColor *pixel = [rep colorAtX:0 y:0];
-    *rendered = pixel != nil;
-    return [pixel alphaComponent];
+    double sum = 0;
+    for (NSInteger y = 0; y < [rep pixelsHigh]; y++)
+        for (NSInteger x = 0; x < [rep pixelsWide]; x++)
+            sum += [[rep colorAtX:x y:y] alphaComponent];
+    return sum;
 }
 
 int main(void) {
@@ -120,36 +142,21 @@ int main(void) {
 
         for (NSTabView *view in @[ plain, sub, fromArchive ]) {
             checkAccessors(view);
-            // GUESS: no documented default; inferred from the constant names of the default
-            // tab view type (top tabs, bezel border), also for a view decoded from an archive.
+            // the default type has top tabs and a bezel border
+            CHECK([view tabViewType] == NSTopTabsBezelBorder);
             CHECK([view tabViewBorderType] == NSTabViewBorderTypeBezel);
             CHECK([view tabPosition] == NSTabPositionTop);
             checkRoundTrips(view);
         }
 
-        // GUESS: the defaults of a decoded view follow its archived tab view type, by the names of
-        // the type constants. Not measured on macOS.
-        static const struct {
-            NSTabViewType type;
-            NSTabPosition position;
-            NSTabViewBorderType border;
-        } byType[] = {
-            { NSTopTabsBezelBorder, NSTabPositionTop, NSTabViewBorderTypeBezel },
-            { NSLeftTabsBezelBorder, NSTabPositionLeft, NSTabViewBorderTypeBezel },
-            { NSBottomTabsBezelBorder, NSTabPositionBottom, NSTabViewBorderTypeBezel },
-            { NSRightTabsBezelBorder, NSTabPositionRight, NSTabViewBorderTypeBezel },
-            { NSNoTabsBezelBorder, NSTabPositionNone, NSTabViewBorderTypeBezel },
-            { NSNoTabsLineBorder, NSTabPositionNone, NSTabViewBorderTypeLine },
-            { NSNoTabsNoBorder, NSTabPositionNone, NSTabViewBorderTypeNone },
-        };
-        for (size_t i = 0; i < sizeof byType / sizeof *byType; i++) {
+        // QUIRK: a view made with, decoded with or given a type has the position and border type of that
+        // type, from every starting type
+        for (size_t i = 0; i < NTYPES; i++) {
             NSTabView *view = decoded(byType[i].type);
             CHECK([view tabViewType] == byType[i].type);
             CHECK([view tabPosition] == byType[i].position);
             CHECK([view tabViewBorderType] == byType[i].border);
-
-            // GUESS: -setTabViewType: derives both values again, from every starting type
-            for (size_t j = 0; j < sizeof byType / sizeof *byType; j++) {
+            for (size_t j = 0; j < NTYPES; j++) {
                 [view setTabViewType:byType[j].type];
                 CHECK([view tabViewType] == byType[j].type);
                 CHECK([view tabPosition] == byType[j].position);
@@ -157,33 +164,63 @@ int main(void) {
             }
         }
 
-        // a tab view saved without a border, given top tabs again, has top tabs and a bezel border
-        NSTabView *borderless = decoded(NSNoTabsNoBorder);
-        [borderless setTabViewType:NSTopTabsBezelBorder];
-        CHECK([borderless tabPosition] == NSTabPositionTop);
+        // QUIRK: setting the position gives the type with that position's tabs, whatever the border type
+        // (which stays), and position none gives the type without tabs of the current border type
+        for (size_t i = 0; i < NTYPES; i++) {
+            for (size_t p = 0; p < sizeof positions / sizeof *positions; p++) {
+                NSTabView *view = viewOfType(byType[i].type);
+                NSTabViewBorderType border = [view tabViewBorderType];
+                [view setTabPosition:positions[p]];
+                CHECK([view tabPosition] == positions[p]);
+                CHECK([view tabViewBorderType] == border);
+                NSTabViewType expected = NSNoTabsBezelBorder;
+                switch (positions[p]) {
+                case NSTabPositionTop: expected = NSTopTabsBezelBorder; break;
+                case NSTabPositionLeft: expected = NSLeftTabsBezelBorder; break;
+                case NSTabPositionBottom: expected = NSBottomTabsBezelBorder; break;
+                case NSTabPositionRight: expected = NSRightTabsBezelBorder; break;
+                default:
+                    expected = border == NSTabViewBorderTypeNone ? NSNoTabsNoBorder
+                             : border == NSTabViewBorderTypeLine ? NSNoTabsLineBorder : NSNoTabsBezelBorder;
+                }
+                CHECK([view tabViewType] == expected);
+            }
+        }
+
+        // QUIRK: setting the border type changes the type only for a view without tabs
+        for (size_t i = 0; i < NTYPES; i++) {
+            for (size_t b = 0; b < sizeof borders / sizeof *borders; b++) {
+                NSTabView *view = viewOfType(byType[i].type);
+                [view setTabViewBorderType:borders[b]];
+                CHECK([view tabViewBorderType] == borders[b]);
+                CHECK([view tabPosition] == byType[i].position);
+                NSTabViewType expected = byType[i].type;
+                if (byType[i].position == NSTabPositionNone)
+                    expected = borders[b] == NSTabViewBorderTypeNone ? NSNoTabsNoBorder
+                             : borders[b] == NSTabViewBorderTypeLine ? NSNoTabsLineBorder : NSNoTabsBezelBorder;
+                CHECK([view tabViewType] == expected);
+            }
+        }
+
+        // QUIRK: giving the type back replaces an explicit border type
+        NSTabView *borderless = viewOfType(NSTopTabsBezelBorder);
+        [borderless setTabViewBorderType:NSTabViewBorderTypeNone];
+        [borderless setTabViewType:NSLeftTabsBezelBorder];
+        CHECK([borderless tabPosition] == NSTabPositionLeft);
         CHECK([borderless tabViewBorderType] == NSTabViewBorderTypeBezel);
 
-        // GUESS: border type none drops the drawn border, any other border type keeps it; skipped
-        // when the view cannot be rendered into a bitmap here.
-        BOOL rendered = YES;
-        NSTabView *drawn = [[NSTabView alloc] initWithFrame:NSMakeRect(0, 0, 40, 40)];
-        [drawn setTabViewType:NSNoTabsLineBorder];
-        CGFloat withBorder = cornerAlpha(drawn, &rendered);
-        if (rendered) {
-            CHECK(withBorder > 0.5);
+        // QUIRK: what is drawn follows the type: a view without tabs draws nothing for no border, and a line
+        // or a bezel for the others (skipped when the view cannot be rendered into a bitmap)
+        NSTabView *drawn = viewOfType(NSNoTabsLineBorder);
+        double line = alphaSum(drawn);
+        if (line >= 0) {
+            CHECK(line > 0);
             [drawn setTabViewBorderType:NSTabViewBorderTypeNone];
-            CGFloat none = cornerAlpha(drawn, &rendered);
-            CHECK(rendered && none < 0.5);
+            CHECK(alphaSum(drawn) == 0);
+            [drawn setTabViewBorderType:NSTabViewBorderTypeBezel];
+            CHECK(alphaSum(drawn) > 0);
             [drawn setTabViewBorderType:NSTabViewBorderTypeLine];
-            CGFloat line = cornerAlpha(drawn, &rendered);
-            CHECK(rendered && line > 0.5);
-
-            // GUESS: a view without a border that is given a type with one draws it again
-            NSTabView *shown = decoded(NSNoTabsNoBorder);
-            CHECK(cornerAlpha(shown, &rendered) < 0.5);
-            [shown setTabViewType:NSNoTabsLineBorder];
-            CGFloat back = cornerAlpha(shown, &rendered);
-            CHECK(rendered && back > 0.5);
+            CHECK(alphaSum(drawn) == line);
         } else {
             printf("SKIP border drawing: no bitmap rendering of the tab view\n");
         }
