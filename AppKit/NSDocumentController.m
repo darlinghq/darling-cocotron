@@ -1080,10 +1080,34 @@ static BOOL actionIsDocumentController(SEL selector) {
                                      userInfo: nil];
         return nil;
     }
+    if (displayNameOrNil != nil)
+        [document setDisplayName: [self _copyNameForDisplayName: displayNameOrNil]];
+    // A duplicate is an unsaved document that already has changes to save.
+    [document setDraft: YES];
+    [document updateChangeCount: NSChangeDone];
     [self addDocument: document];
     [document makeWindowControllers];
     [document showWindows];
     return document;
+}
+
+// "name copy", or "name copy 2", "name copy 3" ... when the name is taken by an open document.
+- (NSString *) _copyNameForDisplayName: (NSString *) name {
+    NSBundle *bundle = [NSBundle bundleForClass: [NSDocumentController class]];
+    NSString *candidate = [NSString stringWithFormat: NSLocalizedStringFromTableInBundle(@"%@ copy", nil, bundle, @"Name of a duplicated document"), name];
+
+    for (NSInteger number = 2;; number++) {
+        BOOL taken = NO;
+        for (NSDocument *document in _documents) {
+            if ([[document displayName] isEqualToString: candidate]) {
+                taken = YES;
+                break;
+            }
+        }
+        if (!taken)
+            return candidate;
+        candidate = [NSString stringWithFormat: NSLocalizedStringFromTableInBundle(@"%@ copy %ld", nil, bundle, @"Name of another duplicated document"), name, (long) number];
+    }
 }
 
 @end
