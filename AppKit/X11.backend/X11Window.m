@@ -41,6 +41,7 @@
 #import <QuartzCore/CAWindowOpenGLContext.h>
 
 #import "X11Display.h"
+#import "X11Gesture.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "X11Fullscreen.h"
@@ -1392,6 +1393,10 @@ static const int X11ChromelessCornerRadius = 5;
     // several times, so set everything to nil/NULL/0.
     [_context release];
     _context = nil;
+
+    // An active pinch on this window ends while its delegate can still be told.
+    if (_window != 0)
+        [(X11Display *) [NSDisplay currentDisplay] cancelPinchOnWindow: _window];
 
     [_delegate platformWindowDidInvalidateCGContext: self];
     _delegate = nil;

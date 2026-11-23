@@ -54,6 +54,7 @@
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import "X11KeyEvent.h"
 #import "X11Touch.h"
+#import "X11Gesture.h"
 #import "X11Occlusion.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
@@ -1124,6 +1125,9 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
                    forKey: [NSNumber
                                    numberWithUnsignedLong: (unsigned long) i]];
     else {
+        // A window replaced by another X window ends its pinch here, while it is still known and
+        // has its delegate; -[X11Window invalidate] ends it earlier.
+        [self cancelPinchOnWindow: i];
         [_windowsByID removeObjectForKey: [NSNumber numberWithUnsignedLong:
                                                             (unsigned long) i]];
 
