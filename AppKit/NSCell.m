@@ -110,6 +110,30 @@ typedef NS_OPTIONS(unsigned int, NSCellAppleFlags2) {
 
 NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChangeNotification";
 
+/* Nib cell flags keep the x86_64 alignment numbering (right 1, center 2) on
+ * every architecture, because one compiled nib serves both slices of a
+ * universal app. NSTextAlignment swaps the two where TARGET_ABI_USES_IOS_VALUES
+ * is set, so convert at that boundary in both directions. */
+static NSTextAlignment NSCellAlignmentFromArchive(unsigned value) {
+#if TARGET_ABI_USES_IOS_VALUES
+    if (value == 1)
+        return NSTextAlignmentRight;
+    if (value == 2)
+        return NSTextAlignmentCenter;
+#endif
+    return (NSTextAlignment) value;
+}
+
+static unsigned NSCellAlignmentToArchive(NSTextAlignment alignment) {
+#if TARGET_ABI_USES_IOS_VALUES
+    if (alignment == NSTextAlignmentRight)
+        return 1;
+    if (alignment == NSTextAlignmentCenter)
+        return 2;
+#endif
+    return (unsigned) alignment;
+}
+
 @implementation NSCell
 
 NS_EXTRA_SYNTHESIZE_COPY(NSCell, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
@@ -189,7 +213,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
 
     // importsGraph  = (flags2 & 0x10000000)
 
-    NS_EXTRA(NSCell, self)->_textAlignment = (flags2 & NSCellAppleFlag2TextAlignmentMask) >> NSCellAppleFlag2TextAlignmentShift;
+    NS_EXTRA(NSCell, self)->_textAlignment = NSCellAlignmentFromArchive((flags2 & NSCellAppleFlag2TextAlignmentMask) >> NSCellAppleFlag2TextAlignmentShift);
 
     // layoutDirRTL  = (flags2 & 0x01000000)
     NS_EXTRA(NSCell, self)->_writingDirection = NSWritingDirectionNatural;
@@ -262,7 +286,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     if (NS_EXTRA(NSCell, self)->_isRichText)
         *flags2 |= NSCellAppleFlag2RichText;
 
-    *flags2 |= (NS_EXTRA(NSCell, self)->_textAlignment << NSCellAppleFlag2TextAlignmentShift) & NSCellAppleFlag2TextAlignmentMask;
+    *flags2 |= (NSCellAlignmentToArchive(NS_EXTRA(NSCell, self)->_textAlignment) << NSCellAppleFlag2TextAlignmentShift) & NSCellAppleFlag2TextAlignmentMask;
 
     if (NS_EXTRA(NSCell, self)->_refusesFirstResponder)
         *flags2 |= NSCellAppleFlag2RefusesFirstResponder;

@@ -40,6 +40,17 @@ enum {
     NSParagraphSeparatorCharacter = 0x2029
 };
 
+/* NSTextAlignment uses different values on arm64 and x86_64: center 1 and
+ * right 2 on arm64, right 1 and center 2 on x86_64. Define the selector
+ * macro unless the build already did. */
+#ifndef TARGET_ABI_USES_IOS_VALUES
+#if defined(__arm64__) || defined(__aarch64__)
+#define TARGET_ABI_USES_IOS_VALUES 1
+#else
+#define TARGET_ABI_USES_IOS_VALUES 0
+#endif
+#endif
+
 #if !__NSTEXT_ALIGNMENT_SHARED_SECTION__
 #define __NSTEXT_ALIGNMENT_SHARED_SECTION__ 1
 typedef NS_ENUM(NSInteger, NSTextAlignment) {
