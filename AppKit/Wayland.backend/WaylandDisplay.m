@@ -509,6 +509,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [_afterDispatch addObject: [[block copy] autorelease]];
 }
 
+- (void) performAfterRunLoopPass: (void (^)(void)) block {
+    [self performAfterDispatch: block];
+    [self scheduleAfterDispatchRun];
+}
+
 // Runs the blocks that were queued before this pass. Blocks queued by those
 // blocks wait for the next run loop iteration, so that work which keeps
 // queueing more work (a view whose frame alternates, say) cannot keep the main

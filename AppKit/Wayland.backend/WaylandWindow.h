@@ -101,6 +101,9 @@ typedef enum {
     // Ordered in by an application that may not take the input focus, so not mapped yet (see
     // -mapWouldTakeFocusFromOthers).
     BOOL _mapDeferred;
+    // The window was ordered out and is still mapped: the unmap waits for the end of the run loop pass, in
+    // case the window is ordered in again within it (see -hideWindow).
+    BOOL _unmapPending;
     // A menu is ordered in but waits for its parent window's first configure: a popup cannot be
     // created for a surface that has no role and configuration yet, and as a toplevel the
     // compositor would place and size it.

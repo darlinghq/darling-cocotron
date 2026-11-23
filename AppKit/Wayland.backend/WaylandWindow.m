@@ -342,6 +342,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) ensureMapped {
+    if (_unmapPending && !_invalidated) {
+        // Ordered out and in again within one pass of the run loop: nothing changed for the window.
+        _unmapPending = NO;
+        _shouldBeMapped = YES;
+        return;
+    }
     if (_mapped || _invalidated)
         return;
     _shouldBeMapped = YES;
@@ -612,6 +618,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (BOOL) isPopupWaitingForParent { return _popupWaitingForParent; }
 
 - (void) unmap {
+    _unmapPending = NO;
     _shouldBeMapped = NO;
     _mapDeferred = NO;
     _popupWaitingForParent = NO;
@@ -704,8 +711,25 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) hideWindowForAppDeactivation: (NSRect) frame {
 }
 
+// Ordering a window out and in again within one pass of the run loop is invisible on macOS: the window
+// stays where it is and keeps the focus. Toolkits do it for each pass of a frame loop. Here unmapping a
+// toplevel destroys its role, and mapping it creates a new one that the compositor places and focuses
+// anew, so the unmap waits for the end of the pass and is dropped if the window is ordered in by then.
+// Windows that are not application toplevels (pop-ups, the menu bar, windows never shown) unmap at once.
 - (void) hideWindow {
-    [self unmap];
+    if (!_mapped || _toplevel == NULL || _popup != NULL) {
+        [self unmap];
+        return;
+    }
+    if (_unmapPending)
+        return;
+    _unmapPending = YES;
+    _shouldBeMapped = NO;
+    _keyRequested = NO;
+    [_display performAfterRunLoopPass: ^{
+        if (self->_unmapPending)
+            [self unmap];
+    }];
 }
 
 - (void) sheetOrderFrontFromFrame: (NSRect) frame
