@@ -17,8 +17,8 @@ static void expect(BOOL condition, NSString *message)
 }
 
 @interface NSApplication (CatalystPrivate)
-- (NSWindow *)_findWindowUsingContextID:(uint32_t)contextID;
-- (BOOL)_restoreMiniaturizedWindow;
+- (NSWindow *)_findWindowUsingContextID:(NSInteger)contextID;
+- (void)_restoreMiniaturizedWindow;
 @end
 
 static NSMutableArray *gOrder;
@@ -60,9 +60,9 @@ int main(void)
                                                        styleMask:NSWindowStyleMaskTitled
                                                          backing:NSBackingStoreBuffered
                                                            defer:YES];
-        expect([app _findWindowUsingContextID:(uint32_t)[window windowNumber]] == nil,
+        expect([app _findWindowUsingContextID:(NSInteger)[window windowNumber]] == nil,
                @"a window number is not a context id");
-        expect([app _findWindowUsingContextID:(uint32_t)[app contextID]] == nil,
+        expect([app _findWindowUsingContextID:(NSInteger)[app contextID]] == nil,
                @"the application's context id finds no window");
         [window release];
 
@@ -75,10 +75,13 @@ int main(void)
                @"NSApplication answers -_restoreMiniaturizedWindow");
         FakeWindow *front = fake(@"front"), *mid = fake(@"mid"), *back = fake(@"back");
         gOrder = [[NSMutableArray alloc] initWithObjects:front, mid, back, nil];
-        expect(![app _restoreMiniaturizedWindow], @"nothing is restored when no window is miniaturized");
+        [app _restoreMiniaturizedWindow];
+        expect(!front->restored && !mid->restored && !back->restored, @"nothing is restored when no window is miniaturized");
         mid->miniaturized = back->miniaturized = YES;
-        expect([app _restoreMiniaturizedWindow] && mid->restored && !back->restored,
-               @"the frontmost miniaturized window is restored, and only it");
+        [app _restoreMiniaturizedWindow];
+        expect(mid->restored && !back->restored, @"the frontmost miniaturized window is restored, and only it");
+        [app _restoreMiniaturizedWindow];
+        expect(back->restored, @"the next call restores the next one");
         [gOrder release];
 
         if (failures == 0)
