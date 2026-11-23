@@ -1,5 +1,6 @@
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSException.h>
+#import <objc/runtime.h>
 #import <QuartzCore/CAAnimation.h>
 #import <QuartzCore/CAConstraintLayoutManager.h>
 #import <QuartzCore/CALayer.h>
@@ -1670,6 +1671,26 @@ static CGRect applyToRect(CATransform3D m, CGRect rect) {
 
 - (NSArray *) animationKeys {
     return [NS_EXTRA(CALayer, self)->_animations allKeys];
+}
+
+// A layer is a key-value coding container: it keeps a value for any key it has no property for
+// (Core Animation Programming Guide, "Key-Value Coding Extensions").
+static char CALayerUndefinedValuesKey;
+
+- (void) setValue: (id) value forUndefinedKey: (NSString *) key {
+    NSMutableDictionary *values = objc_getAssociatedObject(self, &CALayerUndefinedValuesKey);
+    if (values == nil) {
+        values = [NSMutableDictionary dictionary];
+        objc_setAssociatedObject(self, &CALayerUndefinedValuesKey, values, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+    if (value != nil)
+        [values setObject: value forKey: key];
+    else
+        [values removeObjectForKey: key];
+}
+
+- (id) valueForUndefinedKey: (NSString *) key {
+    return [objc_getAssociatedObject(self, &CALayerUndefinedValuesKey) objectForKey: key];
 }
 
 - valueForKey: (NSString *) key {
