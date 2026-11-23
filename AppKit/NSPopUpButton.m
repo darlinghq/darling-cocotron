@@ -436,6 +436,23 @@ static NSString *popUpItemTitle(id value) {
     return [[valuesBinder keyPath] hasPrefix: [[contentBinder keyPath] stringByAppendingString: @"."]];
 }
 
+// QUIRK: when the selection binding made first is selectedIndex or selectedTag, the items stand for their
+// indexes: each item's representedObject is its index as a number, not its content object, so a later
+// selectedObject binding matches none of the items and gets an item of its own. The items already there when
+// that binding is made change too. Not documented. Evidence: black-box observation on macOS 26.1 (arm64), probe
+// 641: "641.22 selectedIndex bound ... reps=[0|1|2]", "641.25 selectedTag bound ... reps=[0|1|2]", the four
+// selection bindings made index first (641.27 "... reps=[0|1|2|nil|nil] ... n=5", 641.29 after a content change
+// "reps=[0|1|2|3]") against object first (641.26 and 641.28, "reps=[a|b|c|nil]" and "reps=[a|b|c|d]"), and
+// selectedValue alone keeping the content objects (641.20). A selection binding made after another does not
+// change them back. Only items built from a content binding are touched: what macOS does for contentValues
+// alone with an index binding, or for items that no binding built, was not observed.
+// Test: appkit-popup-button-content-bindings (test_quirk_index_bindings_make_items_stand_for_indexes)
+static BOOL itemsStandForIndexes(NSPopUpButton *button) {
+    NSString *first = [NS_EXTRA(NSPopUpButton, button)->_selectionBindings firstObject];
+
+    return [first isEqualToString: NSSelectedIndexBinding] || [first isEqualToString: NSSelectedTagBinding];
+}
+
 - (void) _applyItemsFromContent: (NSArray *) content
                        values: (NSArray *) values
                       objects: (NSArray *) objects
@@ -462,7 +479,9 @@ static NSString *popUpItemTitle(id value) {
 
         // Observed on macOS 26.7.3 and 10.14.4: contentObjects does not change what an item stands for; with
         // no content bound the title is the object.
-        if (content != nil && i < [content count])
+        if (content != nil && itemsStandForIndexes(self))
+            represented = [NSNumber numberWithUnsignedInteger: i];
+        else if (content != nil && i < [content count])
             represented = [content objectAtIndex: i];
         else
             represented = title;
@@ -679,6 +698,16 @@ static NSString *popUpItemTitle(id value) {
             order = NS_EXTRA(NSPopUpButton, self)->_selectionBindings = [[NSMutableArray alloc] init];
         [order removeObject: binding];
         [order addObject: binding];
+        if ([order count] == 1 && itemsStandForIndexes(self) && [self _binderForBinding: @"content"] != nil) {
+            NSMenuItem *unmatched = NS_EXTRA(NSPopUpButton, self)->_unmatchedItem;
+            NSInteger index = 0;
+
+            for (NSMenuItem *item in [self itemArray]) {
+                if (item != unmatched)
+                    [item setRepresentedObject: [NSNumber numberWithInteger: index]];
+                index++;
+            }
+        }
     }
 }
 
