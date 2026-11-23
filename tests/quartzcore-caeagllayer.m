@@ -15,7 +15,7 @@ int main(void) {
         CHECK([layer conformsToProtocol: @protocol(EAGLDrawable)], "conforms to EAGLDrawable");
         CHECK(layer.isOpaque, "-layer starts opaque");
         CHECK([[[CAEAGLLayer alloc] init] isOpaque], "-init starts opaque");
-        CHECK(![CALayer layer].isOpaque, "a plain CALayer does not");
+        CHECK(![(CALayer *)[CALayer layer] isOpaque], "a plain CALayer does not");
         CAEAGLLayer *source = [CAEAGLLayer layer];
         source.opaque = NO;
         CHECK([[[CAEAGLLayer alloc] initWithLayer: source] isOpaque], "-initWithLayer: starts opaque");
