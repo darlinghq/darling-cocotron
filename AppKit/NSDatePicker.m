@@ -59,6 +59,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [[self _pickerCell] datePickerStyle];
 }
 
+- (BOOL) presentsCalendarOverlay {
+    return NS_EXTRA(NSDatePicker, self)->_presentsCalendarOverlay;
+}
+
+// The documentation gives NO as the default. Only the value is kept: no calendar overlay exists to present.
+- (void) setPresentsCalendarOverlay: (BOOL) flag {
+    NS_EXTRA(NSDatePicker, self)->_presentsCalendarOverlay = flag;
+}
+
 - (NSCalendar *) calendar {
     return [[self _pickerCell] calendar];
 }
