@@ -7,9 +7,13 @@
 // path components when there are none and it is not nil, else the plain string is drawn with
 // default attributes when it is not nil. So nil is a valid value of both and means no
 // placeholder, and it is the value of a cell decoded from an archive that has none.
-// How the two properties relate beyond that drawing precedence (whether setting one changes
-// what the other returns) is not specified by the documentation and is not tested: each
-// property is only checked against its own setter.
+// The documentation does not say how the two relate beyond that drawing precedence. On macOS
+// 26.7.3 and 10.14.4 (x86_64 and i386; mac-probes/cristim/batch12a/p765.m, p765b.m) a cell has
+// one placeholder, a string or an attributed string: setting either replaces what was there
+// (nil clears it whichever kind it was) and each getter answers nil while the placeholder is
+// of the other kind. A cell archive keeps it under the one key NSPlaceholderString, and it
+// decodes back to the property it came from.
+// Test: test_quirk_pathcell_has_one_placeholder (below)
 // Build: clang -fobjc-arc -framework AppKit appkit-pathcell-nil-placeholder.m
 // Needs a Darling guest; it does not start an NSApplication.
 // On master the nil cases do not survive: -setPlaceholderString: passes nil to
@@ -36,7 +40,7 @@ static int failures;
 
 // Stands in for the cell in a keyed archive: it writes the placeholder key only when
 // standInPlaceholder is set, and no other key, as a nib without a placeholder does.
-static NSString *standInPlaceholder;
+static id standInPlaceholder;
 @interface ArchivedStandIn : NSObject <NSCoding>
 @end
 @implementation ArchivedStandIn
@@ -47,7 +51,7 @@ static NSString *standInPlaceholder;
 - (id)initWithCoder:(NSCoder *)coder { return [super init]; }
 @end
 
-static NSPathCell *decoded(NSString *placeholder, Class cellClass) {
+static NSPathCell *decoded(id placeholder, Class cellClass) {
     standInPlaceholder = placeholder;
     NSMutableData *data = [NSMutableData data];
     NSKeyedArchiver *archiver = [[NSKeyedArchiver alloc] initForWritingWithMutableData:data];
@@ -140,6 +144,38 @@ int main(void) {
         CHECK([[withKey placeholderString] isEqualToString:@"From the archive"]);
         [withKey setPlaceholderString:nil];
         CHECK([withKey placeholderString] == nil);
+
+        // an attributed placeholder in the archive decodes to the attributed property only
+        NSPathCell *attributed = decoded([[NSAttributedString alloc] initWithString:@"Styled"], [NSPathCell class]);
+        CHECK([[[attributed placeholderAttributedString] string] isEqualToString:@"Styled"]);
+        CHECK([attributed placeholderString] == nil);
+
+        // test_quirk_pathcell_has_one_placeholder (macOS 26.7.3 and 10.14.4)
+        NSPathCell *both = [[NSPathCell alloc] init];
+        NSAttributedString *styledText = [[NSAttributedString alloc] initWithString:@"Styled"];
+        [both setPlaceholderString:@"Plain"];
+        CHECK([both placeholderAttributedString] == nil);
+        [both setPlaceholderAttributedString:styledText];
+        CHECK([both placeholderString] == nil);
+        CHECK([[[both placeholderAttributedString] string] isEqualToString:@"Styled"]);
+        [both setPlaceholderString:@"Plain"];
+        CHECK([[both placeholderString] isEqualToString:@"Plain"]);
+        CHECK([both placeholderAttributedString] == nil);
+        [both setPlaceholderAttributedString:nil];
+        CHECK([both placeholderString] == nil);
+        CHECK([both placeholderAttributedString] == nil);
+        [both setPlaceholderAttributedString:styledText];
+        [both setPlaceholderString:nil];
+        CHECK([both placeholderString] == nil);
+        CHECK([both placeholderAttributedString] == nil);
+        // the plain string is copied, and the empty attributed string is a placeholder
+        NSMutableString *changing = [NSMutableString stringWithString:@"Plain"];
+        [both setPlaceholderString:changing];
+        [changing appendString:@" more"];
+        CHECK([[both placeholderString] isEqualToString:@"Plain"]);
+        [both setPlaceholderAttributedString:[[NSAttributedString alloc] initWithString:@""]];
+        CHECK([both placeholderString] == nil);
+        CHECK([both placeholderAttributedString] != nil);
 
         // cells do not share the placeholder
         NSPathCell *first = [[NSPathCell alloc] init];

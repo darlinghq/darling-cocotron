@@ -16,8 +16,12 @@ taking a new one), the attributed string being copied, set and cleared through i
 setter, decoding an archive with and without the placeholder key, cells not sharing the
 placeholder string, and `respondsToSelector:` for the four accessors.
 
-How the two properties relate beyond the drawing precedence (whether setting one changes
-what the other returns) is not specified by the pages and is not tested.
+The pages do not say how the two properties relate beyond the drawing precedence. On macOS 26.7.3
+and 10.14.4 (x86_64 and i386; probes `p765.m` and `p765b.m` of batch 12a) a cell has one placeholder,
+a string or an attributed string: setting either replaces what was there (`nil` clears it whichever
+kind it was), and each getter answers `nil` while the placeholder is of the other kind (marked `QUIRK`
+in the source). A cell archive keeps it under the one key `NSPlaceholderString` (a string or an
+attributed string, decoded back to the property it came from). The test pins all of that.
 
 On master the `nil` cases do not survive: `-setPlaceholderString:` hands `nil` to
 `-[NSAttributedString initWithString:]`, which crashes, and decoding an archive without the
