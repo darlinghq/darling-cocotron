@@ -303,6 +303,18 @@ static BOOL disableRunLoopObserverCommits;
     }
 }
 
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The
+// name asks for the default of the flag above for transactions to come (GUESS:
+// the argument is a BOOL). The flag has no effect here, so the default has none
+// either: it is kept and nothing reads it.
+static BOOL defaultDisableRunLoopObserverCommits;
+
++ (void) setDefaultDisableRunLoopObserverCommits: (BOOL) value {
+    @synchronized([CATransaction class]) {
+        defaultDisableRunLoopObserverCommits = value;
+    }
+}
+
 + (void) flush {
     [self _commitImplicitTransaction];
 }

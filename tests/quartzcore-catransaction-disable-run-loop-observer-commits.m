@@ -2,10 +2,12 @@
 #import <QuartzCore/QuartzCore.h>
 #include <stdlib.h>
 
-// Mac Catalyst frameworks send +[CATransaction setDisableRunLoopObserverCommits:]; it is private
-// and undocumented. Cocotron has no run loop observer commit, so the flag changes nothing.
+// Mac Catalyst frameworks send +[CATransaction setDisableRunLoopObserverCommits:] and
+// +setDefaultDisableRunLoopObserverCommits:; both are private and undocumented. Cocotron has no
+// run loop observer commit, so neither changes anything.
 @interface CATransaction (DisableRunLoopObserverCommitsPrivate)
 + (void)setDisableRunLoopObserverCommits:(BOOL)value;
++ (void)setDefaultDisableRunLoopObserverCommits:(BOOL)value;
 @end
 
 static int failures;
@@ -42,8 +44,15 @@ int main(void)
         [CATransaction setDisableRunLoopObserverCommits:NO];
         expect(explicitTransactionStillWorks(), @"an explicit transaction works with the flag NO");
 
+        expect([CATransaction respondsToSelector:@selector(setDefaultDisableRunLoopObserverCommits:)],
+               @"CATransaction answers +setDefaultDisableRunLoopObserverCommits:");
+        [CATransaction setDefaultDisableRunLoopObserverCommits:YES];
+        expect(explicitTransactionStillWorks(), @"an explicit transaction works with the default YES");
+        [CATransaction setDefaultDisableRunLoopObserverCommits:NO];
+        expect(explicitTransactionStillWorks(), @"an explicit transaction works with the default NO");
+
         if (failures == 0)
-            NSLog(@"PASS: CATransaction +setDisableRunLoopObserverCommits:");
+            NSLog(@"PASS: CATransaction +setDisableRunLoopObserverCommits: and +setDefaultDisableRunLoopObserverCommits:");
     }
     return failures == 0 ? 0 : 1;
 }
