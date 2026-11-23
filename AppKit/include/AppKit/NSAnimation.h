@@ -59,6 +59,7 @@ APPKIT_EXPORT NSString *NSAnimationTriggerOrderOut;
 
 @end
 
+#define _NS_SIDE_NSAnimation 0, 1,
 @interface NSAnimation : NSObject <NSCopying> {
     NSTimeInterval _duration;
     NSAnimationCurve _curve;
@@ -73,6 +74,13 @@ APPKIT_EXPORT NSString *NSAnimationTriggerOrderOut;
     NSTimer *_timer;
     NSTimeInterval _startTime;
     NS_LEGACY_IVAR_PAD(_NSAnimationReserved, 16)
+    NS_EXTRA_IVARS_BEGIN(NSAnimation)
+    // links between animations; none of these references is retained, the
+    // animations remove themselves from each other's links in -dealloc
+    NSAnimation *_startAnimation;
+    NSAnimation *_stopAnimation;
+    NSMutableArray *_linkedAnimations;
+    NS_SIDE_IVARS_END(NSAnimation)
 }
 
 - initWithDuration: (NSTimeInterval) duration
