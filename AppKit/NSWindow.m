@@ -2750,20 +2750,51 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return 0.20;
 }
 
-- (void) selectNextKeyView: sender {
-    if ([_firstResponder isKindOfClass: [NSView class]]) {
-        NSView *view = (NSView *) _firstResponder;
+// The key view that holds the focus: the first responder, or the control that
+// a field editor being the first responder is editing (the field editor itself
+// is not part of the key view loop).
+- (NSView *) _keyViewOfFirstResponder {
+    if ([_firstResponder isKindOfClass: [NSText class]] && [(NSText *) _firstResponder isFieldEditor]) {
+        id delegate = [(NSText *) _firstResponder delegate];
 
-        [self selectKeyViewFollowingView: view];
+        if ([delegate isKindOfClass: [NSView class]])
+            return delegate;
     }
+    return [_firstResponder isKindOfClass: [NSView class]] ? (NSView *) _firstResponder : nil;
+}
+
+// The candidates, in the documented order: the next (previous) valid key view
+// of the current first responder, the initial first responder when it accepts
+// first responder status, and otherwise the next (previous) valid key view of
+// the initial first responder. With none of them nothing changes.
+- (void) selectNextKeyView: sender {
+    NSView *view = [self _keyViewOfFirstResponder];
+
+    if ([view nextValidKeyView] != nil) {
+        [self selectKeyViewFollowingView: view];
+        return;
+    }
+
+    NSView *initial = [self initialFirstResponder];
+    NSView *candidate = [initial acceptsFirstResponder] ? initial : [initial nextValidKeyView];
+
+    if (candidate != nil)
+        [self _makeFirstResponder: candidate selecting: NSSelectingNext];
 }
 
 - (void) selectPreviousKeyView: sender {
-    if ([_firstResponder isKindOfClass: [NSView class]]) {
-        NSView *view = (NSView *) _firstResponder;
+    NSView *view = [self _keyViewOfFirstResponder];
 
+    if ([view previousValidKeyView] != nil) {
         [self selectKeyViewPrecedingView: view];
+        return;
     }
+
+    NSView *initial = [self initialFirstResponder];
+    NSView *candidate = [initial acceptsFirstResponder] ? initial : [initial previousValidKeyView];
+
+    if (candidate != nil)
+        [self _makeFirstResponder: candidate selecting: NSSelectingPrevious];
 }
 
 // While the new key view is made first responder, -keyViewSelectionDirection
