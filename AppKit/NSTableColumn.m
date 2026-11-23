@@ -226,6 +226,31 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSTableColumn, self)->_resizingMask = value;
 }
 
+// The documentation gives the contract: the width becomes that of the header cell, widening a maximum that is
+// narrower and narrowing a minimum that is wider, so the width never has to be clamped, and the table view
+// is marked as needing display when the width changes.
+// GUESS: the header cell's width is -cellSize's width, unrounded, which is the width its title and the cell's
+// own insets need; a column without a header cell is left alone; the header cell and the limits are read and
+// changed through the accessors, so a subclass that overrides them is honoured; only the table view is marked,
+// not its header view.
+- (void) sizeToFit {
+    NSCell *headerCell = [self headerCell];
+    if (headerCell == nil)
+        return;
+
+    CGFloat headerWidth = [headerCell cellSize].width;
+    CGFloat oldWidth = [self width];
+
+    if ([self maxWidth] < headerWidth)
+        [self setMaxWidth: headerWidth];
+    if ([self minWidth] > headerWidth)
+        [self setMinWidth: headerWidth];
+    [self setWidth: headerWidth];
+
+    if ([self width] != oldWidth)
+        [[self tableView] setNeedsDisplay: YES];
+}
+
 - (NSCell *) dataCellForRow: (NSInteger) row {
     return [self dataCell];
 }
