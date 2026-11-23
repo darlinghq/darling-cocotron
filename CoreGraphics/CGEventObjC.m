@@ -430,7 +430,24 @@ static inline BOOL isScrollFixedDelta(CGEventField f) { return f >= kCGScrollWhe
 {
 	free(_eventRecord);
 	free(_unicodeString);
+	[_clientData release];
 	[super dealloc];
+}
+
+-(BOOL) hasSameContentAs:(CGEvent*) other
+{
+	if (other == self)
+		return YES;
+	if (other == nil || _type != other->_type || _timestamp != other->_timestamp || _flags != other->_flags)
+		return NO;
+	if (_locationValid != other->_locationValid
+		|| (_locationValid && (_location.x != other->_location.x || _location.y != other->_location.y)))
+		return NO;
+	if (memcmp(_fields, other->_fields, sizeof(_fields)) != 0)
+		return NO;
+	if (_unicodeLength != other->_unicodeLength || (_unicodeString == NULL) != (other->_unicodeString == NULL))
+		return NO;
+	return _unicodeLength == 0 || memcmp(_unicodeString, other->_unicodeString, _unicodeLength * sizeof(UniChar)) == 0;
 }
 
 -(id) copy

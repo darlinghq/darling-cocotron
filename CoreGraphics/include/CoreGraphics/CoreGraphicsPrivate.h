@@ -69,10 +69,10 @@ extern void CGRegionRelease(CGRegionRef region);
 // CGSNotificationSingleEventType(NX_SYSDEFINED) (or kCGSNotificationAllEvents); the data is a
 // CGSEventRecord whose data.compound.subType is kCGSHotKeyPressedSubtype or
 // kCGSHotKeyReleasedSubtype, whose data.compound.misc.L[0] is the uid, and whose flags,
-// location and time are those of the key event. AppKit turns it into an NSEvent of type
-// NSSystemDefined, which NSApplication hands to HIToolbox. A process with no such proc (a
-// Carbon application without AppKit) gets the same event, made with CGEventCreateWithEventRecord(),
-// in its event stream (_CGSEventStreamPost), through the event taps, where HIToolbox reads it.
+// location and time are those of the key event. The same event, made with
+// CGEventCreateWithEventRecord(), goes through the event taps into the event stream of the process
+// (_CGSEventStreamPost), where HIToolbox reads it; AppKit gets it from HIToolbox's queue as an
+// NSEvent of type NSSystemDefined and hands it back to HIToolbox in -[NSApplication sendEvent:].
 // QUIRK: system-defined subtype 6 is a hot key press, 9 a release, and the event's data1 names
 // the hot key (the uid given when it was set). Not documented. Evidence: public write-ups of
 // the observed event (The Register, 2009, https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/;
@@ -317,6 +317,16 @@ extern CGEventRef _CGSEventStreamCopyNextEvent(void);
 // waits (before each wait, and after each wake up). A new registration replaces the old one;
 // NULL for both stops the stream and drops what is waiting.
 extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef _Nullable source, CFRunLoopRef _Nullable runLoop);
+
+// Interim (darlinghq/darling#937, until the window system backends live in CoreGraphics): the
+// poster of a window system event can attach an object to it, which the framework that reads the
+// event from the stream takes back. AppKit attaches the NSEvent its backend built, with what a
+// CGEvent cannot carry yet (input method text, gesture phases, tablet data). The object is not
+// part of the event: copies of the event do not have it, and an active event tap that changes the
+// event or replaces it with another drops it, so the reader then builds what it needs from the
+// event's fields. The event retains the object.
+extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
+extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
 
 // Registers the 'uchr' keyboard layout (a UCKeyboardLayout blob of `length` bytes, copied) of the
 // window system's current keymap, for a backend that cannot read the keymap itself. The Text Input
