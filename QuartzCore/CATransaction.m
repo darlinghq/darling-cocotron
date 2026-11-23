@@ -272,6 +272,49 @@ static void scheduleCompletionBlocks(void) {
     // for a passed phase waits for the next commit".
 }
 
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The
+// name asks for a handler to run when an implicit transaction begins. The
+// block's signature is not known (GUESS), and calling a block with the wrong
+// arguments could corrupt state, so the block is kept (a new one replaces the
+// old one, nil clears it) and never called. Transactions behave exactly as before.
+static id implicitTransactionDidBeginHandler;
+
++ (void) setImplicitTransactionDidBeginHandler: (id) handler {
+    if (handler != nil)
+        NSLog(@"CATransaction setImplicitTransactionDidBeginHandler: handler stored, never called");
+
+    @synchronized([CATransaction class]) {
+        id previous = implicitTransactionDidBeginHandler;
+        implicitTransactionDidBeginHandler = [handler copy];
+        [previous release];
+    }
+}
+
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The
+// name asks to stop a run loop observer from committing transactions (GUESS: the
+// argument is a BOOL, YES disables). Cocotron commits an implicit transaction from
+// a run loop perform, not from an observer, so there is nothing to switch off: the
+// flag is kept and has no effect. Transactions behave exactly as before.
+static BOOL disableRunLoopObserverCommits;
+
++ (void) setDisableRunLoopObserverCommits: (BOOL) value {
+    @synchronized([CATransaction class]) {
+        disableRunLoopObserverCommits = value;
+    }
+}
+
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The
+// name asks for the default of the flag above for transactions to come (GUESS:
+// the argument is a BOOL). The flag has no effect here, so the default has none
+// either: it is kept and nothing reads it.
+static BOOL defaultDisableRunLoopObserverCommits;
+
++ (void) setDefaultDisableRunLoopObserverCommits: (BOOL) value {
+    @synchronized([CATransaction class]) {
+        defaultDisableRunLoopObserverCommits = value;
+    }
+}
+
 + (void) flush {
     [self _commitImplicitTransaction];
 }
