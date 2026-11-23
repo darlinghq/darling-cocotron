@@ -28,6 +28,9 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemBehavior) {
     NSSplitViewItemBehaviorDefault,
     NSSplitViewItemBehaviorSidebar,
     NSSplitViewItemBehaviorContentList,
+    // GUESS: the value 3 follows the order in which the documentation lists the
+    // cases (the inspector comes after the content list; macOS 11.0).
+    NSSplitViewItemBehaviorInspector,
 };
 
 typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
@@ -37,6 +40,10 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
     NSSplitViewItemCollapseBehaviorUseConstraints,
 };
 
+// Resets a sizing property to its default. The documentation does not state the
+// value (GUESS: -1).
+APPKIT_EXPORT const CGFloat NSSplitViewItemUnspecifiedDimension;
+
 @interface NSSplitViewItem : NSObject <NSCoding> {
     NS_LEGACY_IVAR_PAD(_NSSplitViewItemReserved, 4)
     NS_EXTRA_IVARS_BEGIN(NSSplitViewItem)
@@ -45,6 +52,11 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
     BOOL _collapsed;
     BOOL _canCollapse;
     NSLayoutPriority _holdingPriority;
+    CGFloat _minimumThickness;
+    CGFloat _maximumThickness;
+    NSSplitViewItemCollapseBehavior _collapseBehavior;
+    BOOL _springLoaded;
+    BOOL _allowsFullHeightLayout;
     NS_EXTRA_IVARS_END(NSSplitViewItem)
 }
 
@@ -52,6 +64,9 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
 // A collapsible item whose holding priority is NSLayoutPriorityDefaultLow + 10.
 + (instancetype) sidebarWithViewController: (NSViewController *) viewController;
 + (instancetype) contentListWithViewController: (NSViewController *) viewController;
+// A collapsible item whose thickness is fixed at 270 (the documented macOS 14
+// inspector size).
++ (instancetype) inspectorWithViewController: (NSViewController *) viewController;
 
 @property(readonly) NSSplitViewItemBehavior behavior;
 
@@ -60,6 +75,17 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
 @property(getter=isCollapsed) BOOL collapsed;
 @property BOOL canCollapse;
 @property NSLayoutPriority holdingPriority;
+
+// Stored only: the split view controller does not apply the thickness limits or the
+// collapse behavior, and the spring-loaded and full-height flags have no effect.
+// Both limits default to NSSplitViewItemUnspecifiedDimension (270 for an inspector);
+// assigning NSSplitViewItemUnspecifiedDimension restores that default.
+@property CGFloat minimumThickness;
+@property CGFloat maximumThickness;
+@property NSSplitViewItemCollapseBehavior collapseBehavior;
+@property(getter=isSpringLoaded) BOOL springLoaded;
+// Default YES.
+@property BOOL allowsFullHeightLayout;
 
 // Changes apply immediately; there are no animations.
 - (instancetype) animator;
