@@ -4,9 +4,10 @@
 // https://developer.apple.com/documentation/coredata/nsmanagedobjectcontext/reset()
 // Documented: reset returns the context to its base state and all its managed objects are
 // "forgotten"; the caller must discard references to objects fetched through the context.
-// Lines marked GUESS pin what the page leaves open (they are not observed on macOS): that the
-// pending changes and the undo stack are dropped too, and that reset posts no change
-// notification (nor leaves one pending). That reset also removes the context's key-value
+// Lines marked OBSERVED pin what the page leaves open, as observed on macOS 10.14.4 and 26.7.3: the
+// pending changes and the undo stack are dropped too, and reset posts one
+// NSManagedObjectContextObjectsDidChangeNotification at once with NSInvalidatedAllObjectsKey (the
+// object ids the context had registered) and leaves no other one pending. That reset also removes the context's key-value
 // observers is not pinned: it cannot be seen without touching a forgotten object. The test never
 // touches an object after the reset, as the page requires. Prints PASS when everything holds;
 // the exit code is the number of failed checks.
@@ -33,6 +34,7 @@ static NSManagedObjectModel *makeModel(void) {
 }
 
 static NSUInteger gNotifications;
+static NSDictionary *gUserInfo;
 
 int main(void) {
     @autoreleasepool {
@@ -51,7 +53,7 @@ int main(void) {
 
         [[NSNotificationCenter defaultCenter] addObserverForName:NSManagedObjectContextObjectsDidChangeNotification
                                                           object:context queue:nil
-                                                      usingBlock:^(NSNotification *n) { gNotifications++; }];
+                                                      usingBlock:^(NSNotification *n) { gNotifications++; gUserInfo = [[n userInfo] retain]; }];
         NSUInteger before = gNotifications;
 
         /* an undoable action on the context's undo manager */
@@ -59,7 +61,8 @@ int main(void) {
         [undoManager setGroupsByEvent:NO];
         context.undoManager = undoManager;
         [undoManager beginUndoGrouping];
-        [undoManager registerUndoWithTarget:undoManager selector:@selector(removeAllActions) object:nil];
+        NSMutableString *undoTarget = [NSMutableString string];
+        [undoManager registerUndoWithTarget:undoTarget selector:@selector(setString:) object:@""];
         [undoManager endUndoGrouping];
         CHECK([undoManager canUndo]);
 
@@ -70,15 +73,19 @@ int main(void) {
         CHECK([[context registeredObjects] count] == 2 && [context hasChanges]);
         CHECK([[context updatedObjects] count] == 1 && [[context insertedObjects] count] == 1);
 
+        NSManagedObjectID *unsavedID = [unsaved objectID];
         [context reset];
+        CHECK(gNotifications == before + 1);                /* OBSERVED: posted synchronously, once */
+        NSArray *invalidated = [gUserInfo objectForKey:NSInvalidatedAllObjectsKey];
+        CHECK([invalidated count] == 2 && [invalidated containsObject:savedID] && [invalidated containsObject:unsavedID]);
         [context processPendingChanges];    /* would post the pending changes if reset left them */
+        CHECK(gNotifications == before + 1);
 
         CHECK([[context registeredObjects] count] == 0);
         CHECK([[context insertedObjects] count] == 0 && [[context updatedObjects] count] == 0 && [[context deletedObjects] count] == 0);
         CHECK([context objectRegisteredForID:savedID] == nil);
-        CHECK(![context hasChanges]);                       /* GUESS: pending changes dropped */
-        CHECK(gNotifications == before);                    /* GUESS: no change notification, and none left pending */
-        CHECK(![undoManager canUndo]);                      /* GUESS: the undo stack is cleared */
+        CHECK(![context hasChanges]);                       /* OBSERVED: pending changes dropped */
+        CHECK(![undoManager canUndo]);                      /* OBSERVED: the undo stack is cleared */
 
         /* the store was not touched: only the saved object comes back, with its saved value, as a new instance */
         NSFetchRequest *request = [NSFetchRequest fetchRequestWithEntityName:@"Note"];
@@ -94,9 +101,11 @@ int main(void) {
         CHECK([context hasChanges] && [[context updatedObjects] containsObject:again]);
         CHECK([context save:NULL] && ![context hasChanges]);
 
-        /* reset on an empty context is harmless */
+        /* reset on an empty context is harmless, and still posts the notification, with no ids (OBSERVED) */
         [context reset];
+        NSUInteger beforeEmpty = gNotifications;
         [context reset];
+        CHECK(gNotifications == beforeEmpty + 1 && [[gUserInfo objectForKey:NSInvalidatedAllObjectsKey] count] == 0);
         CHECK([[context registeredObjects] count] == 0 && ![context hasChanges]);
     }
     if (!failures) printf("PASS\n");

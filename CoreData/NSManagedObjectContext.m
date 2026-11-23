@@ -564,12 +564,16 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
 }
 
 // The documentation says every managed object of the context is forgotten and the context
-// returns to its base state. GUESS: "base state" also means the pending changes and the undo
-// stack are dropped (a fresh context has neither). GUESS: no ObjectsDidChange notification is
-// posted (NSInvalidatedAllObjectsKey exists, but its page does not say reset posts it).
-// Not touched: the objects themselves, which the documentation tells the caller to discard.
+// returns to its base state. Observed on macOS 10.14.4 and 26.7.3 (black-box, tier 2): the pending
+// changes and the undo stack are dropped, and reset posts one
+// NSManagedObjectContextObjectsDidChangeNotification at once (also for a context with no objects)
+// whose user info holds NSInvalidatedAllObjectsKey: an array of the object ids the context had
+// registered. Not touched: the objects themselves, which the documentation tells the caller to
+// discard. Test: coredata-context-reset.
 - (void) reset {
+    NSMutableArray *invalidated = [NSMutableArray array];
     for (NSManagedObject *object in [_registeredObjects allObjects]) {
+        [invalidated addObject: [object objectID]];
         for (NSString *key in [[[object entity] propertiesByName] allKeys])
             [object removeObserver: self forKeyPath: key];
     }
@@ -584,6 +588,12 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     [_pendingRefreshed removeAllObjects];
     _hasChanges = NO;
     [_undoManager removeAllActions];
+
+    [[NSNotificationCenter defaultCenter]
+            postNotificationName: NSManagedObjectContextObjectsDidChangeNotification
+                          object: self
+                        userInfo: [NSDictionary dictionaryWithObject: invalidated
+                                                              forKey: NSInvalidatedAllObjectsKey]];
 }
 
 - (void)rollback {
