@@ -131,6 +131,7 @@ typedef NS_ENUM(NSUInteger, NSGradientType) {
         float _periodicDelay, _periodicInterval;
         NSImage *_alternateImageOrKeyEquivalentFont;
         NSUInteger _bcFlags;
+        BOOL _mouseInside;
     NS_EXTRA_IVARS_END(NSButtonCell)
 }
 
