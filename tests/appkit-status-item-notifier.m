@@ -21,6 +21,7 @@
 // shown again; 6 the second item sends its action on a right click as well;
 // 7 the first item is removed; 8 the second item is removed.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <objc/message.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -233,6 +234,7 @@ int main(int argc, char **argv) {
             return failures != 0;
         }
         runTray();
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     return 0;

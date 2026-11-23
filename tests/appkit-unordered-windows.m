@@ -15,6 +15,7 @@
 //
 // With a nib (tests/fixtures/Fixture.nib), its window is loaded as well.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -131,6 +132,7 @@ int main(int argc, char **argv) {
         [NSTimer scheduledTimerWithTimeInterval: 60 repeats: NO block: ^(NSTimer *t) {
             exit(3);
         }];
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     return 0;

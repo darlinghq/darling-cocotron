@@ -25,6 +25,7 @@
 // ignores the window cycle is left out of the Dock's window list, Mission Control and Cmd-`. With
 // behavior 0 the window is a normal window of a regular application, which they list.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -83,6 +84,7 @@ int main(int argc, char **argv) {
         [win setCollectionBehavior: argc > 5 ? (NSWindowCollectionBehavior) strtol(argv[5], NULL, 0) : 0x248];
         // A launched application counts as active until another application has the focus, so the
         // first cycle is a warm-up (WARM follows it); the checks start after it.
+        TestIgnoreArgumentWords();
         [NSApp finishLaunching];
         if (argc > 6) {
             // The collection behavior changes after the window is on screen (argv[6]): the window must

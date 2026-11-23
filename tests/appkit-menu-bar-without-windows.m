@@ -12,6 +12,7 @@
 // Prints PASS, FAIL or SKIP. Needs a window server (Xvfb, or a Wayland
 // compositor; a compositor with wlr-layer-shell gets the bar as a layer surface).
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -75,6 +76,7 @@ int main(int argc, char **argv) {
         [sub addItemWithTitle: @"Quit" action: @selector(terminate:) keyEquivalent: @""];
         [top setSubmenu: sub];
         [NSApp setMainMenu: main];
+        TestIgnoreArgumentWords();
         [NSApp finishLaunching];
         spin(1.0);
 

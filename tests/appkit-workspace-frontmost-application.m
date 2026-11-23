@@ -11,6 +11,7 @@
 // Needs a display (X11 with a window manager, or a Wayland compositor that focuses new windows).
 // Prints PASS on success.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,6 +43,7 @@ static void pumpFor(double seconds) {
 static NSWindow *showWindow(const char *title) {
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
+    TestIgnoreArgumentWords();
     [NSApp finishLaunching];
     NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 300, 200)
                                                    styleMask: NSWindowStyleMaskTitled

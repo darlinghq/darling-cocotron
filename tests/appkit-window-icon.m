@@ -14,6 +14,7 @@
 // say how far it got. Run with DARLING_APPKIT_BACKEND=x11 or wayland and the matching DISPLAY or
 // WAYLAND_DISPLAY set.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -78,6 +79,7 @@ static int showWindow(const char *mode, double seconds) {
                                                            defer: NO];
         [window setTitle: @"icon-test"];
         [window makeKeyAndOrderFront: nil];
+        TestIgnoreArgumentWords();
         [NSApp finishLaunching];
 
         NSDate *end = [NSDate dateWithTimeIntervalSinceNow: seconds];

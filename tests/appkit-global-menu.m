@@ -26,6 +26,7 @@
 //
 // A line "READY" is logged once the application is active and the menu is set.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <objc/message.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -353,6 +354,7 @@ int main(int argc, char **argv) {
                 note("STEP %s key=%d", names[step], (int) [window isKeyWindow]);
                 step++;
             }];
+            TestIgnoreArgumentWords();
             [NSApp run];
             return 0;
         }
@@ -518,6 +520,7 @@ int main(int argc, char **argv) {
             note(argc > 3 ? "done" : "timeout");
             exit(argc > 3 ? 0 : 3);
         }];
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     return 0;

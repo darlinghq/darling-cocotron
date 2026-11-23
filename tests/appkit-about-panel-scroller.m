@@ -12,6 +12,7 @@
 // and "VALUE <v>" whenever the scroller's value changes. The harness presses the knob and drags it, then
 // clicks in the track below the knob, and checks that VALUE grew each time.
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -58,6 +59,7 @@ int main(int argc, char **argv) {
         double seconds = argc > 1 ? atof(argv[1]) : 30;
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
+        TestIgnoreArgumentWords();
         [NSApp finishLaunching];
         [NSApp orderFrontStandardAboutPanel: nil];
         [NSApp activateIgnoringOtherApps: YES];

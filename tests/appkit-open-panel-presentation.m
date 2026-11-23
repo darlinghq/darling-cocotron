@@ -14,6 +14,7 @@
 // sheet attachment, sheet centred horizontally on the window and below its title bar; vd-upstream/mac-probes/
 // open-panel-presentation.m).
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -152,6 +153,7 @@ int main(int argc, char **argv) {
         [NSApplication sharedApplication];
         D *d = [D new];
         [NSApp setDelegate: d];
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     return 0;
