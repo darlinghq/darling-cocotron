@@ -290,6 +290,19 @@ static id implicitTransactionDidBeginHandler;
     }
 }
 
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The
+// name asks to stop a run loop observer from committing transactions (GUESS: the
+// argument is a BOOL, YES disables). Cocotron commits an implicit transaction from
+// a run loop perform, not from an observer, so there is nothing to switch off: the
+// flag is kept and has no effect. Transactions behave exactly as before.
+static BOOL disableRunLoopObserverCommits;
+
++ (void) setDisableRunLoopObserverCommits: (BOOL) value {
+    @synchronized([CATransaction class]) {
+        disableRunLoopObserverCommits = value;
+    }
+}
+
 + (void) flush {
     [self _commitImplicitTransaction];
 }
