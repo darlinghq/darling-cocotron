@@ -436,7 +436,7 @@ static NSError *DocumentOpenFailureError(NSURL *url) {
 // (see -makeDocumentWithContentsOfURL:ofType:error:). The documentation says an error is returned whenever the
 // document cannot be made, and a missing class is the same case for documentClassForType: whether the type has no
 // NSDocumentClass entry or names a class that does not exist; only the latter was observed.
-// QUIRK: observed on macOS 26.1 (arm64), probe 669.make: "NoClass makeDocumentWithContentsOfURL:ofType:error:
+// QUIRK: observed on macOS 26.7.3 and Mac OS X 10.14.4 (docclass.m, identical, tier 2) and on 26.1 (arm64), probe 669.make: "NoClass makeDocumentWithContentsOfURL:ofType:error:
 // -> doc=nil ; error=NSCocoaErrorDomain/256 ... ; calls=[(none)]" and the same for
 // makeDocumentForURL:withContentsOfURL:ofType:error:, for a type whose NSDocumentClass names a class that does
 // not exist (documentClassForType: is nil there). The documentation does not give the domain or code. Only the

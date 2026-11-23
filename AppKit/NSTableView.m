@@ -647,7 +647,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     rect.origin.x = 0.;
     // QUIRK: the rectangle of a hidden column is an empty one at x 0, wherever the column is in the table; the
-    // documentation of isHidden does not say. Observed on macOS 26.1 (arm64), probe 657.1: with 5 columns of
+    // documentation of isHidden does not say. Observed on macOS 26.7.3 and Mac OS X 10.14.4 (tier 2, the PR's test passes on both) and on 26.1 (arm64), probe 657.1: with 5 columns of
     // widths 50, 60, 70, 80 and 90 "hidden=1 ... rectOfColumn x+w=[10+65 0+0 75+87 162+97 259+74]" and
     // "hidden=4 ... [10+65 75+77 152+87 239+94 0+0]"; the probe printed x and width only, so y and height of
     // that rectangle are unchanged here. The header rect and the cell frame of a hidden column agree

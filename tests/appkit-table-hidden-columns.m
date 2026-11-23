@@ -42,6 +42,8 @@ static void setup(void)
     scroll = [[[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 500, 250)] autorelease];
     table = [[[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, 239, 250)] autorelease];
     [table setIntercellSpacing:NSMakeSize(3, 2)];
+    // the columns keep the widths given below (the default would share the clip's width among them on macOS)
+    [table setColumnAutoresizingStyle:NSTableViewNoColumnAutoresizing];
     CGFloat widths[3] = {100, 50, 80};
     NSString *names[3] = {@"a", @"b", @"c"};
     for (int i = 0; i < 3; i++)
@@ -88,7 +90,7 @@ static void test_rects_close_the_gap(void)
     NSRect cell = [table frameOfCellAtColumn:2 row:0];
     CHECK(NSMinX(cell) >= 103 && NSMinX(cell) < 106);
     CHECK([table frameOfCellAtColumn:1 row:0].size.width == 0);
-    // QUIRK (macOS 26.1, probes 657.1 and 657.3): a hidden column's rectangle and cell frame are empty ones at
+    // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probes 657.1 and 657.3): a hidden column's rectangle and cell frame are empty ones at
     // x 0 wherever the column sits; its neighbours are unaffected
     CHECK(NSMinX([table rectOfColumn:1]) == 0);
     CHECK(NSMinX([table frameOfCellAtColumn:1 row:0]) == 0);
@@ -128,7 +130,7 @@ static void test_ranges_over_whole_rects(void)
     NSRange inLast = [table columnsInRect:NSMakeRect(220, 0, 10, 20)];
     CHECK(inLast.location == 2 && inLast.length == 1);
 
-    // QUIRK (macOS 26.1, probe 657.1/657.2): hidden columns after the last shown one are in the range of a rect
+    // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 657.1/657.2): hidden columns after the last shown one are in the range of a rect
     // that reaches past that column; a rect that ends inside the last shown column stops there
     [column(2) setHidden:YES]; // columns now span 0-203, 203-203 (hidden), 203-203 (hidden)
     NSRange pastEnd = [table columnsInRect:NSMakeRect(0, 0, 400, 20)];
@@ -215,7 +217,7 @@ static void test_header(void)
     NSTableHeaderView *header = (NSTableHeaderView *)[table headerView];
     [column(1) setHidden:YES];
     CHECK(NSWidth([header headerRectOfColumn:1]) == 0);
-    CHECK(NSMinX([header headerRectOfColumn:1]) == 0); // QUIRK (macOS 26.1, probe 657.1): a hidden column's header rect is at x 0
+    CHECK(NSMinX([header headerRectOfColumn:1]) == 0); // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 657.1): a hidden column's header rect is at x 0
     CHECK(NSMinX([header headerRectOfColumn:2]) == 103);
     CHECK(NSWidth([header headerRectOfColumn:2]) == 83);
     CHECK([header columnAtPoint:NSMakePoint(120, 5)] == 2);

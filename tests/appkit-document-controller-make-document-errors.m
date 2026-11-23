@@ -106,7 +106,7 @@ int main(void) {
         document = [controller makeDocumentWithContentsOfURL:url ofType:@"Unknown" error:&error];
         expect(document == nil, @"an undeclared type makes no document");
 
-        // QUIRK (macOS 26.1, probe 669.make "NoClass"): a type whose NSDocumentClass names a class that does not
+        // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 669.make "NoClass"): a type whose NSDocumentClass names a class that does not
         // exist gives nil and NSCocoaErrorDomain code 256 (NSFileReadUnknownError), from both make methods.
         error = nil;
         document = [controller makeDocumentWithContentsOfURL:url ofType:@"MissingClass" error:&error];
