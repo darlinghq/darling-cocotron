@@ -467,7 +467,18 @@ static NSString *popUpItemTitle(id value) {
         else
             represented = title;
 
-        [[_cell _appendItemWithTitle: title] setRepresentedObject: represented];
+        NSMenuItem *item = [_cell _appendItemWithTitle: title];
+
+        [item setRepresentedObject: represented];
+        // QUIRK: an item built from the content bindings gets its index as its tag, so a bound selectedTag of 1
+        // selects the second item. Not documented. Evidence: black-box observation on macOS 26.1 (arm64), probe
+        // 641: "content=[a,b,c] only -> ... tags=[0|1|2]", the same with contentValues only (641.3, where
+        // contentObjects was bound without content, which raised, so contentValues was the only item source) and
+        // for a pull-down (641.35), and "641.25 selectedTag bound, model.tag=1, content=[a,b,c] -> ...
+        // tags=[0|1|2] selIndex=1 selTitle=b". The tag of the item added for an unmatched selection is not set
+        // here: it was 0 in 641.20 (selectedValue) and -1 in 641.26 (four selection bindings), two scenarios.
+        // Test: appkit-popup-button-content-bindings (test_quirk_bound_items_are_tagged_by_index)
+        [item setTag: i];
     }
     [self synchronizeTitleAndSelectedItem];
     [self _reapplyBoundSelection];
