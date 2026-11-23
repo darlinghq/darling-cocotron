@@ -18,14 +18,16 @@
 */
 
 // The NSAccessibility protocol (macOS 10.10) for NSView, NSControl, NSCell and its
-// control cells, NSWindow and NSApplication, and the legacy attribute methods
+// control cells, NSMenuItem, NSWindow and NSApplication, and the legacy attribute methods
 // (accessibilityAttributeValue: and friends) on top of it. NSAccessibilityElement.m
 // uses the same storage and methods.
 //
 // Every property can be set; a set value replaces the computed default and is kept
 // per object. The defaults are those of macOS 10.14 and 26: views are not elements
 // and stand for their unignored descendants, controls stand for their cells, cells
-// and windows are elements, and parents are the nearest unignored ancestor.
+// and windows are elements, and parents are the nearest unignored ancestor. The
+// NSMenuItem defaults are not measured: the documentation gives none, see the GUESS
+// comments there.
 //
 // Nothing here talks to an assistive-technology service: there is no such backend.
 
@@ -37,6 +39,7 @@
 #import <AppKit/NSControl.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSImageCell.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPopUpButtonCell.h>
 #import <AppKit/NSSliderCell.h>
 #import <AppKit/NSTextFieldCell.h>
@@ -405,6 +408,76 @@ static BOOL imageIsNamed(NSImage *image, NSString *name, NSString *highlightedNa
 
 - (NSAccessibilityRole) _accessibilityDefaultRole {
     return NSAccessibilityImageRole;
+}
+
+@end
+
+@implementation NSMenuItem (NSAccessibility)
+
+ACCESSIBILITY_COMMON_METHODS
+
+// Stored values are kept per object, so a copy of an item starts without them.
+// The documentation lists NSMenuItem as conforming to NSAccessibility and
+// NSAccessibilityElement but gives no defaults for it. The role constant exists in the
+// documentation; that it is the default is a GUESS, as is each default marked below.
+// GUESS: an item is an element.
+- (BOOL) isAccessibilityElement {
+    return _NSAccessibilityStoredBool(self, _NSAccessibilityElementKey, YES);
+}
+
+- (void) setAccessibilityElement: (BOOL) value {
+    _NSAccessibilitySetStoredValue(self, _NSAccessibilityElementKey, [NSNumber numberWithBool: value]);
+}
+
+- (void) setAccessibilityFrame: (NSRect) value {
+    _NSAccessibilitySetStoredValue(self, _NSAccessibilityFrameKey, [NSValue valueWithRect: value]);
+}
+
+// GUESS: a separator has the same role as any other item.
+- (NSAccessibilityRole) accessibilityRole {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityRoleAttribute, NSAccessibilityMenuItemRole);
+}
+
+// GUESS: no children until set; a submenu is not reported as one.
+- (NSArray *) accessibilityChildren {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityChildrenAttribute, nil);
+}
+
+// GUESS: no parent until set. NSMenu does not implement the protocol here, so the
+// owning menu is not offered as one.
+- (id) accessibilityParent {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityParentAttribute, nil);
+}
+
+- (id) accessibilityWindow {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityWindowAttribute, nil);
+}
+
+- (id) accessibilityTopLevelUIElement {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityTopLevelUIElementAttribute, nil);
+}
+
+// GUESS: items have no screen geometry of their own to report.
+- (NSRect) accessibilityFrame {
+    return _NSAccessibilityStoredRect(self, _NSAccessibilityFrameKey, NSZeroRect);
+}
+
+- (NSString *) accessibilityLabel {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityDescriptionAttribute, nil);
+}
+
+// GUESS: the item's title.
+- (NSString *) accessibilityTitle {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityTitleAttribute, [self title]);
+}
+
+- (id) accessibilityValue {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityValueAttribute, nil);
+}
+
+// GUESS: follows -isEnabled.
+- (BOOL) isAccessibilityEnabled {
+    return _NSAccessibilityStoredBool(self, NSAccessibilityEnabledAttribute, [self isEnabled]);
 }
 
 @end

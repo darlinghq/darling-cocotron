@@ -26,8 +26,8 @@ APPKIT_EXPORT id NSAccessibilityUnignoredDescendant(id element);
 APPKIT_EXPORT NSArray *NSAccessibilityUnignoredChildren(NSArray *originalChildren);
 APPKIT_EXPORT NSArray *NSAccessibilityUnignoredChildrenForOnlyChild(id originalChild);
 
-// The legacy attribute-based accessibility methods. NSView, NSWindow, NSCell and
-// NSApplication implement them on top of the NSAccessibility protocol's methods.
+// The legacy attribute-based accessibility methods. NSView, NSWindow, NSCell, NSMenuItem
+// and NSApplication implement them on top of the NSAccessibility protocol's methods.
 @interface NSObject (NSAccessibility)
 - (NSArray *) accessibilityAttributeNames;
 - accessibilityAttributeValue: (NSString *) attribute;
