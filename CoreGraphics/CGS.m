@@ -923,7 +923,7 @@ CGError CGSRemoveNotifyProc(CGSNotifyProcPtr proc, CGSNotificationType notificat
 }
 
 // Hands a hot key press or release, as a system-defined event, to the procs registered for
-// such events. Called by the backends (through -postHotKeyEventForUID:...) on the main run loop.
+// such events, or to the event stream when there is none. Called by the backends (through -postHotKeyEventForUID:...) on the main run loop.
 __attribute__((visibility("hidden")))
 void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEventFlags flags, CGPoint location, uint64_t time)
 {
@@ -951,6 +951,23 @@ void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEv
 			[procs addObject: [NSData dataWithBytes: e length: sizeof(*e)]];
 	}
 	pthread_mutex_unlock(&g_cgsNotifyProcMutex);
+
+	// Without a client that wants the system-defined events itself, the hot key is an event of the
+	// process like any other: it goes through the event taps into the event stream, which the
+	// event loop of HIToolbox reads (a Carbon application has no other way to receive it).
+	// Interim: AppKit still takes the events from the notification procs (NSApplication registers
+	// one) and queues them in its own queue, so while one exists the stream is not used.
+	if ([procs count] == 0)
+	{
+		CGEventRef event = CGEventCreateWithEventRecord(&record, sizeof(record));
+
+		if (event)
+		{
+			_CGSEventStreamPost(event);
+			CFRelease(event);
+		}
+		return;
+	}
 
 	for (NSData* entry in procs)
 	{
