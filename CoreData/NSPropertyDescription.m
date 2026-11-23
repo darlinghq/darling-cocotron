@@ -43,6 +43,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void)dealloc {
     [_propertyName release];
+    [_userInfo release];
+    [_validationPredicates release];
+    [_validationWarnings release];
     [super dealloc];
 }
 
@@ -94,18 +97,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSDictionary *) userInfo {
-    NSUnimplementedMethod();
-    return nil;
+    return _userInfo;
 }
 
+// GUESS: the documentation does not say what the arrays are before they are set. The public
+// header declares both as non-null, so an unset property returns an empty array, not nil.
 - (NSArray *) validationPredicates {
-    NSUnimplementedMethod();
-    return nil;
+    return _validationPredicates ? _validationPredicates : [NSArray array];
 }
 
 - (NSArray *) validationWarnings {
-    NSUnimplementedMethod();
-    return nil;
+    return _validationWarnings ? _validationWarnings : [NSArray array];
 }
 
 - (void) setName: (NSString *) value {
@@ -134,13 +136,30 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) setUserInfo: (NSDictionary *) value {
-    NSUnimplementedMethod();
+    [self _checkMutable];
+    value = [value retain];
+    [_userInfo release];
+    _userInfo = value;
 }
 
+// GUESS: the documentation says the arrays "should contain the same number of elements" without
+// saying what happens otherwise. A length mismatch raises NSInvalidArgumentException (rejected
+// alternative: store them and let the warnings run out of range when a predicate fails). The
+// arrays are stored as immutable copies so a later change to the caller's array cannot break
+// the pairing of predicates and warnings.
 - (void) setValidationPredicates: (NSArray *) predicates
           withValidationWarnings: (NSArray *) warnings
 {
-    NSUnimplementedMethod();
+    [self _checkMutable];
+    if ([predicates count] != [warnings count])
+        [NSException raise:NSInvalidArgumentException
+                    format:@"The validation predicates and validation warnings must have the same number of elements."];
+    predicates = [predicates copy];
+    warnings = [warnings copy];
+    [_validationPredicates release];
+    [_validationWarnings release];
+    _validationPredicates = predicates;
+    _validationWarnings = warnings;
 }
 
 @end
