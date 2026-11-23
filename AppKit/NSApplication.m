@@ -1595,13 +1595,8 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
     // Constraint/layout callbacks may close windows or open new ones.
     NSArray *windows = [[NSApp windows] copy];
     @try {
-        for (NSWindow *window in windows) {
-            if ([window isVisible] && ![window isMiniaturized]) {
-                [window _fitContentSizeToConstraints];
-                [[window _backgroundView] layoutSubtreeIfNeeded];
-            }
-            [window displayIfNeeded];
-        }
+        for (NSWindow *window in windows)
+            [window _layoutAndDisplayIfNeeded];
     } @finally {
         [windows release];
     }

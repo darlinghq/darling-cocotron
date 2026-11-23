@@ -3001,6 +3001,19 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     DarlingLayoutSetLastGeneration(_contentView, DarlingLayoutKindWindowFit, DarlingLayoutGeneration());
 }
 
+// A display cycle of the window: the constraints and the layout of a window on screen are brought up to date before
+// it draws, so the views it draws have their frames. Ordering a window in draws it at once, and with the same cycle:
+// a view whose needsLayout was set before then is laid out without another event or display request.
+// Test: tests/appkit-collection-view-scroll-position-none.m (a collection view set up before the window is ordered
+// front gets its content size).
+- (void) _layoutAndDisplayIfNeeded {
+    if ([self isVisible] && ![self isMiniaturized]) {
+        [self _fitContentSizeToConstraints];
+        [_backgroundView layoutSubtreeIfNeeded];
+    }
+    [self displayIfNeeded];
+}
+
 - (void) layoutIfNeeded {
     [self _fitContentSizeToConstraints];
     [self updateConstraintsIfNeeded];
@@ -3224,7 +3237,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
            incomplete). This may be the right place to do this, maybe not,
            further investigation is required.
         */
-        [self displayIfNeeded];
+        [self _layoutAndDisplayIfNeeded];
         // This is here since it would seem that doing this any earlier will not
         // work.
         if (![self isKindOfClass: [NSPanel class]] &&
@@ -3250,7 +3263,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
            incomplete). This may be the right place to do this, maybe not,
            further investigation is required.
         */
-        [self displayIfNeeded];
+        [self _layoutAndDisplayIfNeeded];
         // This is here since it would seem that doing this any earlier will not
         // work.
         if (![self isKindOfClass: [NSPanel class]] &&
