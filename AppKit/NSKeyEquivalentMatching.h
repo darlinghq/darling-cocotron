@@ -9,6 +9,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 // Shared by menu items and buttons: whether a key event matches a key equivalent and its
 // modifier mask.
 #import <AppKit/NSEvent.h>
+#import <Foundation/NSCharacterSet.h>
 #import <Foundation/NSString.h>
 
 // QUIRK: Command, Option and Control must match exactly, but Shift is not compared for an
@@ -44,4 +45,24 @@ static inline BOOL NSKeyEquivalentMatchesEvent(NSString *key, NSUInteger itemMas
     if ([event modifierFlags] & NSShiftKeyMask)
         return [[key lowercaseString] isEqualToString: [characters lowercaseString]];
     return NO;
+}
+
+// Whether an event that matched an equivalent agrees with it on Shift. The equivalent asks for Shift when it is an
+// uppercase letter or the mask has Shift; the event agrees when it has Shift exactly then. The exception is a single
+// symbol (not a letter or a digit) that the event carries as typed, like "{": Shift is part of typing it, so an event
+// with Shift agrees. A symbol that needs no Shift on the layout, delivered with Shift held, looks the same and
+// counts as agreeing. A menu prefers the item that agrees over one that matches through the Shift quirk above, so
+// Command+Shift+Z performs the "Z" item (Redo) rather than the "z" item (Undo) ahead of it, and Command+Z the other way.
+static inline BOOL NSKeyEquivalentAgreesOnShift(NSString *key, NSUInteger itemMask, NSEvent *event) {
+    BOOL uppercase = [key length] > 0 && ![key isEqualToString: [key lowercaseString]];
+    BOOL wantsShift = uppercase || (itemMask & NSShiftKeyMask) != 0;
+    BOOL hasShift = ([event modifierFlags] & NSShiftKeyMask) != 0;
+
+    if (!hasShift)
+        return !wantsShift;
+    if (wantsShift)
+        return YES;
+    return [key length] == 1 &&
+           ![[NSCharacterSet alphanumericCharacterSet] characterIsMember: [key characterAtIndex: 0]] &&
+           [key isEqualToString: [event charactersIgnoringModifiers]];
 }
