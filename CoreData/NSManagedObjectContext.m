@@ -205,7 +205,6 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     _pendingRefreshed = [NSMutableSet new];
     _lock = [[NSLock alloc] init];
     _storeCoordinator = nil;
-    _undoManager = [[NSUndoManager alloc] init];
     _registeredObjects = [[NSMutableSet alloc] init];
     _insertedObjects = [[NSMutableSet alloc] init];
     _updatedObjects = [[NSMutableSet alloc] init];
