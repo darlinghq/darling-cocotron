@@ -39,6 +39,9 @@
     BOOL _dropAnnounced, _dropped, _accepted, _transferFailed;
     int _sequence;
     NSUInteger _negotiationDepth, _motionGeneration;
+    NSInteger _validItems; // -1 until a destination sets numberOfValidItemsForDrop
+    NSDraggingFormation _formation;
+    BOOL _animatesToDestination;
 }
 - (id) initWithOffer: (struct wl_proxy *) offer types: (NSArray *) mimes
             display: (WaylandDisplay *) display window: (WaylandWindow *) window

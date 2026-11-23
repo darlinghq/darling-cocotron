@@ -253,8 +253,13 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
 }
 - (NSString *) stringForType: (NSString *) type {
     NSData *data = [self dataForType: type];
-    return data ? [[[NSString alloc] initWithData: data encoding:
-            [NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString] ? NSUTF8StringEncoding : NSUnicodeStringEncoding] autorelease] : nil;
+    if (!data) return nil;
+    // UTF-8 is what other clients' data is read as; data that is not valid UTF-8 (what -setString:forType:
+    // stores for a type other than the string type) is read as Unicode, as NSPasteboard does
+    NSString *string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    if (!string && ![NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString])
+        string = [[[NSString alloc] initWithData: data encoding: NSUnicodeStringEncoding] autorelease];
+    return string;
 }
 - (NSArray *) types {
     [_display processPendingEvents];
@@ -305,6 +310,11 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     [_display flush];
 }
 - (NSData *) dataForType: (NSString *) type {
+    NSData *data = [self offeredDataForType: type];
+    return data != nil ? data : NSPasteboardDerivedDataForType(self, type);
+}
+// The data of a type this clipboard holds or the selection's owner offers
+- (NSData *) offeredDataForType: (NSString *) type {
     type = NSPasteboardCanonicalType(type);
     [_display processPendingEvents];
     if (_owned || !_device) return [self localDataForType: type];

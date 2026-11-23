@@ -21,8 +21,21 @@
 #import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
+// The instance variables fill 22 of the 60 bytes Apple's legacy (i386) layout has
 @interface NSCollectionViewLayoutInvalidationContext : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewLayoutInvalidationContextReserved, 60)
+    NSMutableSet *_invalidatedItemIndexPaths;
+    NSPoint _contentOffsetAdjustment;
+    NSSize _contentSizeAdjustment;
+    BOOL _invalidateEverything;
+    BOOL _invalidateDataSourceCounts;
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewLayoutInvalidationContextReserved, 38)
 }
+
+@property(readonly) BOOL invalidateEverything;
+@property(readonly) BOOL invalidateDataSourceCounts;
+- (void) invalidateItemsAtIndexPaths: (NSSet<NSIndexPath *> *) indexPaths;
+@property(readonly) NSSet<NSIndexPath *> *invalidatedItemIndexPaths;
+@property NSPoint contentOffsetAdjustment;
+@property NSSize contentSizeAdjustment;
 
 @end

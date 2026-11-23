@@ -89,10 +89,14 @@ static void reportTitles(NSWindow *window) {
     id appMenu = [[NSDisplay currentDisplay] respondsToSelector: @selector(appMenu)]
                          ? [(id) [NSDisplay currentDisplay] performSelector: @selector(appMenu)]
                          : nil;
-    NSWindow *barWindow = nil;
+    // The bar window may sit behind a controller that keeps it in its own _bar
+    id barWindow = appMenu;
     @try {
-        barWindow = [appMenu valueForKey: @"_bar"];
+        do
+            barWindow = [barWindow valueForKey: @"_bar"];
+        while (barWindow != nil && ![barWindow isKindOfClass: [NSWindow class]]);
     } @catch (id e) {
+        barWindow = nil;
     }
     if (barWindow != nil) {
         view = findView([barWindow contentView], @"NSMainMenuView");

@@ -48,6 +48,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCollectionView.h>
 #import <AppKit/NSCollectionViewFlowLayout.h>
 #import <AppKit/NSCollectionViewLayout.h>
+#import <AppKit/NSCollectionViewLayoutAttributes.h>
+#import <AppKit/NSCollectionViewLayoutInvalidationContext.h>
 #import <AppKit/NSCollectionViewCompositionalLayout.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSColorList.h>
@@ -72,6 +74,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDocumentController.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSDraggingItem.h>
+#import <AppKit/NSDraggingSession.h>
 #import <AppKit/NSDrawer.h>
 #import <AppKit/NSEPSImageRep.h>
 #import <AppKit/NSEvent.h>

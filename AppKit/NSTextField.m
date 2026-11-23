@@ -411,8 +411,10 @@ NS_EXTRA_DEALLOC(NSTextField)
     [self setNeedsDisplay: YES];
 }
 
+// Only an editable field accepts the keys; a selectable one takes them when pressed (macOS 10.14.4 and 26.7.3; test:
+// appkit-textfield-label-mouse-down.m)
 - (BOOL) acceptsFirstResponder {
-    return YES;
+    return [self isEditable];
 }
 
 - (BOOL) canBecomeKeyView {
@@ -547,6 +549,13 @@ NS_EXTRA_DEALLOC(NSTextField)
 
 - (void) mouseDown: (NSEvent *) event {
     NSTextFieldCell *cell = [self selectedCell];
+
+    // A label takes no press: it goes up the responder chain, as on macOS (10.14.4 and 26.7.3; test:
+    // appkit-textfield-label-mouse-down.m), so a click on a label in a table's cell reaches the table
+    if (![self isEditable] && ![self isSelectable]) {
+        [[self nextResponder] mouseDown: event];
+        return;
+    }
 
     if (![cell isEnabled])
         return;

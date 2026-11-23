@@ -452,11 +452,13 @@ static NSArray *pathsOfDocumentsEvent(NSAppleEventDescriptor *event) {
     for (NSInteger i = 1; i <= count; i++) {
         NSAppleEventDescriptor *item =
                 [object descriptorType] == typeAEList ? [object descriptorAtIndex: i] : object;
-        NSData *data = [item data];
         NSString *string = nil;
 
-        if ([item descriptorType] == typeFileURL || [item descriptorType] == typeUTF8Text)
-            string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+        // Items are file URLs, text, or anything that coerces to a file URL (such as bookmark data).
+        if ([item descriptorType] != typeUTF8Text)
+            item = [item coerceToDescriptorType: typeFileURL];
+        if (item != nil)
+            string = [[[NSString alloc] initWithData: [item data] encoding: NSUTF8StringEncoding] autorelease];
 
         NSURL *url = string != nil ? [NSURL URLWithString: string] : nil;
         if ([url isFileURL] && [[url path] length] > 0)
@@ -513,13 +515,28 @@ static NSMutableArray *pendingOpenURLs = nil;
     [self _handleInitialEvent: kind paths: paths];
 }
 
+// The documents of an open-documents event go to application:openURLs:, as file URLs, when the
+// delegate implements it; application:openFile: and application:openFiles: are then not called
+// (NSApplicationDelegate documentation). Documents named in argv are not an event: they go to
+// openFile(s): (observed on macOS 26.7.3; tests/src/launch_documents_delivery.m in darling).
+- (void) _openDocumentsOfEvent: (NSArray *) paths {
+    if ([paths count] == 0)
+        return;
+    if ([_delegate respondsToSelector: @selector(application:openURLs:)]) {
+        NSMutableArray *urls = [NSMutableArray arrayWithCapacity: [paths count]];
+        for (NSString *path in paths)
+            [urls addObject: [NSURL fileURLWithPath: path]];
+        [self _openURLs: urls];
+    } else
+        [self _openFileNames: paths];
+}
+
 - (void) _handleOpenDocumentsEvent: (NSAppleEventDescriptor *) event
                     withReplyEvent: (NSAppleEventDescriptor *) reply {
     NSArray *paths = pathsOfDocumentsEvent(event);
 
     if (launchComplete) {
-        if ([paths count] > 0)
-            [self _openFileNames: paths];
+        [self _openDocumentsOfEvent: paths];
         return;
     }
     [self _launchEvent: InitialEventOpenDocuments paths: paths];
@@ -1366,7 +1383,7 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
         if (!argumentDocumentsOpened)
             [self _openUntitledFileIfNeeded];
     } else if (kind == InitialEventOpenDocuments) {
-        [self _openFileNames: paths];
+        [self _openDocumentsOfEvent: paths];
     } else if (kind == InitialEventOpenURLs) {
         [self _openURLs: paths];
     } else {
@@ -1409,7 +1426,7 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
         NSArray *paths = [pendingOpenFiles autorelease];
 
         pendingOpenFiles = nil;
-        [self _openFileNames: paths];
+        [self _openDocumentsOfEvent: paths];
     }
     if ([pendingOpenURLs count] > 0) {
         NSArray *urls = [pendingOpenURLs autorelease];
@@ -1673,13 +1690,8 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     // Constraint/layout callbacks may close windows or open new ones.
     NSArray *windows = [[NSApp windows] copy];
     @try {
-        for (NSWindow *window in windows) {
-            if ([window isVisible] && ![window isMiniaturized]) {
-                [window _fitContentSizeToConstraints];
-                [[window _backgroundView] layoutSubtreeIfNeeded];
-            }
-            [window displayIfNeeded];
-        }
+        for (NSWindow *window in windows)
+            [window _layoutAndDisplayIfNeeded];
     } @finally {
         [windows release];
     }
@@ -1755,7 +1767,7 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
 }
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
-    [NS_EXTRA(NSApplication, self)->_display postEvent: event atStart: atStart];
+    [NS_EXTRA(NSApplication, self)->_display _postEventWithoutCoalescing: event atStart: atStart];
 }
 
 - _searchForAction: (SEL) action responder: target {
@@ -1882,10 +1894,13 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     NSUnimplementedMethod();
 }
 
-// The windows are updated between the two notifications.
+// The windows are updated between the two notifications; only the windows on screen are updated (and their
+// toolbars validated), as documented. Test: tests/appkit-toolbar-closed-window-validation.m
 - (void) updateWindows {
     [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationWillUpdateNotification object: self];
-    [_windows makeObjectsPerformSelector: @selector(update)];
+    for (NSWindow *window in [[_windows copy] autorelease])
+        if ([window isVisible])
+            [window update];
     [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationDidUpdateNotification object: self];
 }
 

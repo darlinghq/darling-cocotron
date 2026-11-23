@@ -19,19 +19,54 @@
 
 #import <AppKit/AppKitExport.h>
 #import <AppKit/AppKitIvarLayout.h>
+#import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
+
+@class NSArray, NSString;
+@protocol NSPasteboardWriting;
+
+NS_ASSUME_NONNULL_BEGIN
 
 typedef NSString *NSDraggingImageComponentKey NS_STRING_ENUM;
 
 APPKIT_EXPORT NSDraggingImageComponentKey const NSDraggingImageComponentIconKey;
 APPKIT_EXPORT NSDraggingImageComponentKey const NSDraggingImageComponentLabelKey;
 
+// One layer of a dragging item's image: an image placed in the item's frame
 @interface NSDraggingImageComponent : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSDraggingImageComponentReserved, 24)
+    // The original's ivars take 24 bytes on i386 (appkit-i386-ivar-layout)
+    NSDraggingImageComponentKey _key;
+    id _contents;
+    NSRect _frame;
 }
+
++ (instancetype) draggingImageComponentWithKey: (NSDraggingImageComponentKey) key;
+- (instancetype) initWithKey: (NSDraggingImageComponentKey) key;
+
+@property(copy) NSDraggingImageComponentKey key;
+@property(retain, nullable) id contents;   // an NSImage or a CGImageRef
+@property NSRect frame;                    // in the item's coordinates, its frame's origin at (0, 0)
+
 @end
 
 @interface NSDraggingItem : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSDraggingItemReserved, 36)
+    // The original's ivars take 36 bytes on i386 (appkit-i386-ivar-layout)
+    id _item;
+    NSRect _draggingFrame;
+    NSArray *_Nonnull (^_imageComponentsProvider)(void);
+    NS_LEGACY_IVAR_PAD(_NSDraggingItemReserved, 12)
 }
+
+- (instancetype) initWithPasteboardWriter: (id<NSPasteboardWriting>) pasteboardWriter;
+
+@property(readonly, retain) id item;
+@property NSRect draggingFrame;
+@property(copy, nullable) NSArray<NSDraggingImageComponent *> *_Nonnull (^imageComponentsProvider)(void);
+@property(readonly, copy, nullable) NSArray<NSDraggingImageComponent *> *imageComponents;
+
+// Sets the frame, and a provider of one icon component showing the contents over all of it
+- (void) setDraggingFrame: (NSRect) frame contents: (nullable id) contents;
+
 @end
+
+NS_ASSUME_NONNULL_END

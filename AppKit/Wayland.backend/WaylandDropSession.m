@@ -24,6 +24,7 @@
 #import "WaylandWindow.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import <AppKit/NSDraggingManager.h>
 #import <AppKit/NSWindow-Drag.h>
 #import <AppKit/NSWindow.h>
 #include <unistd.h>
@@ -56,6 +57,7 @@
         if (offer && WL.wl_proxy_get_version(offer) < 3) _sourceActions = _action = 1;
         static int nextSequence = 0;
         _sequence = ++nextSequence;
+        _validItems = -1;
     }
     return self;
 }
@@ -89,8 +91,10 @@
 - (void) sourceActions: (uint32_t) actions { if (!_dropAnnounced) _sourceActions = actions; }
 - (void) selectedAction: (uint32_t) action { if (!_dropAnnounced) _action = action; }
 - (NSArray *) types { return NSPasteboardTypesWithAliases(_types); }
+- (BOOL) _storesFileURLs { return [_types containsObject: NSPasteboardTypeFileURL]; }
 - (NSString *) availableTypeFromArray: (NSArray *) types {
-    for (NSString *type in types) if ([_types containsObject: NSPasteboardCanonicalType(type)]) return type;
+    NSArray *available = [self types];
+    for (NSString *type in types) if ([available containsObject: type]) return type;
     return nil;
 }
 - (NSString *) mimeForType: (NSString *) type {
@@ -112,6 +116,7 @@
 - (NSData *) dataForType: (NSString *) type {
     type = NSPasteboardCanonicalType(type);
     if ([type isEqual: @"DELETE"]) return nil;
+    if (![_types containsObject: type]) return NSPasteboardDerivedDataForType(self, type);
     if (_localSnapshot) {
         if (![self hasLocalAccess]) { _transferFailed = YES; return nil; }
         return [_localSnapshot objectForKey:type];
@@ -166,8 +171,13 @@
 }
 - (NSString *) stringForType: (NSString *) type {
     NSData *data = [self dataForType: type];
-    return data ? [[[NSString alloc] initWithData: data encoding:
-        [NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString] ? NSUTF8StringEncoding : NSUnicodeStringEncoding] autorelease] : nil;
+    if (!data) return nil;
+    // UTF-8 is what other clients' data is read as; data that is not valid UTF-8 (what -setString:forType:
+    // stores for a type other than the string type) is read as Unicode, as NSPasteboard does
+    NSString *string = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    if (!string && ![NSPasteboardCanonicalType(type) isEqual: NSPasteboardTypeString])
+        string = [[[NSString alloc] initWithData: data encoding: NSUnicodeStringEncoding] autorelease];
+    return string;
 }
 - (void) motion: (CGPoint) point {
     if (!_offer || _dropped) return;
@@ -250,7 +260,13 @@
             [self invalidate];
             [_receiver concludeDragOperation: self];
         }
-    } @finally { [self invalidate]; [_display flush]; }
+    } @finally {
+        [self invalidate];
+        [_display flush];
+        // Whether or not it was performed, the drop ends the drag for its destination
+        if ([_receiver respondsToSelector: @selector(draggingEnded:)])
+            [_receiver draggingEnded: self];
+    }
 }
 - (void) leave {
     // Compositors may send leave immediately after drop; the queued transfer
@@ -259,19 +275,47 @@
     [self invalidate];
     [_receiver draggingExited: self];
 }
-- (NSPasteboard *) draggingPasteboard { return self; }
+- (NSPasteboard *) draggingPasteboard {
+    // A dragging session of this application is read where its source wrote it,
+    // the drag pasteboard, item by item, as on macOS. What the older
+    // -dragImage:... offers is read as the drag offers it.
+    if ([_localSource isKindOfClass: [NSDraggingSession class]])
+        return [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
+    return self;
+}
 - (NSDragOperation) draggingSourceOperationMask {
     // Once dropped, tell the receiver which operation the compositor chose.
     // NSDraggingInfo has no separate selected-operation accessor.
     uint32_t actions = _dropped ? ([self hasAcceptedAction] ? _action : 0) : _sourceActions;
     NSDragOperation operations = WaylandOperationsFromActions(actions);
-    return _localSource ? (operations & _localOperations) : operations;
+    if (_localSource)
+        operations &= _localOperations;
+    // Until the drop, the mask is narrowed by the modifier keys held (NSDraggingInfo)
+    return _dropped ? operations : [NSDraggingSession _operationMask: operations narrowedForSource: _localSource];
 }
 - (NSPoint) draggingLocation { return _point; }
 - (NSWindow *) draggingDestinationWindow { return _destination; }
 - (NSImage *) draggedImage { return nil; }
 - (NSPoint) draggedImageLocation { return _point; }
-- (id) draggingSource { return _localSource; }
+- (id) draggingSource { return [NSDraggingSession _sourceForDestination: _localSource]; }
+- (NSDraggingFormation) draggingFormation { return _formation; }
+- (void) setDraggingFormation: (NSDraggingFormation) formation { _formation = formation; }
+- (BOOL) animatesToDestination { return _animatesToDestination; }
+- (void) setAnimatesToDestination: (BOOL) animates { _animatesToDestination = animates; }
+- (NSInteger) numberOfValidItemsForDrop {
+    return _validItems >= 0 ? _validItems : (NSInteger) [[[self draggingPasteboard] pasteboardItems] count];
+}
+- (void) setNumberOfValidItemsForDrop: (NSInteger) count { _validItems = count; }
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
+                                   forView: (NSView *) view
+                                   classes: (NSArray<Class> *) classArray
+                             searchOptions: (NSDictionary *) searchOptions
+                                usingBlock: (void (^)(NSDraggingItem *, NSInteger, BOOL *)) block {
+    [NSDraggingSession _enumerateItemsOfDraggingInfo: self source: _localSource forView: view
+                                             classes: classArray searchOptions: searchOptions usingBlock: block];
+}
+- (NSSpringLoadingHighlight) springLoadingHighlight { return NSSpringLoadingHighlightNone; }
+- (void) resetSpringLoading {}
 - (int) draggingSequenceNumber { return _sequence; }
 - (void) slideDraggedImageTo: (NSPoint) point {}
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination { return nil; }

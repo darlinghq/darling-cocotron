@@ -5,6 +5,9 @@
 // the selection request and waits for XdndFinished. Exit 0 when the target
 // accepted the drop and reported it finished. Plain Xlib; build with
 //   cc -o xdnd-source-driver xdnd-source-driver.c -lX11
+// Optional environment: XDND_TARGET, the target window's name (default
+// "xdnd-target"); XDND_AT, "x,y", where to drop in the window (default
+// "20,20"); XDND_URIS, the text/uri-list to drop (CRLF-separated).
 #include <X11/Xlib.h>
 #include <X11/Xatom.h>
 #include <stdio.h>
@@ -17,7 +20,8 @@ static Display *dpy;
 static Window find_target(Window w, int depth) {
     char *name = NULL;
     if (XFetchName(dpy, w, &name) && name) {
-        int match = strcmp(name, "xdnd-target") == 0;
+        const char *wanted = getenv("XDND_TARGET") ? getenv("XDND_TARGET") : "xdnd-target";
+        int match = strcmp(name, wanted) == 0;
         XFree(name);
         if (match)
             return w;
@@ -100,7 +104,10 @@ int main(void) {
     XWindowAttributes attr;
     XGetWindowAttributes(dpy, target, &attr);
     Window dummy; int tx, ty;
-    XTranslateCoordinates(dpy, target, root, 20, 20, &tx, &ty, &dummy);
+    int ax = 20, ay = 20;
+    if (getenv("XDND_AT"))
+        sscanf(getenv("XDND_AT"), "%d,%d", &ax, &ay);
+    XTranslateCoordinates(dpy, target, root, ax, ay, &tx, &ty, &dummy);
 
     XEvent m; memset(&m, 0, sizeof m);
     m.xclient.type = ClientMessage; m.xclient.display = dpy; m.xclient.format = 32;
@@ -133,7 +140,7 @@ int main(void) {
     XSendEvent(dpy, recv, False, NoEventMask, &m);
     XFlush(dpy);
 
-    const char *uris = "file:///tmp/xdnd%20test%20file.txt\r\n";
+    const char *uris = getenv("XDND_URIS") ? getenv("XDND_URIS") : "file:///tmp/xdnd%20test%20file.txt\r\n";
     for (int i = 0; i < 100; i++) {
         if (!wait_event(&ev, 200)) continue;
         if (ev.type == SelectionRequest && ev.xselectionrequest.selection == selection) {

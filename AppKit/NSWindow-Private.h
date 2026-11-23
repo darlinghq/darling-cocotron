@@ -83,6 +83,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Moves the attached child windows along with this window.
 - (void) _moveChildWindowsBy: (NSSize) delta;
 - (NSView *) _backgroundView;
+- (void) _fitContentSizeToConstraints;
+- (void) _layoutAndDisplayIfNeeded;
 - (void) _hideMenuViewIfNeeded;
 - (void) _showMenuViewIfNeeded;
 - (void) _updateTrackingAreas;

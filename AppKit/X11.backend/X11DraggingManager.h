@@ -54,8 +54,11 @@
     Atom *_dragTypes;
     unsigned long _dragTypeCount;
     NSDragOperation _offeredOperations, _chosenOperations;
+    BOOL _localOnly; // the source allows nothing outside this application: only its windows are targets
     NSRect _suppressionRect;
     Atom _dropAction;
+    // The source of the drag this manager is running, which a destination in this application sees
+    id _localSource;
     BOOL _dragging, _targetAccepts, _suppressionWanted, _awaitingStatus, _dropFinished;
 }
 

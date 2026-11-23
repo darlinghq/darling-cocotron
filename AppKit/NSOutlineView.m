@@ -288,6 +288,7 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 
     [_markerCell release];
     [_outlineTableColumn release];
+    [NS_EXTRA(NSOutlineView, self)->_dropItem release];
 
     NS_EXTRA_FREE(NSOutlineView, self);
     [super dealloc];
@@ -600,11 +601,146 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     [self reloadData];
 }
 
-// Retargets the drop being validated. The outline view takes the item and child index
-// without retaining the item: they are only meaningful while the data source validates the drop.
+#pragma mark Dragging source
+
+// The table's dragging goes through these, so the data source is asked about items, never rows
+- (BOOL) _dataSourceHasPasteboardWriters {
+    return [_dataSource respondsToSelector: @selector(outlineView:pasteboardWriterForItem:)];
+}
+
+- (BOOL) _dataSourceWritesRows {
+    return [self _dataSourceHasPasteboardWriters];
+}
+
+- (id<NSPasteboardWriting>) _pasteboardWriterForRow: (NSInteger) row {
+    return [_dataSource outlineView: self pasteboardWriterForItem: [self itemAtRow: row]];
+}
+
+- (NSArray *) _itemsAtRows: (NSIndexSet *) rows {
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSUInteger row = [rows firstIndex]; row != NSNotFound; row = [rows indexGreaterThanIndex: row]) {
+        id item = [self itemAtRow: row];
+        if (item != nil)
+            [items addObject: item];
+    }
+    return items;
+}
+
+- (void) draggingSession: (NSDraggingSession *) session willBeginAtPoint: (NSPoint) screenPoint {
+    if ([_dataSource respondsToSelector: @selector(outlineView:draggingSession:willBeginAtPoint:forItems:)])
+        [_dataSource outlineView: self
+                 draggingSession: session
+                willBeginAtPoint: screenPoint
+                        forItems: [self _itemsAtRows: NS_EXTRA(NSTableView, self)->_draggedRows ?: [NSIndexSet indexSet]]];
+}
+
+- (void) draggingSession: (NSDraggingSession *) session
+            endedAtPoint: (NSPoint) screenPoint
+               operation: (NSDragOperation) operation
+{
+    if ([_dataSource respondsToSelector: @selector(outlineView:draggingSession:endedAtPoint:operation:)])
+        [_dataSource outlineView: self draggingSession: session endedAtPoint: screenPoint operation: operation];
+    [NS_EXTRA(NSTableView, self)->_draggedRows release];
+    NS_EXTRA(NSTableView, self)->_draggedRows = nil;
+}
+
+#pragma mark Drop target
+
+- (NSInteger) _indexOfChild: (id) child inItem: (id) parent {
+    NSInteger count = [_dataSource outlineView: self numberOfChildrenOfItem: parent];
+    for (NSInteger i = 0; i < count; i++) {
+        id candidate = [_dataSource outlineView: self child: i ofItem: parent];
+        if (candidate == child || [candidate isEqual: child])
+            return i;
+    }
+    return count;
+}
+
+- (void) _setDropItem: (id) item index: (NSInteger) index {
+    [item retain];
+    [NS_EXTRA(NSOutlineView, self)->_dropItem release];
+    NS_EXTRA(NSOutlineView, self)->_dropItem = item;
+    NS_EXTRA(NSOutlineView, self)->_dropChildIndex = index;
+}
+
+// The table's proposal as an item and a child index (black-box observation on macOS 26.7.3 and 10.14.4, test
+// appkit-outlineview-drag.m): on a row, on its item; above a row, before that row's item among its siblings, unless
+// the row above is deeper, when the point's distance from the outline column's edge picks the level, between the
+// row above's item and the row's; below every row, on the root item.
+- (void) _proposeDropForPoint: (NSPoint) point {
+    [super _proposeDropForPoint: point];
+    NSInteger row = NS_EXTRA(NSTableView, self)->_draggingRow;
+    NSInteger count = [self numberOfRows];
+    if ([self rowAtPoint: point] < 0) {
+        [self _setDropItem: nil index: NSOutlineViewDropOnItemIndex];
+        return;
+    }
+    if (NS_EXTRA(NSTableView, self)->_draggingOperation == NSTableViewDropOn) {
+        [self _setDropItem: [self itemAtRow: row] index: NSOutlineViewDropOnItemIndex];
+        return;
+    }
+    id below = row < count ? [self itemAtRow: row] : nil;
+    NSInteger belowLevel = below != nil ? [self levelForRow: row] : 0;
+    id above = row > 0 ? [self itemAtRow: row - 1] : nil;
+    NSInteger aboveLevel = above != nil ? [self levelForRow: row - 1] : 0;
+    if (below != nil && (above == nil || belowLevel >= aboveLevel)) {
+        id parent = [self parentForItem: below];
+        [self _setDropItem: parent index: [self _indexOfChild: below inItem: parent]];
+        return;
+    }
+    // After the row above's item, or one of its ancestors down to the row's level
+    CGFloat indentation = MAX([self indentationPerLevel], 1);
+    NSInteger column = [_tableColumns indexOfObjectIdenticalTo: _outlineTableColumn];
+    CGFloat left = column != NSNotFound ? NSMinX([self rectOfColumn: column]) : 0;
+    NSInteger level = (NSInteger) floor((point.x - left) / indentation);
+    level = MAX(belowLevel, MIN(aboveLevel, level));
+    id item = above;
+    while (item != nil && [self levelForItem: item] > level)
+        item = [self parentForItem: item];
+    id parent = [self parentForItem: item];
+    [self _setDropItem: parent index: [self _indexOfChild: item inItem: parent] + 1];
+}
+
 - (void) setDropItem: (id) item dropChildIndex: (NSInteger) index {
-    NS_EXTRA(NSOutlineView, self)->_proposedDropItem = item;
-    NS_EXTRA(NSOutlineView, self)->_proposedDropChildIndex = index;
+    [self _setDropItem: item index: index];
+}
+
+- (BOOL) _dataSourceValidatesDrops {
+    return [_dataSource respondsToSelector: @selector(outlineView:validateDrop:proposedItem:proposedChildIndex:)];
+}
+
+- (NSDragOperation) _dataSourceValidateDrop: (id<NSDraggingInfo>) info {
+    return [_dataSource outlineView: self
+                       validateDrop: info
+                       proposedItem: NS_EXTRA(NSOutlineView, self)->_dropItem
+                 proposedChildIndex: NS_EXTRA(NSOutlineView, self)->_dropChildIndex];
+}
+
+// The table's acceptDrop for a drop forced on it without validateDrop was observed; an outline view's was not, so
+// such a drop is refused
+- (BOOL) _dataSourceAcceptUnvalidatedDrop: (id<NSDraggingInfo>) info {
+    return NO;
+}
+
+- (BOOL) _dataSourceAcceptDrop: (id<NSDraggingInfo>) info {
+    if (![_dataSource respondsToSelector: @selector(outlineView:acceptDrop:item:childIndex:)])
+        return NO;
+    return [_dataSource outlineView: self
+                         acceptDrop: info
+                               item: NS_EXTRA(NSOutlineView, self)->_dropItem
+                         childIndex: NS_EXTRA(NSOutlineView, self)->_dropChildIndex];
+}
+
+// A drop on an item frames its row; one between children shows above the row the table proposed. A drop on the root
+// shows none.
+- (NSInteger) _dropIndicatorRow {
+    if (NS_EXTRA(NSOutlineView, self)->_dropChildIndex == NSOutlineViewDropOnItemIndex)
+        return NS_EXTRA(NSOutlineView, self)->_dropItem != nil ? [self rowForItem: NS_EXTRA(NSOutlineView, self)->_dropItem] : -1;
+    return [super _dropIndicatorRow];
+}
+
+- (BOOL) _dropIndicatorIsOn {
+    return NS_EXTRA(NSOutlineView, self)->_dropChildIndex == NSOutlineViewDropOnItemIndex;
 }
 
 - (BOOL) shouldCollapseAutoExpandedItemsForDeposited: (BOOL) collapse {
@@ -639,6 +775,18 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 
     _dataSource = dataSource;
     [self reloadData];
+}
+
+// The data source hears of a change of the sort descriptors as outlineView:sortDescriptorsDidChange:, with the old
+// ones, whether a column header was clicked or they were set programmatically.
+// Test: tests/appkit-outline-view-sort-descriptors.m
+- (void) setSortDescriptors: (NSArray *) value {
+    NSArray *old = [[self sortDescriptors] retain];
+    [super setSortDescriptors: value];
+    if ([self sortDescriptors] != old &&
+        [_dataSource respondsToSelector: @selector(outlineView:sortDescriptorsDidChange:)])
+        [_dataSource outlineView: self sortDescriptorsDidChange: old];
+    [old release];
 }
 
 - (void) setDelegate: delegate {

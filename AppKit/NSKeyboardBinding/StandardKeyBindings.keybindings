@@ -27,8 +27,8 @@
 
 	"keypad,0xF702" = "moveLeft:";		/* NSLeftArrowFunctionKey */
 	"keypad,0xF703" = "moveRight:";		/* NSRightArrowFunctionKey */
-	"shift,keypad,0xF702" = "moveBackwardAndModifySelection:";
-	"shift,keypad,0xF703" = "moveForwardAndModifySelection:";
+	"shift,keypad,0xF702" = "moveLeftAndModifySelection:";
+	"shift,keypad,0xF703" = "moveRightAndModifySelection:";
 
 	"command,keypad,0xF702" = "moveWordBackward:";
 	"command,keypad,0xF703" = "moveWordForward:";

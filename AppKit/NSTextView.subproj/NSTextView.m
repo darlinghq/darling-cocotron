@@ -1635,6 +1635,23 @@ static NSTextView *s_targetTextView = nil;
     }
 }
 
+// Like -moveLeft: and -moveRight:, by the direction of the text at the selection
+- (void) moveLeftAndModifySelection: sender {
+    NSRange range = [self selectedRange];
+    if ([self _locationIsLeftToRight: range.location])
+        [self moveBackwardAndModifySelection: sender];
+    else
+        [self moveForwardAndModifySelection: sender];
+}
+
+- (void) moveRightAndModifySelection: sender {
+    NSRange range = [self selectedRange];
+    if ([self _locationIsLeftToRight: range.location])
+        [self moveForwardAndModifySelection: sender];
+    else
+        [self moveBackwardAndModifySelection: sender];
+}
+
 - (void) moveBackward: sender {
     NSRange range = [self selectedRange];
 

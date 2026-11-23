@@ -35,6 +35,18 @@ NSPasteboardType NSPasteboardLegacyAliasOfType(NSPasteboardType type);
 // dropped. This is the shape of -[NSPasteboard types].
 NSArray<NSPasteboardType> *NSPasteboardTypesWithAliases(NSArray<NSPasteboardType> *types);
 
+// The data of a type that -types derives rather than stores: public.file-url on a pasteboard that holds a list
+// of file names (NSFilenamesPboardType) is the first file's URL. nil for any other type, or when the pasteboard
+// holds no such list. A pasteboard's -dataForType: falls back to this for a type it has no data of its own for.
+NSData *NSPasteboardDerivedDataForType(NSPasteboard *pasteboard, NSPasteboardType type);
+
+@interface NSPasteboard (NSPasteboardStoredFileURLs)
+// Whether the pasteboard holds public.file-url data of its own, not only what it derives from a list of file
+// names. A pasteboard whose types are not stored in CoreFoundation's pasteboard answers from the types it was
+// given.
+- (BOOL) _storesFileURLs;
+@end
+
 // The canonical form of every type of the list, without the older spellings, duplicates dropped.
 NSArray<NSPasteboardType> *NSPasteboardCanonicalTypes(NSArray<NSPasteboardType> *types);
 

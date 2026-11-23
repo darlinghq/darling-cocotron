@@ -70,10 +70,11 @@ static BOOL typeIsPlainText(NSPasteboardType type) {
 
 @implementation NSURL (NSPasteboardSupport)
 
-// The URL is offered as a URL, and as its text so that a text field can take it too.
+// QUIRK: a URL is written as a URL only, not as text: a file URL as public.file-url, any other as public.url.
+// Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-dragging-session.m test_begin_returns_session_with_pasteboard_items (a URL item read as a string)
 - (NSArray<NSPasteboardType> *) writableTypesForPasteboard: (NSPasteboard *) pasteboard {
-    return [NSArray arrayWithObjects: [self isFileURL] ? NSPasteboardTypeFileURL : NSPasteboardTypeURL,
-                                      NSPasteboardTypeString, nil];
+    return [NSArray arrayWithObject: [self isFileURL] ? NSPasteboardTypeFileURL : NSPasteboardTypeURL];
 }
 
 - (id) pasteboardPropertyListForType: (NSPasteboardType) type {

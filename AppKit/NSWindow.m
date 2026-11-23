@@ -290,6 +290,9 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
     NSWindow *_destinationWindow;
     NSPoint _screenPoint;
     NSDragOperation _sourceMask;
+    NSInteger _validItems; // -1 until a destination sets numberOfValidItemsForDrop
+    NSDraggingFormation _formation;
+    BOOL _animatesToDestination;
 }
 @end
 
@@ -305,7 +308,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 - (NSDragOperation) draggingSourceOperationMask {
-    return _sourceMask;
+    return [NSDraggingSession _operationMask: _sourceMask narrowedForSource: _source];
 }
 
 - (NSPoint) draggingLocation {
@@ -327,7 +330,52 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 - (id) draggingSource {
-    return _source;
+    return [NSDraggingSession _sourceForDestination: _source];
+}
+
+- (NSDraggingFormation) draggingFormation {
+    return _formation;
+}
+
+- (void) setDraggingFormation: (NSDraggingFormation) formation {
+    _formation = formation;
+}
+
+- (BOOL) animatesToDestination {
+    return _animatesToDestination;
+}
+
+- (void) setAnimatesToDestination: (BOOL) animates {
+    _animatesToDestination = animates;
+}
+
+- (NSInteger) numberOfValidItemsForDrop {
+    return _validItems >= 0 ? _validItems : (NSInteger) [[_pasteboard pasteboardItems] count];
+}
+
+- (void) setNumberOfValidItemsForDrop: (NSInteger) count {
+    _validItems = count;
+}
+
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
+                                   forView: (NSView *) view
+                                   classes: (NSArray<Class> *) classArray
+                             searchOptions: (NSDictionary *) searchOptions
+                                usingBlock: (void (^)(NSDraggingItem *, NSInteger, BOOL *)) block
+{
+    [NSDraggingSession _enumerateItemsOfDraggingInfo: self
+                                              source: _source
+                                             forView: view
+                                             classes: classArray
+                                       searchOptions: searchOptions
+                                          usingBlock: block];
+}
+
+- (NSSpringLoadingHighlight) springLoadingHighlight {
+    return NSSpringLoadingHighlightNone;
+}
+
+- (void) resetSpringLoading {
 }
 
 - (void) slideDraggedImageTo: (NSPoint) point {
@@ -2957,6 +3005,19 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     DarlingLayoutSetLastGeneration(_contentView, DarlingLayoutKindWindowFit, DarlingLayoutGeneration());
 }
 
+// A display cycle of the window: the constraints and the layout of a window on screen are brought up to date before
+// it draws, so the views it draws have their frames. Ordering a window in draws it at once, and with the same cycle:
+// a view whose needsLayout was set before then is laid out without another event or display request.
+// Test: tests/appkit-collection-view-scroll-position-none.m (a collection view set up before the window is ordered
+// front gets its content size).
+- (void) _layoutAndDisplayIfNeeded {
+    if ([self isVisible] && ![self isMiniaturized]) {
+        [self _fitContentSizeToConstraints];
+        [_backgroundView layoutSubtreeIfNeeded];
+    }
+    [self displayIfNeeded];
+}
+
 - (void) layoutIfNeeded {
     [self _fitContentSizeToConstraints];
     [self updateConstraintsIfNeeded];
@@ -3180,7 +3241,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
            incomplete). This may be the right place to do this, maybe not,
            further investigation is required.
         */
-        [self displayIfNeeded];
+        [self _layoutAndDisplayIfNeeded];
         // This is here since it would seem that doing this any earlier will not
         // work.
         if (![self isKindOfClass: [NSPanel class]] &&
@@ -3206,7 +3267,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
            incomplete). This may be the right place to do this, maybe not,
            further investigation is required.
         */
-        [self displayIfNeeded];
+        [self _layoutAndDisplayIfNeeded];
         // This is here since it would seem that doing this any earlier will not
         // work.
         if (![self isKindOfClass: [NSPanel class]] &&
@@ -3619,14 +3680,21 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [recognizer _resetIfFinished];
 
     if (shouldValidateToolbarItems && [self toolbar]) {
-        [NSObject cancelPreviousPerformRequestsWithTarget: [self toolbar]
-                                                 selector: @selector
-                                                 (validateVisibleItems)
+        [NSObject cancelPreviousPerformRequestsWithTarget: self
+                                                 selector: @selector(_validateToolbarIfShown)
                                                    object: nil];
-        [[self toolbar] performSelector: @selector(validateVisibleItems)
-                             withObject: nil
-                             afterDelay: .5];
+        [self performSelector: @selector(_validateToolbarIfShown)
+                   withObject: nil
+                   afterDelay: .5];
     }
+}
+
+// The toolbar is validated after events only while the window is shown: an event can close the window, and its
+// toolbar items' targets may be gone by the time the validation would run.
+// Test: tests/appkit-toolbar-closed-window-validation.m
+- (void) _validateToolbarIfShown {
+    if ([self isVisible])
+        [[self toolbar] validateVisibleItems];
 }
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
@@ -3744,6 +3812,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
                       source: (id) source
 {
     NSWindowLocalDraggingInfo *info = [[NSWindowLocalDraggingInfo alloc] init];
+    info->_validItems = -1;
     info->_pasteboard = pasteboard;
     info->_image = image;
     info->_source = source;
@@ -4254,12 +4323,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     }
 }
 
+// The sender's title is the application's to set (macOS leaves it as it is)
 - (void) toggleToolbarShown: (id) sender {
     [_toolbar setVisible: ![_toolbar isVisible]];
-    [sender setTitle: [NSString stringWithFormat: @"%@ Toolbar",
-                                                  [_toolbar isVisible]
-                                                          ? @"Hide"
-                                                          : @"Show"]];
 }
 
 - (void) runToolbarCustomizationPalette: (id) sender {
@@ -5149,6 +5215,8 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
         return [[self undoManager] canUndo];
     if ([item action] == @selector(redo:))
         return [[self undoManager] canRedo];
+    if ([item action] == @selector(toggleToolbarShown:))
+        return _toolbar != nil;
 
     return YES;
 }

@@ -508,9 +508,13 @@ static BOOL isStandardItemIdentifier(NSString *identifier) {
                               object: self];
 }
 
+// A hidden toolbar takes no room: its view is hidden (the window leaves it out of its frame and content
+// computations), and the window's frame shrinks by its height, keeping the content's size
 - (void) setVisible: (BOOL) flag {
+    CGFloat oldHeight = [self visibleHeight];
     _visible = flag;
-    [self didChangeAppearanceGlobal: NO];
+    [_view setHidden: !flag];
+    [_window _toolbarSizeDidChangeFromOldHeight: oldHeight];
 }
 
 - (void) setSizeMode: (NSToolbarSizeMode) mode {

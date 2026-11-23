@@ -21,3 +21,10 @@ image-x-generic.png            mimetypes/image-x-generic
 package-x-generic.png          mimetypes/package-x-generic
 text-x-generic.png             mimetypes/text-x-generic
 video-x-generic.png            mimetypes/video-x-generic
+
+These were rendered from adwaita-icon-theme 51.0 with rsvg-convert:
+NSVolumeInternal.png           devices/drive-harddisk
+NSVolumeRemovable.png          devices/drive-removable-media
+NSDiskImage.png                mimetypes/package-x-generic
+NSMultipleDocuments.png        mimetypes/application-x-generic, twice at 26x26,
+                               the second 6 pixels right of and below the first

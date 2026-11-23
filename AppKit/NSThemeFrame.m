@@ -140,7 +140,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [toolbarView setFrame: toolbarFrame];
     [toolbarView layoutViews];
 
-    contentFrame.size.height -= toolbarFrame.size.height;
+    // A hidden toolbar takes no room
+    if (toolbarView != nil && ![toolbarView isHidden])
+        contentFrame.size.height -= toolbarFrame.size.height;
     [contentView setFrame: contentFrame];
 }
 

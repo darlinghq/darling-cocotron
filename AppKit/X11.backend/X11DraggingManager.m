@@ -133,6 +133,8 @@ static X11DraggingManager *X11SharedManager;
     // requires the proxy to point at itself.
     XChangeProperty(_xdpy, parent, _atom.proxy, XA_ATOM, 32, PropModeReplace,
                     (unsigned char *) &handle, 1);
+    XChangeProperty(_xdpy, handle, _atom.proxy, XA_ATOM, 32, PropModeReplace,
+                    (unsigned char *) &handle, 1);
 }
 
 - (instancetype) init {
@@ -170,6 +172,10 @@ static X11DraggingManager *X11SharedManager;
 }
 
 #pragma mark Target registration
+
+- (id) localDraggingSource {
+    return _dragging ? _localSource : nil;
+}
 
 - (void) registerWindow: (NSWindow *) window dragTypes: (NSArray *) types {
     // XdndAware has to be on every top-level window that can accept a drop, and
@@ -211,10 +217,19 @@ static X11DraggingManager *X11SharedManager;
 
     // Only the three actions XDND has atoms for can be offered: a target names the
     // one it wants, and the rest could not be named on the wire.
+    // A source that allows nothing outside this application can still be dragged within it: the drag then
+    // offers what it allows within it, to this application's windows only.
+    NSDragOperation xdndOperations = NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
     NSDragOperation operations = NSDragOperationCopy;
-    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)])
-        operations = [source draggingSourceOperationMaskForLocal: NO];
-    operations &= NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
+    BOOL localOnly = NO;
+    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)]) {
+        operations = [source draggingSourceOperationMaskForLocal: NO] & xdndOperations;
+        if (operations == NSDragOperationNone) {
+            operations = [source draggingSourceOperationMaskForLocal: YES] & xdndOperations;
+            localOnly = operations != NSDragOperationNone;
+        }
+    }
+    operations &= xdndOperations;
 
     NSArray<NSString *> *names = [self selectionTargetsForPasteboard: pasteboard];
     if (operations == NSDragOperationNone || [names count] == 0) {
@@ -287,13 +302,22 @@ static X11DraggingManager *X11SharedManager;
     _dragPasteboard = board;
     _dragWindow = sourceWindow;
     _offeredOperations = operations;
+    _localOnly = localOnly;
+    _localSource = heldSource;
+    // The source is told where the image's corner is on the screen: where it started, moved with the mouse
+    NSWindow *originWindow = [event window];
+    NSPoint imageOrigin = originWindow != nil
+                              ? [originWindow convertRectToScreen: NSMakeRect(location.x, location.y, 0, 0)].origin
+                              : location;
+    NSPoint mouseStart = [[NSDisplay currentDisplay] mouseLocation];
+    NSPoint imageAt = imageOrigin;
     @try {
         int rootX = 0, rootY = 0;
         X11PointerInRoot(_xdpy, &rootX, &rootY);
         [self sendPositionAtRootX: rootX rootY: rootY];
         began = YES;
         if ([heldSource respondsToSelector: @selector(draggedImage:beganAt:)])
-            [heldSource draggedImage: heldImage beganAt: location];
+            [heldSource draggedImage: heldImage beganAt: imageOrigin];
 
         int lastX = rootX, lastY = rootY;
         while (!_dropFinished) {
@@ -302,14 +326,12 @@ static X11DraggingManager *X11SharedManager;
                               untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.01]
                                  inMode: NSDefaultRunLoopMode
                                 dequeue: YES];
-            if (next != nil) {
-                // The release is the drag's end. Any other event that reaches here
-                // is the pointer the drag is holding; the application's own events
-                // are not in the mask and stay queued for when it is over.
-                if (next.type == NSLeftMouseUp)
-                    break;
-                continue;
-            }
+            // The release is the drag's end. Any other event that reaches here is
+            // the pointer the drag is holding; the application's own events are not
+            // in the mask and stay queued for when it is over. Events can keep
+            // arriving all through a drag, so the pointer is looked at after each.
+            if (next != nil && next.type == NSLeftMouseUp)
+                break;
             // One position at a time. The answer to a position says which action
             // the target would take there, so a drag that outran its target would
             // be deciding on an answer to a place the pointer has left.
@@ -321,6 +343,10 @@ static X11DraggingManager *X11SharedManager;
                 // pointer is inside it, unless it asked for them anyway.
                 if (![self pointerInsideSuppressionRectAtRootX: rootX rootY: rootY])
                     [self sendPositionAtRootX: rootX rootY: rootY];
+                NSPoint mouse = [[NSDisplay currentDisplay] mouseLocation];
+                imageAt = NSMakePoint(imageOrigin.x + mouse.x - mouseStart.x, imageOrigin.y + mouse.y - mouseStart.y);
+                if ([heldSource respondsToSelector: @selector(draggedImage:movedTo:)])
+                    [heldSource draggedImage: heldImage movedTo: imageAt];
             }
         }
 
@@ -345,13 +371,14 @@ static X11DraggingManager *X11SharedManager;
             result = [self operationForAction: _dropAction] & _offeredOperations;
     } @finally {
         _dragging = NO;
+        _localSource = nil;
         XUngrabPointer(_xdpy, CurrentTime);
         XSync(_xdpy, False);
         [self releaseDragState];
         @try {
             if (began && [heldSource respondsToSelector:
                                   @selector(draggedImage:endedAt:operation:)])
-                [heldSource draggedImage: heldImage endedAt: location operation: result];
+                [heldSource draggedImage: heldImage endedAt: imageAt operation: result];
         } @finally {
             [heldSource release];
             [heldImage release];
@@ -373,6 +400,7 @@ static X11DraggingManager *X11SharedManager;
     _enteredWindow = None;
     _pointerWindow = None;
     _chosenOperations = _offeredOperations = NSDragOperationNone;
+    _localOnly = NO;
     _dropAction = None;
     _suppressionRect = NSZeroRect;
     _targetAccepts = _suppressionWanted = _awaitingStatus = _dropFinished = NO;
@@ -477,9 +505,17 @@ static X11DraggingManager *X11SharedManager;
     // sending a position to a new one has to tell it first: a target that was
     // never sent an XdndEnter does not know a drag is happening at all.
     Window target = [self xdndAwareWindowAtRootX: rootX rootY: rootY];
+    if (_localOnly && target != None && [(X11Display *) [NSDisplay currentDisplay] windowForID: target] == nil)
+        target = None;
     if (target != _enteredWindow) {
         [self sendLeaveTo: _enteredWindow];
         [self sendEnterTo: target];
+    }
+    // Over a window that takes no drops there is no one to answer, and nothing to wait for
+    if (target == None) {
+        _enteredWindow = _targetWindow = None;
+        _targetAccepts = NO;
+        return;
     }
     // The position is the root-relative pointer location packed into two 16-bit
     // halves of one word, the x coordinate in the high half and y in the low half.
@@ -489,7 +525,8 @@ static X11DraggingManager *X11SharedManager;
     // a time could not tell this drag from the next one either.
     long fields[5] = { (long) _dragWindow, 0,
                        ((long) (rootX & 0xFFFF) << 16) | (rootY & 0xFFFF), 0,
-                       (long) [self atomForOperations: _offeredOperations] };
+                       (long) [self atomForOperations: [NSDraggingSession _operationMask: _offeredOperations
+                                                                      narrowedForSource: _localSource]] };
     [self sendXdndMessage: _atom.position destination: target fields: fields];
     _awaitingStatus = YES;
 }
@@ -541,6 +578,38 @@ static X11DraggingManager *X11SharedManager;
 // The window a message is about: the one under the pointer that carries
 // XdndAware, following XdndProxy so that a reparenting window manager's frame
 // resolves to the window inside it.
+// The XdndProxy a window names, if it is one the specification allows following, or None
+- (Window) proxyNamedBy: (Window) window {
+    Atom proxy;
+    int format;
+    unsigned long count, remaining;
+    unsigned char *data = NULL;
+    if (XGetWindowProperty(_xdpy, window, _atom.proxy, 0, 1, False, XA_ATOM, &proxy,
+                           &format, &count, &remaining, &data) != Success ||
+        data == NULL || count == 0) {
+        if (data)
+            XFree(data);
+        return None;
+    }
+    proxy = *(Atom *) data;
+    XFree(data);
+    return (Window) proxy;
+}
+
+- (Window) validProxyOf: (Window) window {
+    Window proxy = [self proxyNamedBy: window];
+    if (proxy == None)
+        return None;
+    // The specification says to ignore an XdndProxy left behind by a crashed
+    // client: it has to point at itself, and the window it names has to still
+    // exist and be aware. An XID that has since been reused would otherwise hand
+    // the whole drag to an unrelated client.
+    XWindowAttributes attributes;
+    if (!XGetWindowAttributes(_xdpy, proxy, &attributes) || [self proxyNamedBy: proxy] != proxy)
+        return None;
+    return X11HasProperty(_xdpy, proxy, _atom.aware, XA_ATOM) ? proxy : None;
+}
+
 - (Window) xdndAwareWindowAtRootX: (int) rootX rootY: (int) rootY {
     Window root, child;
     int windowX, windowY;
@@ -551,34 +620,27 @@ static X11DraggingManager *X11SharedManager;
     // A target answers with the window the pointer is in, which under a
     // reparenting window manager is the frame rather than the window inside it.
     _pointerWindow = child;
-    if (X11HasProperty(_xdpy, child, _atom.aware, XA_ATOM))
-        return child;
 
-    // The pointer is over the frame a reparenting window manager put around the
-    // window, so the frame's XdndProxy is where the drop is really going.
-    Atom proxy;
-    int format;
-    unsigned long count, remaining;
-    unsigned char *data = NULL;
-    if (XGetWindowProperty(_xdpy, child, _atom.proxy, 0, 1, False, XA_ATOM, &proxy,
-                           &format, &count, &remaining, &data) != Success ||
-        proxy == None) {
-        if (data)
-            XFree(data);
-        return None;
+    // A window manager's frame carries no XdndAware: the window that listens is
+    // inside it, at any depth (a frame may wrap the client in windows of its own),
+    // so the search goes down toward the pointer, as the specification describes.
+    // A window on the way may name the one that listens with XdndProxy.
+    Window window = child, from = DefaultRootWindow(_xdpy);
+    for (int depth = 0; window != None && depth < 16; depth++) {
+        if (X11HasProperty(_xdpy, window, _atom.aware, XA_ATOM))
+            return window;
+        Window proxy = [self validProxyOf: window];
+        if (proxy != None)
+            return proxy;
+        Window inner = None;
+        if (!XTranslateCoordinates(_xdpy, from, window, rootX, rootY, &windowX, &windowY, &inner))
+            return None;
+        from = window;
+        rootX = windowX;
+        rootY = windowY;
+        window = inner;
     }
-    if (data)
-        XFree(data);
-    // The specification says to ignore an XdndProxy left behind by a crashed
-    // client: it has to point at itself, and the window it names has to still
-    // exist. An XID that has since been reused would otherwise hand the whole drag
-    // to an unrelated client.
-    if (!X11HasProperty(_xdpy, proxy, _atom.proxy, XA_ATOM))
-        return None;
-    XWindowAttributes attributes;
-    if (!XGetWindowAttributes(_xdpy, proxy, &attributes))
-        return None;
-    return X11HasProperty(_xdpy, proxy, _atom.aware, XA_ATOM) ? proxy : None;
+    return None;
 }
 
 // The drag holds the pointer, so the replies a target sends arrive as X events
@@ -747,6 +809,8 @@ static NSString *X11PropertyAtomName(Display *xdpy, Atom atom) {
                                                  types: types
                                       sourceOperations: [self operationsFromSource: source
                                                                             version: version]];
+    if (_dragging && source == _dragWindow)
+        [_session setLocalSource: _localSource];
 }
 
 - (void) handlePosition: (XClientMessageEvent *) message toWindow: (X11Window *) window {

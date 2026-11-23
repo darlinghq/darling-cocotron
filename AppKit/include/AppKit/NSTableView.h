@@ -49,6 +49,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSControl.h>
 #import <AppKit/NSDragging.h>
 
+@protocol NSPasteboardWriting;
+
 @class NSTableHeaderView, NSTableColumn, NSNib, NSTableRowView;
 
 @class NSSortDescriptor;
@@ -130,7 +132,7 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 // Legacy ObjC ABI (i386): instance size must stay 0xe4, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSTableView : NSControl {
+@interface NSTableView : NSControl <NSDraggingSource> {
     NSTableHeaderView *_headerView;
     NSView *_cornerView;
     NSMutableArray *_tableColumns;
@@ -190,6 +192,7 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         BOOL _draggingTargetShown;  // drop feedback is visible
         NSDragOperation _draggingSourceMaskLocal;
         NSDragOperation _draggingSourceMaskNonLocal;
+        NSIndexSet *_draggedRows;           // the rows of the dragging session the table began
 
         NSMutableDictionary *_registeredNibs;
         NSMutableDictionary *_cellViews;    // views in the table, keyed by cell position
@@ -286,6 +289,7 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
 - (void) setDraggingSourceOperationMask: (NSDragOperation) mask
                                forLocal: (BOOL) isLocal;
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) isLocal;
+// In tableView:validateDrop:proposedRow:proposedDropOperation:, makes the drop go to another row or operation
 - (void) setDropRow: (NSInteger) row dropOperation: (NSTableViewDropOperation) dropOperation;
 
 
@@ -379,6 +383,15 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         dropOperation: (NSTableViewDropOperation) dropOperation;
 - (void) tableView: (NSTableView *) tableView
         sortDescriptorsDidChange: (NSArray<NSSortDescriptor *> *) oldDescriptors;
+- (nullable id<NSPasteboardWriting>) tableView: (NSTableView *) tableView pasteboardWriterForRow: (NSInteger) row;
+- (void) tableView: (NSTableView *) tableView
+         draggingSession: (NSDraggingSession *) session
+        willBeginAtPoint: (NSPoint) screenPoint
+           forRowIndexes: (NSIndexSet *) rowIndexes;
+- (void) tableView: (NSTableView *) tableView
+        draggingSession: (NSDraggingSession *) session
+           endedAtPoint: (NSPoint) screenPoint
+              operation: (NSDragOperation) operation;
 @end
 
 @protocol NSTableViewDelegate <NSObject>

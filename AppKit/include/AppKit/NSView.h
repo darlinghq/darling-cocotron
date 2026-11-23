@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAnimation.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSResponder.h>
+#import <AppKit/NSDragging.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
@@ -34,6 +35,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
 #import <AppKit/NSAccessibilityProtocols.h>
 
+@class NSDraggingSession, NSDraggingItem;
 @class NSLayoutConstraint, NSViewController;
 
 NS_ASSUME_NONNULL_BEGIN
@@ -99,7 +101,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 // Legacy ObjC ABI (i386): instance size must stay 0x50, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSView : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAppearanceCustomization> {
+@interface NSView : NSResponder <NSAnimatablePropertyContainer, NSUserInterfaceItemIdentification, NSAppearanceCustomization, NSDraggingDestination> {
     NSRect _frame;
     NSRect _bounds;
     NSView *_superview;
@@ -523,6 +525,9 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         pasteboard: (NSPasteboard *) pasteboard
             source: (id) source
          slideBack: (BOOL) slideBack;
+- (NSDraggingSession *) beginDraggingSessionWithItems: (NSArray<NSDraggingItem *> *) items
+                                                event: (NSEvent *) event
+                                               source: (id<NSDraggingSource>) source;
 - (BOOL) dragFile: (NSString *) path
          fromRect: (NSRect) rect
         slideBack: (BOOL) slideBack

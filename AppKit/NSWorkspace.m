@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRunningApplication.h>
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
+#import "NSWorkspaceVolumeEvents.h"
 #include <dispatch/dispatch.h>
 #include <notify.h>
 
@@ -82,7 +83,13 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
 @implementation NSWorkspace
 
 + (NSWorkspace *) sharedWorkspace {
-    return NSThreadSharedInstance(@"NSWorkspace");
+    // one workspace for the process, whichever thread asks first
+    static NSWorkspace *shared;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        shared = [NSWorkspace new];
+    });
+    return shared;
 }
 
 // The front application, as last seen by this process, and whether a refresh is under way (key-value
@@ -168,6 +175,7 @@ static NSRunningApplication *QueryFrontApplication(void) {
 }
 
 - (NSNotificationCenter *) notificationCenter {
+    NSWorkspaceVolumeEventsStart(self);
     return _notificationCenter;
 }
 
@@ -364,6 +372,16 @@ BOOL NSAccessibilityDisplayShouldIncreaseContrast(void) {
 - (BOOL) unmountAndEjectDeviceAtPath: (NSString *) path {
     NSInvalidAbstractInvocation();
     return 0;
+}
+
+- (BOOL) unmountAndEjectDeviceAtURL: (NSURL *) url error: (NSError **) error {
+    NSInvalidAbstractInvocation();
+    return 0;
+}
+
+- (void) recycleURLs: (NSArray<NSURL *> *) URLs
+   completionHandler: (void (^)(NSDictionary<NSURL *, NSURL *> *newURLs, NSError *error)) handler {
+    NSInvalidAbstractInvocation();
 }
 
 - (BOOL) fileSystemChanged {

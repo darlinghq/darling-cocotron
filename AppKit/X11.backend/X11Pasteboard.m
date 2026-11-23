@@ -535,7 +535,8 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
         // We're the owner; just fetch the data directly.
         id<NSPasteboardTypeOwner> owner = _typeToOwner[type];
         [owner pasteboard: self provideDataForType: type];
-        return _typeToData[type];
+        NSData *data = _typeToData[type];
+        return data != nil ? data : NSPasteboardDerivedDataForType(self, type);
     }
 
     [self observeSelectionOwner];
@@ -569,7 +570,7 @@ static NSMutableDictionary<NSPasteboardName, X11Pasteboard *> *nameToPboard;
             return data;
     }
 
-    return nil;
+    return NSPasteboardDerivedDataForType(self, type);
 }
 
 - (NSString *) stringForType: (NSPasteboardType) type {

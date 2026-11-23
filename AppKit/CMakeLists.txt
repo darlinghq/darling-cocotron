@@ -111,6 +111,7 @@ set(AppKit_sources
 	NSMutableAttributedString.m
 	NSRuleEditor.m
 	NSWorkspace.m
+	NSWorkspaceVolumeEvents.m
 	NSBezierPath.m
 	NSWindowAnimationContext.m
 	NSCellUndoManager.m
@@ -433,6 +434,7 @@ set(AppKit_sources
 	NSGestureRecognizer.m
 	NSClickGestureRecognizer.m
 	NSDraggingItem.m
+	NSDraggingSession.m
 	NSGroupTouchBarItem.m
 	NSKeyBindingManager.m
 	NSPasteboardItem.m
@@ -518,6 +520,10 @@ set(AppKit_resources
 	NSApplicationIcon.tiff NSSystemInfoPanel/NSApplicationIcon.tiff
 
 	NSComputer.png SystemImages/NSComputer.png
+	NSDiskImage.png SystemImages/NSDiskImage.png
+	NSMultipleDocuments.png SystemImages/NSMultipleDocuments.png
+	NSVolumeInternal.png SystemImages/NSVolumeInternal.png
+	NSVolumeRemovable.png SystemImages/NSVolumeRemovable.png
 	NSFolder.png SystemImages/NSFolder.png
 	NSNetwork.png SystemImages/NSNetwork.png
 	NSTrashEmpty.png SystemImages/NSTrashEmpty.png
@@ -610,6 +616,7 @@ add_framework(AppKit
 		compression
 		UIFoundation
 		dbus
+		DiskArbitration
 )
 
 # Applications bind the NSCollectionLayout* names to AppKit, so AppKit re-exports the framework that defines them.

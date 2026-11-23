@@ -85,6 +85,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     NS_EXTRA(NSTableColumn, self)->_headerCell = [[NSTableHeaderCell alloc] initTextCell: @""];
     NS_EXTRA(NSTableColumn, self)->_dataCell = [[NSTextFieldCell alloc] initTextCell: @""];
+    // A new column and its data cell are editable (macOS 10.14.4 and 26.7.3; test: appkit-tableview-edit-column.m)
+    [self setEditable: YES];
 
     return self;
 }

@@ -31,19 +31,54 @@ typedef NS_ENUM(NSInteger, NSCollectionViewScrollDirection) {
     NSCollectionViewScrollDirectionHorizontal,
 };
 
+@protocol NSCollectionViewDelegateFlowLayout <NSCollectionViewDelegate>
+@optional
+- (NSSize) collectionView: (NSCollectionView *) collectionView
+                   layout: (NSCollectionViewLayout *) collectionViewLayout
+   sizeForItemAtIndexPath: (NSIndexPath *) indexPath;
+- (NSEdgeInsets) collectionView: (NSCollectionView *) collectionView
+                         layout: (NSCollectionViewLayout *) collectionViewLayout
+         insetForSectionAtIndex: (NSInteger) section;
+- (CGFloat) collectionView: (NSCollectionView *) collectionView
+                                 layout: (NSCollectionViewLayout *) collectionViewLayout
+    minimumLineSpacingForSectionAtIndex: (NSInteger) section;
+- (CGFloat) collectionView: (NSCollectionView *) collectionView
+                                      layout: (NSCollectionViewLayout *) collectionViewLayout
+    minimumInteritemSpacingForSectionAtIndex: (NSInteger) section;
+- (NSSize) collectionView: (NSCollectionView *) collectionView
+                             layout: (NSCollectionViewLayout *) collectionViewLayout
+    referenceSizeForHeaderInSection: (NSInteger) section;
+- (NSSize) collectionView: (NSCollectionView *) collectionView
+                             layout: (NSCollectionViewLayout *) collectionViewLayout
+    referenceSizeForFooterInSection: (NSInteger) section;
+@end
+
+// The instance variables fill 80 of the 124 bytes Apple's legacy (i386) layout has
 @interface NSCollectionViewFlowLayout : NSCollectionViewLayout
 {
     NSSize _itemSize;
     NSEdgeInsets _sectionInset;
     CGFloat _minimumLineSpacing;
     CGFloat _minimumInteritemSpacing;
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewFlowLayoutReserved, 92)
+    NSCollectionViewScrollDirection _scrollDirection;
+    NSSize _estimatedItemSize;
+    NSSize _headerReferenceSize;
+    NSSize _footerReferenceSize;
+    NSMutableArray *_sectionItems; // per section, the attributes of its items; nil until prepared
+    NSMutableArray *_sectionLines; // per section, the rect (an NSValue) of each item's row or column
+    NSMutableArray *_sectionStarts; // per section, where its first line begins (an NSNumber, along the flow)
+    NSSize _contentSize;
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewFlowLayoutReserved, 44)
 }
 
 @property NSSize itemSize;
+@property NSSize estimatedItemSize;
 @property NSEdgeInsets sectionInset;
 @property CGFloat minimumLineSpacing;
 @property CGFloat minimumInteritemSpacing;
+@property NSCollectionViewScrollDirection scrollDirection;
+@property NSSize headerReferenceSize;
+@property NSSize footerReferenceSize;
 
 @end
 

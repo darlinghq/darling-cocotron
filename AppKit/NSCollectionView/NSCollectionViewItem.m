@@ -56,4 +56,49 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _isSelected = value;
 }
 
+- (NSCollectionViewItemHighlightState) highlightState {
+    return (NSCollectionViewItemHighlightState) _highlightState;
+}
+
+- (void) setHighlightState: (NSCollectionViewItemHighlightState) state {
+    _highlightState = (unsigned char) state;
+}
+
+- (void) dealloc {
+    if (NS_EXTRA_ALLOCATED(NSCollectionViewItem, self)) {
+        [NS_EXTRA(NSCollectionViewItem, self)->_imageView release];
+        [NS_EXTRA(NSCollectionViewItem, self)->_textField release];
+    }
+    NS_EXTRA_FREE(NSCollectionViewItem, self);
+    [super dealloc];
+}
+
+- (NSImageView *) imageView {
+    return NS_EXTRA(NSCollectionViewItem, self)->_imageView;
+}
+
+- (void) setImageView: (NSImageView *) view {
+    [view retain];
+    [NS_EXTRA(NSCollectionViewItem, self)->_imageView release];
+    NS_EXTRA(NSCollectionViewItem, self)->_imageView = view;
+}
+
+- (NSTextField *) textField {
+    return NS_EXTRA(NSCollectionViewItem, self)->_textField;
+}
+
+- (void) setTextField: (NSTextField *) field {
+    [field retain];
+    [NS_EXTRA(NSCollectionViewItem, self)->_textField release];
+    NS_EXTRA(NSCollectionViewItem, self)->_textField = field;
+}
+
+- (void) prepareForReuse {
+}
+
+// Set by the collection view that shows the item; it doesn't retain the collection view
+- (void) _setCollectionView: (NSCollectionView *) collectionView {
+    _collectionView = collectionView;
+}
+
 @end

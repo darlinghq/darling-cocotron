@@ -361,7 +361,19 @@ static NSDisplay *processDisplay = nil;
         *dy = (int32_t) wholeY;
 }
 
+// The backends post the input devices' events here; mouse motion is coalesced
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
+    [self _postEvent: event atStart: atStart coalesce: YES];
+}
+
+// QUIRK: what an application posts with -[NSApplication postEvent:atStart:] is queued as it is: posted drags are
+// dequeued one by one, never coalesced. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-posted-events-not-coalesced.m
+- (void) _postEventWithoutCoalescing: (NSEvent *) event atStart: (BOOL) atStart {
+    [self _postEvent: event atStart: atStart coalesce: NO];
+}
+
+- (void) _postEvent: (NSEvent *) event atStart: (BOOL) atStart coalesce: (BOOL) coalesce {
     // Callable from any thread
     [_eventQueueLock lock];
     @try {
@@ -369,7 +381,7 @@ static NSDisplay *processDisplay = nil;
 
         // A moved or dragged event replaces the one still queued last for the
         // same window and type.
-        if (!atStart && [NSEvent isMouseCoalescingEnabled]) {
+        if (coalesce && !atStart && [NSEvent isMouseCoalescingEnabled]) {
             NSEventType type = [event type];
             if (type == NSMouseMoved || type == NSLeftMouseDragged ||
                 type == NSRightMouseDragged || type == NSOtherMouseDragged) {
