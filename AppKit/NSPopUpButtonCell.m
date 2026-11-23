@@ -303,15 +303,12 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
 
 - (void) _addItemWithTitle: (NSString *) title {
 
-    // A separator item has an empty title, so it is never the duplicate to remove: look for the
-    // first item that is not a separator.
-    NSMenuItem *duplicate = nil;
-    for (NSMenuItem *candidate in [_menu itemArray]) {
-        if (![candidate isSeparatorItem] && [[candidate title] isEqualToString: title]) {
-            duplicate = candidate;
-            break;
-        }
-    }
+    // QUIRK: an item with an empty title never replaces an earlier one: only titled items are
+    // de-duplicated, so adding @"" to a pop-up that holds a separator or an empty-titled item
+    // keeps both. Not documented. Evidence: black-box observation of NSPopUpButtonCell on
+    // macOS 26.7.3 and 10.14.4 (tier 2): [A]+A has 1 item, []+@"" 2, [A,@"",B]+@"" 4.
+    // Test: appkit-nsmenuitem-title-never-nil (quirk: empty titles are not de-duplicated)
+    NSMenuItem *duplicate = [title length] > 0 ? [_menu itemWithTitle: title] : nil;
     if (duplicate != nil) {
         // don't allow items with duplicate titles by default
         [_menu removeItem: duplicate];
@@ -393,8 +390,16 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     [self selectItem: item];
 }
 
+// QUIRK: a title that only matches a separator item (an empty title) selects nothing: the index
+// of the selected item becomes -1. Not documented. Evidence: black-box observation of
+// NSPopUpButtonCell on macOS 26.7.3 and 10.14.4 (tier 2), [A, separator] with @"".
+// Test: appkit-nsmenuitem-title-never-nil (quirk: selecting the title of a separator)
 - (void) selectItemWithTitle: (NSString *) title {
-    [self selectItemAtIndex: [self indexOfItemWithTitle: title]];
+    NSInteger index = [self indexOfItemWithTitle: title];
+
+    if (index >= 0 && [[self itemAtIndex: index] isSeparatorItem])
+        index = -1;
+    [self selectItemAtIndex: index];
 }
 
 - (BOOL) selectItemWithTag: (NSInteger) tag {

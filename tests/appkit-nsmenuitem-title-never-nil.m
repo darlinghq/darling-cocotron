@@ -5,13 +5,12 @@
 // separator item), NSMenu item(withTitle:) and indexOfItem(withTitle:) (the first item with a
 // given title), and init(title:action:keyEquivalent:) (the title must not be nil; the caller
 // passes an empty NSString for an item without a title). What is checked from that: -title never
-// answers nil, for a titled item, an item created with an empty title, a separator item and an
-// item whose title was set to nil; a titled item answers its title unchanged; a separator item
+// answers nil, for a titled item, an item created with an empty title, and a separator item; a titled item answers its title unchanged; a separator item
 // stays a separator item; the first item whose title is @"" in a menu is found by the title
 // lookups, a separator included (that last point is a reading of the pages together, not a
-// sentence of any one of them); adding an empty-titled item to a pop-up does not remove a
-// separator.
-// nil is passed through a variable, since the parameter is nonnull in the header.
+// sentence of any one of them); the pop-up quirks below (empty titles are not de-duplicated, a separator
+// title selects nothing) are observations of macOS 26.7.3 and 10.14.4. A title set to nil is not
+// tested: macOS raises an assertion for it.
 // No ARC.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -42,11 +41,6 @@ int main(void) {
         report(isEmptyString([separator title]), "separator item answers a non-nil empty string");
         report([separator isSeparatorItem], "separator item is still a separator");
 
-        id nilTitle = nil;
-        NSMenuItem *cleared = [[[NSMenuItem alloc] initWithTitle: @"Gone" action: NULL keyEquivalent: @""] autorelease];
-        [cleared setTitle: nilTitle];
-        report(isEmptyString([cleared title]), "item whose title was set to nil answers a non-nil empty string");
-
         NSMenu *menu = [[[NSMenu alloc] initWithTitle: @"Test"] autorelease];
         [menu addItem: titled];
         NSMenuItem *separatorInMenu = [NSMenuItem separatorItem];
@@ -59,6 +53,8 @@ int main(void) {
         report([menu indexOfItemWithTitle: @"Open"] == 0, "indexOfItemWithTitle: still finds a titled item");
         report([[separator description] length] > 0, "description of a separator item works");
 
+        // QUIRK tests (see NSPopUpButtonCell.m): macOS 26.7.3 and 10.14.4 do not de-duplicate empty titles, so
+        // adding @"" keeps a separator and an earlier empty-titled item, and itemTitles is all strings.
         NSPopUpButtonCell *cell = [[[NSPopUpButtonCell alloc] initTextCell: @"" pullsDown: NO] autorelease];
         [cell addItemWithTitle: @"First"];
         [[cell menu] addItem: [NSMenuItem separatorItem]];
@@ -66,19 +62,35 @@ int main(void) {
         NSArray *cellTitles = [cell itemTitles];
         report([cellTitles count] == 3 && [[cellTitles objectAtIndex: 1] isEqual: @""] && [[cellTitles objectAtIndex: 2] isEqual: @""] &&
                [[[cell menu] itemAtIndex: 1] isSeparatorItem],
-               "adding an empty-titled item to a pop-up keeps its separator, and itemTitles is all strings");
+               "quirk: adding an empty-titled item to a pop-up keeps its separator, and itemTitles is all strings");
 
         NSPopUpButtonCell *second = [[[NSPopUpButtonCell alloc] initTextCell: @"" pullsDown: NO] autorelease];
         [[second menu] addItem: [NSMenuItem separatorItem]];
         [second addItemWithTitle: @""];
-        // Retained so a new item cannot reuse its address and defeat the identity check below.
-        NSMenuItem *oldEmpty = [[[second menu] itemAtIndex: 1] retain];
         [second addItemWithTitle: @""];
-        report([[second menu] numberOfItems] == 2 && [[[second menu] itemAtIndex: 0] isSeparatorItem] &&
-               ![[[second menu] itemAtIndex: 1] isSeparatorItem] && [[second menu] itemAtIndex: 1] != oldEmpty &&
-               [[second menu] indexOfItem: oldEmpty] == -1,
-               "adding an empty-titled item to [separator, empty-titled] replaces the old empty-titled item and keeps the separator");
-        [oldEmpty release];
+        report([[second menu] numberOfItems] == 3 && [[[second menu] itemAtIndex: 0] isSeparatorItem] &&
+               ![[[second menu] itemAtIndex: 1] isSeparatorItem] && ![[[second menu] itemAtIndex: 2] isSeparatorItem],
+               "quirk: empty titles are not de-duplicated, [separator, empty] + empty has three items");
+
+        // titled items are still de-duplicated, also behind a separator
+        NSPopUpButtonCell *dedupe = [[[NSPopUpButtonCell alloc] initTextCell: @"" pullsDown: NO] autorelease];
+        [dedupe addItemWithTitle: @"A"];
+        [[dedupe menu] addItem: [NSMenuItem separatorItem]];
+        [dedupe addItemWithTitle: @"B"];
+        [dedupe addItemWithTitle: @"B"];
+        [dedupe addItemWithTitle: @"A"];
+        report([[dedupe menu] numberOfItems] == 3 && [[[dedupe menu] itemAtIndex: 0] isSeparatorItem] &&
+               [[dedupe itemTitles] isEqual: @[@"", @"B", @"A"]],
+               "an item with an existing title replaces the earlier one");
+
+        // a title that only matches a separator selects nothing (quirk), removing it removes the separator
+        NSPopUpButtonCell *select = [[[NSPopUpButtonCell alloc] initTextCell: @"" pullsDown: NO] autorelease];
+        [select addItemWithTitle: @"A"];
+        [[select menu] addItem: [NSMenuItem separatorItem]];
+        [select selectItemWithTitle: @""];
+        report([select indexOfSelectedItem] == -1, "quirk: selecting the title of a separator leaves no item selected");
+        [select removeItemWithTitle: @""];
+        report([[select menu] numberOfItems] == 1, "removeItemWithTitle:@\"\" removes the separator");
     }
     return failures != 0;
 }
