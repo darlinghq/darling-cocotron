@@ -689,9 +689,11 @@ static NSString *extensionForAllowedType(NSString *type) {
 }
 
 - (void) setAccessoryView: (NSView *) view {
-    view = [view retain];
-    [_accessoryView release];
-    _accessoryView = view;
+    NSView *old = _accessoryView;
+    _accessoryView = [view retain];
+    // The navigation puts the view into the panel, below the file list.
+    [[_NSSavePanelNavigation navigationForPanel: self] accessoryViewDidChangeFrom: old];
+    [old release];
 }
 
 - (void) setCanCreateDirectories: (BOOL) value {
