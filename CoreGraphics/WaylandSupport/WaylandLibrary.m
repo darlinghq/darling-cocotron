@@ -396,6 +396,7 @@ bool WaylandCheckOpcodes(void) {
             {&xdg_toplevel_interface, false, WP_TOPLEVEL_SET_MINIMIZED, "set_minimized"},
             {&xdg_toplevel_interface, true, WP_TOPLEVEL_EV_CONFIGURE, "configure"},
             {&xdg_toplevel_interface, true, WP_TOPLEVEL_EV_CLOSE, "close"},
+            {&xdg_toplevel_interface, true, WP_TOPLEVEL_EV_WM_CAPABILITIES, "wm_capabilities"},
             {&zxdg_decoration_manager_v1_interface, false,
              WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION, "get_toplevel_decoration"},
             {&zxdg_toplevel_decoration_v1_interface, false,

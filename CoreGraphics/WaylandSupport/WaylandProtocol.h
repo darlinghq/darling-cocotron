@@ -285,6 +285,8 @@ enum {
     WP_TOPLEVEL_SET_MINIMIZED = 13,
     WP_TOPLEVEL_EV_CONFIGURE = 0,
     WP_TOPLEVEL_EV_CLOSE = 1,
+    WP_TOPLEVEL_EV_WM_CAPABILITIES = 3, /* xdg_toplevel version 5 */
+    WP_TOPLEVEL_CAPABILITY_MINIMIZE = 4, /* wm_capabilities: set_minimized is available */
 
     WP_LAYER_SHELL_GET_LAYER_SURFACE = 0,
     WP_LAYER_SURFACE_SET_SIZE = 0,
@@ -367,6 +369,10 @@ enum {
     WP_POINTER_BUTTON_STATE_PRESSED = 1,
     WP_POINTER_AXIS_VERTICAL_SCROLL = 0,
     WP_POINTER_AXIS_HORIZONTAL_SCROLL = 1,
+    // wl_pointer.axis_source: the finger source is a touch surface. Value from the Wayland core
+    // protocol, https://gitlab.freedesktop.org/wayland/wayland/-/blob/main/protocol/wayland.xml
+    // (also https://wayland.app/protocols/wayland#wl_pointer).
+    WP_POINTER_AXIS_SOURCE_FINGER = 1,
     WP_KEYBOARD_KEYMAP_FORMAT_NO_KEYMAP = 0,
     WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1 = 1,
     WP_KEYBOARD_KEY_STATE_PRESSED = 1,

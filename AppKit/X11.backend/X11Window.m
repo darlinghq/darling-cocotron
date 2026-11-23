@@ -791,14 +791,52 @@ static NSData *makeWindowIcon(X11Display *display) {
     return _styleMask;
 }
 
+// ICCCM 4.1.2.3 minimum and maximum sizes for a resizable window. A minimum of zero and a maximum of
+// zero or too large for a window (the FLT_MAX of an unset maximum) are no limit, and a limit is
+// hinted only when it applies in some dimension. The hints are in device pixels too.
+- (void) addSizeLimitsToHints: (XSizeHints *) sh {
+    if (_delegate == nil)
+        return;
+    NSSize minimum = [_delegate _minFrameSize];
+    NSSize maximum = [_delegate _maxFrameSize];
+    const CGFloat largest = 65535;
+    // -deviceSize: makes a zero extent one pixel, which for a limit means none.
+    NSSize deviceMinimum = [self deviceSize: minimum];
+    NSSize deviceMaximum = [self deviceSize: maximum];
+
+    if (minimum.width > 0 || minimum.height > 0) {
+        sh->flags |= PMinSize;
+        sh->min_width = minimum.width > 0 ? MIN(deviceMinimum.width, largest) : 1;
+        sh->min_height = minimum.height > 0 ? MIN(deviceMinimum.height, largest) : 1;
+    }
+    BOOL limitedWidth = maximum.width > 0 && deviceMaximum.width < largest;
+    BOOL limitedHeight = maximum.height > 0 && deviceMaximum.height < largest;
+    if (limitedWidth || limitedHeight) {
+        sh->flags |= PMaxSize;
+        // A maximum below the minimum would make the hints inconsistent.
+        sh->max_width = limitedWidth ? MAX(deviceMaximum.width, sh->min_width) : largest;
+        sh->max_height = limitedHeight ? MAX(deviceMaximum.height, sh->min_height) : largest;
+    }
+}
+
+// NSWindow's size limits changed (see NSWindow_sizeLimits in NSWindow-Private.h).
+- (void) sizeLimitsChanged {
+    if (_window == 0)
+        return;
+    [self updateSizeHints: _styleMask];
+    XFlush(_display);
+}
+
 // The mask is passed in rather than read from _styleMask because
 // -setStyleMask: hands the new mask here before it stores it. The hinted size is
 // _frame's, so a caller that just resized has to re-issue these.
 - (void) updateSizeHints: (NSUInteger) mask {
     XSizeHints *sh = XAllocSizeHints();
     if (mask & NSWindowStyleMaskResizable) {
-        // Make resizable
+        // Make resizable, within the limits NSWindow derives from minSize, maxSize, contentMinSize
+        // and contentMaxSize.
         sh->flags = 0;
+        [self addSizeLimitsToHints: sh];
     } else {
         // Make non-resizable
         sh->flags = PMinSize | PMaxSize;

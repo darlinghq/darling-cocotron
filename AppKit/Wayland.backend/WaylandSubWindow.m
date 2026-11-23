@@ -351,6 +351,17 @@ static BOOL validFrame(CGRect frame) {
     [[_parent waylandDisplay] flush];
 }
 
+- (void) parentSurfaceWillBeReplaced {
+    [self removeRole];
+    [self detachMetalSubsurfaces];
+}
+
+// An EGL child's subsurface is made again by its next swap (see -flush); a Metal layer's at once.
+- (void) parentSurfaceReplaced {
+    if (_visible)
+        [self attachMetalSubsurfaces];
+}
+
 - (void) attachMetalSubsurfaces {
     for (CAMetalLayer *layer in [[_metalSurfaces keyEnumerator] allObjects]) {
         WaylandMetalSurface *metal = [_metalSurfaces objectForKey: layer];

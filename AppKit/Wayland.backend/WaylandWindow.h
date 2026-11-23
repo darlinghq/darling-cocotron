@@ -34,6 +34,14 @@ struct WaylandBuffer {
     BOOL busy; // attached and not yet released by the compositor
 };
 
+// The role (xdg-shell or layer-shell) a window's wl_surface was given.
+typedef enum {
+    WaylandSurfaceRoleNone,
+    WaylandSurfaceRoleToplevel,
+    WaylandSurfaceRolePopup,
+    WaylandSurfaceRoleLayer,
+} WaylandSurfaceRole;
+
 // A top-level window: an xdg_toplevel whose content is Onyx2D's CPU rendering,
 // copied into wl_shm buffers.
 @interface WaylandWindow : CGWindow {
@@ -55,6 +63,8 @@ struct WaylandBuffer {
     BOOL _hasShadow;
 
     struct wl_proxy *_surface;
+    // The role of _surface (see -prepareSurfaceForRole:): a wl_surface keeps its role for life.
+    WaylandSurfaceRole _surfaceRole;
     struct wl_proxy *_xdgSurface;
     struct wl_proxy *_toplevel;
     // The menu bar, when the compositor has wlr-layer-shell: it has this role instead of the xdg ones.
@@ -78,6 +88,13 @@ struct WaylandBuffer {
     // for instance because it is covered or its workspace is not shown.
     BOOL _pendingSuspended, _suspended;
     BOOL _mapped;
+    // The window was sent -miniaturize (xdg_toplevel.set_minimized) and has not been shown again
+    // since; xdg-shell cannot tell a client whether a toplevel is minimized (see -miniaturize).
+    BOOL _minimized;
+    // Whether the compositor advertised that it minimizes toplevels (xdg_toplevel wm_capabilities,
+    // version 5): one that did not ignores set_minimized. The event applies with the configure that
+    // follows it.
+    BOOL _minimizeAdvertised, _pendingMinimizeAdvertised;
     // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
     BOOL _shouldBeMapped;
     BOOL _fullyTransparent;
