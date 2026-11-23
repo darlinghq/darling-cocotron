@@ -1412,8 +1412,17 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [_headerView setNeedsDisplay: YES];
 }
 
+// Hidden columns are left out of the set: https://developer.apple.com/documentation/appkit/nstableview/columnindexes(in:)
+// says columns that are hidden are not included, unlike the range columnsInRect: gives.
 - (NSIndexSet *) columnIndexesInRect: (NSRect) rect {
-    return [NSIndexSet indexSetWithIndexesInRange: [self columnsInRect: rect]];
+    NSRange range = [self columnsInRect: rect];
+    NSMutableIndexSet *result = [NSMutableIndexSet indexSet];
+    NSUInteger i;
+
+    for (i = range.location; i < NSMaxRange(range); i++)
+        if (![[_tableColumns objectAtIndex: i] isHidden])
+            [result addIndex: i];
+    return result;
 }
 
 - (void) deselectRow: (NSInteger) row {

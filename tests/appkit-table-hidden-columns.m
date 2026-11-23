@@ -137,6 +137,21 @@ static void test_ranges_over_whole_rects(void)
     CHECK(two.location == 0 && two.length == 2);
 }
 
+// Documented (https://developer.apple.com/documentation/appkit/nstableview/columnindexes(in:)): the index set
+// holds the columns that intersect the rect and are not hidden, however many hidden ones the range holds
+static void test_column_indexes_leave_out_hidden_columns(void)
+{
+    setup();
+    [column(1) setHidden:YES];
+    NSIndexSet *all = [table columnIndexesInRect:NSMakeRect(0, 0, 400, 20)];
+    CHECK([all count] == 2 && [all containsIndex:0] && [all containsIndex:2] && ![all containsIndex:1]);
+    [column(2) setHidden:YES];
+    all = [table columnIndexesInRect:NSMakeRect(0, 0, 400, 20)];
+    CHECK([all count] == 1 && [all containsIndex:0]);
+    [column(0) setHidden:YES];
+    CHECK([[table columnIndexesInRect:NSMakeRect(0, 0, 400, 20)] count] == 0);
+}
+
 static void test_a_hidden_first_column(void)
 {
     setup();
@@ -207,6 +222,7 @@ int main(void)
         test_rects_close_the_gap();
         test_a_point_is_never_in_a_hidden_column();
         test_ranges_over_whole_rects();
+        test_column_indexes_leave_out_hidden_columns();
         test_a_hidden_first_column();
         test_unhiding_restores_the_layout();
         test_size_last_column_to_fit();
