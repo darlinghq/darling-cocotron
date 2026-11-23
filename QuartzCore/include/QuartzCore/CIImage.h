@@ -1,16 +1,3 @@
-#import <CoreGraphics/CoreGraphics.h>
-#import <Foundation/NSObject.h>
-
-@class CIFilter;
-
-@interface CIImage : NSObject {
-    CGImageRef _cgImage;
-    CIFilter *_filter;
-}
-
-+ (CIImage *) emptyImage;
-
-- initWithCGImage: (CGImageRef) cgImage;
-- (CGRect) extent;
-
-@end
+/* QuartzCore re-exports CoreImage, which implements this class (the sources here are not
+   built). One declaration, as in Apple's SDK, so code that sees both frameworks agrees. */
+#import <CoreImage/CIImage.h>
