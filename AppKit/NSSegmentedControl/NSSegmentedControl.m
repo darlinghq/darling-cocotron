@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSSegmentedCell (PrivateToControlView)
 - (void) _wasDrawnWithFrame: (NSRect) cellFrame inView: (NSView *) controlView;
+- (BOOL) _showsMenuIndicatorForSegment: (NSInteger) segment;
+- (void) _setShowsMenuIndicator: (BOOL) flag forSegment: (NSInteger) segment;
 @end
 
 @implementation NSSegmentedControl
@@ -80,6 +82,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (NSMenu *) menuForSegment: (NSInteger) segment {
     return [_cell menuForSegment: segment];
+}
+
+// The documentation gives the two methods (macOS 10.13) a signature and nothing more: no default, no effect
+// on drawing, nothing about a segment index out of range.
+// GUESS: the default is NO; a segment index out of range raises NSRangeException, as for the other
+// per-segment properties; the indicator is only stored, nothing is drawn.
+- (BOOL) showsMenuIndicatorForSegment: (NSInteger) segment {
+    return [_cell _showsMenuIndicatorForSegment: segment];
+}
+
+- (void) setShowsMenuIndicator: (BOOL) showsMenuIndicator forSegment: (NSInteger) segment {
+    [_cell _setShowsMenuIndicator: showsMenuIndicator forSegment: segment];
 }
 
 - (NSString *) toolTipForSegment: (NSInteger) segment {
