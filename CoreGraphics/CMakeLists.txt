@@ -43,6 +43,7 @@ set_property(SOURCE
 	CGPDFContext.m
 	CGPDFDictionary.m
 	CGPDFDocument.m
+	CGPDFObject.m
 	CGPDFOperatorTable.m
 	CGPDFPage.m
 	CGPDFScanner.m
@@ -104,6 +105,7 @@ set(CoreGraphics_sources
 	CGPDFContext.m
 	CGPDFDictionary.m
 	CGPDFDocument.m
+	CGPDFObject.m
 	CGPDFOperatorTable.m
 	CGPDFPage.m
 	CGPDFScanner.m
