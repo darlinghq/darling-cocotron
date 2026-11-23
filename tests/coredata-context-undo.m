@@ -131,6 +131,20 @@ int main(int argc, char **argv) {
         CHECK([context save:NULL]);
         [undoManager removeAllActions];
 
+        /* changes without an open group on a manager that does not group by event do not raise, and are undone */
+        NSUndoManager *plain = [[NSUndoManager alloc] init];
+        [plain setGroupsByEvent:NO];
+        context.undoManager = plain;
+        [note setValue:@"p" forKey:@"text"];
+        [note setValue:@"q" forKey:@"text"];
+        [context processPendingChanges];
+        CHECK([plain canUndo]);
+        for (int i = 0; i < 4 && [plain canUndo]; i++)
+            [context undo];
+        CHECK([[note valueForKey:@"text"] isEqual:@"f"]);
+        CHECK(![context hasChanges]);
+        context.undoManager = undoManager;
+
         /* several groups are undone one at a time, the last change first */
         [undoManager beginUndoGrouping];
         [note setValue:@"x" forKey:@"text"];

@@ -1070,7 +1070,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     _hasChanges = YES;
     [_pendingInserted addObject:object];
     [self _registerObject:object];
-    [_undoManager registerUndoWithTarget: _undoTarget selector: @selector(undoInsert:) object: object];
+    [self _registerUndoWithSelector: @selector(undoInsert:) object: object];
     [self _requestProcessPendingChanges];
 }
 
@@ -1083,7 +1083,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
         [object setValue:([relationship isToMany] ? (id)[NSSet set] : nil) forKey:[relationship name]];
     }
     [self _markDeleted:object];
-    [_undoManager registerUndoWithTarget: _undoTarget selector: @selector(undoDelete:) object: object];
+    [self _registerUndoWithSelector: @selector(undoDelete:) object: object];
 }
 
 // The undo and redo of insertions and deletions (see -undo). Undoing an insertion forgets the
@@ -1091,6 +1091,19 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
 // the object a registered object again, redoing it deletes it. Each records the inverse with the
 // undo manager, which files it as the redo or the undo according to the manager's state. An
 // object that the context has meanwhile saved or lost is left alone.
+// Records an action with the undo manager. A manager that does not group by event and has no open group
+// would raise: the context then records each action in a group of its own, as macOS does (observed on
+// macOS 10.14.4 and 26.7.3, probe und2.m of batch11b: an undo step per change, no group left open).
+- (void) _registerUndoWithSelector: (SEL) selector object: (id) object {
+    BOOL ownGroup = [_undoManager groupingLevel] == 0 && ![_undoManager groupsByEvent];
+
+    if (ownGroup)
+        [_undoManager beginUndoGrouping];
+    [_undoManager registerUndoWithTarget: _undoTarget selector: selector object: object];
+    if (ownGroup)
+        [_undoManager endUndoGrouping];
+}
+
 - (void) _undoInsertOfObject: (NSManagedObject *) object {
     if (![_insertedObjects containsObject: object])
         return;
@@ -1104,7 +1117,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     [_pendingUpdated removeObject: object];
     [object _setInserted: NO updated: NO deleted: NO];
     [self _recomputeHasChanges];
-    [_undoManager registerUndoWithTarget: _undoTarget selector: @selector(redoInsert:) object: object];
+    [self _registerUndoWithSelector: @selector(redoInsert:) object: object];
     [self _requestProcessPendingChanges];
 }
 
@@ -1121,7 +1134,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     [_pendingDeleted removeObject: object];
     [object _setInserted: [_insertedObjects containsObject: object] updated: NO deleted: NO];
     [self _recomputeHasChanges];
-    [_undoManager registerUndoWithTarget: _undoTarget selector: @selector(redoDelete:) object: object];
+    [self _registerUndoWithSelector: @selector(redoDelete:) object: object];
     [self _requestProcessPendingChanges];
 }
 
@@ -1278,11 +1291,10 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
         if (_undoManager != nil && [[[object entity] attributesByName] objectForKey: keyPath] != nil) {
             id old = [change objectForKey: NSKeyValueChangeOldKey];
 
-            [_undoManager registerUndoWithTarget: _undoTarget
-                                        selector: @selector(undoChange:)
-                                          object: [NSDictionary dictionaryWithObjectsAndKeys:
-                                                                        object, @"object", keyPath, @"key",
-                                                                        old ?: [NSNull null], @"value", nil]];
+            [self _registerUndoWithSelector: @selector(undoChange:)
+                                     object: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                                   object, @"object", keyPath, @"key",
+                                                                   old ?: [NSNull null], @"value", nil]];
         }
         _hasChanges = YES;
         [self _requestProcessPendingChanges];
