@@ -44,7 +44,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSSheetContext.h>
 #import <AppKit/NSSpellChecker.h>
+#import <AppKit/NSStatusBar_(Private).h>
 #import <AppKit/NSStoryboard-Private.h>
+#import <AppKit/NSToolTipWindow.h>
 #import <AppKit/NSSystemInfoPanel.h>
 #import <AppKit/NSWindow-Private.h>
 #import <AppKit/NSWorkspace.h>
@@ -1441,34 +1443,127 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
     }
 }
 
+// Windows that never count as one of the application's windows when deciding
+// whether the last one is gone: panels, which include the menu, pop-up and
+// alert windows, sheets, and the application's internal helper windows.
+//
+// QUIRK: a panel or sheet that is left does not keep the application from being
+// asked, but a borderless or floating ordinary window, one that is minimized, or
+// one without a close button does. Not documented. Evidence: black-box
+// observation on macOS 26.7.3 (tier 2), delegate answering YES.
+// Test: tests/appkit-terminate-after-last-window.sh, the "panel left over",
+// "borderless window left over" and "miniaturized window" cases.
+static BOOL windowCountsAsApplicationWindow(NSWindow *window) {
+    if ([window isKindOfClass: [NSPanel class]] || [window isSheet] ||
+        [window isKindOfClass: [NSToolTipWindow class]] ||
+        [window isKindOfClass: NSClassFromString(@"NSMenuBarWindow")] ||
+        [window isKindOfClass: NSClassFromString(@"NSWindowDragImageWindow")])
+        return NO;
+    return YES;
+}
+
+- (void) _scheduleTerminateCheck {
+    // After the close or order-out has completed, on the next run-loop pass.
+    [self performSelector: @selector(_checkForTerminate)
+               withObject: nil
+               afterDelay: 0.0];
+}
+
 - (void) _windowWillClose: (NSNotification *) note {
-    if (![[note object] isKindOfClass: [NSPanel class]])
-        NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck = YES;
+    NSWindow *window = [note object];
+
+    if (!windowCountsAsApplicationWindow(window))
+        return;
+    NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck = YES;
+    // A window without a title bar or close button is not one that the user
+    // closes to leave the application.
+    if ([window _isClosingByUser] &&
+        ([window styleMask] & NSTitledWindowMask) &&
+        ([window styleMask] & NSClosableWindowMask))
+        NS_EXTRA(NSApplication, self)->_windowClosedByUserSinceTerminateCheck = YES;
+    [self _scheduleTerminateCheck];
+}
+
+// QUIRK: ordering the last window out, not only closing it, makes the delegate
+// be asked -applicationShouldTerminateAfterLastWindowClosed:. This is not
+// documented; the documentation speaks of closing. Evidence: black-box
+// observation on macOS 26.7.3 (tier 2): with a delegate answering YES, an
+// application whose only window was ordered out called
+// -applicationShouldTerminate: (and quit) just as when the window was closed,
+// also for the last of several windows ordered out one by one.
+// Test: tests/appkit-terminate-after-last-window.sh, "delegate YES: quits when
+// the last window is ordered out". It only concerns the delegate; the
+// TerminateAfterLastWindowClosed setting acts on closes by the user.
+- (void) _windowWasOrderedOut: (NSWindow *) window {
+    if (!windowCountsAsApplicationWindow(window))
+        return;
+    NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck = YES;
+    [self _scheduleTerminateCheck];
+}
+
+// The Darling setting TerminateAfterLastWindowClosed (boolean, off by default).
+// The application's own value wins; otherwise the user's org.darlinghq.AppKit
+// domain decides, so that it can be set for all applications.
+static BOOL terminateAfterLastWindowClosedSetting(void) {
+    CFStringRef key = CFSTR("TerminateAfterLastWindowClosed");
+    Boolean valid = false;
+    Boolean flag = CFPreferencesGetAppBooleanValue(
+            key, kCFPreferencesCurrentApplication, &valid);
+
+    if (!valid)
+        flag = CFPreferencesGetAppBooleanValue(
+                key, CFSTR("org.darlinghq.AppKit"), &valid);
+    return valid && flag;
 }
 
 // Terminates the application once its last window has been closed, if the
 // delegate asks for that. Hiding or never opening windows does not count.
+//
+// Mirrors macOS: when no window of the application is left on screen, after
+// a window was closed or ordered out, the delegate is asked
+// -applicationShouldTerminateAfterLastWindowClosed: and a YES makes the
+// application call -terminate:. Minimized windows, windows hidden by
+// deactivation and ordinary windows of any style still count as open.
+//
+// Darling has no Dock, so an application that stays running without a window
+// looks stuck on Linux desktops. With TerminateAfterLastWindowClosed set, a
+// regular application that does not implement the delegate method also calls
+// -terminate: when the user closes its last window. An application that
+// implements the method keeps its own decision, whichever way it answers.
 - (void) _checkForTerminate {
-    if (!NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck)
+    BOOL closed = NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck;
+    BOOL closedByUser = NS_EXTRA(NSApplication, self)->_windowClosedByUserSinceTerminateCheck;
+
+    if (!closed && !closedByUser)
         return;
     NS_EXTRA(NSApplication, self)->_windowClosedSinceTerminateCheck = NO;
+    NS_EXTRA(NSApplication, self)->_windowClosedByUserSinceTerminateCheck = NO;
+    // Documents closing as part of -terminate: are not the user leaving.
+    if (NS_EXTRA(NSApplication, self)->_terminateInProgress)
+        return;
 
     int count = [_windows count];
 
     while (--count >= 0) {
         NSWindow *check = [_windows objectAtIndex: count];
 
-        if ([check isKindOfClass: [NSPanel class]])
+        if (!windowCountsAsApplicationWindow(check))
             continue;
         if ([check isVisible] || [check _isHiddenForDeactivation])
             return;
     }
 
     if ([_delegate respondsToSelector: @selector
-                   (applicationShouldTerminateAfterLastWindowClosed:)] &&
-        [_delegate applicationShouldTerminateAfterLastWindowClosed: self]) {
-        [self terminate: self];
+                   (applicationShouldTerminateAfterLastWindowClosed:)]) {
+        if ([_delegate applicationShouldTerminateAfterLastWindowClosed: self])
+            [self terminate: self];
+        return;
     }
+
+    if (closedByUser && terminateAfterLastWindowClosedSetting() &&
+        [self activationPolicy] == NSApplicationActivationPolicyRegular &&
+        ![NSStatusBar _hasStatusItems])
+        [self terminate: self];
 }
 
 - (void) _checkForAppActivation {
@@ -2206,6 +2301,7 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 }
 
 - (void) terminate: sender {
+    NS_EXTRA(NSApplication, self)->_terminateInProgress = YES;
     // The windows are saved before the documents close them.
     NS_DURING [self _saveRestorableStateForTermination];
     NS_HANDLER [self reportException: localException];
@@ -2223,6 +2319,8 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
                  contextInfo: (void *) info
 {
     // callback method for terminate:
+    if (!didCloseAll)
+        NS_EXTRA(NSApplication, self)->_terminateInProgress = NO;
     if (didCloseAll) {
         if ([_delegate
                     respondsToSelector: @selector(applicationShouldTerminate:)])
@@ -2235,6 +2333,8 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 }
 
 - (void) replyToApplicationShouldTerminate: (BOOL) terminate {
+    // A cancelled termination ends here, and the application runs on.
+    NS_EXTRA(NSApplication, self)->_terminateInProgress = NO;
     if (terminate == YES) {
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationWillTerminateNotification

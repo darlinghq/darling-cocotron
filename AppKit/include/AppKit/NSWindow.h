@@ -322,6 +322,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         BOOL _useOptimizedDrawing;
         BOOL _releaseWhenClosed;
         BOOL _isClosed;
+        // YES while performClose: is closing the window on behalf of the user.
+        BOOL _closingByUser;
         BOOL _hidesOnDeactivate;
         BOOL _hiddenForDeactivate;
         BOOL _isActive;
