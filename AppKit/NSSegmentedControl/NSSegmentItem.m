@@ -97,6 +97,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _menu;
 }
 
+- (BOOL) showsMenuIndicator {
+    return _showsMenuIndicator;
+}
+
 - (NSString *) toolTip {
     return _toolTip;
 }
@@ -127,6 +131,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     label = [label copy];
     [_label release];
     _label = label;
+}
+
+- (void) setShowsMenuIndicator: (BOOL) flag {
+    _showsMenuIndicator = flag;
 }
 
 - (void) setMenu: (NSMenu *) menu {
