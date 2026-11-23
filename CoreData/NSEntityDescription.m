@@ -342,11 +342,28 @@ static BOOL isGeneratedManagedAccessor(IMP implementation) {
         [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
 
     NSString *name = [value copy];
+    // GUESS: a name another sub-entity of the same super-entity already has is refused, as for
+    // properties and model entities ("unique"); the pages do not cover this case.
+    NSEntityDescription *sibling = _superentity ? [_superentity->_subentities objectForKey:name] : nil;
+    if (sibling && sibling != self) {
+        [name release];
+        [NSException raise:NSInvalidArgumentException format:@"Sub-entity names must be unique within an entity."];
+    }
     @try {
         [_model _renameEntity:self from:_name to:name];
     } @catch (id exception) {
         [name release];
         @throw;
+    }
+    // subentitiesByName is keyed by the sub-entity names, so the super-entity follows a rename.
+    if (_superentity) {
+        NSMutableDictionary *rekeyed = [_superentity->_subentities mutableCopy];
+        if (_name)
+            [rekeyed removeObjectForKey:_name];
+        if (name)    // setName:nil was accepted before sub-entities existed; keep it working
+            [rekeyed setObject:self forKey:name];
+        [_superentity->_subentities release];
+        _superentity->_subentities = rekeyed;
     }
     [_name release];
     _name = name;
@@ -391,7 +408,34 @@ static BOOL isGeneratedManagedAccessor(IMP implementation) {
     if (_hasBeenInstantiated)
         [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
 
-    NSUnimplementedMethod();
+    // The hierarchy is built top-down: an entity's superentity can only be set by listing the
+    // entity among its superentity's subentities. GUESS: the documentation does not say which
+    // lists are invalid. Rejected here, before anything changes: a non-entity, an entity without a
+    // name, two entities with one name, the receiver or one of its ancestors (a cycle), an
+    // entity that already belongs to a different superentity (silently moving it was rejected
+    // because the old superentity would still list it), an entity whose model is in use (its
+    // hierarchy is frozen) and an entity of another model (as setEntities: refuses).
+    NSMutableDictionary *subentities = [NSMutableDictionary dictionary];
+    for (NSEntityDescription *entity in value) {
+        BOOL isAncestor = NO;
+        for (NSEntityDescription *ancestor = self; ancestor; ancestor = ancestor->_superentity)
+            if (ancestor == entity)
+                isAncestor = YES;
+        if (![entity isKindOfClass:[NSEntityDescription class]] || ![[entity name] length] ||
+            isAncestor || (entity->_superentity && entity->_superentity != self) ||
+            entity->_hasBeenInstantiated ||
+            (entity->_model && _model && entity->_model != _model) ||
+            [subentities objectForKey:[entity name]])
+            [NSException raise:NSInvalidArgumentException format:@"Invalid or duplicate sub-entity."];
+        [subentities setObject:entity forKey:[entity name]];
+    }
+    for (NSEntityDescription *entity in [_subentities allValues])
+        if ([subentities objectForKey:[entity name]] != entity)
+            entity->_superentity = nil;
+    for (NSEntityDescription *entity in [subentities allValues])
+        entity->_superentity = self;
+    [_subentities release];
+    _subentities = [subentities retain];
 }
 
 - (void) setUserInfo: (NSDictionary *) value {
@@ -408,8 +452,7 @@ static BOOL isGeneratedManagedAccessor(IMP implementation) {
 }
 
 - (NSDictionary *) subentitiesByName {
-    NSUnimplementedMethod();
-    return nil;
+    return [NSDictionary dictionaryWithDictionary:_subentities];
 }
 
 - (NSDictionary *) attributesByName {
