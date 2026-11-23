@@ -1,12 +1,11 @@
 // Copyright (C) 2026 Lubos Dolezel
 // NSMenuItem conforms to NSAccessibility and NSAccessibilityElement (documented in the
 // "Conforms To" list of NSMenuItem). Checks that the property setters of the protocol
-// are accepted and read back, that the role is the menu item role, that a copy does not
-// share what was set on the original, and that a separator item behaves the same.
-// The pages give no accessibility defaults for menu items; checks marked GUESS pin this
-// implementation's choice, not a documented value, and were not measured on macOS. Only
-// the existence of the protocols, of the NSAccessibilityMenuItemRole constant and of the
-// setters is documented; the label to AXDescription mapping is this repo's legacy mapping.
+// are accepted and read back, and that the role is the menu item role. The pages give no
+// accessibility defaults for menu items; the defaults checked below ("quirk") are observations of
+// NSMenuItem on macOS 26.7.3 (see NSAccessibilityProtocols.m): element, menu item role, the item's
+// title as title and label, owning menu as parent, no children (the submenu if there is one), zero frame.
+// A copy keeps the label that was set on the original and none of the other values.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
@@ -84,46 +83,55 @@ int main(void) {
         CHECK([item conformsToProtocol: @protocol(NSAccessibility)], "NSMenuItem conforms to NSAccessibility");
         CHECK([item conformsToProtocol: @protocol(NSAccessibilityElement)], "NSMenuItem conforms to NSAccessibilityElement");
 
-        // GUESS: the pages give no defaults. The role is the menu item role, the title is
-        // the item's, and the label, help and identifier are nil.
+        // quirk: defaults of a menu item
         CHECK_EQ([item accessibilityRole], NSAccessibilityMenuItemRole);
         CHECK_EQ([item accessibilityTitle], @"Open");
-        CHECK_EQ([item accessibilityLabel], nil);
+        CHECK_EQ([item accessibilityLabel], @"Open");
         CHECK_EQ([item accessibilityHelp], nil);
         CHECK_EQ([item accessibilityIdentifier], nil);
-        CHECK([item isAccessibilityElement], "GUESS: an item is an element");
+        CHECK_EQ([item accessibilityValue], nil);
+        CHECK([item isAccessibilityElement], "an item is an element");
         CHECK_EQ([item accessibilityParent], nil);
-        CHECK_EQ([item accessibilityChildren], nil);
-        CHECK(NSEqualRects([item accessibilityFrame], NSZeroRect), "GUESS: no frame until set");
-        CHECK([item isAccessibilityEnabled] == [item isEnabled], "GUESS: enabled follows -isEnabled");
+        CHECK_EQ([item accessibilityChildren], @[]);
+        CHECK_EQ([item accessibilityWindow], nil);
+        CHECK_EQ([item accessibilityTopLevelUIElement], nil);
+        CHECK(NSEqualRects([item accessibilityFrame], NSZeroRect), "no frame until set");
+        CHECK([item isAccessibilityEnabled] == [item isEnabled], "enabled follows -isEnabled");
 
-        // GUESS: the default title follows the item's title.
+        // the owning menu is the parent; a submenu is the only child
+        NSMenu *menu = [[[NSMenu alloc] initWithTitle: @"Menu"] autorelease];
+        [menu setAutoenablesItems: NO];
+        [menu addItem: item];
+        CHECK_EQ([item accessibilityParent], menu);
+        NSMenu *submenu = [[[NSMenu alloc] initWithTitle: @"Sub"] autorelease];
+        NSMenuItem *host = [[[NSMenuItem alloc] initWithTitle: @"Host" action: NULL keyEquivalent: @""] autorelease];
+        [host setSubmenu: submenu];
+        CHECK_EQ([host accessibilityChildren], @[submenu]);
+        [item setEnabled: NO];
+        CHECK(![item isAccessibilityEnabled], "a disabled item is not enabled");
+        [item setEnabled: YES];
+
+        // the default title and label follow the item's title
         [item setTitle: @"Close"];
         CHECK_EQ([item accessibilityTitle], @"Close");
+        CHECK_EQ([item accessibilityLabel], @"Close");
 
-        // A label round-trips. That the legacy description attribute reads it is this
-        // repo's mapping, not a documented contract.
+        // A label round-trips; setting the title to nil replaces the default and does not change the item's title.
         [item setAccessibilityLabel: @"Open a document"];
         CHECK_EQ([item accessibilityLabel], @"Open a document");
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-        CHECK_EQ([item accessibilityAttributeValue: NSAccessibilityDescriptionAttribute], @"Open a document");
-#pragma clang diagnostic pop
-
-        // Setting nil replaces the default; the title is not changed by the label.
         [item setAccessibilityTitle: nil];
         CHECK_EQ([item accessibilityTitle], nil);
         CHECK_EQ([item title], @"Close");
 
-        // A copy does not share what was set on the original, in either direction.
+        // quirk: a copy keeps the label and none of the other values, and does not share them afterwards
         NSMenuItem *original = [[[NSMenuItem alloc] initWithTitle: @"Save" action: NULL keyEquivalent: @""] autorelease];
         [original setAccessibilityLabel: @"Original label"];
         [original setAccessibilityHelp: @"Original help"];
         NSMenuItem *copy = [[original copy] autorelease];
         CHECK(copy != original, "a copy is a new object");
-        CHECK_EQ([copy accessibilityLabel], nil);
+        CHECK_EQ([copy accessibilityLabel], @"Original label");
         CHECK_EQ([copy accessibilityHelp], nil);
-        CHECK_EQ([copy accessibilityRole], NSAccessibilityMenuItemRole);  // GUESS: default role
+        CHECK_EQ([copy accessibilityRole], NSAccessibilityMenuItemRole);
         [copy setAccessibilityLabel: @"Copy label"];
         CHECK_EQ([original accessibilityLabel], @"Original label");
         CHECK_EQ([copy accessibilityLabel], @"Copy label");
@@ -133,21 +141,20 @@ int main(void) {
         // All the documented setters are accepted on a regular item.
         testSetters([[[NSMenuItem alloc] initWithTitle: @"Edit" action: NULL keyEquivalent: @""] autorelease]);
 
-        // A separator item takes the same properties.
+        // A separator item takes the same properties; its title and label are empty strings.
         NSMenuItem *separator = [NSMenuItem separatorItem];
         CHECK([separator isSeparatorItem], "a separator item");
-        CHECK_EQ([separator accessibilityRole], NSAccessibilityMenuItemRole);  // GUESS: not documented for separators
-        // GUESS: the title follows -title, whether or not that is nil for a separator.
-        CHECK_EQ([separator accessibilityTitle], [separator title]);
-        CHECK_EQ([separator accessibilityLabel], nil);
+        CHECK_EQ([separator accessibilityRole], NSAccessibilityMenuItemRole);
+        CHECK_EQ([separator accessibilityTitle], @"");
+        CHECK_EQ([separator accessibilityLabel], @"");
         [separator setAccessibilityLabel: @"Divider"];
         CHECK_EQ([separator accessibilityLabel], @"Divider");
         testSetters([NSMenuItem separatorItem]);
 
-        // A separator's copy is still a separator and starts without the label.
+        // A separator's copy is still a separator and keeps the label.
         NSMenuItem *separatorCopy = [[separator copy] autorelease];
         CHECK([separatorCopy isSeparatorItem], "the copy is a separator item");
-        CHECK_EQ([separatorCopy accessibilityLabel], nil);
+        CHECK_EQ([separatorCopy accessibilityLabel], @"Divider");
     }
     if (failures) {
         printf("%d failures\n", failures);
