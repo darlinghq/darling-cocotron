@@ -52,6 +52,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _isSelected = [decoder decodeBoolForKey: @"NSSegmentItemSelected"];
     _tag = [decoder decodeIntForKey: @"NSSegmentItemTag"];
     _width = [decoder decodeFloatForKey: @"NSSegmentItemWidth"];
+    // the key an archive carries on macOS 26.7.3 and 10.14.4 for a segment whose indicator is on (probe p769.m of
+    // batch 12a in mac-probes/cristim)
+    _showsMenuIndicator = [decoder decodeBoolForKey: @"NSSegmentItemShowMenuIndicator"];
     return self;
 }
 

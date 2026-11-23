@@ -84,10 +84,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return [_cell menuForSegment: segment];
 }
 
-// The documentation gives the two methods (macOS 10.13) a signature and nothing more: no default, no effect
-// on drawing, nothing about a segment index out of range.
-// GUESS: the default is NO; a segment index out of range raises NSRangeException, as for the other
-// per-segment properties; the indicator is only stored, nothing is drawn.
+// The documentation gives the two methods (macOS 10.13) a signature and nothing more. Observed on macOS 26.7.3 and
+// 10.14.4 (x86_64 and i386), probe p769.m of batch 12a in mac-probes/cristim: the default is NO, a segment index out
+// of range raises NSRangeException, a menu on the segment neither sets nor clears it, a segment added later starts
+// from NO, and the archive carries it (NSSegmentItemShowMenuIndicator, see NSSegmentItem). The indicator is only
+// stored, nothing is drawn.
 - (BOOL) showsMenuIndicatorForSegment: (NSInteger) segment {
     return [_cell _showsMenuIndicatorForSegment: segment];
 }

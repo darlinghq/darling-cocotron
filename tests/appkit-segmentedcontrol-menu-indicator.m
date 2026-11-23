@@ -3,15 +3,44 @@
 // -[NSSegmentedControl setShowsMenuIndicator:forSegment:] and showsMenuIndicatorForSegment:
 // (macOS 10.13). The documentation gives each a signature (a BOOL and a segment index) and
 // nothing more: no description, default, effect on drawing or behavior for an index out of range.
-// Everything marked GUESS pins this implementation's choice, not a documented or measured value:
-// the default is NO, an index out of range raises NSRangeException like the other per-segment
-// properties, and a segment's menu, tag, label, enabled and selected state are independent of it.
+// Observed on macOS 26.7.3 and 10.14.4 (x86_64 and i386; mac-probes/cristim/batch12a/p769.m): the default
+// is NO, an index out of range raises NSRangeException (also for a control with no segment), a segment's menu
+// (set or removed), tag, label, enabled and selected state are independent of it, segments added later start
+// from NO (also after the count was lowered and raised again), and an archive carries it in the segment item
+// under the key NSSegmentItemShowMenuIndicator.
 // Build: clang -fobjc-arc -framework AppKit appkit-segmentedcontrol-menu-indicator.m
 // Not covered: any indicator being drawn (the value is only stored). On master the selectors do
 // not exist: with ARC the test does not compile against master's header, without ARC the first
 // call raises an unrecognized selector.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
+#include <objc/message.h>
+
+// Stands in for the object in a keyed archive: it writes only the one key (as an archive of a program that
+// does not know the property would not have it, and as macOS writes it), and is decoded as the class under test.
+static NSString *standInKey;
+static BOOL standInValue;
+@interface ArchivedStandIn : NSObject <NSCoding>
+@end
+@implementation ArchivedStandIn
+- (void)encodeWithCoder:(NSCoder *)coder {
+    if (standInKey != nil)
+        [coder encodeBool:standInValue forKey:standInKey];
+}
+- (id)initWithCoder:(NSCoder *)coder { return [super init]; }
+@end
+
+static id decodedAs(Class cls, NSString *key, BOOL value) {
+    standInKey = key;
+    standInValue = value;
+    NSMutableData *data = [NSMutableData data];
+    NSKeyedArchiver *archiver = [[NSKeyedArchiver alloc] initForWritingWithMutableData:data];
+    [archiver encodeObject:[ArchivedStandIn new] forKey:@"root"];
+    [archiver finishEncoding];
+    NSKeyedUnarchiver *unarchiver = [[NSKeyedUnarchiver alloc] initForReadingWithData:data];
+    [unarchiver setClass:cls forClassName:@"ArchivedStandIn"];
+    return [unarchiver decodeObjectForKey:@"root"];
+}
 
 // the methods are macOS 10.13 API; the guest has them whatever the build's deployment target is
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
@@ -40,7 +69,7 @@ static BOOL raisesRange(void (^body)(void)) {
 static void checkControl(NSSegmentedControl *control) {
     [control setSegmentCount:3];
     for (NSInteger i = 0; i < 3; i++)
-        CHECK(![control showsMenuIndicatorForSegment:i]);          // GUESS: the default
+        CHECK(![control showsMenuIndicatorForSegment:i]);          // the default
 
     [control setShowsMenuIndicator:YES forSegment:1];
     CHECK([control showsMenuIndicatorForSegment:1]);
@@ -53,7 +82,7 @@ static void checkControl(NSSegmentedControl *control) {
     [control setShowsMenuIndicator:NO forSegment:2];
     CHECK(![control showsMenuIndicatorForSegment:2]);
 
-    // independent of the segment's other properties (GUESS)
+    // independent of the segment's other properties
     [control setShowsMenuIndicator:YES forSegment:0];
     NSMenu *menu = [[NSMenu alloc] initWithTitle:@"M"];
     [control setMenu:menu forSegment:0];
@@ -78,13 +107,19 @@ static void checkControl(NSSegmentedControl *control) {
     CHECK([control showsMenuIndicatorForSegment:1]);
     CHECK(![control showsMenuIndicatorForSegment:3]);
 
-    // GUESS: out of range raises, as the other per-segment properties do
+    // out of range raises
     CHECK(raisesRange(^{ (void)[control showsMenuIndicatorForSegment:4]; }));
     CHECK(raisesRange(^{ [control setShowsMenuIndicator:YES forSegment:-1]; }));
 }
 
 int main(void) {
     @autoreleasepool {
+        // the archive key of a segment item (NSSegmentItem is the class macOS archives a segment as)
+        Class itemClass = NSClassFromString(@"NSSegmentItem");
+        BOOL (*indicator)(id, SEL) = (BOOL (*)(id, SEL))objc_msgSend;
+        CHECK(!indicator(decodedAs(itemClass, nil, NO), @selector(showsMenuIndicator)));
+        CHECK(indicator(decodedAs(itemClass, @"NSSegmentItemShowMenuIndicator", YES), @selector(showsMenuIndicator)));
+
         CHECK([NSSegmentedControl instancesRespondToSelector:@selector(showsMenuIndicatorForSegment:)]);
         CHECK([NSSegmentedControl instancesRespondToSelector:@selector(setShowsMenuIndicator:forSegment:)]);
 

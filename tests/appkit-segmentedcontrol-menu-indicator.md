@@ -11,8 +11,8 @@ segment, segments not affecting one another, the value and the segment's menu, t
 enabled and selected state not overwriting one another, a segment added later, two controls not
 sharing it.
 
-Marked GUESS in the source and test: the default is `NO`; an index out of range raises
-`NSRangeException` (as the other per-segment properties do); the other segment properties are
-independent of the value. On master the selectors do not exist: with ARC the test does not
+Observed on macOS 26.7.3 and 10.14.4 (probe `p769.m` of batch 12a): the default is `NO`; an index out
+of range raises `NSRangeException`; the other segment properties are independent of the value; an
+archive carries it in the segment item under `NSSegmentItemShowMenuIndicator`, which the test decodes. On master the selectors do not exist: with ARC the test does not
 compile against master's header, without ARC the first call raises an unrecognized-selector
 exception. The value is only stored: no indicator is drawn.
