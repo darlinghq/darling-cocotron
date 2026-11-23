@@ -46,4 +46,8 @@ struct wl_egl_window;
 - (struct wl_proxy *) stackMetalSurfacesAbove: (struct wl_proxy *) below;
 - (void) detachMetalSubsurfaces;
 - (void) attachMetalSubsurfaces;
+// The parent window replaces its wl_surface (see -[WaylandWindow prepareSurfaceForRole:]): the
+// subsurfaces made for the old one go first, and the new one gets them when it has its role.
+- (void) parentSurfaceWillBeReplaced;
+- (void) parentSurfaceReplaced;
 @end

@@ -84,6 +84,7 @@ typedef enum {
 - (NSString *) copyPostScriptName;
 - (NSString *) copyFamilyName;
 - (NSString *) copyStyleName;
+- (NSString *) copyFullName;
 - (CFArrayRef) copyTableTags;
 - (NSData *) copyTableForTag: (uint32_t) tag;
 

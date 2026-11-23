@@ -10,6 +10,7 @@
 #define O2FONT_SMOOTHING_WIDENING 0.0125
 #import <string.h>
 #include <limits.h>
+#include <sys/stat.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <dispatch/dispatch.h>
@@ -33,6 +34,20 @@ O2FontRef O2FontCreateWithFontName_platform(NSString *name) {
 
 O2FontRef O2FontCreateWithDataProvider_platform(O2DataProviderRef provider) {
     return [[O2Font_freetype alloc] initWithDataProvider: provider];
+}
+
+O2FontRef O2FontCreateWithDataProviderAndFaceIndex(O2DataProviderRef provider, int faceIndex) {
+    return [[O2Font_freetype alloc] initWithDataProvider: provider faceIndex: faceIndex];
+}
+
+long O2FontFaceCountOfData(const void *bytes, size_t length) {
+    FT_Face face = NULL;
+    if (bytes == NULL || length == 0 ||
+        FT_New_Memory_Face(O2FontSharedFreeTypeLibrary(), bytes, length, -1, &face) != 0)
+        return 0;
+    long count = face->num_faces;
+    FT_Done_Face(face);
+    return count;
 }
 
 #endif
@@ -162,6 +177,19 @@ static void addPrefixCacheDirectory(FcConfig *config) {
 }
 #endif
 
+// The fonts of the prefix itself, found by fontconfig as the system fonts of macOS are in
+// /System/Library/Fonts; fontconfig only knows the host's directories. The directory is absent
+// when the prefix has no fonts.
+static void addSystemFontDirectory(FcConfig *config) {
+    // stat() takes a guest path, fontconfig a host path.
+    const char *guestPath = "/System/Library/Fonts";
+    struct stat info;
+    if (stat(guestPath, &info) != 0 || !S_ISDIR(info.st_mode))
+        return;
+    NSString *hostPath = hostPathFromGuestPath([NSString stringWithUTF8String: guestPath]);
+    FcConfigAppFontAddDir(config, (const FcChar8 *) [hostPath UTF8String]);
+}
+
 FcConfig *O2FontSharedFontConfig() {
     static FcConfig *fontConfig = NULL;
 
@@ -171,6 +199,7 @@ FcConfig *O2FontSharedFontConfig() {
         if (fontConfig != NULL) {
             addPrefixCacheDirectory(fontConfig);
             FcConfigBuildFonts(fontConfig);
+            addSystemFontDirectory(fontConfig);
         }
 #else
         fontConfig = FcInitLoadConfigAndFonts();
@@ -215,6 +244,48 @@ O2FontRegistrationResult O2FontRegisterFontFile(NSString *path) {
         [fontFileCache removeAllObjects];
     }
     return O2FontRegistrationSucceeded;
+}
+
+// The slant of a face on the scale of kCTFontSlantTrait (-1 to 1, 1 for 30 degrees clockwise), from
+// the italic angle of its 'post' table, which is counter-clockwise from vertical. Zero for an
+// upright face. The files are read once for each face.
+static double normalizedSlantOfFace(const char *hostFile, int faceIndex) {
+    static NSMutableDictionary *cache = nil;
+    NSString *key = [NSString stringWithFormat: @"%s#%d", hostFile, faceIndex];
+    @synchronized([O2Font_freetype class]) {
+        NSNumber *cached = [cache objectForKey: key];
+        if (cached != nil)
+            return [cached doubleValue];
+    }
+
+    double slant = 0;
+    FT_Face face = NULL;
+    // Bits 16 and up of the index of a fontconfig face select a variation instance.
+    if (FT_New_Face(O2FontSharedFreeTypeLibrary(), hostFile, faceIndex & 0xFFFF, &face) == 0) {
+        TT_Postscript *post = FT_Get_Sfnt_Table(face, FT_SFNT_POST);
+        if (post != NULL)
+            slant = -(post->italicAngle / 65536.0) / 30.0;
+        FT_Done_Face(face);
+    }
+    if (slant > 1)
+        slant = 1;
+    if (slant < -1)
+        slant = -1;
+
+    @synchronized([O2Font_freetype class]) {
+        if (cache == nil)
+            cache = [[NSMutableDictionary alloc] init];
+        [cache setObject: @(slant) forKey: key];
+    }
+    return slant;
+}
+
+// The width of a face on the scale of kCTFontWidthTrait (-1 condensed to 1 expanded), from its
+// fontconfig width, which numbers the nine OS/2 width classes 50 to 200.
+static double normalizedWidthOfFace(int width) {
+    int widthClass = width <= 56 ? 1 : width <= 69 ? 2 : width <= 81 ? 3 : width <= 93 ? 4
+            : width < 106 ? 5 : width < 119 ? 6 : width < 137 ? 7 : width < 175 ? 8 : 9;
+    return (widthClass - 5) / 4.0;
 }
 
 // CTFontSymbolicTraits bits (CTFont.h) of a face, from its fontconfig slant, weight and width.
@@ -275,6 +346,8 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
         goto out;
     for (int i = 0; i < count; i++)
         FcObjectSetAdd(objects, properties[i]);
+    FcObjectSetAdd(objects, FC_VARIABLE);
+    FcObjectSetAdd(objects, FC_INDEX);
     FcObjectSetAdd(objects, FC_SLANT);
     FcObjectSetAdd(objects, FC_WEIGHT);
     FcObjectSetAdd(objects, FC_WIDTH);
@@ -287,6 +360,14 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
 
     FcFontSet *fonts = FcFontList(O2FontSharedFontConfig(), pattern, objects);
     for (int i = 0; fonts != NULL && i < fonts->nfont; i++) {
+        // fontconfig lists a variable font once for each of its named
+        // instances and once more as the variable font itself, which has no
+        // PostScript or full name. A face is a named instance, so the variable
+        // entry is left out; every face reported has a PostScript name.
+        FcBool variable = FcFalse;
+        if (FcPatternGetBool(fonts->fonts[i], FC_VARIABLE, 0, &variable) == FcResultMatch &&
+            variable)
+            continue;
         NSMutableDictionary *face = [[NSMutableDictionary alloc] init];
         for (int j = 0; j < count; j++) {
             FcChar8 *text = NULL;
@@ -309,6 +390,17 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
                      forKey: @"symbolicTraits"];
             [face setObject: [NSNumber numberWithDouble: normalizedWeightOfFace(weight)]
                      forKey: @"weight"];
+            [face setObject: [NSNumber numberWithDouble: normalizedWidthOfFace(width)]
+                     forKey: @"width"];
+            double faceSlant = 0;
+            FcChar8 *file = NULL;
+            int fileIndex = 0;
+            if ((slant == FC_SLANT_ITALIC || slant == FC_SLANT_OBLIQUE) &&
+                FcPatternGetString(fonts->fonts[i], FC_FILE, 0, &file) == FcResultMatch) {
+                FcPatternGetInteger(fonts->fonts[i], FC_INDEX, 0, &fileIndex);
+                faceSlant = normalizedSlantOfFace((const char *) file, fileIndex);
+            }
+            [face setObject: [NSNumber numberWithDouble: faceSlant] forKey: @"slant"];
         }
         [result addObject: face];
         [face release];
@@ -556,13 +648,23 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 /* The installed face whose PostScript name is exactly name: its file and the face index in it
  * (which selects the face within a font collection file and the instance of a variable font). */
 + (NSString *) filenameForPostScriptName: (NSString *) name faceIndex: (int *) faceIndex {
+    return [self filenameForFace: name property: FC_POSTSCRIPT_NAME faceIndex: faceIndex];
+}
+
++ (NSString *) filenameForFullName: (NSString *) name faceIndex: (int *) faceIndex {
+    return [self filenameForFace: name property: FC_FULLNAME faceIndex: faceIndex];
+}
+
++ (NSString *) filenameForFace: (NSString *) name
+                      property: (const char *) property
+                     faceIndex: (int *) faceIndex {
     FcConfig *config = O2FontSharedFontConfig();
     FcPattern *pattern = FcPatternCreate();
     FcObjectSet *objects = FcObjectSetCreate();
     NSString *result = nil;
 
     if (pattern != NULL && objects != NULL && [name length] > 0 &&
-        FcPatternAddString(pattern, FC_POSTSCRIPT_NAME, (const FcChar8 *) [name UTF8String]) &&
+        FcPatternAddString(pattern, property, (const FcChar8 *) [name UTF8String]) &&
         FcObjectSetAdd(objects, FC_FILE) && FcObjectSetAdd(objects, FC_INDEX)) {
         FcFontSet *set = FcFontList(config, pattern, objects);
         for (int i = 0; set != NULL && i < set->nfont && result == nil; i++) {
@@ -604,6 +706,11 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 }
 
 - (instancetype) initWithDataProvider: (O2DataProviderRef) provider {
+    return [self initWithDataProvider: provider faceIndex: 0];
+}
+
+- (instancetype) initWithDataProvider: (O2DataProviderRef) provider
+                            faceIndex: (int) faceIndex {
     self = [super initWithDataProvider: provider];
     if (self == nil) {
         return nil;
@@ -627,7 +734,7 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
 
     FT_Face face;
     int error = FT_New_Memory_Face(O2FontSharedFreeTypeLibrary(), bytes, length,
-                                   0, &face);
+                                   faceIndex, &face);
 
     if (error != 0) {
         NSLog(@"FT_New_Memory_Face() = %d", error);
@@ -635,12 +742,16 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         return nil;
     }
 
+    _sourceFaceIndex = faceIndex;
     return [self initWithFace: face];
 }
 
-// The installed face for a font name: by its PostScript name, else fontconfig's closest match.
+// The installed face for a font name: by its PostScript name, else by its full name, else
+// fontconfig's closest match.
 static NSString *resolveFontFile(Class cls, NSString *name, int *faceIndex) {
     NSString *filename = [cls filenameForPostScriptName: name faceIndex: faceIndex];
+    if (filename == nil)
+        filename = [cls filenameForFullName: name faceIndex: faceIndex];
     if (filename == nil) {
         // The families macOS ships resolve as O2FontCopyInstalledFamilyForStandardFamily does.
         NSString *standard = standardFamilyPattern(name, NULL);
@@ -949,6 +1060,20 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
     if (_face->style_name == NULL)
         return [super copyStyleName];
     return [[NSString alloc] initWithUTF8String: _face->style_name];
+}
+
+// The full font name of the name table when the font was created with its own PostScript name
+// or has no created name (made from data), else the name the font was created with.
+- (NSString *) copyFullName {
+    NSString *name = [super copyFullName];
+    if (name != nil) {
+        const char *postScript = FT_Get_Postscript_Name(_face);
+        if (postScript == NULL || ![name isEqualToString: [NSString stringWithUTF8String: postScript]])
+            return name;
+        [name release];
+    }
+    NSString *tableName = [variationAxisName(_face, TT_NAME_ID_FULL_NAME) copy];
+    return tableName != nil ? tableName : [super copyFullName];
 }
 
 // The face has a single glyph slot, so every FT_Load_Glyph on it is

@@ -27,6 +27,7 @@ set(QuartzCore_sources
 	CADisplayLink.m
 	CABase.m
 	CABasicAnimation.m
+	CAKeyframeAnimation.m
 	CAContext.m
 	CAEDRMetadata.m
 	CAEmitterCell.m

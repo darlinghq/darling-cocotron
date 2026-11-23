@@ -293,6 +293,7 @@ set(AppKit_sources
 	NSStatusItem.m
 	NSStatusItemNotifier.m
 	NSDBusMenu.m
+	NSMenuBarController.m
 	NSPathComponentCell.m
 	NSCachedImageRep.m
 	NSWindow-Drag.m
@@ -675,6 +676,7 @@ add_backend(X11
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
 		X11.backend/X11Touch.m
+		X11.backend/X11Gesture.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES
@@ -721,6 +723,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Wayland.backend/WaylandDragIcon.m
 			Wayland.backend/WaylandPasteboard.m
 			Wayland.backend/WaylandWindow.m
+			Wayland.backend/WaylandToplevelIcon.m
 			Wayland.backend/WaylandSubWindow.m
 			${WAYLAND_PROTOCOL_SOURCES}
 		INFO_PLIST

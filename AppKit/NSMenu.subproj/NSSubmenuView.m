@@ -30,6 +30,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #define WINDOW_BORDER_THICKNESS 1
 #define WINDOW_VERTICAL_PADDING 5
 #define IMAGE_TITLE_GAP 8
+// A menu with a submenu item has a column at the right for the arrow, as wide as the column for the key equivalents or
+// wider (the two share it). Measured on macOS 10.14.4 and 26.7.3 with -[NSMenu size]: a menu with a submenu item
+// is 39 (10.14.4) or 31 (26.7.3) points wider than the same menu without one; the wider value is used.
+#define SUBMENU_COLUMN_WIDTH 39
 
 - (NSSize) sizeForMenuItemImage: (NSMenuItem *) item {
     NSSize result = NSZeroSize;
@@ -79,6 +83,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     CGFloat maxTitleWidth = 0.0f;
     BOOL anItemHasAnImage = NO;
     CGFloat maxKeyWidth = 0.0f;
+    BOOL anItemHasSubmenu = NO;
     CGFloat totalHeight = 0.0f;
     NSSize gutterSize = [[self graphicsStyle] menuItemGutterSize];
     NSSize rightArrowSize = [[self graphicsStyle] menuItemBranchArrowSize];
@@ -109,6 +114,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                 maxKeyWidth = MAX(maxKeyWidth, size.width);
                 height = MAX(height, size.height);
             }
+            if ([item hasSubmenu])
+                anItemHasSubmenu = YES;
             height = MAX(height, gutterSize.height);
             height = MAX(height, rightArrowSize.height);
 
@@ -122,10 +129,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (anItemHasAnImage)
         result.width += IMAGE_TITLE_GAP;
     result.width += maxTitleWidth;
-    if (maxKeyWidth > 0.0f) {
-        result.width += MIN_TITLE_KEY_GAP;
-        result.width += maxKeyWidth;
-    }
+    CGFloat rightColumn = 0.0f;
+    if (maxKeyWidth > 0.0f)
+        rightColumn = MIN_TITLE_KEY_GAP + maxKeyWidth;
+    if (anItemHasSubmenu)
+        rightColumn = MAX(rightColumn, SUBMENU_COLUMN_WIDTH);
+    result.width += rightColumn;
     result.width += rightArrowSize.width;
 
     // border. Magic constants that may not be right for Win7 vs XP
@@ -294,8 +303,9 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
             if ([item hasSubmenu]) {
                 NSSize branchArrowSize =
                         [[self graphicsStyle] menuItemBranchArrowSize];
-                partRect.origin.x =
-                        origin.x + NSWidth(itemArea) - branchArrowSize.width;
+                partRect.origin.x = origin.x + NSWidth(itemArea) -
+                                    [[self graphicsStyle] menuItemBranchArrowMargins].right -
+                                    branchArrowSize.width;
                 partRect.size.width = branchArrowSize.width;
                 CENTER_PART_RECT_VERTICALLY(branchArrowSize);
                 [[self graphicsStyle] drawMenuBranchArrowInRect: partRect
@@ -425,6 +435,8 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
         NSMenuItem *item = [items objectAtIndex: _selectedItemIndex];
 
         if ([item hasSubmenu]) {
+            [[item submenu] _updateWithoutSubmenus];
+
             NSMenuWindow *branch =
                     [[NSMenuWindow alloc] initWithMenu: [item submenu]];
 

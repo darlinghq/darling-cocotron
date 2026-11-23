@@ -168,16 +168,3 @@ NSString *const kCAAnimationRotateAutoReverse = @"autoReverse";
 }
 
 @end
-
-@implementation CAKeyframeAnimation
-
-- (NSMethodSignature *) methodSignatureForSelector: (SEL) aSelector {
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
-}
-
-- (void) forwardInvocation: (NSInvocation *) anInvocation {
-    NSLog(@"Stub called: %@ in %@",
-          NSStringFromSelector([anInvocation selector]), [self class]);
-}
-
-@end

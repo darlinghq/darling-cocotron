@@ -24,6 +24,7 @@ set(CoreText_sources
 	CTFontCollection.m
 	CTFontDescriptor.m
 	CTFontManager.m
+	KTFontSuitcase.m
 	CTFrame.m
 	CTFrameSetter.m
 	CTLine.m
@@ -82,8 +83,11 @@ if (SWIFT_TOOLCHAIN_FOUND AND BUILD_TARGET_64BIT)
 	set_target_properties(swiftCoreText_placeholder PROPERTIES
 		LINKER_LANGUAGE C
 		OUTPUT_NAME "swiftCoreText_placeholder")
-	reexport(CoreText_${APPLE_ARCH_64BIT} swiftCoreText_placeholder
-		"${CMAKE_CURRENT_BINARY_DIR}/libswiftCoreText_placeholder.dylib")
+	# The overlay has every 64-bit slice
+	foreach (arch IN LISTS DARLING_ARCHS_64BIT)
+		reexport(CoreText_${arch} swiftCoreText_placeholder
+			"${CMAKE_CURRENT_BINARY_DIR}/libswiftCoreText_placeholder.dylib")
+	endforeach ()
 elseif (NOT SWIFT_TOOLCHAIN_FOUND)
 	message(STATUS "CoreText: no Swift toolchain, so no Swift overlay to re-export")
 endif ()

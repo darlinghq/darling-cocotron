@@ -65,6 +65,8 @@ static void expect(BOOL condition, NSString *message)
 
 @implementation CountingView
 @synthesize downs = _downs;
+// The test window is never key, so its first press would otherwise only activate it and not reach a plain view.
+- (BOOL)acceptsFirstMouse:(NSEvent *)event { return YES; }
 - (void)mouseDown:(NSEvent *)event { self.downs++; }
 @end
 

@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSMatrix, NSScroller;
 
+APPKIT_EXPORT NSString *const NSBrowserColumnConfigurationDidChangeNotification;
+
 typedef NS_ENUM(NSUInteger, NSBrowserColumnResizingType) {
     NSBrowserNoColumnResizing = 0,
     NSBrowserAutoColumnResizing = 1,
@@ -159,6 +161,8 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
 
 - (void) browserWillScroll: (NSBrowser *) browser;
 - (void) browserDidScroll: (NSBrowser *) browser;
+
+- (void) browserColumnConfigurationDidChange: (NSNotification *) notification;
 
 - (void) browser: (NSBrowser *) browser
         willDisplayCell: cell

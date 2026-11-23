@@ -129,14 +129,6 @@ NSString *const _NSToolbarItemIdentifierPboardType = @"NSToolbarItemIdentifierPb
     NSInteger totalNonSpace = 0, totalVisibleNonSpace = 0;
     NSInteger totalVisible = 0;
 
-    NSInteger priorities[4] = {
-            NSToolbarItemVisibilityPriorityUser,
-            NSToolbarItemVisibilityPriorityHigh,
-            NSToolbarItemVisibilityPriorityStandard,
-            NSToolbarItemVisibilityPriorityLow,
-    };
-    int priorityCount = 4;
-
     [_visibleItems removeAllObjects];
 
     for (NSUInteger i = 0; i < count; i++) {
@@ -163,30 +155,38 @@ NSString *const _NSToolbarItemIdentifierPboardType = @"NSToolbarItemIdentifierPb
         }
     }
 
+    // Space goes to the items of the highest visibilityPriority first (any value is a priority,
+    // not only the named ones); items of equal priority are served left to right, so the ones
+    // nearest the trailing edge are the first to overflow. An insertion sort is stable.
+    NSUInteger order[count];
+    for (NSUInteger i = 0; i < count; i++) {
+        NSUInteger at = i;
+        while (at > 0 &&
+               [items[order[at - 1]] visibilityPriority] < [items[i] visibilityPriority]) {
+            order[at] = order[at - 1];
+            at--;
+        }
+        order[at] = i;
+    }
+
     // Consume available space based on priority.
-    for (int p = 0; p < priorityCount; p++) {
-        NSInteger priority = priorities[p];
+    for (NSUInteger k = 0; k < count; k++) {
+        NSUInteger i = order[k];
+        NSToolbarItem *item = items[i];
+        CGFloat availableWidth = desiredWidth - consumedWidth;
 
-        for (NSUInteger i = 0; i < count; i++) {
-            NSToolbarItem *item = items[i];
+        // If there are still items which can go in the overflow menu we
+        // need to accomodate the menu.
+        if (totalVisibleNonSpace + 1 < totalNonSpace)
+            availableWidth -= overflowSize.width;
 
-            if ([item visibilityPriority] == priority) {
-                CGFloat availableWidth = desiredWidth - consumedWidth;
-
-                // If there are still items which can go in the overflow menu we
-                // need to accomodate the menu.
-                if (totalVisibleNonSpace + 1 < totalNonSpace)
-                    availableWidth -= overflowSize.width;
-
-                if (frames[i].size.width < availableWidth) {
-                    [_visibleItems addObject: item];
-                    visible[i] = YES;
-                    totalVisible++;
-                    consumedWidth += frames[i].size.width;
-                    if (notSpace[i])
-                        totalVisibleNonSpace++;
-                }
-            }
+        if (frames[i].size.width < availableWidth) {
+            [_visibleItems addObject: item];
+            visible[i] = YES;
+            totalVisible++;
+            consumedWidth += frames[i].size.width;
+            if (notSpace[i])
+                totalVisibleNonSpace++;
         }
     }
 

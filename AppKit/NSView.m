@@ -20,6 +20,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSViewController-Private.h>
 #import <AppKit/NSClipView.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
@@ -1247,6 +1248,14 @@ static void sendHiddenStateChange(NSView *view, BOOL hidden) {
 
     if (NS_EXTRA(NSView, self)->_isHidden != flag) {
         BOOL wasHidden = [self isHiddenOrHasHiddenAncestor];
+        NSArray *appearance = [NSViewController
+                _appearanceTransitionsUnder: self
+                                     window: _window
+                              windowVisible: [_window _isShownForViewAppearance]
+                              rootSuperview: _superview
+                              useRootHidden: YES
+                                 rootHidden: flag];
+        [NSViewController _willPerformAppearanceTransitions: appearance];
         invalidateTransform(self);
         if ((NS_EXTRA(NSView, self)->_isHidden = flag)) {
             id view = [_window firstResponder];
@@ -1270,6 +1279,7 @@ static void sendHiddenStateChange(NSView *view, BOOL hidden) {
         BOOL hidden = [self isHiddenOrHasHiddenAncestor];
         if (hidden != wasHidden)
             sendHiddenStateChange(self, hidden);
+        [NSViewController _didPerformAppearanceTransitions: appearance];
     }
 }
 
@@ -1764,13 +1774,31 @@ static void postFrameChange(NSView *self) {
     NS_EXTRA(NSView, self)->_postsNotificationOnBoundsChange = flag;
 }
 
+// -[NSView _setWindow:] runs for a view and then, recursively, for each subview.
+// The view controller appearance transitions of the whole subtree are worked
+// out once, by the outermost call, and reported around it.
+static int setWindowDepth;
+
 - (void) _setWindow: (NSWindow *) window {
     if (_window != window) {
+        NSArray *appearance = nil;
+        if (setWindowDepth == 0) {
+            appearance = [NSViewController
+                    _appearanceTransitionsUnder: self
+                                         window: window
+                                  windowVisible: [window _isShownForViewAppearance]
+                                  rootSuperview: _superview
+                                  useRootHidden: NO
+                                     rootHidden: NO];
+        }
+        setWindowDepth++;
+
         BOOL windowRecalulatesKeyViewLoop =
                 [window autorecalculatesKeyViewLoop];
         if (windowRecalulatesKeyViewLoop)
             [self setNextKeyView: nil];
 
+        [NSViewController _willPerformAppearanceTransitions: appearance];
         [self viewWillMoveToWindow: window];
 
         _window = window;
@@ -1793,6 +1821,9 @@ static void postFrameChange(NSView *self) {
             [_window recalculateKeyViewLoop];
 
         [self viewDidMoveToWindow];
+
+        setWindowDepth--;
+        [NSViewController _didPerformAppearanceTransitions: appearance];
     }
 }
 
@@ -2175,7 +2206,12 @@ static void postFrameChange(NSView *self) {
             NSTrackingArea *area = [NS_EXTRA(NSView, self)->_trackingAreas objectAtIndex: i];
             NSRect rectOfInterest;
 
-            rectOfInterest = NSIntersectionRect([area rect], [self bounds]);
+            // With this option the area covers whatever part of the view is
+            // visible now, and the rect it was created with plays no part.
+            if ([area options] & NSTrackingInVisibleRect)
+                rectOfInterest = [self visibleRect];
+            else
+                rectOfInterest = NSIntersectionRect([area rect], [self bounds]);
 
             if (rectOfInterest.size.width > 0. &&
                 rectOfInterest.size.height > 0.) {
@@ -2368,6 +2404,14 @@ static char inputContextKey;
 }
 
 - (void) viewDidChangeEffectiveAppearance {
+}
+
+- (NSViewController *) _viewController {
+    return NS_EXTRA(NSView, self)->_viewController;
+}
+
+- (void) _setViewController: (NSViewController *) controller {
+    NS_EXTRA(NSView, self)->_viewController = controller;
 }
 
 - (void) viewWillMoveToWindow: (NSWindow *) window {
@@ -3867,7 +3911,14 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
 }
 
 - (void) rightMouseDown: (NSEvent *) event {
-    [NSMenu popUpContextMenu: [self menuForEvent: event]
+    NSMenu *menu = [self menuForEvent: event];
+
+    // A view with no context menu for the click leaves it to the next responder.
+    if (menu == nil) {
+        [super rightMouseDown: event];
+        return;
+    }
+    [NSMenu popUpContextMenu: menu
                    withEvent: event
                      forView: self];
 }

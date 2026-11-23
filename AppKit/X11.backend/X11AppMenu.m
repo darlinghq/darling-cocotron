@@ -19,81 +19,13 @@
 
 #import "X11AppMenu.h"
 #import "../private-include/AppKit/NSDBusMenu.h"
-#import "../NSWindow-Private.h"
 #import <AppKit/NSApplication.h>
-#import <AppKit/NSMainMenuView.h>
 #import <AppKit/NSMenu.h>
-#import <AppKit/NSScreen.h>
 #import <X11/Xatom.h>
 
 // Atoms KDE reads to find the menu of a window; the registrar is told the same.
 #define SERVICE_NAME_PROPERTY "_KDE_NET_WM_APPMENU_SERVICE_NAME"
 #define OBJECT_PATH_PROPERTY "_KDE_NET_WM_APPMENU_OBJECT_PATH"
-
-@implementation X11MenuBarWindow
-
-- (instancetype) initWithMenu: (NSMenu *) menu applicationName: (NSString *) name {
-    NSRect screen = [[NSScreen mainScreen] frame];
-    NSRect frame = NSMakeRect(NSMinX(screen), NSMaxY(screen), NSWidth(screen),
-                              [NSMainMenuView menuHeight]);
-
-    self = [super initWithContentRect: frame
-                            styleMask: NSBorderlessWindowMask | NSAppKitPrivateWindow
-                              backing: NSBackingStoreBuffered
-                                defer: NO];
-    if (self == nil)
-        return nil;
-
-    [self setLevel: NSMainMenuWindowLevel];
-    [self setReleasedWhenClosed: NO];
-    [self setHasShadow: NO];
-
-    _barView = [[NSMainMenuView alloc]
-            initWithFrame: NSMakeRect(0, 0, NSWidth(frame), NSHeight(frame))
-                     menu: menu];
-    [_barView setApplicationName: name];
-    [_barView setAutoresizingMask: NSViewWidthSizable | NSViewHeightSizable];
-    [[self contentView] addSubview: _barView];
-    [self placeAtTopOfScreen];
-    return self;
-}
-
-- (void) dealloc {
-    [_barView release];
-    [super dealloc];
-}
-
-- (BOOL) canBecomeKeyWindow {
-    return NO;
-}
-
-- (BOOL) canBecomeMainWindow {
-    return NO;
-}
-
-- (void) setMainMenu: (NSMenu *) menu {
-    [_barView setMenu: menu];
-    [_barView setNeedsDisplay: YES];
-}
-
-- (void) setApplicationName: (NSString *) name {
-    [_barView setApplicationName: name];
-}
-
-- (void) menuChanged {
-    [_barView setNeedsDisplay: YES];
-}
-
-- (void) placeAtTopOfScreen {
-    NSRect screen = [[NSScreen mainScreen] frame];
-    CGFloat height = [NSMainMenuView menuHeight];
-
-    [self setFrame: NSMakeRect(NSMinX(screen), NSMaxY(screen) - height,
-                               NSWidth(screen), height)
-           display: NO];
-}
-
-@end
 
 @implementation X11AppMenu
 
@@ -115,37 +47,13 @@ static NSString *applicationName(void) {
     _display = display;
     _windows = [NSMutableSet new];
 
-    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
-
-    [center addObserver: self
-               selector: @selector(applicationActivationChanged:)
-                   name: NSApplicationDidBecomeActiveNotification
-                 object: nil];
-    [center addObserver: self
-               selector: @selector(applicationActivationChanged:)
-                   name: NSApplicationDidResignActiveNotification
-                 object: nil];
-    [center addObserver: self
-               selector: @selector(menuStructureChanged:)
-                   name: NSMenuDidAddItemNotification
-                 object: nil];
-    [center addObserver: self
-               selector: @selector(menuStructureChanged:)
-                   name: NSMenuDidRemoveItemNotification
-                 object: nil];
-    [center addObserver: self
-               selector: @selector(menuStructureChanged:)
-                   name: NSMenuDidChangeItemNotification
-                 object: nil];
+    _bar = [[NSMenuBarController alloc] initWithDelegate: self];
     return self;
 }
 
 - (void) dealloc {
-    [self stopRedrawingBar];
-    [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_exporter invalidate];
     [_exporter release];
-    [_bar close];
     [_bar release];
     [_menu release];
     [_windows release];
@@ -161,6 +69,11 @@ static NSString *applicationName(void) {
     _exporter = [[NSDBusMenu alloc] initWithSessionBus];
     [_exporter setDelegate: self];
     [_exporter setApplicationName: applicationName()];
+}
+
+- (BOOL) globalMenuPresent {
+    [self connectIfNeeded];
+    return _exporter != nil && [_exporter registrarPresent];
 }
 
 #pragma mark - Windows
@@ -219,7 +132,6 @@ static NSString *applicationName(void) {
     if (_menu != nil)
         [self connectIfNeeded];
     [_exporter setMenu: _menu];
-    [_bar setMainMenu: _menu];
 
     for (NSNumber *window in _windows) {
         if (_menu != nil)
@@ -227,122 +139,25 @@ static NSString *applicationName(void) {
         else if (hadMenu)
             [self withdrawMenuFromWindow: [window unsignedLongValue]];
     }
-    [self updateBar];
+    [_bar setMainMenu: _menu];
 }
 
-// Whether a menu was changed that belongs to the main menu.
-- (void) menuStructureChanged: (NSNotification *) notification {
-    if (_menu == nil)
-        return;
-
-    NSMenu *menu = [notification object];
-
-    while ([menu supermenu] != nil && menu != _menu)
-        menu = [menu supermenu];
-    if (menu != _menu)
-        return;
-
+- (void) menuBarControllerMenuDidChange: (NSMenuBarController *) controller {
     [_exporter menuChanged];
-    [_bar menuChanged];
 }
 
-- (void) applicationActivationChanged: (NSNotification *) notification {
-    [self updateBar];
+// A desktop that shows the menu itself leaves the application's bar out.
+- (BOOL) menuBarControllerDesktopShowsMenu: (NSMenuBarController *) controller {
+    return _exporter != nil && [_exporter registrarPresent];
 }
 
-- (void) dbusMenuRegistrarChanged: (NSDBusMenu *) menu {
-    [self updateBar];
-}
-
-#pragma mark - Menu bar
-
-// Whether the application asks for the menu bar to be out of the way: through
-// its presentation options, or because a window of it is in full screen mode
-// (it has the full screen style), where the menu bar is hidden as well.
-static BOOL menuBarHiddenByApplication(void) {
-    NSApplicationPresentationOptions options = [NSApp presentationOptions];
-
-    if (options & (NSApplicationPresentationHideMenuBar |
-                   NSApplicationPresentationAutoHideMenuBar))
-        return YES;
-
-    return ([[NSApp keyWindow] styleMask] & NSWindowStyleMaskFullScreen) != 0 ||
-           ([[NSApp mainWindow] styleMask] & NSWindowStyleMaskFullScreen) != 0;
-}
-
-// The bar is shown while the application is active, has a main menu and the
-// desktop shows no global menu, unless the application hides the menu bar.
-- (BOOL) barWanted {
-    BOOL globalMenu = _exporter != nil && [_exporter registrarPresent];
-
-    return _menu != nil && NSApp != nil && [NSApp isActive] && !globalMenu &&
-           !menuBarHiddenByApplication();
-}
-
-- (void) updateBar {
-    // Presentation options and window styles have no notification of their
-    // own, so the observer below keeps checking while the application has a
-    // main menu.
-    if (_menu == nil)
-        [self stopRedrawingBar];
-    else
-        [self startRedrawingBar];
-
-    if (![self barWanted]) {
-        [_bar orderOut: nil];
-        _barShown = NO;
-        // This can run from the run loop observer with no event to flush it.
-        XFlush(_display);
-        return;
-    }
-
-    if (_bar == nil)
-        _bar = [[X11MenuBarWindow alloc] initWithMenu: _menu
-                                      applicationName: applicationName()];
-    [_bar placeAtTopOfScreen];
-    [_bar orderFront: nil];
-    _barShown = YES;
+- (void) menuBarControllerDidUpdateBar: (NSMenuBarController *) controller {
+    // This can run from a run loop observer with no event to flush it.
     XFlush(_display);
 }
 
-static void redrawBar(CFRunLoopObserverRef observer, CFRunLoopActivity activity,
-                      void *info) {
-    X11AppMenu *menu = info;
-
-    if ([menu barWanted] != [menu barShown])
-        [menu updateBar];
-    [[menu bar] displayIfNeeded];
-}
-
-- (BOOL) barShown {
-    return _barShown;
-}
-
-- (X11MenuBarWindow *) bar {
-    return _bar;
-}
-
-// Before the run loop sleeps, which includes the waits of the loops that track
-// the mouse in a menu.
-- (void) startRedrawingBar {
-    if (_displayObserver != NULL)
-        return;
-
-    CFRunLoopObserverContext context = {.version = 0, .info = self};
-
-    _displayObserver = CFRunLoopObserverCreate(kCFAllocatorDefault,
-                                               kCFRunLoopBeforeWaiting, true, 0,
-                                               redrawBar, &context);
-    CFRunLoopAddObserver(CFRunLoopGetMain(), _displayObserver,
-                         kCFRunLoopCommonModes);
-}
-
-- (void) stopRedrawingBar {
-    if (_displayObserver == NULL)
-        return;
-    CFRunLoopObserverInvalidate(_displayObserver);
-    CFRelease(_displayObserver);
-    _displayObserver = NULL;
+- (void) dbusMenuRegistrarChanged: (NSDBusMenu *) menu {
+    [_bar update];
 }
 
 @end

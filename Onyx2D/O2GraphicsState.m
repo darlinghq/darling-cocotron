@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2GraphicsState.h>
 
 #import <Foundation/NSArray.h>
+#import <Onyx2D/O2ClipPhase.h>
 #import <Onyx2D/O2ClipState.h>
 #import <Onyx2D/O2Color.h>
 #import <Onyx2D/O2ColorSpace.h>
@@ -131,9 +132,95 @@ O2AffineTransform O2GStateUserSpaceTransform(O2GState *self) {
     return self->_userSpaceTransform;
 }
 
-- (O2Rect) clipBoundingBox {
-    O2UnimplementedMethod();
-    return O2RectZero;
+// The bounding box of the clip in user space (CGContextGetClipBoundingBox). The documentation gives the box of
+// the clipping path with the control points of curves included. The other cases are pinned to what was observed
+// on macOS 26.7.3 and Mac OS X 10.14.4 (identical), tests coregraphics-context-clip-bounding-box:
+//  - no clip: the bounds of the context;
+//  - an empty or zero-size intersection: CGRectNull;
+//  - a clip larger than the context: the context bounds;
+//  - a mask: the intersection with the mask's rectangle; several paths or rectangles: the intersection of their
+//    boxes (two rectangle subpaths in one clip give the box of their union; an even-odd hole is ignored);
+//  - under a rotating transformation: the box, in user space, of the clip's rectangle in device space (not of
+//    the rotated clip itself).
+// The clip is kept in device space, so the device box of each phase is intersected first and the result moved
+// back through the current transform. A context with no bounds of its own (bounds of zero size) has no
+// device limit: with no clip the answer is then the zero rectangle.
+- (O2Rect) clipBoundingBoxWithinDeviceBounds: (O2Rect) bounds {
+    BOOL bounded = bounds.size.width > 0 && bounds.size.height > 0;
+    NSArray *phases = [_clipState clipPhases];
+
+    if (_deviceSpaceTransform.a * _deviceSpaceTransform.d - _deviceSpaceTransform.b * _deviceSpaceTransform.c == 0 ||
+        (!bounded && [phases count] == 0))
+        return O2RectZero;
+
+    O2Float minX = 0, minY = 0, maxX = 0, maxY = 0;
+    BOOL haveBox = NO;
+
+    if (bounded) {
+        minX = O2RectGetMinX(bounds);
+        minY = O2RectGetMinY(bounds);
+        maxX = O2RectGetMaxX(bounds);
+        maxY = O2RectGetMaxY(bounds);
+        haveBox = YES;
+    }
+
+    for (O2ClipPhase *phase in phases) {
+        O2Rect box;
+
+        if (O2ClipPhasePhaseType(phase) == O2ClipPhaseMask) {
+            O2Rect rect = O2ClipPhaseRect(phase);
+            O2AffineTransform transform = O2ClipPhaseTransform(phase);
+            O2Point corners[4] = {
+                O2PointApplyAffineTransform(O2PointMake(O2RectGetMinX(rect), O2RectGetMinY(rect)), transform),
+                O2PointApplyAffineTransform(O2PointMake(O2RectGetMaxX(rect), O2RectGetMinY(rect)), transform),
+                O2PointApplyAffineTransform(O2PointMake(O2RectGetMaxX(rect), O2RectGetMaxY(rect)), transform),
+                O2PointApplyAffineTransform(O2PointMake(O2RectGetMinX(rect), O2RectGetMaxY(rect)), transform),
+            };
+            O2Float x0 = corners[0].x, x1 = x0, y0 = corners[0].y, y1 = y0;
+
+            for (int i = 1; i < 4; i++) {
+                x0 = MIN(x0, corners[i].x);
+                x1 = MAX(x1, corners[i].x);
+                y0 = MIN(y0, corners[i].y);
+                y1 = MAX(y1, corners[i].y);
+            }
+            box = O2RectMake(x0, y0, x1 - x0, y1 - y0);
+        } else
+            box = O2PathGetBoundingBox(O2ClipPhaseObject(phase));
+
+        if (!haveBox) {
+            minX = O2RectGetMinX(box);
+            minY = O2RectGetMinY(box);
+            maxX = O2RectGetMaxX(box);
+            maxY = O2RectGetMaxY(box);
+            haveBox = YES;
+        } else {
+            minX = MAX(minX, O2RectGetMinX(box));
+            minY = MAX(minY, O2RectGetMinY(box));
+            maxX = MIN(maxX, O2RectGetMaxX(box));
+            maxY = MIN(maxY, O2RectGetMaxY(box));
+        }
+    }
+
+    if (!(maxX > minX) || !(maxY > minY))
+        return O2RectMake(INFINITY, INFINITY, 0, 0);
+
+    O2AffineTransform toUser = O2AffineTransformInvert(_deviceSpaceTransform);
+    O2Point corners[4] = {
+        O2PointApplyAffineTransform(O2PointMake(minX, minY), toUser),
+        O2PointApplyAffineTransform(O2PointMake(maxX, minY), toUser),
+        O2PointApplyAffineTransform(O2PointMake(maxX, maxY), toUser),
+        O2PointApplyAffineTransform(O2PointMake(minX, maxY), toUser),
+    };
+    O2Float x0 = corners[0].x, x1 = x0, y0 = corners[0].y, y1 = y0;
+
+    for (int i = 1; i < 4; i++) {
+        x0 = MIN(x0, corners[i].x);
+        x1 = MAX(x1, corners[i].x);
+        y0 = MIN(y0, corners[i].y);
+        y1 = MAX(y1, corners[i].y);
+    }
+    return O2RectMake(x0, y0, x1 - x0, y1 - y0);
 }
 
 - (O2InterpolationQuality) interpolationQuality {

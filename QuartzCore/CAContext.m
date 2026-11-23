@@ -67,15 +67,15 @@ NSString *const kCAContextPortNumber = @"port_number";
 - (void) _publishFrame;
 @end
 
-// Draws a remote context's tree into an offscreen framebuffer and copies each
-// frame into one of two IOSurfaces. It runs on CALayerContext's frame timer:
+// Draws a remote context's tree into a framebuffer whose texture is bound to
+// one of two IOSurfaces, which the hosts then show. It runs on CALayerContext's frame timer:
 // the layers of the tree request frames from it as they change.
 @interface CARemoteLayerContext : CALayerContext {
     CAContext *_owner;
     GLuint _framebuffer;
-    GLuint _renderbuffer;
-    GLint _framebufferWidth;
-    GLint _framebufferHeight;
+    // The texture bound to each surface, and the surface it is bound to.
+    GLuint _textures[2];
+    IOSurfaceRef _textureSurfaces[2];
     IOSurfaceRef _surfaces[2];
     mach_port_t _surfacePorts[2];
     // Where the frame in each surface lies.
@@ -108,6 +108,7 @@ NSString *const kCAContextPortNumber = @"port_number";
     if (_surfaces[index] != NULL)
         CFRelease(_surfaces[index]);
     _surfaces[index] = NULL;
+    _textureSurfaces[index] = NULL;
     if (_surfacePorts[index] != MACH_PORT_NULL)
         mach_port_deallocate(mach_task_self(), _surfacePorts[index]);
     _surfacePorts[index] = MACH_PORT_NULL;
@@ -119,7 +120,7 @@ NSString *const kCAContextPortNumber = @"port_number";
     CGLContextObj previous = CGLGetCurrentContext();
     if (_framebuffer != 0 && CGLSetCurrentContext(_glContext) == kCGLNoError) {
         glDeleteFramebuffers(1, &_framebuffer);
-        glDeleteRenderbuffers(1, &_renderbuffer);
+        glDeleteTextures(2, _textures);
         CGLSetCurrentContext(previous != _glContext ? previous : NULL);
     }
     [self releaseSurfaceAtIndex: 0];
@@ -146,21 +147,34 @@ NSString *const kCAContextPortNumber = @"port_number";
 - (void) setSubwindow: (CGSubWindow *) subwindow {
 }
 
-- (BOOL) prepareFramebufferWidth: (GLint) width height: (GLint) height {
-    if (_framebuffer == 0) {
+// Makes the framebuffer draw into the texture that uses the surface's memory
+// (the surface is the texture's storage, so nothing is read back or copied
+// afterwards; where the driver cannot import the surface, OpenGL.c copies the
+// texture into it when it is locked). Leaves the framebuffer bound.
+- (BOOL) prepareFramebufferForSurface: (IOSurfaceRef) surface index: (int) index {
+    if (_framebuffer == 0)
         glGenFramebuffers(1, &_framebuffer);
-        glGenRenderbuffers(1, &_renderbuffer);
+    if (_textures[index] == 0)
+        glGenTextures(1, &_textures[index]);
+
+    glBindTexture(GL_TEXTURE_2D, _textures[index]);
+    if (_textureSurfaces[index] != surface) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        if (CGLTexImageIOSurface2D(_glContext, GL_TEXTURE_2D, GL_RGBA8,
+                                   (GLsizei) IOSurfaceGetWidth(surface),
+                                   (GLsizei) IOSurfaceGetHeight(surface), GL_BGRA,
+                                   GL_UNSIGNED_INT_8_8_8_8_REV, surface, 0) != kCGLNoError) {
+            glBindTexture(GL_TEXTURE_2D, 0);
+            return NO;
+        }
+        _textureSurfaces[index] = surface;
     }
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     glBindFramebuffer(GL_FRAMEBUFFER, _framebuffer);
-    if (width != _framebufferWidth || height != _framebufferHeight) {
-        glBindRenderbuffer(GL_RENDERBUFFER, _renderbuffer);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA8, width, height);
-        glBindRenderbuffer(GL_RENDERBUFFER, 0);
-        glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
-                                  GL_RENDERBUFFER, _renderbuffer);
-        _framebufferWidth = width;
-        _framebufferHeight = height;
-    }
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           _textures[index], 0);
     return glCheckFramebufferStatus(GL_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
 }
 
@@ -244,27 +258,20 @@ static BOOL frameRectForExtent(CGRect extent, CGRect *frame) {
     if (CGLSetCurrentContext(_glContext) != kCGLNoError)
         return;
 
-    if ([self prepareFramebufferWidth: width height: height]) {
+    // Hosts may still be reading the last frame: draw into the other surface.
+    int next = _current == 0 ? 1 : 0;
+    IOSurfaceRef surface = [self surfaceAtIndex: next
+                                          width: width
+                                         height: height];
+    if (surface != NULL && [self prepareFramebufferForSurface: surface index: next]) {
         [self _drawLayerTree: layer
                       inRect: frame
                  topRowFirst: YES];
 
-        // Hosts may still be reading the last frame: draw into the other
-        // surface.
-        int next = _current == 0 ? 1 : 0;
-        IOSurfaceRef surface = [self surfaceAtIndex: next
-                                              width: width
-                                             height: height];
-        if (surface != NULL &&
-            IOSurfaceLock(surface, 0, NULL) == kIOReturnSuccess) {
-            glPixelStorei(GL_PACK_ALIGNMENT, 4);
-            glPixelStorei(GL_PACK_ROW_LENGTH,
-                          (GLint) (IOSurfaceGetBytesPerRow(surface) / 4));
-            glReadPixels(0, 0, width, height, GL_BGRA,
-                         GL_UNSIGNED_INT_8_8_8_8_REV,
-                         IOSurfaceGetBaseAddress(surface));
-            glPixelStorei(GL_PACK_ROW_LENGTH, 0);
-            // The unlock moves the seed on, so hosts upload the new pixels.
+        // The lock waits for the drawing to finish (and has OpenGL.c copy
+        // the texture into the surface where it only holds a copy of it);
+        // the unlock moves the seed on, so hosts bind the new pixels.
+        if (IOSurfaceLock(surface, 0, NULL) == kIOReturnSuccess) {
             IOSurfaceUnlock(surface, 0, NULL);
             _geometries[next] = (CARemoteFrameGeometry) {
                 .originX = (int32_t) frame.origin.x,
@@ -276,6 +283,8 @@ static BOOL frameRectForExtent(CGRect extent, CGRect *frame) {
         } else {
             _current = -1;
         }
+    } else {
+        _current = -1;
     }
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

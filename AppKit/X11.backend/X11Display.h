@@ -57,6 +57,12 @@
     BOOL _relativeResumeValid;
     double _relativeResumeX, _relativeResumeY;
     Window _relativeWindow;
+    // A pinch gesture in progress (see X11Gesture.h): its window, the scale it last
+    // reported, and where and with which modifiers its last event was.
+    Window _pinchWindow;
+    CGFloat _pinchScale;
+    NSPoint _pinchLocation;
+    NSEventModifierFlags _pinchModifiers;
     X11RelativeMouse _relativeMouse;
     // ConfinePointerToFullscreenWindows (org.darlinghq.AppKit): keep the
     // pointer inside the focused fullscreen window, through a pointer grab on
@@ -107,6 +113,20 @@
     // per batch of events, when _occlusionDirty is set.
     BOOL _occlusionDirty;
     Window _occlusionWatchWindow;
+    // What was last read from the server about the focused foreign window, kept until an event that
+    // can change it: the window itself (_occlusionActive, from _NET_ACTIVE_WINDOW), its geometry and
+    // state (the cover fields, root coordinates, device pixels) and the last ConfigureNotify geometry
+    // seen on it, so that a notification repeating the same geometry changes nothing.
+    BOOL _occlusionActiveKnown;
+    Window _occlusionActive;
+    BOOL _occlusionCoverValid;
+    BOOL _occlusionCoverOK;
+    BOOL _occlusionCoverFullscreen;
+    BOOL _occlusionCoverOpaque;
+    int _occlusionCoverX, _occlusionCoverY;
+    unsigned int _occlusionCoverWidth, _occlusionCoverHeight;
+    BOOL _occlusionWatchGeometryKnown;
+    int _occlusionWatchX, _occlusionWatchY, _occlusionWatchWidth, _occlusionWatchHeight;
 
 @public
     XIM _xim;
@@ -140,6 +160,13 @@
 - (void) menuWindowUnmapped: (X11Window *) window;
 - (id) windowForID: (XID) i;
 - (void) windowHoldsFocus: (X11Window *) window;
+// The AppKit modifier flags for an X modifier state (the core protocol's state mask).
+- (NSEventModifierFlags) modifierFlagsForState: (unsigned int) state;
+
+// YES while a cursor hidden until the pointer moves waits for that motion. The server only reports
+// a motion to a window that selected PointerMotionMask, which a window does for mouse-moved events,
+// so every window selects it while this is YES.
+- (BOOL) cursorAwaitsPointerMotion;
 
 // Re-reads the backing scale and, when it changed, resizes the windows to the
 // new scale and notifies them.

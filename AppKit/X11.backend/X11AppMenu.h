@@ -18,52 +18,35 @@
 */
 
 #import <AppKit/NSWindow.h>
+#import "../private-include/AppKit/NSMenuBarController.h"
 #import <X11/Xlib.h>
 
-@class NSMenu, NSMainMenuView, NSDBusMenu;
-
-// The window along the top of the screen that shows the main menu of the
-// active application when the desktop has no global menu. It is a dock window
-// (_NET_WM_WINDOW_TYPE_DOCK) that reserves its strip of the screen
-// (_NET_WM_STRUT_PARTIAL), so window managers keep other windows out of it and
-// lay it over no decoration; see -[X11Window publishDockHints].
-@interface X11MenuBarWindow : NSWindow {
-    NSMainMenuView *_barView;
-}
-
-- (instancetype) initWithMenu: (NSMenu *) menu applicationName: (NSString *) name;
-- (void) setMainMenu: (NSMenu *) menu;
-- (void) setApplicationName: (NSString *) name;
-// Redraws after the items of the menu changed.
-- (void) menuChanged;
-// Puts the bar along the top edge of the main screen, across its width.
-- (void) placeAtTopOfScreen;
-
-@end
+@class NSMenu, NSDBusMenu, NSMenuBarController;
 
 // Shows the application's main menu outside its windows: in the desktop's
-// global menu when the session has one, and otherwise in an X11MenuBarWindow
-// for as long as the application is active.
+// global menu when the session has one, and otherwise in the bar of an
+// NSMenuBarController (an NSMenuBarWindow shown as a dock window).
 //
 // With a session bus the menu is exported on it, and the top-level windows
 // carry the properties that tell the desktop where to find it. A desktop that
 // has registered com.canonical.AppMenu.Registrar shows it in its panel, and the
 // application's own bar stays hidden.
-@interface X11AppMenu : NSObject {
+@interface X11AppMenu : NSObject <NSMenuBarControllerDelegate> {
     Display *_display;
     NSMenu *_menu;
     NSDBusMenu *_exporter;
     BOOL _connectionTried;
-    X11MenuBarWindow *_bar;
-    BOOL _barShown;
-    // The bar is not among the application's windows, so nothing else redraws it.
-    CFRunLoopObserverRef _displayObserver;
+    NSMenuBarController *_bar;
     NSMutableSet *_windows;
 }
 
 - (instancetype) initWithDisplay: (Display *) display;
 
 - (void) setMainMenu: (NSMenu *) menu;
+
+// Whether the session has a desktop that shows application menus (an appmenu
+// registrar owns its name on the session bus). Connects to the bus on first use.
+- (BOOL) globalMenuPresent;
 
 // A top-level window of the application was created or destroyed (not a popup
 // or the bar).

@@ -27,6 +27,7 @@
 #import <QuartzCore/CALayerHost.h>
 #import <QuartzCore/CALayerContext.h>
 #import <IOSurface/IOSurface.h>
+#import <OpenGL/gl.h>
 #import "CALayerInternal.h"
 #import "CARemoteContextProtocol.h"
 
@@ -60,6 +61,8 @@
 - (BOOL) isConnected;
 // The last frame, or NULL.
 - (IOSurfaceRef) frame;
+// Which of the two surfaces the frame is in.
+- (int) frameSlot;
 // Where the last frame lies in the context's coordinate space.
 - (CARemoteFrameGeometry) geometry;
 @end
@@ -187,6 +190,10 @@ static void handleHostMessages(void *context);
     return _geometry;
 }
 
+- (int) frameSlot {
+    return _frame != NULL && _frame == _surfaces[1] ? 1 : 0;
+}
+
 // Takes the send right in the message.
 - (void) receiveSurfacePort: (mach_port_t) port
                    geometry: (CARemoteFrameGeometry) geometry
@@ -290,6 +297,9 @@ static void handleHostMessages(void *context) {
 @implementation CALayerHost
 
 - (void) dealloc {
+    [[self _context] deleteTextureId: NS_EXTRA(CALayerHost, self)->_otherTextureId];
+    [NS_EXTRA(CALayerHost, self)->_otherTextureId release];
+    [NS_EXTRA(CALayerHost, self)->_otherTextureContents release];
     [NS_EXTRA(CALayerHost, self)->_connection cancel];
     [NS_EXTRA(CALayerHost, self)->_connection release];
     [super dealloc];
@@ -316,14 +326,69 @@ static void handleHostMessages(void *context) {
     [self _frameDidChange];
 }
 
+// Whether the layer, or one above it, is hidden or fully transparent, so
+// that a new frame changes nothing that is drawn.
+- (BOOL) _isInvisible {
+    for (CALayer *layer = self; layer != nil; layer = [layer superlayer])
+        if ([layer isHidden] || [layer opacity] <= 0)
+            return YES;
+    return NO;
+}
+
+// Showing the layer again (hidden, opacity) asks for a frame, which then
+// draws the latest one.
 - (void) _frameDidChange {
+    if ([self _isInvisible])
+        return;
     [[self _context] startTimerIfNeeded];
+}
+
+// The renderer keeps one texture per layer and binds a new surface to it when
+// the contents change. The frames alternate between two surfaces, so the
+// texture would be bound to the other surface at every frame; instead each
+// surface keeps a texture, and the layer's texture state is swapped to the
+// surface's when the frame moves to the other one. Called while the layer is
+// being drawn, with the rendering context current.
+- (void) _selectTextureForSlot: (int) slot {
+    if (slot == NS_EXTRA(CALayerHost, self)->_activeSlot)
+        return;
+    NS_EXTRA(CALayerHost, self)->_activeSlot = slot;
+
+    NSNumber *textureId = [[self _textureId] retain];
+    id contents = [[self _textureContents] retain];
+    uint32_t seed = [self _textureSeed];
+
+    [self _setTextureId: NS_EXTRA(CALayerHost, self)->_otherTextureId];
+    [self _setTextureContents: NS_EXTRA(CALayerHost, self)->_otherTextureContents];
+    [self _setTextureSeed: NS_EXTRA(CALayerHost, self)->_otherTextureSeed];
+
+    [NS_EXTRA(CALayerHost, self)->_otherTextureId release];
+    [NS_EXTRA(CALayerHost, self)->_otherTextureContents release];
+    NS_EXTRA(CALayerHost, self)->_otherTextureId = textureId;
+    NS_EXTRA(CALayerHost, self)->_otherTextureContents = contents;
+    NS_EXTRA(CALayerHost, self)->_otherTextureSeed = seed;
+
+    if ([self _textureId] == nil) {
+        GLuint texture;
+        glGenTextures(1, &texture);
+        [self _setTextureId: [NSNumber numberWithUnsignedInt: texture]];
+    }
+}
+
+- (void) _setContext: (CALayerContext *) context {
+    if ([self _context] != context) {
+        [[self _context] deleteTextureId: NS_EXTRA(CALayerHost, self)->_otherTextureId];
+        [NS_EXTRA(CALayerHost, self)->_otherTextureId release];
+        NS_EXTRA(CALayerHost, self)->_otherTextureId = nil;
+    }
+    [super _setContext: context];
 }
 
 - (id) _contentsForRendering: (CGRect *) rect {
     IOSurfaceRef frame = [NS_EXTRA(CALayerHost, self)->_connection frame];
     if (frame == NULL)
         return [super _contentsForRendering: rect];
+    [self _selectTextureForSlot: [NS_EXTRA(CALayerHost, self)->_connection frameSlot]];
     CARemoteFrameGeometry geometry = [NS_EXTRA(CALayerHost, self)->_connection geometry];
     CGFloat width = IOSurfaceGetWidth(frame);
     CGFloat height = IOSurfaceGetHeight(frame);

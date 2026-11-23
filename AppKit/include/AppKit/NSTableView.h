@@ -184,13 +184,14 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         NSRect _editingFrame, _editingBorder;
         NSArray *_sortDescriptors;
 
-        NSInteger _draggingRow;             // the drop indicator's row, -1 for none
-        BOOL _draggingRowOn;                // it's drawn around the row rather than above it
+        // Drop target proposed by the table and retargeted by the data source; -1 with
+        // NSTableViewDropOn is the whole table.
+        NSInteger _draggingRow;
+        NSTableViewDropOperation _draggingOperation;
+        BOOL _draggingTargetKnown;  // validated by the data source, not yet dropped
+        BOOL _draggingTargetShown;  // drop feedback is visible
         NSDragOperation _draggingSourceMaskLocal;
         NSDragOperation _draggingSourceMaskNonLocal;
-        NSInteger _dropRow;                 // the drop being validated, as setDropRow:dropOperation: may change it
-        NSTableViewDropOperation _dropOperation;
-        NSDragOperation _dropDragOperation; // what the data source answered for it
         NSIndexSet *_draggedRows;           // the rows of the dragging session the table began
 
         NSMutableDictionary *_registeredNibs;
@@ -211,6 +212,8 @@ typedef NS_ENUM(NSInteger, NSTableRowActionEdge) {
         BOOL _awaitingAwakeFromNib;
         // A data source set while loading from a nib is checked on the next -numberOfRows.
         BOOL _dataSourceCheckPending;
+        NSString *_autosaveName;
+        BOOL _autosaveTableColumns;
     NS_EXTRA_IVARS_END(NSTableView)
 }
 

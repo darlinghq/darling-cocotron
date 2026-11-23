@@ -23,10 +23,16 @@
 
 /*
  * Touch screens, through XInput 2.2. libXi is loaded when the display opens,
- * so a host without it (or a server without XInput 2.2, such as Xvfb) just
+ * so a host without it (or a server without XInput 2.2) just
  * has no touches. A window that selects touch events no longer gets the
  * pointer events the server would emulate from them: AppKit's touch router
  * (NSTouchPost) moves the mouse itself for views that take no touches.
+ *
+ * The version asked for is 2.4. When the server has it, and the XInput headers do (X11_XI_GESTURES),
+ * the same selection also asks for touchpad pinch gestures (X11Gesture.h). A device reports touches or
+ * gestures, never both, and gestures only come from dependent devices such as touchpads; which one a
+ * device reports is a property of the device, not of the version a client asks for, so touch
+ * screens and servers without 2.4 behave as before.
  */
 BOOL X11TouchInit(Display *display);
 void X11TouchSelectWindow(Display *display, Window window);

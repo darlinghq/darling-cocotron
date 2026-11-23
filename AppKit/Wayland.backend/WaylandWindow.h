@@ -34,6 +34,14 @@ struct WaylandBuffer {
     BOOL busy; // attached and not yet released by the compositor
 };
 
+// The role (xdg-shell or layer-shell) a window's wl_surface was given.
+typedef enum {
+    WaylandSurfaceRoleNone,
+    WaylandSurfaceRoleToplevel,
+    WaylandSurfaceRolePopup,
+    WaylandSurfaceRoleLayer,
+} WaylandSurfaceRole;
+
 // A top-level window: an xdg_toplevel whose content is Onyx2D's CPU rendering,
 // copied into wl_shm buffers.
 @interface WaylandWindow : CGWindow {
@@ -55,10 +63,17 @@ struct WaylandBuffer {
     BOOL _hasShadow;
 
     struct wl_proxy *_surface;
+    // The role of _surface (see -prepareSurfaceForRole:): a wl_surface keeps its role for life.
+    WaylandSurfaceRole _surfaceRole;
     struct wl_proxy *_xdgSurface;
     struct wl_proxy *_toplevel;
+    // The menu bar, when the compositor has wlr-layer-shell: it has this role instead of the xdg ones.
+    struct wl_proxy *_layerSurface;
     // org_kde_kwin_appmenu of the toplevel, while the main menu is exported.
     struct wl_proxy *_appMenu;
+    // org_kde_plasma_surface of the toplevel while it is not an application window (see
+    // -updateTaskbarPresence).
+    struct wl_proxy *_plasmaSurface;
     struct wl_proxy *_popup;
     WaylandWindow *_popupParent;
     uint32_t _popupGrabSerial;
@@ -73,9 +88,19 @@ struct WaylandBuffer {
     // for instance because it is covered or its workspace is not shown.
     BOOL _pendingSuspended, _suspended;
     BOOL _mapped;
+    // The window was sent -miniaturize (xdg_toplevel.set_minimized) and has not been shown again
+    // since; xdg-shell cannot tell a client whether a toplevel is minimized (see -miniaturize).
+    BOOL _minimized;
+    // Whether the compositor advertised that it minimizes toplevels (xdg_toplevel wm_capabilities,
+    // version 5): one that did not ignores set_minimized. The event applies with the configure that
+    // follows it.
+    BOOL _minimizeAdvertised, _pendingMinimizeAdvertised;
     // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
     BOOL _shouldBeMapped;
     BOOL _fullyTransparent;
+    // Ordered in by an application that may not take the input focus, so not mapped yet (see
+    // -mapWouldTakeFocusFromOthers).
+    BOOL _mapDeferred;
     // A menu is ordered in but waits for its parent window's first configure: a popup cannot be
     // created for a surface that has no role and configuration yet, and as a toplevel the
     // compositor would place and size it.
@@ -86,6 +111,7 @@ struct WaylandBuffer {
     // The activation is being reported to the NSWindow; its -becomeKeyWindow asks -makeKey, which is no new request.
     BOOL _reportingActivation;
     BOOL _configured;
+    BOOL _toplevelIconSet; // the compositor was given an icon for the toplevel
     BOOL _needsPresent;
     BOOL _activated;
     NSMutableSet *_surfaceOutputs;
@@ -99,6 +125,8 @@ struct WaylandBuffer {
     // configure said, and the size to go back to.
     BOOL _fullscreenRequested, _pendingFullscreen, _fullscreenRecheckPending;
     BOOL _fullscreenReported; // what the last configure said, told to the delegate
+    BOOL _fullscreenSettling; // a fullscreen change was requested and not yet answered
+    NSUInteger _fullscreenSettleToken;
     WaylandFullscreenTracker _fullscreenTracker;
     // The window this one is transient for because of its level, if any (not retained: the
     // display clears it when that window goes away).
@@ -123,6 +151,9 @@ struct WaylandBuffer {
 - (BOOL) isMapped;
 - (BOOL) isFullyTransparent;
 - (BOOL) isOrderedIn;
+- (void) keyboardFocusLeft;
+- (BOOL) isActivatedByCompositor;
+- (BOOL) isMapDeferred;
 - (BOOL) takeKeyRequest;
 - (void) reportActivationDisplayingIfNeeded: (BOOL) displayIfNeeded;
 - (int32_t) bufferScale;
@@ -135,6 +166,7 @@ struct WaylandBuffer {
 // events of the batch (including a configure for the new size) are in.
 - (void) outputsChanged;
 - (BOOL) isPopup;
+- (struct wl_proxy *) layerSurface;
 - (BOOL) isPopupWaitingForParent;
 - (void) ensureMapped;
 // A tool tip window: placed as an ungrabbed popup next to the pointer.
@@ -165,5 +197,8 @@ struct WaylandBuffer {
                 kind: (WaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy
            arguments: (union wl_argument *) args;
+
+// Gives the toplevel the application icon (xdg-toplevel-icon), when the compositor has the protocol.
+- (void) updateToplevelIcon;
 
 @end

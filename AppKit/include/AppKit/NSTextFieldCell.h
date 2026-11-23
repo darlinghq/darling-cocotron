@@ -38,6 +38,7 @@ typedef NS_ENUM(NSUInteger, NSTextFieldBezelStyle) {
         NSTextFieldBezelStyle _bezelStyle;
         id _placeholder;
         NSArray<NSString *> *_allowedInputSourceLocales;
+        NSInteger _maximumNumberOfLines;
     NS_EXTRA_IVARS_END(NSTextFieldCell)
 }
 

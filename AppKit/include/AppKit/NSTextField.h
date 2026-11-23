@@ -52,7 +52,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property(nonatomic) BOOL allowsEditingTextAttributes;
 
-- (NSInteger) maximumNumberOfLines;
+@property NSInteger maximumNumberOfLines;
 @property(nullable, copy) NSString *placeholderString;
 @property(nullable, copy) NSAttributedString *placeholderAttributedString;
 

@@ -28,6 +28,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 + pdfObjectDictionaryMark;
 + pdfObjectDictionaryMarkEnd;
 + pdfObjectWithNull;
+// The null object a reference to a missing object resolves to: one shared,
+// never released instance, so that it can be recognised and outlives any
+// autorelease pool. Its type is null like any other null object.
++ pdfObjectWithMissingObject;
 
 + pdfObjectProcMark;
 + pdfObjectProcMarkEnd;

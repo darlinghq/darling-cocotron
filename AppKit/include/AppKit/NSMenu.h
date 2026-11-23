@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
+#import <AppKit/NSAppearance.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 
@@ -54,7 +55,7 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 // Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSMenu : NSObject <NSCopying, NSUserInterfaceItemIdentification> {
+@interface NSMenu : NSObject <NSCopying, NSUserInterfaceItemIdentification, NSAppearanceCustomization> {
     NSMenu *_supermenu;
     NSString *_title;
     NS_LEGACY_IVAR_PAD(_NSMenuReserved1, 12)
@@ -65,10 +66,14 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
         id<NSMenuDelegate> _delegate;
         BOOL _showsStateColumn;
         NSUserInterfaceItemIdentifier _identifier;
+        NSAppearance *_appearance;
     NS_EXTRA_IVARS_END(NSMenu)
 }
 
 @property BOOL showsStateColumn;
+
+@property(nullable, strong) NSAppearance *appearance;
+@property(readonly, strong) NSAppearance *effectiveAppearance;
 
 + (void) popUpContextMenu: (NSMenu*) menu
                 withEvent: (NSEvent*) event
@@ -76,9 +81,15 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 + (null_unspecified NSZone *) menuZone;
 
++ (BOOL) menuBarVisible;
++ (void) setMenuBarVisible: (BOOL) visible;
+
 - (BOOL) popUpMenuPositioningItem: (nullable NSMenuItem *) item
                        atLocation: (NSPoint) location
                            inView: (nullable NSView *) view;
+
+- (void) cancelTracking;
+- (void) cancelTrackingWithoutAnimation;
 
 - (instancetype) initWithTitle: (NSString *) title;
 

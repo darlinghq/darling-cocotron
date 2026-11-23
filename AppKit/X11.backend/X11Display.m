@@ -24,9 +24,11 @@
 #import "X11DraggingManager.h"
 #import "X11Pasteboard.h"
 #import "X11LevelStacking.h"
+#import "X11Crossing.h"
 #import "../private-include/AppKit/NSEventTime.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
+#import "X11DockSupport.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSScreen.h>
@@ -53,6 +55,7 @@
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import "X11KeyEvent.h"
 #import "X11Touch.h"
+#import "X11Gesture.h"
 #import "X11Occlusion.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
@@ -347,6 +350,9 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         _lastScreens = nil;
     }
     _primaryRootFrameValid = NO;
+    // Whether the focused window covers a monitor depends on the layout.
+    _occlusionCoverValid = NO;
+    _occlusionDirty = YES;
     [self reevaluateBackingScale];
     [self _postScreenParametersChanged];
 }
@@ -387,6 +393,17 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
         if ([window isKindOfClass: [X11Window class]])
             [window displayBackingScaleChangedFrom: oldScale];
     }
+}
+
+// The windows carry the application icon in _NET_WM_ICON: when the application sets another one,
+// the windows already shown are given it too.
+- (void) applicationIconImageChanged {
+    [super applicationIconImageChanged];
+    for (id window in [_windowsByID allValues]) {
+        if ([window isKindOfClass: [X11Window class]])
+            [window setWindowIcon];
+    }
+    XFlush(_display);
 }
 
 // The main monitor's rectangle in root coordinates, device pixels: the origin
@@ -918,6 +935,34 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     }
 }
 
+- (BOOL) cursorAwaitsPointerMotion {
+    return _cursorHiddenUntilMouseMoves;
+}
+
+// Windows re-select their events when the wait for motion starts and when it ends.
+- (void) selectPointerMotionOnWindows {
+    for (id window in [_windowsByID allValues]) {
+        if ([window isKindOfClass: [X11Window class]])
+            [window syncDelegateProperties];
+    }
+}
+
+- (void) setCursorHiddenUntilMouseMoves: (BOOL) flag {
+    BOOL awaited = _cursorHiddenUntilMouseMoves;
+
+    [super setCursorHiddenUntilMouseMoves: flag];
+    if (awaited != _cursorHiddenUntilMouseMoves)
+        [self selectPointerMotionOnWindows];
+}
+
+- (void) pointerMoved {
+    BOOL awaited = _cursorHiddenUntilMouseMoves;
+
+    [super pointerMoved];
+    if (awaited)
+        [self selectPointerMotionOnWindows];
+}
+
 // Arrow, IBeam, HorizontalResize, VerticalResize
 - (id) cursorWithName: (NSString *) name {
     unsigned int shape = XC_left_ptr;
@@ -1081,6 +1126,9 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
                    forKey: [NSNumber
                                    numberWithUnsignedLong: (unsigned long) i]];
     else {
+        // A window replaced by another X window ends its pinch here, while it is still known and
+        // has its delegate; -[X11Window invalidate] ends it earlier.
+        [self cancelPinchOnWindow: i];
         [_windowsByID removeObjectForKey: [NSNumber numberWithUnsignedLong:
                                                             (unsigned long) i]];
 
@@ -1099,6 +1147,23 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
         if (_relativeWindow == i)
             [self suspendRelativeMouse];
     }
+}
+
+// The menu bar window is a dock that the window manager has to place at the top of the screen. Under a manager
+// that does not handle docks it would float over the windows of the application (see X11DockSupport.h), so
+// there the menu is outside the windows only when the desktop has a global menu, as on Wayland, and the
+// windows draw it themselves otherwise. -appMenu is not used: it asks +[NSWindow _usesInWindowMenuBar], which
+// is what is being answered.
+- (BOOL) _showsMainMenuOutsideWindows {
+    if (X11WindowManagerPlacesDocks(_display))
+        return YES;
+    if (_appMenu == nil)
+        _appMenu = [[X11AppMenu alloc] initWithDisplay: _display];
+    if ([_appMenu globalMenuPresent])
+        return YES;
+    [_appMenu release];
+    _appMenu = nil;
+    return NO;
 }
 
 - (X11AppMenu *) appMenu {
@@ -1529,24 +1594,60 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     }
 }
 
+// Whether the window is one of this process's own: an application window, or an overlay of the display.
+- (BOOL) isOwnWindowID: (Window) window {
+    return window != None && ([self windowForID: window] != nil ||
+                              [_overlayWindows containsObject: [NSNumber numberWithUnsignedLong: (unsigned long) window]]);
+}
+
+// The window manager made a window of another client the active one: the application is no longer
+// active, even when none of its own windows ever held the focus and so no focus-out will tell it.
+- (void) noteActiveWindowOfAnotherClient {
+    Window active = X11OcclusionActiveWindow(_display);
+
+    if (active != None && ![self isOwnWindowID: active])
+        [NSApp _systemFocusMovedToAnotherClient];
+}
+
 // Marks the occlusion state for a new judgement when the event can change it. Returns YES for the
 // root window's and the watched foreign window's events, which nothing else is interested in.
+// A ConfigureNotify that repeats the geometry of the previous one for the same window changes
+// nothing, so it does not ask for a new judgement: a window manager may send one for every
+// request that leaves the geometry as it was.
 - (BOOL) noteOcclusionEvent: (XEvent *) ev window: (X11Window *) window {
     Window target = ev->xany.window;
     if (target == DefaultRootWindow(_display)) {
         if (ev->type != PropertyNotify)
             return NO; // RandR notifications
         Atom atom = ev->xproperty.atom;
-        if (atom == XInternAtom(_display, "_NET_ACTIVE_WINDOW", False) ||
-            atom == XInternAtom(_display, "_NET_CLIENT_LIST_STACKING", False))
+        if (atom == XInternAtom(_display, "_NET_ACTIVE_WINDOW", False)) {
+            _occlusionActiveKnown = NO;
             _occlusionDirty = YES;
+            [self noteActiveWindowOfAnotherClient];
+        } else if (atom == XInternAtom(_display, "_NET_CLIENT_LIST_STACKING", False)) {
+            _occlusionDirty = YES;
+        }
         return YES;
     }
     if (window == nil) {
         if (target == None || target != _occlusionWatchWindow)
             return NO;
-        if (ev->type == DestroyNotify)
+        if (ev->type == DestroyNotify) {
             _occlusionWatchWindow = None;
+            _occlusionActiveKnown = NO;
+        }
+        if (ev->type == ConfigureNotify) {
+            XConfigureEvent *c = &ev->xconfigure;
+            if (_occlusionWatchGeometryKnown && c->x == _occlusionWatchX && c->y == _occlusionWatchY &&
+                c->width == _occlusionWatchWidth && c->height == _occlusionWatchHeight)
+                return YES;
+            _occlusionWatchGeometryKnown = YES;
+            _occlusionWatchX = c->x;
+            _occlusionWatchY = c->y;
+            _occlusionWatchWidth = c->width;
+            _occlusionWatchHeight = c->height;
+        }
+        _occlusionCoverValid = NO;
         _occlusionDirty = YES;
         // A property deleted on that window may be the end of a transfer another part is waiting for.
         return !(ev->type == PropertyNotify && ev->xproperty.state == PropertyDelete);
@@ -1554,8 +1655,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     switch (ev->type) {
     case MapNotify:
     case UnmapNotify:
-    case ConfigureNotify:
         _occlusionDirty = YES;
+        break;
+    case ConfigureNotify:
+        if ([window noteConfigureGeometryChanged: &ev->xconfigure])
+            _occlusionDirty = YES;
         break;
     }
     return NO;
@@ -1566,16 +1670,23 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     _occlusionDirty = NO;
     Window root = DefaultRootWindow(_display);
 
-    Window active = X11OcclusionActiveWindow(_display);
-    // The application's own windows never cover each other here.
-    if (active != None && [self windowForID: active] != nil)
-        active = None;
+    // The focused window and its geometry are read again only after an event that can change them.
+    if (!_occlusionActiveKnown) {
+        Window focused = X11OcclusionActiveWindow(_display);
+        // The application's own windows never cover each other here.
+        if ([self isOwnWindowID: focused])
+            focused = None;
+        _occlusionActive = focused;
+        _occlusionActiveKnown = YES;
+        _occlusionCoverValid = NO;
+        _occlusionWatchGeometryKnown = NO;
+    }
+    Window active = _occlusionActive;
 
     // Watch the focused foreign window for size, fullscreen and unmap changes. Selecting input replaces
     // this client's earlier selection on that window.
     if (active != _occlusionWatchWindow) {
-        if (_occlusionWatchWindow != None)
-            XSelectInput(_display, _occlusionWatchWindow, NoEventMask);
+        X11OcclusionStopWatching(_display, _occlusionWatchWindow, [self isOwnWindowID: _occlusionWatchWindow]);
         _occlusionWatchWindow = active;
         if (active != None)
             XSelectInput(_display, active, StructureNotifyMask | PropertyChangeMask);
@@ -1585,10 +1696,26 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     X11FullscreenRect cover = {0};
     bool coverFullscreen = false, coverOpaque = false;
     unsigned long *stack = NULL, stackCount = 0;
-    if (active != None && [windows count] > 0 &&
-        X11OcclusionCoverInfo(_display, active, &cover, &coverFullscreen, &coverOpaque) &&
-        coverFullscreen && coverOpaque)
-        stack = X11OcclusionStackingList(_display, &stackCount);
+    if (active != None && [windows count] > 0) {
+        if (!_occlusionCoverValid) {
+            X11FullscreenRect info = {0};
+            bool fullscreen = false, opaque = false;
+            _occlusionCoverOK = X11OcclusionCoverInfo(_display, active, &info, &fullscreen, &opaque);
+            _occlusionCoverX = info.x;
+            _occlusionCoverY = info.y;
+            _occlusionCoverWidth = info.width;
+            _occlusionCoverHeight = info.height;
+            _occlusionCoverFullscreen = fullscreen;
+            _occlusionCoverOpaque = opaque;
+            _occlusionCoverValid = YES;
+        }
+        cover = (X11FullscreenRect){_occlusionCoverX, _occlusionCoverY, _occlusionCoverWidth,
+                                    _occlusionCoverHeight};
+        coverFullscreen = _occlusionCoverFullscreen;
+        coverOpaque = _occlusionCoverOpaque;
+        if (_occlusionCoverOK && coverFullscreen && coverOpaque)
+            stack = X11OcclusionStackingList(_display, &stackCount);
+    }
 
     for (X11Window *platform in windows) {
         if (![platform isKindOfClass: [X11Window class]])
@@ -1659,22 +1786,31 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     case KeyPress:
     case KeyRelease:;
 
+        // Xlib wants every event through XFilterEvent(), key events included, and an input method only sees
+        // a key that goes through it: one that is switched by a modifier alone (fcitx's Shift_L alternative
+        // trigger key, a pinyin engine's Shift) never hears of a modifier that is handled first.
+        BOOL filtered = XFilterEvent(ev, None) != False;
+
         NSEventModifierFlags modifierFlags = [self modifierFlagsForState: ev->xkey.state];
         char buf[20] = {0};
         char *text = buf;
         KeySym keySym = NoSymbol;
         int strLen;
 
-        // Ahead of the input method: a modifier is not text, and an IM filter
-        // that swallows it would leave the reported flags permanently stale.
-        // The aggregate mask is also corrected here for the same reason, with
-        // the keycode macOS uses when no single key is responsible.
+        // A modifier is not text. One the input method took is left alone (X11KeyEvent.h): the unfiltered
+        // copy it forwards back updates the flags and is posted as a flagsChanged, and one it keeps is
+        // corrected by the modifier state of the next key or pointer event, with the keycode macOS uses when
+        // no single key is responsible.
         {
             BOOL pressed = ev->type == KeyPress;
             unsigned int keycode = ev->xkey.keycode;
             X11ModifierKey modifier = modifierKeyForKeysym(
                     XKeycodeToKeysym(_display, keycode, 0));
+            X11KeyEventPlan plan = X11KeyEventPlanFor(modifier.carbonKeyCode >= 0, filtered,
+                                                      ev->xany.send_event);
             if (modifier.carbonKeyCode >= 0) {
+                if (!plan.trackModifier)
+                    break;
                 // A lock key changes the state on its press only.
                 if (modifier.toggle && !pressed)
                     break;
@@ -1691,12 +1827,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                               inWindow: window];
                 break; // Modifiers are neither text nor repeatable keys.
             }
-            if (!ev->xany.send_event)
+            if (plan.resyncFromState)
                 [self resyncModifierFlagsWithState: ev->xkey.state window: window];
+            if (!plan.lookUpText)
+                break; // The input method took the key; what it commits comes back as another event.
         }
-
-        if (XFilterEvent(ev, None)) // XIM processing
-            break;
 
         // A window has no input context when the display couldn't open an input method or
         // XCreateIC() failed, and Xutf8LookupString() dereferences its XIC unconditionally.
@@ -1887,6 +2022,10 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                             deltaY: 0.0];
         [(NSEvent_mouse *) event
                 _setButtonNumber: cocoaButtonNumber(ev->xbutton.button)];
+        // The window manager may focus the window for this very click, before
+        // or after the press reaches us; the press is judged by what we knew
+        // when it arrived, not by what the queue shows when it is taken.
+        [(NSEvent_mouse *) event _setWindowWasKeyOnArrival: [delegate isKeyWindow]];
         [self postEvent: event atStart: NO];
         break;
 
@@ -2068,6 +2207,18 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case LeaveNotify:
+        // The pointer left the window (X11Crossing.h says which crossings mean that), and the event carries where it
+        // was. The window re-evaluates its tracking areas at that position, as it does for a motion, and sends the
+        // exits for the areas the position is outside. A leave that comes with the pointer still inside the window's
+        // rectangle (another window mapped over it) finds the areas still containing it and sends nothing. A pointer
+        // on another screen has no usable position here.
+        if (window == nil || _relativeMouse.active || !ev->xcrossing.same_screen ||
+            !X11LeaveNotifyMeansPointerLeft(ev->xcrossing.mode, ev->xcrossing.detail))
+            break;
+        [window setLastKnownCursorPosition:
+                        [window logicalPoint: NSMakePoint(ev->xcrossing.x,
+                                                          ev->xcrossing.y)]];
+        [delegate platformWindowSetCursorEvent: window];
         break;
 
     case FocusIn:
@@ -2335,6 +2486,8 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
         if ((error = XNextEvent(_display, &e)) != 0)
             NSLog(@"XNextEvent returned %d", error);
+        else if (e.type != KeyPress && e.type != KeyRelease && XFilterEvent(&e, None))
+            continue; // An input method's reply (Xlib: every event goes through XFilterEvent()).
         else
             [self postXEvent: &e];
     }

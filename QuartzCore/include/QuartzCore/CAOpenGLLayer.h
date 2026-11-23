@@ -21,6 +21,7 @@
 #import <QuartzCore/LegacyIvarLayout.h>
 #import <OpenGL/OpenGL.h>
 #import <CoreVideo/CVBase.h>
+#import <IOSurface/IOSurfaceRef.h>
 
 @interface CAOpenGLLayer : CALayer {
     NS_EXTRA_IVARS_BEGIN(CAOpenGLLayer)
@@ -29,9 +30,29 @@
         CGLContextObj _cglContext;
         BOOL _wantsExtendedDynamicRangeContent;
         GLuint _fbo;
-        GLuint _colorTex;
         GLuint _depthRb;
         CGSize _allocatedSize;
+        // The frames the layer draws go into one of three slots at a time,
+        // so that the compositor never samples the slot being drawn.
+        // _frontSlot and _hostSlot are slot numbers plus one (0 for none): the
+        // latest finished frame, and the one the compositor sampled last (it
+        // may still be reading it). A slot's texture is a plain one, or, for
+        // a compositing context that shares no objects with the layer's,
+        // bound to the IOSurface in _slotSurface.
+        IOSurfaceRef _slotSurface[3];
+        GLuint _slotTex[3];
+        GLsizei _slotWidth[3];
+        GLsizei _slotHeight[3];
+        int _frontSlot;
+        int _hostSlot;
+        unsigned long _frameSerial;
+        BOOL _wantsSurface;
+        // The textures of a compositing context that shares no objects with
+        // the layer's context, one for each slot, bound to the slot's surface
+        // and to the frame they last showed.
+        GLuint _hostTex[3];
+        CGLContextObj _hostTexContext;
+        unsigned long _hostBoundSerial[3];
     NS_EXTRA_IVARS_END(CAOpenGLLayer)
 }
 

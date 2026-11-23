@@ -41,14 +41,17 @@
 #import <QuartzCore/CAWindowOpenGLContext.h>
 
 #import "X11Display.h"
+#import "X11Gesture.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "X11Fullscreen.h"
 #import "X11InputShape.h"
 #import "X11RoundedShape.h"
 #import "X11InvisibleWindow.h"
+#import "X11PointerMotion.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
+#import "X11OpaqueRegion.h"
 #import "X11AppMenu.h"
 #import <X11/Xatom.h>
 #import <X11/Xutil.h>
@@ -446,86 +449,56 @@ static void preeditCaretCallback(XIC ic, XPointer clientData, XPointer callData)
     return ret;
 }
 
-static NSData *makeWindowIcon() {
-    static NSMutableData *res;
+// The edge lengths the window icon is offered at. The window manager picks the one that fits its
+// title bar, task bar or switcher best.
+static const int WindowIconSides[] = {16, 32, 48, 64, 128, 256};
 
-    if (res != nil)
-        return res;
+// _NET_WM_ICON: for each size the width and height, then width * height ARGB pixels (not premultiplied),
+// every value in a long as the property is a 32 bit format. nil when the application has no icon.
+static NSData *makeWindowIcon(X11Display *display) {
+    NSMutableData *res = nil;
 
-    // Figure out the path.
-    NSBundle *bundle = [NSBundle mainBundle];
-    NSString *name = [bundle objectForInfoDictionaryKey: @"CFBundleIconFile"];
-    if (name == nil || [name length] == 0)
-        return nil;
-    NSString *path = [bundle pathForImageResource: name];
-    if (path == nil) {
-        NSLog(@"Cannot find an icon file named %@", name);
-        return nil;
-    }
-    NSURL *url = [NSURL fileURLWithPath: path];
+    for (size_t i = 0; i < sizeof(WindowIconSides) / sizeof(WindowIconSides[0]); i++) {
+        int side = WindowIconSides[i];
+        NSData *pixels = [display applicationIconPixelsOfSide: side];
+        if (pixels == nil)
+            return nil;
+        if (res == nil)
+            res = [NSMutableData data];
 
-    O2ImageSource *imageSource = [O2ImageSource newImageSourceWithURL: url
-                                                              options: nil];
-    if (imageSource == nil) {
-        NSLog(@"Cannot parse the icon");
-        return nil;
-    }
-
-    res = [[NSMutableData alloc] initWithCapacity: 32 * 32 * 4 + 2];
-    O2ColorSpace *colorSpace = O2ColorSpaceCreateDeviceRGB();
-
-    // Go over the images, turning them into the required format
-    // and appending them to res.
-    for (NSUInteger i = 0; i < [imageSource count]; i++) {
-
-        O2Image *image = [imageSource createImageAtIndex: i options: nil];
-        NSUInteger width = O2ImageGetWidth(image);
-        NSUInteger height = O2ImageGetHeight(image);
-
-        // Render the image in ARGB.
-        O2BitmapContext *context = (O2BitmapContext *) O2BitmapContextCreate(
-                NULL, width, height, 8, width * 4, colorSpace,
-                kO2ImageAlphaPremultipliedFirst | kO2BitmapByteOrder32Host);
-
-        [context drawImage: image inRect: O2RectMake(0, 0, width, height)];
-        int *imageData = O2BitmapContextGetData(context);
-
-        // Convert to the format accepted by Xlib.
-        NSMutableData *data =
-                [NSMutableData dataWithLength: width * height * sizeof(long)];
-        long *dataPtr = (long *) [data mutableBytes];
-        int count = width * height;
-        for (int i = 0; i < count; i++) {
-            dataPtr[i] = imageData[i];
+        long header[2] = {side, side};
+        [res appendBytes: header length: sizeof(header)];
+        NSMutableData *data = [NSMutableData dataWithLength: (size_t) side * side * sizeof(long)];
+        long *out = (long *) [data mutableBytes];
+        const uint32_t *in = (const uint32_t *) [pixels bytes];
+        for (int p = 0; p < side * side; p++) {
+            uint32_t argb = in[p];
+            uint32_t alpha = argb >> 24;
+            if (alpha != 0 && alpha != 255) {
+                uint32_t red = MIN(255u, ((argb >> 16) & 0xff) * 255 / alpha);
+                uint32_t green = MIN(255u, ((argb >> 8) & 0xff) * 255 / alpha);
+                uint32_t blue = MIN(255u, (argb & 0xff) * 255 / alpha);
+                argb = (alpha << 24) | (red << 16) | (green << 8) | blue;
+            }
+            out[p] = argb;
         }
-
-        struct {
-            long w, h;
-        } size = {width, height};
-        [res appendBytes: &size length: sizeof(size)];
         [res appendData: data];
-
-        [context release];
-        [image release];
     }
-
-    [colorSpace release];
-    [imageSource release];
-
     return res;
 }
 
+// Sets _NET_WM_ICON from the application icon, or removes it when there is none (so the window manager
+// falls back to its own choice).
 - (void) setWindowIcon {
+    Atom property = XInternAtom(_display, "_NET_WM_ICON", False);
+    NSData *data = makeWindowIcon((X11Display *) [NSDisplay currentDisplay]);
 
-    NSData *data = makeWindowIcon();
-
-    if (data == nil)
+    if (data == nil) {
+        XDeleteProperty(_display, _window, property);
         return;
-
-    XChangeProperty(
-            _display, _window, XInternAtom(_display, "_NET_WM_ICON", False),
-            XInternAtom(_display, "CARDINAL", False), 32, PropModeReplace,
-            [data bytes], [data length] / sizeof(long));
+    }
+    XChangeProperty(_display, _window, property, XInternAtom(_display, "CARDINAL", False), 32, PropModeReplace,
+                    [data bytes], [data length] / sizeof(long));
 }
 
 - (instancetype) initWithDelegate: (NSWindow *) delegate {
@@ -574,7 +547,7 @@ static NSData *makeWindowIcon() {
     // receives keyboard focus from a compositor and cannot be made fullscreen.
     // The menu bar window is a dock window: the window manager has to manage
     // it for its strut to count.
-    _dock = [delegate isKindOfClass: [X11MenuBarWindow class]];
+    _dock = [delegate isKindOfClass: [NSMenuBarWindow class]];
     // Menu and pop-up windows are panels, but they are the first kind named
     // above: a managed window would take the input focus from the window the
     // menu belongs to when it is clicked, and the application would see
@@ -674,6 +647,10 @@ static NSData *makeWindowIcon() {
 
     [self setWindowIcon];
 
+    // The new X window has no region yet.
+    _opaqueRegionSize = NSZeroSize;
+    [self updateOpaqueRegion];
+
     return YES;
 }
 
@@ -760,15 +737,17 @@ static NSData *makeWindowIcon() {
         XDeleteProperty(_display, _window, XA_WM_TRANSIENT_FOR);
 
     // Whether the window takes the input focus when the window manager maps it (ICCCM 4.1.7). A
-    // window that is not an application window is not given the focus by being shown either: the
-    // user time 0 says no user action caused it (EWMH _NET_WM_USER_TIME). Making it the key window
+    // window that is not an application window, or one of an application that is not active, is
+    // not given the focus by being shown either: the user time 0 says no user action caused it
+    // (EWMH _NET_WM_USER_TIME). Making it the key window
     // asks for the focus explicitly (-requestInputFocus).
     XWMHints hints = {0};
     hints.flags = InputHint;
     hints.input = canBecomeKey ? True : False;
     XSetWMHints(_display, _window, &hints);
     Atom userTime = XInternAtom(_display, "_NET_WM_USER_TIME", False);
-    if (!_dock && presentation != DarlingWindowPresentationApplication) {
+    // An application that is not active does not take the focus by showing a window either.
+    if (!_dock && (presentation != DarlingWindowPresentationApplication || ![NSApp _mayTakeInputFocus])) {
         unsigned long zero = 0;
         XChangeProperty(_display, _window, userTime, XA_CARDINAL, 32, PropModeReplace,
                         (const unsigned char *) &zero, 1);
@@ -776,6 +755,29 @@ static NSData *makeWindowIcon() {
         XDeleteProperty(_display, _window, userTime);
     }
     [self updateSizeHints: _styleMask];
+}
+
+// The window's presentation can change while it is on screen (its collection behavior): tell the window
+// manager whether the window is listed in the task bar and pager now.
+- (void) presentationChanged {
+    if (!_mapped || _window == 0 || _dock)
+        return;
+    BOOL wasSkipping = _skipTaskbar;
+    [self updateWindowManagerHints];
+    if (_skipTaskbar == wasSkipping)
+        return;
+    XEvent event = {0};
+    event.xclient.type = ClientMessage;
+    event.xclient.window = _window;
+    event.xclient.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
+    event.xclient.format = 32;
+    event.xclient.data.l[0] = _skipTaskbar ? 1 : 0; // add or remove
+    event.xclient.data.l[1] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False);
+    event.xclient.data.l[2] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False);
+    event.xclient.data.l[3] = 1; // source indication: application
+    XSendEvent(_display, DefaultRootWindow(_display), False,
+               SubstructureRedirectMask | SubstructureNotifyMask, &event);
+    XFlush(_display);
 }
 
 - (void) dealloc {
@@ -789,14 +791,52 @@ static NSData *makeWindowIcon() {
     return _styleMask;
 }
 
+// ICCCM 4.1.2.3 minimum and maximum sizes for a resizable window. A minimum of zero and a maximum of
+// zero or too large for a window (the FLT_MAX of an unset maximum) are no limit, and a limit is
+// hinted only when it applies in some dimension. The hints are in device pixels too.
+- (void) addSizeLimitsToHints: (XSizeHints *) sh {
+    if (_delegate == nil)
+        return;
+    NSSize minimum = [_delegate _minFrameSize];
+    NSSize maximum = [_delegate _maxFrameSize];
+    const CGFloat largest = 65535;
+    // -deviceSize: makes a zero extent one pixel, which for a limit means none.
+    NSSize deviceMinimum = [self deviceSize: minimum];
+    NSSize deviceMaximum = [self deviceSize: maximum];
+
+    if (minimum.width > 0 || minimum.height > 0) {
+        sh->flags |= PMinSize;
+        sh->min_width = minimum.width > 0 ? MIN(deviceMinimum.width, largest) : 1;
+        sh->min_height = minimum.height > 0 ? MIN(deviceMinimum.height, largest) : 1;
+    }
+    BOOL limitedWidth = maximum.width > 0 && deviceMaximum.width < largest;
+    BOOL limitedHeight = maximum.height > 0 && deviceMaximum.height < largest;
+    if (limitedWidth || limitedHeight) {
+        sh->flags |= PMaxSize;
+        // A maximum below the minimum would make the hints inconsistent.
+        sh->max_width = limitedWidth ? MAX(deviceMaximum.width, sh->min_width) : largest;
+        sh->max_height = limitedHeight ? MAX(deviceMaximum.height, sh->min_height) : largest;
+    }
+}
+
+// NSWindow's size limits changed (see NSWindow_sizeLimits in NSWindow-Private.h).
+- (void) sizeLimitsChanged {
+    if (_window == 0)
+        return;
+    [self updateSizeHints: _styleMask];
+    XFlush(_display);
+}
+
 // The mask is passed in rather than read from _styleMask because
 // -setStyleMask: hands the new mask here before it stores it. The hinted size is
 // _frame's, so a caller that just resized has to re-issue these.
 - (void) updateSizeHints: (NSUInteger) mask {
     XSizeHints *sh = XAllocSizeHints();
     if (mask & NSWindowStyleMaskResizable) {
-        // Make resizable
+        // Make resizable, within the limits NSWindow derives from minSize, maxSize, contentMinSize
+        // and contentMaxSize.
         sh->flags = 0;
+        [self addSizeLimitsToHints: sh];
     } else {
         // Make non-resizable
         sh->flags = PMinSize | PMaxSize;
@@ -1035,6 +1075,22 @@ static const int X11ChromelessCornerRadius = 5;
         _roundedShapeSet = _chromeless;
 }
 
+// The promise to a compositing manager that all of an opaque window with an alpha channel is opaque, an occlusion
+// hint it may ignore (see X11OpaqueRegion.h).
+// Asked again when the opacity or the size changes; a request is made only for a change.
+- (void) updateOpaqueRegion {
+    if (_window == 0 || _delegate == nil || _visualInfo == NULL)
+        return;
+    BOOL windowIsOpaque = [_delegate isOpaque];
+    NSSize device = [self deviceSize: _frame.size];
+    NSSize wanted = X11OpaqueRegionApplies(_visualInfo->depth, windowIsOpaque) ? device : NSZeroSize;
+    if (NSEqualSizes(wanted, _opaqueRegionSize))
+        return;
+    X11WindowSetOpaqueRegion(_display, _window, _visualInfo->depth, windowIsOpaque, (int) device.width,
+                             (int) device.height);
+    _opaqueRegionSize = wanted;
+}
+
 // The outline of a window without a frame: one device pixel along the rounded edge, drawn over the content
 // every time the window is flushed. The window's backing keeps what is drawn on it, so drawing it again must
 // change nothing: every pixel is either the opaque outline colour or untouched. The straight sides are
@@ -1095,8 +1151,6 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 - (void) setStyleMask: (NSUInteger) mask {
-    NSLog(@"X11Window setStyleMask: 0x%lx\n", (unsigned long) mask);
-
     [self setStyleMaskInternal: mask force: NO];
 
     _styleMask = mask;
@@ -1302,9 +1356,9 @@ static const int X11ChromelessCornerRadius = 5;
                 VisibilityChangeMask | FocusChangeMask | PropertyChangeMask |
                 SubstructureRedirectMask;
 
-    if ([_delegate acceptsMouseMovedEvents]) {
-        mask |= PointerMotionMask;
-    }
+    mask |= X11PointerMotionEventMask(
+            [_delegate acceptsMouseMovedEvents],
+            [(X11Display *) [NSDisplay currentDisplay] cursorAwaitsPointerMotion]);
     XSelectInput(_display, _window, mask);
     X11TouchSelectWindow(_display, _window);
 
@@ -1377,6 +1431,10 @@ static const int X11ChromelessCornerRadius = 5;
     // several times, so set everything to nil/NULL/0.
     [_context release];
     _context = nil;
+
+    // An active pinch on this window ends while its delegate can still be told.
+    if (_window != 0)
+        [(X11Display *) [NSDisplay currentDisplay] cancelPinchOnWindow: _window];
 
     [_delegate platformWindowDidInvalidateCGContext: self];
     _delegate = nil;
@@ -1520,6 +1578,7 @@ static const int X11ChromelessCornerRadius = 5;
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
     [self updateWindowShape];
+    [self updateOpaqueRegion];
     // A non-resizable window hints PMinSize == PMaxSize, and a window manager
     // refuses any resize that falls outside the pair, so the hints have to follow
     // the size. Only on a real change so a drag does not re-issue them per pixel.
@@ -1559,6 +1618,7 @@ static const int X11ChromelessCornerRadius = 5;
 
 - (void) setOpaque: (BOOL) value {
     _isOpaque = value;
+    [self updateOpaqueRegion];
 }
 
 - (void) sheetOrderFrontFromFrame: (NSRect) frame
@@ -1596,6 +1656,17 @@ static const int X11ChromelessCornerRadius = 5;
     _keyRequested = NO;
 }
 
+// Stacks this window directly above or below another top-level window. With a window manager the two client
+// windows live in frames of their own and are not siblings, so a plain stacking request naming the other window
+// as sibling is a BadMatch; XReconfigureWMWindow makes the ICCCM request for that case (a ConfigureRequest sent
+// to the root window, which the window manager carries out for the frames).
+- (void) stackRelativeToWindow: (Window) sibling mode: (int) mode {
+    XWindowChanges changes;
+    changes.sibling = sibling;
+    changes.stack_mode = mode;
+    XReconfigureWMWindow(_display, _window, DefaultScreen(_display), CWSibling | CWStackMode, &changes);
+}
+
 - (void) placeAboveWindow: (NSInteger) otherNumber {
     X11Window *other = [X11Window windowWithWindowNumber: otherNumber];
     [self ensureMappedIfVisible];
@@ -1603,8 +1674,7 @@ static const int X11ChromelessCornerRadius = 5;
     if (!other) {
         XRaiseWindow(_display, _window);
     } else {
-        Window w[2] = {_window, other->_window};
-        XRestackWindows(_display, w, 2);
+        [self stackRelativeToWindow: other->_window mode: Above];
     }
     [self restackForLevels];
 }
@@ -1616,8 +1686,7 @@ static const int X11ChromelessCornerRadius = 5;
     if (!other) {
         XLowerWindow(_display, _window);
     } else {
-        Window w[2] = {other->_window, _window};
-        XRestackWindows(_display, w, 1);
+        [self stackRelativeToWindow: other->_window mode: Below];
     }
 }
 
@@ -1865,6 +1934,18 @@ static BOOL X11WindowManagerSupports(Display *display, const char *name) {
     return _occluded;
 }
 
+- (BOOL) noteConfigureGeometryChanged: (XConfigureEvent *) event {
+    if (_configureKnown && event->x == _configureX && event->y == _configureY &&
+        event->width == _configureWidth && event->height == _configureHeight)
+        return NO;
+    _configureKnown = YES;
+    _configureX = event->x;
+    _configureY = event->y;
+    _configureWidth = event->width;
+    _configureHeight = event->height;
+    return YES;
+}
+
 - (void) setOccluded: (BOOL) occluded {
     _occluded = occluded;
 }
@@ -2067,6 +2148,7 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
         [self invalidateContextWithNewSize: rect.size];
         _frame = rect;
         [self updateWindowShape];
+        [self updateOpaqueRegion];
     } @finally {
         XSetErrorHandler(previousHandler);
     }

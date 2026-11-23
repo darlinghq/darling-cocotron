@@ -4,6 +4,7 @@
 #import <QuartzCore/CAConstraintLayoutManager.h>
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CALayerContext.h>
+#import <QuartzCore/CAScrollLayer.h>
 #import <QuartzCore/CATransaction.h>
 #import <Onyx2D/O2Image.h>
 #import "CAKeyedCoding.h"
@@ -896,6 +897,7 @@ static BOOL isOpaqueBlack(CGColorRef color) {
         CGColorRelease(NS_EXTRA(CALayer, self)->_backgroundColor);
     if (NS_EXTRA(CALayer, self)->_borderColor)
         CGColorRelease(NS_EXTRA(CALayer, self)->_borderColor);
+    [NS_EXTRA(CALayer, self)->_contents release];
     [NS_EXTRA(CALayer, self)->_textureContents release];
     NS_EXTRA_FREE(CALayer, self);
     [super dealloc];
@@ -1490,6 +1492,23 @@ static CGRect applyToRect(CATransform3D m, CGRect rect) {
 
 - (CGRect) convertRect: (CGRect) rect toLayer: (CALayer *) layer {
     return applyToRect(transformBetweenLayers(self, layer), rect);
+}
+
+// The part of the layer's bounds that shows through the scroll layers above it
+// (a layer outside any scroll layer shows all of its bounds; clipping by
+// masksToBounds does not count).
+- (CGRect) visibleRect {
+    CGRect visible = [self bounds];
+    for (CALayer *ancestor = [self superlayer]; ancestor != nil;
+         ancestor = [ancestor superlayer]) {
+        if (![ancestor isKindOfClass: [CAScrollLayer class]])
+            continue;
+        visible = CGRectIntersection(
+                visible, [self convertRect: [ancestor bounds] fromLayer: ancestor]);
+        if (CGRectIsNull(visible))
+            return CGRectZero;
+    }
+    return visible;
 }
 
 - (BOOL) needsDisplayOnBoundsChange {

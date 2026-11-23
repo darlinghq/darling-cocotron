@@ -120,6 +120,12 @@ static NSInteger compareZIndex(id first, id second, void *context)
 }
 
 @implementation NSCollectionView
+
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
 @synthesize dataSource = _dataSource;
 @synthesize delegate = _delegate;
 

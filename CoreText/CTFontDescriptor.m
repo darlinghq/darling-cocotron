@@ -35,11 +35,18 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
 @implementation KTFontDescriptor
 
 - initWithAttributes: (NSDictionary *) attributes fontData: (NSData *) data {
+    return [self initWithAttributes: attributes fontData: data faceIndex: 0];
+}
+
+- initWithAttributes: (NSDictionary *) attributes
+            fontData: (NSData *) data
+           faceIndex: (int) faceIndex {
     self = [super init];
     if (self == nil)
         return nil;
     _attributes = attributes ? [attributes copy] : [[NSDictionary alloc] init];
     _fontData = [data copy];
+    _faceIndex = faceIndex;
     return self;
 }
 
@@ -65,13 +72,18 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
     return _fontData;
 }
 
+- (int) faceIndex {
+    return _faceIndex;
+}
+
 - (BOOL) isEqual: (id) other {
     if (other == self)
         return YES;
     if (![other isKindOfClass: [KTFontDescriptor class]])
         return NO;
     KTFontDescriptor *descriptor = other;
-    if (![_attributes isEqual: descriptor->_attributes])
+    if (![_attributes isEqual: descriptor->_attributes] ||
+        _faceIndex != descriptor->_faceIndex)
         return NO;
     if (_fontData == nil || descriptor->_fontData == nil)
         return _fontData == descriptor->_fontData;
@@ -89,6 +101,8 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
 
 @end
 
+static NSString *stringAttribute(NSDictionary *attributes, CFStringRef key);
+
 static KTFontDescriptor *descriptorObject(CTFontDescriptorRef descriptor) {
     return (KTFontDescriptor *) descriptor;
 }
@@ -99,6 +113,22 @@ CTFontDescriptorRef KTFontDescriptorCreateWithFontData(CFDictionaryRef attribute
     return (CTFontDescriptorRef) [[KTFontDescriptor alloc]
             initWithAttributes: (NSDictionary *) attributes
                       fontData: (NSData *) data];
+}
+
+CTFontDescriptorRef KTFontDescriptorCreateWithFontDataAndFaceIndex(CFDictionaryRef attributes,
+                                                                   CFDataRef data,
+                                                                   int faceIndex)
+{
+    return (CTFontDescriptorRef) [[KTFontDescriptor alloc]
+            initWithAttributes: (NSDictionary *) attributes
+                      fontData: (NSData *) data
+                     faceIndex: faceIndex];
+}
+
+int KTFontDescriptorGetFaceIndex(CTFontDescriptorRef descriptor) {
+    if (descriptor == NULL)
+        return 0;
+    return [descriptorObject(descriptor) faceIndex];
 }
 
 CFDataRef KTFontDescriptorGetFontData(CTFontDescriptorRef descriptor) {
@@ -137,8 +167,8 @@ CTFontDescriptorRef CTFontDescriptorCreateCopyWithAttributes(CTFontDescriptorRef
     NSMutableDictionary *merged = [[descriptor attributes] mutableCopy];
     if (attributes != NULL)
         [merged addEntriesFromDictionary: (NSDictionary *) attributes];
-    CTFontDescriptorRef result = KTFontDescriptorCreateWithFontData(
-            (CFDictionaryRef) merged, (CFDataRef) [descriptor fontData]);
+    CTFontDescriptorRef result = KTFontDescriptorCreateWithFontDataAndFaceIndex(
+            (CFDictionaryRef) merged, (CFDataRef) [descriptor fontData], [descriptor faceIndex]);
     [merged release];
     return result;
 }
@@ -149,11 +179,45 @@ CFDictionaryRef CTFontDescriptorCopyAttributes(CTFontDescriptorRef descriptor) {
     return (CFDictionaryRef) [[descriptorObject(descriptor) attributes] copy];
 }
 
+// A descriptor is often made with the PostScript name alone, or from a font
+// object, and its other naming attributes are those of the installed face of
+// that name. The attribute is read from that face when the descriptor does not
+// carry it. A descriptor that holds font data is not looked up: the face it
+// describes is not necessarily an installed one.
+static id installedFaceAttribute(KTFontDescriptor *descriptor, CFStringRef attribute)
+{
+    const char *faceKey = NULL;
+    if (CFEqual(attribute, kCTFontFamilyNameAttribute))
+        faceKey = "family";
+    else if (CFEqual(attribute, kCTFontDisplayNameAttribute))
+        faceKey = "fullName";
+    else if (CFEqual(attribute, kCTFontStyleNameAttribute))
+        faceKey = "style";
+    else if (CFEqual(attribute, kCTFontURLAttribute))
+        faceKey = "path";
+    if (faceKey == NULL || [descriptor fontData] != nil)
+        return nil;
+
+    NSString *name = stringAttribute([descriptor attributes], kCTFontNameAttribute);
+    if (name == nil)
+        return nil;
+    NSArray *faces = O2FontCopyInstalledFaces(nil, name, nil, nil);
+    id value = nil;
+    if ([faces count] > 0)
+        value = [[faces objectAtIndex: 0] objectForKey: [NSString stringWithUTF8String: faceKey]];
+    [faces release];
+    if (value != nil && strcmp(faceKey, "path") == 0)
+        value = [NSURL fileURLWithPath: value];
+    return value;
+}
+
 CFTypeRef CTFontDescriptorCopyAttribute(CTFontDescriptorRef descriptor, CFStringRef attribute)
 {
     if (descriptor == NULL || attribute == NULL)
         return NULL;
     id value = [[descriptorObject(descriptor) attributes] objectForKey: (NSString *) attribute];
+    if (value == nil)
+        value = installedFaceAttribute(descriptorObject(descriptor), attribute);
     return (CFTypeRef) [value retain];
 }
 
@@ -227,9 +291,17 @@ CFArrayRef CTFontDescriptorCreateMatchingFontDescriptors(CTFontDescriptorRef des
         NSNumber *symbolic = [face objectForKey: @"symbolicTraits"];
         NSNumber *weight = [face objectForKey: @"weight"];
         if (symbolic != nil && weight != nil) {
-            NSDictionary *traits = [NSDictionary dictionaryWithObjectsAndKeys:
+            // All four traits are reported, as CTFontCopyTraits does: callers read the width and
+            // slant values without a check for their presence.
+            NSMutableDictionary *traits = [NSMutableDictionary dictionaryWithObjectsAndKeys:
                     symbolic, (NSString *) kCTFontSymbolicTrait,
                     weight, (NSString *) kCTFontWeightTrait, nil];
+            NSNumber *width = [face objectForKey: @"width"];
+            NSNumber *slant = [face objectForKey: @"slant"];
+            if (width != nil)
+                [traits setObject: width forKey: (NSString *) kCTFontWidthTrait];
+            if (slant != nil)
+                [traits setObject: slant forKey: (NSString *) kCTFontSlantTrait];
             [attributes setObject: traits forKey: (NSString *) kCTFontTraitsAttribute];
         }
         if ((value = [face objectForKey: @"path"]) != nil)

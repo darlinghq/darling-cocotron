@@ -560,6 +560,86 @@ ONYX2D_STATIC O2Paint *paintFromColor(O2Context_builtin *self, O2ColorRef color,
 #endif
 }
 
+// A coordinate as a whole device pixel, clamped far beyond any surface so that
+// a huge value cannot overflow; NO for NaN.
+static BOOL copyBitsPixel(O2Float value, long *pixel) {
+    if (isnan(value))
+        return NO;
+    *pixel = lround(MAX(MIN(value, (O2Float) 1e9), (O2Float) -1e9));
+    return YES;
+}
+
+// What NSCopyBits and so -[NSView scrollRect:by:] ask for: the pixels of rect
+// are copied to the rectangle of the same size at point, both in user space,
+// by whole device pixels (the offset is rounded to them). What would land off
+// the surface is left out; the clip is not consulted. The rectangle is taken in
+// the context's current state: Darling keeps no graphics state under the number
+// gState, so the documented source state cannot be looked up. A rotation other
+// than a quarter turn moves the device bounding box of rect.
+- (void) copyBitsInRect: (O2Rect) rect
+                toPoint: (O2Point) point
+                 gState: (int) gState
+{
+    O2Surface *surface = [_layerStack count] > 0
+            ? O2LayerGetSurface([_layerStack lastObject])
+            : _surface;
+    O2AffineTransform toDevice = O2ContextGetUserSpaceToDeviceSpaceTransform(self);
+    uint8_t *pixels = O2SurfaceGetPixelBytes(surface);
+    size_t bitsPerPixel = O2ImageGetBitsPerPixel((O2ImageRef) surface);
+
+    if (pixels == NULL || bitsPerPixel == 0 || bitsPerPixel % 8 != 0)
+        return;
+
+    size_t bytesPerPixel = bitsPerPixel / 8;
+    size_t bytesPerRow = O2SurfaceGetBytesPerRow(surface);
+    long width = (long) O2ImageGetWidth((O2ImageRef) surface);
+    long height = (long) O2ImageGetHeight((O2ImageRef) surface);
+
+    // the device box of rect, and the offset as the linear part of the
+    // transform makes it
+    O2Point corners[4] = {
+        O2PointApplyAffineTransform(O2PointMake(O2RectGetMinX(rect), O2RectGetMinY(rect)), toDevice),
+        O2PointApplyAffineTransform(O2PointMake(O2RectGetMaxX(rect), O2RectGetMinY(rect)), toDevice),
+        O2PointApplyAffineTransform(O2PointMake(O2RectGetMaxX(rect), O2RectGetMaxY(rect)), toDevice),
+        O2PointApplyAffineTransform(O2PointMake(O2RectGetMinX(rect), O2RectGetMaxY(rect)), toDevice),
+    };
+    O2Float minX = corners[0].x, maxX = corners[0].x;
+    O2Float minY = corners[0].y, maxY = corners[0].y;
+    for (int i = 1; i < 4; i++) {
+        minX = fmin(minX, corners[i].x);
+        maxX = fmax(maxX, corners[i].x);
+        minY = fmin(minY, corners[i].y);
+        maxY = fmax(maxY, corners[i].y);
+    }
+    O2Float offsetX = point.x - rect.origin.x, offsetY = point.y - rect.origin.y;
+    long left, right, top, bottom, dx, dy;
+
+    if (!copyBitsPixel(minX, &left) || !copyBitsPixel(maxX, &right) ||
+        !copyBitsPixel(minY, &top) || !copyBitsPixel(maxY, &bottom) ||
+        !copyBitsPixel(toDevice.a * offsetX + toDevice.c * offsetY, &dx) ||
+        !copyBitsPixel(toDevice.b * offsetX + toDevice.d * offsetY, &dy))
+        return;
+
+    if (dx == 0 && dy == 0)
+        return;
+
+    // the pixels of the box that exist and land on the surface
+    long fromLeft = MAX(MAX(left, 0L), -dx), fromRight = MIN(MIN(right, width), width - dx);
+    long fromTop = MAX(MAX(top, 0L), -dy), fromBottom = MIN(MIN(bottom, height), height - dy);
+
+    if (fromLeft >= fromRight || fromTop >= fromBottom)
+        return;
+
+    // rows are copied in the order that never reads one already written
+    for (long i = 0; i < fromBottom - fromTop; i++) {
+        long row = dy > 0 ? fromBottom - 1 - i : fromTop + i;
+
+        memmove(pixels + (row + dy) * bytesPerRow + (fromLeft + dx) * bytesPerPixel,
+                pixels + row * bytesPerRow + fromLeft * bytesPerPixel,
+                (fromRight - fromLeft) * bytesPerPixel);
+    }
+}
+
 - (void) drawShading: (O2Shading *) shading {
     O2GState *gState = O2ContextCurrentGState(self);
     O2ClipState *clipState = O2GStateClipState(gState);
@@ -587,6 +667,8 @@ ONYX2D_STATIC O2Paint *paintFromColor(O2Context_builtin *self, O2ColorRef color,
         VGPath *vgPath =
                 [[VGPath alloc] initWithKGPath: O2ClipStateOnePath(clipState)];
         VGPathFill(vgPath, O2AffineTransformIdentity, self);
+        // the edges are copies, the path is not needed past the fill
+        [vgPath release];
         break;
 
     default:
@@ -1527,6 +1609,29 @@ void O2DContextFillEdgesOnSurface(O2Context_builtin *self, O2Surface *surface,
 
     int ylimit = self->_vpy + self->_vpheight;
     int xlimit = self->_vpx + self->_vpwidth;
+    int firstY = self->_vpy;
+
+    // Only the rows and columns the edges reach can change. Scanning the whole
+    // viewport made the time to fill a small path grow with the size of the
+    // surface: the edges that cover part of a row add their winding to every
+    // pixel to the right of them up to the viewport's edge.
+    if (edgeCount > 0) {
+        O2Float minY = edges[0]->v0.y, maxY = edges[0]->v1.y, maxX = -INFINITY;
+        int i;
+
+        for (i = 0; i < edgeCount; i++) {
+            minY = MIN(minY, MIN(edges[i]->v0.y, edges[i]->v1.y));
+            maxY = MAX(maxY, MAX(edges[i]->v0.y, edges[i]->v1.y));
+            maxX = MAX(maxX, MAX(edges[i]->v0.x, edges[i]->v1.x));
+        }
+        if (minY > firstY)
+            firstY = MAX(self->_vpy, (int) floor(minY));
+        if (maxY + 1 < ylimit)
+            ylimit = MAX(firstY, (int) ceil(maxY) + 1);
+        // one pixel more than the rightmost vertex for the pixel it lies in
+        if (maxX + 2 < xlimit)
+            xlimit = MAX(self->_vpx, (int) ceil(maxX) + 2);
+    }
 
     Edge *activeRoot = NULL;
     int nextAvailableEdge = 0;
@@ -1539,7 +1644,7 @@ void O2DContextFillEdgesOnSurface(O2Context_builtin *self, O2Surface *surface,
     int totalActiveEdges = 0;
     int totalActiveVerticalEdgesFullCoverage = 0;
 
-    for (scany = self->_vpy; scany < ylimit; scany++) {
+    for (scany = firstY; scany < ylimit; scany++) {
         Edge *edge, *previous = NULL;
         int unchangedActiveEdges = 1;
 

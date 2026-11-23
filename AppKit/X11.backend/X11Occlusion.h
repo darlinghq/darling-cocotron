@@ -57,6 +57,16 @@ static inline Window X11OcclusionActiveWindow(Display *display) {
     return active;
 }
 
+/* Stops watching a foreign window. XSelectInput() replaces this client's whole selection on the window, so
+ * clearing it is only right for a window that is not ours. The id of a watched window can outlive the window
+ * (the window manager leaves a stale _NET_ACTIVE_WINDOW behind when a client exits) and a later window of this
+ * process can be given the same id; clearing the selection on that one would cut it off from every key,
+ * button and expose event. */
+static inline void X11OcclusionStopWatching(Display *display, Window watched, bool isOurs) {
+    if (watched != None && !isOurs)
+        XSelectInput(display, watched, NoEventMask);
+}
+
 /* The windows of _NET_CLIENT_LIST_STACKING, bottom to top, in a buffer to XFree, or NULL. */
 static inline unsigned long *X11OcclusionStackingList(Display *display, unsigned long *count) {
     Atom type = None;

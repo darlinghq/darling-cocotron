@@ -48,6 +48,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) getDictionaryForKey: (const char *) key
                        value: (O2PDFDictionary **) dictionaryp;
 - (BOOL) getStreamForKey: (const char *) key value: (O2PDFStream **) streamp;
+- (NSUInteger) count;
+- (void) applyFunction: (void (*)(const char *key, O2PDFObject *value,
+                                 void *info)) function
+                  info: (void *) info;
 
 @end
 

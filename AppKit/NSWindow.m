@@ -51,6 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTrackingArea.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow-Private.h>
+#import <AppKit/NSViewController-Private.h>
 #import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindowTabGroup+Private.h>
@@ -61,6 +62,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGWindowPrivate.h>
 #include <math.h>
 #import "NSGestureRecognizer-Private.h"
+#import "private-include/AppKit/NSEventTime.h"
 
 const NSNotificationName NSWindowDidBecomeKeyNotification =
         @"NSWindowDidBecomeKeyNotification";
@@ -166,6 +168,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSRect) zoomedFrame;
 - (void) _updateOcclusionState;
+- (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible;
 
 @end
 
@@ -245,6 +248,10 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 @interface NSView (NSWindowBackingProperties)
 - (void) _backingPropertiesDidChange;
 - (void) _updateLayerContextFrames;
+@end
+
+@interface NSOpenGLContext (FullScreenUpdate)
++ (void) _updateContextsAttachedToWindow: (NSWindow *) window;
 @end
 
 @implementation NSWindowSheetCompletion
@@ -642,8 +649,22 @@ static BOOL _allowsAutomaticWindowTabbing;
     return nil;
 }
 
+// -_autosaveFrameKeyWithName: gives a saved frame one defaults key per screen
+// layout: the fixed text, the name, then the screen frame as text. Remove every
+// such key of this name. The screen frame text starts with "{", which keeps the
+// keys of a longer name that begins with this one out of the match.
 + (void) removeFrameUsingName: (NSString *) name {
-    NSUnimplementedMethod();
+    if ([name length] == 0)
+        return;
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *prefix = [NSString stringWithFormat: @"NSWindow frame %@ ", name];
+
+    for (NSString *key in [[defaults dictionaryRepresentation] allKeys]) {
+        if ([key hasPrefix: prefix] &&
+            [[key substringFromIndex: [prefix length]] hasPrefix: @"{"])
+            [defaults removeObjectForKey: key];
+    }
 }
 
 // The window manager's frame shows these buttons for a window with a title
@@ -749,9 +770,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     NS_EXTRA(NSWindow, self)->_savedFrame = _frame;
 
     _level = NSNormalWindowLevel;
-    NS_EXTRA(NSWindow, self)->_minSize = NSZeroSize;
-    // "The default maximum size of a window is {FLT_MAX, FLT_MAX}"
-    NS_EXTRA(NSWindow, self)->_maxSize = NSMakeSize(FLT_MAX, FLT_MAX);
+    // "The default maximum size of a window is {FLT_MAX, FLT_MAX}". The limits are kept as content
+    // sizes (see -minSize), so that is the maximum of the content too.
+    NS_EXTRA(NSWindow, self)->_contentMinSize = NSZeroSize;
+    NS_EXTRA(NSWindow, self)->_contentMaxSize = NSMakeSize(FLT_MAX, FLT_MAX);
     NS_EXTRA(NSWindow, self)->_title = @"";
     NS_EXTRA(NSWindow, self)->_miniwindowTitle = @"";
     _backgroundColor = [[NSColor windowBackgroundColor] copy];
@@ -926,6 +948,8 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (void) setStyleMask: (NSWindowStyleMask) mask {
     NS_EXTRA(NSWindow, self)->_styleMask = mask;
     [_platformWindow setStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    // What the frame adds around the content, and so the frame size limits, depend on the style.
+    [self _sizeLimitsChanged];
 
     [self _hideMenuViewIfNeeded];
 
@@ -1029,12 +1053,24 @@ static BOOL _allowsAutomaticWindowTabbing;
     return 0;
 }
 
+// minSize and contentMinSize (and maxSize and contentMaxSize) are two views of one limit: the
+// content size is kept, and the frame size is that plus what the frame adds around the content
+// (title bar, toolbar) in the current style. The last setter called wins. The _minSize and
+// _maxSize ivars are unused.
+- (NSSize) _frameChrome {
+    return [self frameRectForContentRect: NSZeroRect].size;
+}
+
 - (NSSize) minSize {
-    return NS_EXTRA(NSWindow, self)->_minSize;
+    NSSize content = NS_EXTRA(NSWindow, self)->_contentMinSize;
+    NSSize chrome = [self _frameChrome];
+    return NSMakeSize(content.width + chrome.width, content.height + chrome.height);
 }
 
 - (NSSize) maxSize {
-    return NS_EXTRA(NSWindow, self)->_maxSize;
+    NSSize content = NS_EXTRA(NSWindow, self)->_contentMaxSize;
+    NSSize chrome = [self _frameChrome];
+    return NSMakeSize(content.width + chrome.width, content.height + chrome.height);
 }
 
 - (NSSize) contentMinSize {
@@ -1378,7 +1414,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     }
 #endif
 
-    if (changed) {
+    // A window that sits exactly at the limit (a window an application keeps hidden at the screen's corner)
+    // computes its own frame back. Setting it would only restart the check (-setFrame:display: asks for
+    // another one) and make the platform window reconfigure itself, which the window system reports
+    // back: a loop that spins the application's main thread while it is idle.
+    if (changed && !NSEqualRects(frame, _frame)) {
         [self setFrame: frame display: YES];
     }
     NS_EXTRA(NSWindow, self)->_makeSureIsOnAScreen = NO;
@@ -1517,22 +1557,58 @@ static BOOL _allowsAutomaticWindowTabbing;
     [self setFrame: frame display: NO];
 }
 
+// The window system limits user resizing to the sizes below, which a platform window reads when
+// it is told they changed.
+- (void) _sizeLimitsChanged {
+    id platform = _platformWindow;
+    if ([platform respondsToSelector: @selector(sizeLimitsChanged)])
+        [platform sizeLimitsChanged];
+}
+
+// QUIRK: the minimum and maximum of the frame and of the content are two views of one limit: setting
+// either changes what the other returns and the last call wins (the documentation lists them as
+// separate properties). A minimum below what the frame adds around the content is zero as a content
+// size, a maximum below it goes negative, and a titled window with no minimum reports a minSize one
+// title bar high. Evidence: black-box observation on macOS 26.7.3 (tier 2): after setMinSize 300x200
+// contentMinSize is 300x168, a later setContentMinSize 100x100 makes minSize 100x132, and setMaxSize
+// 0x0 gives contentMaxSize 0x-32.
+// Test: tests/appkit-window-frame-size-limits.m (the quirk_ checks).
+- (NSSize) _minFrameSize {
+    NSSize content = NS_EXTRA(NSWindow, self)->_contentMinSize;
+    NSSize chrome = [self _frameChrome];
+    return NSMakeSize(content.width > 0 ? content.width + chrome.width : 0,
+                      content.height > 0 ? content.height + chrome.height : 0);
+}
+
+- (NSSize) _maxFrameSize {
+    NSSize content = NS_EXTRA(NSWindow, self)->_contentMaxSize;
+    NSSize chrome = [self _frameChrome];
+    return NSMakeSize(content.width > 0 && content.width < FLT_MAX ? content.width + chrome.width : FLT_MAX,
+                      content.height > 0 && content.height < FLT_MAX ? content.height + chrome.height : FLT_MAX);
+}
+
 - (void) setMinSize: (NSSize) size {
-    NS_EXTRA(NSWindow, self)->_minSize = size;
+    NSSize chrome = [self _frameChrome];
+    NS_EXTRA(NSWindow, self)->_contentMinSize =
+            NSMakeSize(MAX(0, size.width - chrome.width), MAX(0, size.height - chrome.height));
+    [self _sizeLimitsChanged];
 }
 
 - (void) setMaxSize: (NSSize) size {
-    NS_EXTRA(NSWindow, self)->_maxSize = size;
+    NSSize chrome = [self _frameChrome];
+    NS_EXTRA(NSWindow, self)->_contentMaxSize =
+            NSMakeSize(size.width - chrome.width, size.height - chrome.height);
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentMinSize: (NSSize) value {
-    // The value was already being stored; the unimplemented marker made every
-    // caller raise instead.
     NS_EXTRA(NSWindow, self)->_contentMinSize = value;
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentMaxSize: (NSSize) value {
     NS_EXTRA(NSWindow, self)->_contentMaxSize = value;
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentBorderThickness: (CGFloat) thickness
@@ -2230,6 +2306,9 @@ static BOOL _allowsAutomaticWindowTabbing;
 // window is visible, so -canBecomeMainWindow answers for a window that is on screen).
 - (int) _windowPresentation {
     DarlingWindowTraits traits = {
+        .leavesWindowCycle = ([self collectionBehavior] & (NSWindowCollectionBehaviorTransient |
+                                                          NSWindowCollectionBehaviorStationary |
+                                                          NSWindowCollectionBehaviorIgnoresCycle)) != 0,
         .hasTitlebar = [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask],
         .canBecomeMain = [self canBecomeMainWindow],
         .canBecomeKey = [self canBecomeKeyWindow],
@@ -2257,6 +2336,11 @@ static BOOL _allowsAutomaticWindowTabbing;
     // unimplemented marker made the setter raise, so ordinary window setup
     // aborted. The value is plain window state and is kept.
     NS_EXTRA(NSWindow, self)->_collectionBehavior = behavior;
+    // The collection behavior decides whether the window is an application window (see
+    // -_windowPresentation), which a window that is already on screen has to tell the window system.
+    id platform = [self platformWindow];
+    if ([platform respondsToSelector: @selector(presentationChanged)])
+        [platform presentationChanged];
 }
 
 - (NSWindowTabbingMode) tabbingMode {
@@ -2574,7 +2658,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 }
 
 - (void) makeKeyWindow {
-    [[self platformWindow] makeKey];
+    // An application that is not active does not take the input focus by making a window key.
+    if ([NSApp _mayTakeInputFocus])
+        [[self platformWindow] makeKey];
 
     if (NS_EXTRA(NSWindow, self)->_hasBeenOnScreen) {
         return;
@@ -3111,6 +3197,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
           relativeTo: (NSInteger) relativeTo
 {
     BOOL wasVisible = NS_EXTRA(NSWindow, self)->_isVisible;
+    NSArray *appearance = nil;
 
     // The move notifications are sent under unknown conditions around
     // orderFront: in the Apple AppKit, we do them all the time here until it's
@@ -3129,6 +3216,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [self _titlebarVisibilityChanged];
         }
         [self update];
+        appearance = [self _willChangeViewAppearanceForVisible: YES];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
         [[self platformWindow] placeAboveWindow: relativeTo];
         /* In some instances when a COMMAND is issued from a menu item to bring
@@ -3154,6 +3242,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [self _titlebarVisibilityChanged];
         }
         [self update];
+        appearance = [self _willChangeViewAppearanceForVisible: YES];
         NS_EXTRA(NSWindow, self)->_isVisible = YES;
         [[self platformWindow] placeBelowWindow: relativeTo];
         /* In some instances when a COMMAND is issued from a menu item to bring
@@ -3181,6 +3270,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [[self retain] autorelease];
             [NS_EXTRA(NSWindow, self)->_parentWindow _detachChildWindow: self];
         }
+        appearance = [self _willChangeViewAppearanceForVisible: NO];
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
         if (![self isKindOfClass: [NSPanel class]]) {
@@ -3192,6 +3282,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     }
 
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
     [self postNotificationName: NSWindowDidMoveNotification];
 }
 
@@ -3330,6 +3421,25 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 // A mouse click in a window that is not key makes it key (a click does not wait for the window
 // system's focus, which on its own does not always hand out the key status). A panel that becomes key
 // only if needed takes it only for a click on a view that needs the panel to be key.
+// The left click that finds a window not key (the click that activates it) is
+// delivered only to a view that accepts first mouse; for any other view it only
+// makes the window key (if it is not already), and the matching release and
+// drags find no view to go to. A window that cannot become key is not activated by the click, so its
+// views always get it. Only the view under the pointer is asked.
+- (BOOL) _withholdsFirstMouseEvent: (NSEvent *) event fromView: (NSView *) view {
+    if (view == nil || ![self canBecomeKeyWindow])
+        return NO;
+    // A press from the window system carries whether the window was key when it
+    // arrived (the window system's activation for the same click may be applied
+    // before the press is taken from the queue); other events are judged now.
+    BOOL wasKey = [self isKeyWindow];
+    if ([event isKindOfClass: [NSEvent_mouse class]] && [(NSEvent_mouse *) event _hasWindowKeyStateOnArrival])
+        wasKey = [(NSEvent_mouse *) event _windowWasKeyOnArrival];
+    if (wasKey)
+        return NO;
+    return ![view acceptsFirstMouse: event];
+}
+
 - (void) _makeKeyForMouseDownInView: (NSView *) view {
     if ([self isKeyWindow] || ![self canBecomeKeyWindow])
         return;
@@ -3418,6 +3528,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     case NSLeftMouseDown: {
         NSView *view = [_backgroundView hitTest: [event locationInWindow]];
 
+        if ([self _withholdsFirstMouseEvent: event fromView: view]) {
+            [self _makeKeyForMouseDownInView: view];
+            break;
+        }
         [self _makeKeyForMouseDownInView: view];
         if ([view acceptsFirstResponder]) {
             if ([view needsPanelToBecomeKey]) {
@@ -3875,6 +3989,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NS_EXTRA(NSWindow, self)->_isVisible == visible) {
         return;
     }
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     if (visible) {
         [[self platformWindow] showWindowWithoutActivation];
@@ -3882,6 +3997,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [[self platformWindow] hideWindow];
     }
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
 }
 
 - (void) orderFront: (id) sender {
@@ -4043,6 +4159,47 @@ enum {
 // How long the window system has to confirm a full screen change.
 static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
+// QUIRK: when a window enters or leaves native full screen, AppKit itself sends
+// -update to the NSOpenGLContexts attached to views of that window, once the
+// window has its new size, so their drawables follow the views (they are not
+// resized by a plain window resize, which sends no -update). Not documented.
+// Evidence (tier 2, black-box): macOS 10.14.4 x86_64 sends -update to such a
+// context (seen by overriding -update) twice on entering and once on leaving
+// full screen, and the drawable follows; macOS 26.7.3 x86_64 sends none and
+// the drawable stays at its old size. Followed per the widest-(older)-version
+// policy. A window resize alone gets no update on either.
+// Test: tests/nsopenglcontext-fullscreen-update.m
+// (test_quirk_fullscreen_transition_sends_update, mode "follow"; "resize" is
+// the control).
+//
+// The update has to follow the size change of the window, which a window
+// system reports before or after it confirms the full screen state: it is sent
+// at each size change of the transition, and when the confirmation came first
+// at the size change that follows it (or, when the window does not change
+// size, once the confirmation has been handled).
+- (void) _updateOpenGLContextsForFullScreenChange {
+    [NSOpenGLContext _updateContextsAttachedToWindow: self];
+}
+
+- (void) _fullScreenChangeConfirmed {
+    if (NS_EXTRA(NSWindow, self)->_fullScreenSized) {
+        [self _updateOpenGLContextsForFullScreenChange];
+        return;
+    }
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = YES;
+    [self performSelector: @selector(_fullScreenSettled)
+               withObject: nil
+               afterDelay: 0
+                  inModes: @[NSRunLoopCommonModes]];
+}
+
+- (void) _fullScreenSettled {
+    if (!NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending)
+        return;
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
+    [self _updateOpenGLContextsForFullScreenChange];
+}
+
 - (void) toggleFullScreen: (id) sender {
     if (NS_EXTRA(NSWindow, self)->_fullScreenTransition != FullScreenIdle)
         return;
@@ -4051,6 +4208,8 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     NS_EXTRA(NSWindow, self)->_fullScreenTransition = entering ? FullScreenEntering : FullScreenExiting;
     NS_EXTRA(NSWindow, self)->_fullScreenTransitionGeneration++;
+    NS_EXTRA(NSWindow, self)->_fullScreenSized = NO;
+    NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
     [self postNotificationName: entering ? NSWindowWillEnterFullScreenNotification
                                          : NSWindowWillExitFullScreenNotification];
 
@@ -4112,15 +4271,19 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     if (transition == FullScreenEntering && fullScreen) {
         [self _finishFullScreenTransition];
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidEnterFullScreenNotification];
     } else if (transition == FullScreenExiting && !fullScreen) {
         [self _finishFullScreenTransition];
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidExitFullScreenNotification];
     } else if (transition == FullScreenIdle && !fullScreen &&
                (NS_EXTRA(NSWindow, self)->_styleMask & NSWindowStyleMaskFullScreen)) {
         // The window system took the window out of full screen on its own.
         [self postNotificationName: NSWindowWillExitFullScreenNotification];
         [self setStyleMask: NS_EXTRA(NSWindow, self)->_styleMask & ~NSWindowStyleMaskFullScreen];
+        NS_EXTRA(NSWindow, self)->_fullScreenSized = NO;
+        [self _fullScreenChangeConfirmed];
         [self postNotificationName: NSWindowDidExitFullScreenNotification];
     }
 }
@@ -4272,10 +4435,29 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 }
 
 - (void) _setVisible: (BOOL) visible {
-    BOOL wasVisible = NS_EXTRA(NSWindow, self)->_isVisible;
-
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     [self _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
+}
+
+- (BOOL) _isShownForViewAppearance {
+    return NS_EXTRA(NSWindow, self)->_isVisible && ![self isMiniaturized];
+}
+
+// The view controllers of the window's views hear -viewWillAppear or
+// -viewWillDisappear before the window is shown or hidden, and the matching
+// -viewDid... call after, which the caller sends with
+// +[NSViewController _didPerformAppearanceTransitions:].
+- (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible {
+    NSArray *appearance = [NSViewController _appearanceTransitionsUnder: _backgroundView
+                                                                 window: self
+                                                          windowVisible: visible
+                                                          rootSuperview: nil
+                                                          useRootHidden: NO
+                                                             rootHidden: NO];
+    [NSViewController _willPerformAppearanceTransitions: appearance];
+    return appearance;
 }
 
 // Called wherever something -occlusionState depends on may have changed: posts the notification
@@ -4376,9 +4558,10 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     [self _setSheetOrigin];
     NSRect sheetFrame = [sheet frame];
 
-    BOOL sheetWasVisible = NS_EXTRA(NSWindow, sheet)->_isVisible;
+    NSArray *sheetAppearance = [sheet _willChangeViewAppearanceForVisible: YES];
     NS_EXTRA(NSWindow, sheet)->_isVisible = YES;
     [sheet _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: sheetAppearance];
     [sheet display];
     [[sheet platformWindow] sheetOrderFrontFromFrame: sheetFrame
                                          aboveWindow: [self platformWindow]];
@@ -4401,10 +4584,11 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     sheetFrame.origin.y = NSMaxY(sheetFrame);
     sheetFrame.size.height = 0;
 
-    BOOL sheetWasVisible = NS_EXTRA(NSWindow, sheet)->_isVisible;
+    NSArray *sheetAppearance = [sheet _willChangeViewAppearanceForVisible: NO];
     NS_EXTRA(NSWindow, sheet)->_isVisible = NO;
     [[sheet platformWindow] sheetOrderOutToFrame: sheetFrame];
     [sheet _updateOcclusionState];
+    [NSViewController _didPerformAppearanceTransitions: sheetAppearance];
     [(NSThemeFrame *) [sheet _backgroundView] setWindowBorderType: NSNoBorder];
 
     [NS_EXTRA(NSWindow, self)->_sheetContext release];
@@ -4484,6 +4668,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 }
 
 - (void) platformWindowDeminiaturized: (CGWindow *) window {
+    // The window is shown again, so its views appear again.
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: [self isVisible]];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
     [self _updatePlatformWindowTitle];
     if (NS_EXTRA(NSWindow, self)->_sheetContext != nil) {
         [[NS_EXTRA(NSWindow, self)->_sheetContext sheet] orderWindow: NSWindowAbove
@@ -4496,6 +4683,10 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
 - (void) platformWindowMiniaturized: (CGWindow *) window {
     NS_EXTRA(NSWindow, self)->_isActive = NO;
+
+    // A miniaturized window shows none of its views.
+    NSArray *appearance = [self _willChangeViewAppearanceForVisible: NO];
+    [NSViewController _didPerformAppearanceTransitions: appearance];
 
     [self _updatePlatformWindowTitle];
     if (NS_EXTRA(NSWindow, self)->_sheetContext != nil) {
@@ -4539,14 +4730,16 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     // Don't allow the platform window changes to violate our window size limits
     // (if we have them). Windows (for example) likes to make the platform
     // window very small so it fits in the task bar...
-    if (!NSEqualSizes([self minSize], NSMakeSize(0, 0))) {
-        frame.size.width = MAX(NSWidth(frame), [self minSize].width);
-        frame.size.height = MAX(NSHeight(frame), [self minSize].height);
-    }
-
-    if (!NSEqualSizes([self maxSize], NSMakeSize(FLT_MAX, FLT_MAX))) {
-        frame.size.width = MIN(NSWidth(frame), [self maxSize].width);
-        frame.size.height = MIN(NSHeight(frame), [self maxSize].height);
+    // The same limits the platform window is given (see -_minFrameSize), and the minimum wins over a
+    // maximum below it, as in what is sent to the window system. Only a resize is limited: a move
+    // reports the size the window has and must not change it (nothing would resize the views).
+    if (didSize) {
+        NSSize maxSize = [self _maxFrameSize];
+        frame.size.width = MIN(NSWidth(frame), maxSize.width);
+        frame.size.height = MIN(NSHeight(frame), maxSize.height);
+        NSSize minSize = [self _minFrameSize];
+        frame.size.width = MAX(NSWidth(frame), minSize.width);
+        frame.size.height = MAX(NSHeight(frame), minSize.height);
     }
 
     // We don't want the miniaturized frame.
@@ -4570,6 +4763,13 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
         [self resetCursorRects];
         [self saveFrameUsingName: _autosaveFrameName];
         [self postNotificationName: NSWindowDidResizeNotification];
+        if (NS_EXTRA(NSWindow, self)->_fullScreenTransition != FullScreenIdle) {
+            NS_EXTRA(NSWindow, self)->_fullScreenSized = YES;
+            [self _updateOpenGLContextsForFullScreenChange];
+        } else if (NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending) {
+            NS_EXTRA(NSWindow, self)->_fullScreenUpdatePending = NO;
+            [self _updateOpenGLContextsForFullScreenChange];
+        }
     } else {
         [self saveFrameUsingName: _autosaveFrameName];
         [self postNotificationName: NSWindowDidMoveNotification];
@@ -4839,8 +5039,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSMouseExited
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
@@ -4859,8 +5058,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSMouseEntered
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
@@ -4879,7 +5077,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     mouseEventWithType: NSMouseMoved
                               location: mousePoint
                          modifierFlags: [NSEvent modifierFlags]
-                             timestamp: [NSDate timeIntervalSinceReferenceDate]
+                             timestamp: NSEventCurrentTime()
                           windowNumber: [self windowNumber]
                                context: [self graphicsContext]
                            eventNumber: 0 // NSEvent currently ignores this.
@@ -4897,8 +5095,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSCursorUpdate
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.

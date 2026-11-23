@@ -667,15 +667,15 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
 // appkit-outlineview-drag.m): on a row, on its item; above a row, before that row's item among its siblings, unless
 // the row above is deeper, when the point's distance from the outline column's edge picks the level, between the
 // row above's item and the row's; below every row, on the root item.
-- (void) _proposeDropAtPoint: (NSPoint) point {
-    [super _proposeDropAtPoint: point];
-    NSInteger row = NS_EXTRA(NSTableView, self)->_dropRow;
+- (void) _proposeDropForPoint: (NSPoint) point {
+    [super _proposeDropForPoint: point];
+    NSInteger row = NS_EXTRA(NSTableView, self)->_draggingRow;
     NSInteger count = [self numberOfRows];
     if ([self rowAtPoint: point] < 0) {
         [self _setDropItem: nil index: NSOutlineViewDropOnItemIndex];
         return;
     }
-    if (NS_EXTRA(NSTableView, self)->_dropOperation == NSTableViewDropOn) {
+    if (NS_EXTRA(NSTableView, self)->_draggingOperation == NSTableViewDropOn) {
         [self _setDropItem: [self itemAtRow: row] index: NSOutlineViewDropOnItemIndex];
         return;
     }
@@ -705,13 +705,21 @@ static inline id childOfItemAtIndex(NSOutlineView *self, id item,
     [self _setDropItem: item index: index];
 }
 
+- (BOOL) _dataSourceValidatesDrops {
+    return [_dataSource respondsToSelector: @selector(outlineView:validateDrop:proposedItem:proposedChildIndex:)];
+}
+
 - (NSDragOperation) _dataSourceValidateDrop: (id<NSDraggingInfo>) info {
-    if (![_dataSource respondsToSelector: @selector(outlineView:validateDrop:proposedItem:proposedChildIndex:)])
-        return NSDragOperationNone;
     return [_dataSource outlineView: self
                        validateDrop: info
                        proposedItem: NS_EXTRA(NSOutlineView, self)->_dropItem
                  proposedChildIndex: NS_EXTRA(NSOutlineView, self)->_dropChildIndex];
+}
+
+// The table's acceptDrop for a drop forced on it without validateDrop was observed; an outline view's was not, so
+// such a drop is refused
+- (BOOL) _dataSourceAcceptUnvalidatedDrop: (id<NSDraggingInfo>) info {
+    return NO;
 }
 
 - (BOOL) _dataSourceAcceptDrop: (id<NSDraggingInfo>) info {
@@ -893,10 +901,11 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
     return NS_EXTRA(NSOutlineView, self)->_numberOfCachedRows;
 }
 
-- (NSRect) frameOfOutlineCellAtRow: (NSInteger) row {
+// The rectangle the disclosure triangle draws in.
+- (NSRect) _drawingFrameOfOutlineCellAtRow: (NSInteger) row {
     NSInteger column =
             [_tableColumns indexOfObjectIdenticalTo: _outlineTableColumn];
-    NSRect result = [super frameOfCellAtColumn: column row: row];
+    NSRect result = [super _drawingFrameOfCellAtColumn: column row: row];
     NSInteger level = [self levelForRow: row];
     CGFloat indentPixels = level * NS_EXTRA(NSOutlineView, self)->_indentationPerLevel;
 
@@ -910,11 +919,32 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
     return result;
 }
 
+// The disclosure triangle's frame: a fixed 12 points wide, 6 in from the column's edge plus the item's
+// indentation (when the marker follows the cell), as high as the row less one point (none without vertical
+// spacing), and empty for an item that cannot be expanded. Black-box observation on macOS 10.14.4 (the indentation per
+// level and the spacing did not change the width or the 6).
+// Test: tests/appkit-table-cell-frames.m
+- (NSRect) frameOfOutlineCellAtRow: (NSInteger) row {
+    if (row < 0 || row >= [self numberOfRows] || ![self isExpandable: [self itemAtRow: row]])
+        return NSZeroRect;
+
+    NSInteger column = [_tableColumns indexOfObjectIdenticalTo: _outlineTableColumn];
+    NSRect cell = [super frameOfCellAtColumn: column row: row];
+    NSRect result;
+
+    result.origin.x = NSMinX([self rectOfColumn: column]) + 6;
+    if (NS_EXTRA(NSOutlineView, self)->_indentationMarkerFollowsCell)
+        result.origin.x += [self levelForRow: row] * NS_EXTRA(NSOutlineView, self)->_indentationPerLevel;
+    result.origin.y = NSMinY(cell);
+    result.size = NSMakeSize(12, NSHeight(cell) - (_intercellSpacing.height > 0 ? 1 : 0));
+    return result;
+}
+
 - (NSRect) _adjustedFrameOfCellAtColumn: (NSInteger) column
                                     row: (NSInteger) row
                             objectValue: (id) objectValue
 {
-    NSRect cellRect = [super frameOfCellAtColumn: column row: row];
+    NSRect cellRect = [super _drawingFrameOfCellAtColumn: column row: row];
     NSTableColumn *tableColumn = [_tableColumns objectAtIndex: column];
 
     if (tableColumn == _outlineTableColumn) {
@@ -962,7 +992,7 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
     return cellRect;
 }
 
-- (NSRect) frameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
+- (NSRect) _drawingFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
     NSTableColumn *tableColumn = [_tableColumns objectAtIndex: column];
 
     if (tableColumn == _outlineTableColumn) {
@@ -977,7 +1007,26 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
                                           objectValue: objectValue];
     }
 
-    return [super frameOfCellAtColumn: column row: row];
+    return [super _drawingFrameOfCellAtColumn: column row: row];
+}
+
+// The cell of the outline column is indented by the marker's area, 16 points, and by the item's level times
+// the indentation per level, which also narrows it. Black-box observation on macOS 10.14.4; the 16 did not
+// follow the indentation per level or the spacing.
+// Test: tests/appkit-table-cell-frames.m
+- (NSRect) frameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
+    NSRect frame = [super frameOfCellAtColumn: column row: row];
+    NSTableColumn *tableColumn = column >= 0 && column < (NSInteger) [_tableColumns count] ? [_tableColumns objectAtIndex: column] : nil;
+
+    if (tableColumn != nil && tableColumn == _outlineTableColumn && !NSIsEmptyRect(frame) &&
+        ([self _delegateMakesCellViews] ||
+         [self _objectValueForTableColumn: tableColumn byItem: [self itemAtRow: row]] != nil)) {
+        CGFloat inset = 16 + [self levelForRow: row] * NS_EXTRA(NSOutlineView, self)->_indentationPerLevel;
+
+        frame.origin.x += inset;
+        frame.size.width -= inset;
+    }
+    return frame;
 }
 
 - (void) drawHighlightedSelectionForColumn: (NSInteger) column
@@ -1003,7 +1052,7 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
 {
     NSInteger column = [_tableColumns indexOfObject: _outlineTableColumn];
     NSInteger row = [self rowForItem: item];
-    NSRect myFrame = [self frameOfCellAtColumn: column row: row];
+    NSRect myFrame = [self _drawingFrameOfCellAtColumn: column row: row];
 
     if (level > 0) {
         NSRect rect = myFrame;
@@ -1030,8 +1079,8 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
         if (lastChild != nil) {
             NSRect rect = myFrame;
             NSRect lastChildRect =
-                    [self frameOfCellAtColumn: column
-                                          row: [self rowForItem: lastChild]];
+                    [self _drawingFrameOfCellAtColumn: column
+                                                  row: [self rowForItem: lastChild]];
             CGFloat delta = lastChildRect.origin.y - myFrame.origin.y;
 
             // it is safe to assume that all rows are the same height.
@@ -1136,7 +1185,7 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
         ![_delegate outlineView: self shouldShowOutlineCellForItem: item])
         return;
 
-    NSRect outlineCellFrame = [self frameOfOutlineCellAtRow: row];
+    NSRect outlineCellFrame = [self _drawingFrameOfOutlineCellAtRow: row];
     if (NSIsEmptyRect(outlineCellFrame))
         return;
     [_markerCell setState: isItemExpanded(self, item) ? NSOnState : NSOffState];
@@ -1165,6 +1214,8 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
                     format: @"invalid row in drawRow:clipRect:"];
 
     for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
+        if ([[_tableColumns objectAtIndex: drawThisColumn] isHidden])
+            continue;
 
         if (row == _editedRow && drawThisColumn == _editedColumn &&
             _editingCell != nil) {
@@ -1181,8 +1232,8 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
         } else {
             NSCell *dataCell = [self preparedCellAtColumn: drawThisColumn
                                                       row: row];
-            [dataCell drawWithFrame: [self frameOfCellAtColumn: drawThisColumn
-                                                           row: row]
+            [dataCell drawWithFrame: [self _drawingFrameOfCellAtColumn: drawThisColumn
+                                                                   row: row]
                              inView: self];
         }
 
@@ -1197,7 +1248,7 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
             id item = [self itemAtRow: row];
 
             if ([self isExpandable: item]) {
-                NSRect outlineCellFrame = [self frameOfOutlineCellAtRow: row];
+                NSRect outlineCellFrame = [self _drawingFrameOfOutlineCellAtRow: row];
 
                 if (!NSIsEmptyRect(outlineCellFrame)) {
                     if (isItemExpanded(self, item))

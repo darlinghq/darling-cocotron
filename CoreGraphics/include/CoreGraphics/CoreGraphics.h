@@ -26,11 +26,16 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CGImage.h>
 #import <CoreGraphics/CGLayer.h>
+#import <CoreGraphics/CGPDFArray.h>
+#import <CoreGraphics/CGPDFContentStream.h>
 #import <CoreGraphics/CGPDFContext.h>
 #import <CoreGraphics/CGPDFDictionary.h>
 #import <CoreGraphics/CGPDFDocument.h>
 #import <CoreGraphics/CGPDFObject.h>
+#import <CoreGraphics/CGPDFOperatorTable.h>
 #import <CoreGraphics/CGPDFPage.h>
+#import <CoreGraphics/CGPDFScanner.h>
+#import <CoreGraphics/CGPDFStream.h>
 #import <CoreGraphics/CGPDFString.h>
 #import <CoreGraphics/CGPath.h>
 #import <CoreGraphics/CGPattern.h>

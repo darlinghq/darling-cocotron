@@ -33,6 +33,30 @@ static const CGFloat sidebarWidth = 150, margin = 16, gap = 12;
 }
 @end
 
+// The file list. Its clicks go through the navigation first, see -listClickEventForEvent:.
+@interface _NSSavePanelListView : NSOutlineView
+@end
+@implementation _NSSavePanelListView
+// Typing "/" or "~" in the list starts a path: the Go to Folder sheet opens with the character in its field.
+- (void) keyDown: (NSEvent *) event {
+    NSString *characters = [event characters];
+    NSUInteger flags = [event modifierFlags] & (NSCommandKeyMask | NSControlKeyMask | NSAlternateKeyMask);
+    _NSSavePanelNavigation *navigation =
+            [_NSSavePanelNavigation navigationForPanel: (NSSavePanel *) [self window]];
+    if (navigation != nil && flags == 0 && [characters length] == 1 &&
+        ([characters isEqual: @"/"] || [characters isEqual: @"~"])) {
+        [navigation showGoToFolderWithText: characters];
+        return;
+    }
+    [super keyDown: event];
+}
+- (void) mouseDown: (NSEvent *) event {
+    _NSSavePanelNavigation *navigation =
+            [_NSSavePanelNavigation navigationForPanel: (NSSavePanel *) [self window]];
+    [super mouseDown: navigation != nil ? [navigation listClickEventForEvent: event] : event];
+}
+@end
+
 @implementation _NSSavePanelNavigation
 
 + (_NSSavePanelNavigation *) navigationForPanel: (NSSavePanel *) panel {
@@ -125,6 +149,8 @@ static NSTextField *makeLabel(NSString *text, NSRect frame) {
 }
 
 - (void) installLayout {
+    // The nib's outline view becomes the panel's list view (the subclass adds no state).
+    object_setClass(_list, [_NSSavePanelListView class]);
     NSScrollView *listScroll = [_list enclosingScrollView];
     NSView *content = [listScroll superview];
     NSButton *okButton = nil, *cancelButton = nil;
@@ -316,7 +342,35 @@ static NSTextField *makeLabel(NSString *text, NSRect frame) {
     _updatingSidebar = NO;
 }
 
+// A double-click is two clicks on one listing. The window system counts clicks at one place in quick succession
+// (a third and fourth click are what a second double-click on the same spot is), but once the list shows another
+// folder the clicks made on the earlier one are no part of the next click sequence: a double-click on a folder
+// entered by double-click must enter the next one, not be taken for a third and fourth click.
+- (NSEvent *) listClickEventForEvent: (NSEvent *) event {
+    if ([event type] != NSLeftMouseDown)
+        return event;
+    NSInteger count = [event clickCount];
+    if (count <= 1)
+        _clickCountOffset = 0;
+    _lastClickCount = count;
+    NSInteger effective = count - _clickCountOffset;
+    if (effective < 1)
+        effective = 1;
+    if (effective == count)
+        return event;
+    return [NSEvent mouseEventWithType: [event type]
+                              location: [event locationInWindow]
+                         modifierFlags: [event modifierFlags]
+                             timestamp: [event timestamp]
+                          windowNumber: [event windowNumber]
+                               context: nil
+                           eventNumber: [event eventNumber]
+                            clickCount: effective
+                              pressure: 1.0];
+}
+
 - (void) reloadList {
+    _clickCountOffset = _lastClickCount;
     NSString *directory = [_panel directory];
     [_source setRootURL: [directory length] > 0
                                  ? [NSURL fileURLWithPath: directory isDirectory: YES]
@@ -457,6 +511,10 @@ static NSTextField *makeLabel(NSString *text, NSRect frame) {
 #pragma mark - Go to Folder
 
 - (void) showGoToFolder {
+    [self showGoToFolderWithText: @""];
+}
+
+- (void) showGoToFolderWithText: (NSString *) text {
     if (_goToSheet != nil)
         return;
     NSBundle *bundle = [NSBundle bundleForClass: [NSSavePanel class]];
@@ -476,7 +534,7 @@ static NSTextField *makeLabel(NSString *text, NSRect frame) {
     _goToField = [[[NSTextField alloc]
             initWithFrame: NSMakeRect(margin, height - 64, width - 2 * margin, 24)]
             autorelease];
-    [_goToField setStringValue: @""];
+    [_goToField setStringValue: text];
     [content addSubview: _goToField];
     _goToMessage = makeLabel(@"", NSMakeRect(margin, height - 86,
                                              width - 2 * margin, 18));
@@ -503,6 +561,8 @@ static NSTextField *makeLabel(NSString *text, NSRect frame) {
     [content addSubview: cancel];
 
     [_goToSheet makeFirstResponder: _goToField];
+    if ([text length] > 0)
+        [[_goToField currentEditor] setSelectedRange: NSMakeRange([text length], 0)];
     [NSApp beginSheet: _goToSheet
             modalForWindow: _panel
              modalDelegate: self

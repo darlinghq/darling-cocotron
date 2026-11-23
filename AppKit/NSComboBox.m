@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 // Original - Christopher Lloyd <cjwl@objc.net>
+#import "NSDelegateNotifications.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSComboBox.h>
 #import <AppKit/NSComboBoxCell.h>
@@ -36,6 +37,21 @@ NSString *const NSComboBoxWillPopUpNotification =
 
 + (Class) cellClass {
     return [NSComboBoxCell class];
+}
+
+// The delegate is also an observer of the combo box's own notifications, besides the text editing ones
+// NSTextField registers it for.
+- (void) setDelegate: delegate {
+    NSDelegateNotification notes[] = {
+        {NSComboBoxSelectionDidChangeNotification, @selector(comboBoxSelectionDidChange:)},
+        {NSComboBoxSelectionIsChangingNotification, @selector(comboBoxSelectionIsChanging:)},
+        {NSComboBoxWillPopUpNotification, @selector(comboBoxWillPopUp:)},
+        {NSComboBoxWillDismissNotification, @selector(comboBoxWillDismiss:)},
+        {nil, NULL}};
+
+    NSDelegateNotificationsRemove([self delegate], self, notes);
+    [super setDelegate: delegate];
+    NSDelegateNotificationsAdd(delegate, self, notes);
 }
 
 - dataSource {

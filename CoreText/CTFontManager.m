@@ -1,5 +1,6 @@
 #import <CoreText/CTFontManager.h>
 #import "KTFontDescriptor.h"
+#import "KTFontSuitcase.h"
 #import <Foundation/Foundation.h>
 #import <Onyx2D/O2Font_freetype.h>
 
@@ -62,14 +63,17 @@ bool CTFontManagerRegisterFontsForURL(CFURLRef fontURL, CTFontManagerScope scope
     return false;
 }
 
-CTFontDescriptorRef CTFontManagerCreateFontDescriptorFromData(CFDataRef data)
+// The descriptor of one face of font data: the naming attributes are those of the face, and the
+// descriptor keeps the data and the face index, so CTFontCreateWithFontDescriptor makes its font
+// from these bytes rather than looking the name up among the installed fonts.
+static CTFontDescriptorRef createDescriptorForFace(CFDataRef data, int faceIndex,
+                                                   NSString *postScriptName, NSURL *url)
 {
-    if (data == NULL)
-        return NULL;
     CGDataProviderRef provider = CGDataProviderCreateWithCFData(data);
     if (provider == NULL)
         return NULL;
-    CGFontRef font = CGFontCreateWithDataProvider(provider);
+    CGFontRef font = (CGFontRef) O2FontCreateWithDataProviderAndFaceIndex(
+            (O2DataProviderRef) provider, faceIndex);
     CGDataProviderRelease(provider);
     if (font == NULL)
         return NULL;
@@ -77,29 +81,72 @@ CTFontDescriptorRef CTFontManagerCreateFontDescriptorFromData(CFDataRef data)
     NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
     NSString *name = (NSString *) CGFontCopyPostScriptName(font);
     NSString *family = (NSString *) O2FontCopyFamilyName((O2FontRef) font);
-    if (name != nil)
+    NSString *fullName = (NSString *) O2FontCopyFullName((O2FontRef) font);
+    NSString *style = (NSString *) O2FontCopyStyleName((O2FontRef) font);
+    if (postScriptName != nil)
+        [attributes setObject: postScriptName forKey: (NSString *) kCTFontNameAttribute];
+    else if (name != nil)
         [attributes setObject: name forKey: (NSString *) kCTFontNameAttribute];
     if (family != nil)
         [attributes setObject: family forKey: (NSString *) kCTFontFamilyNameAttribute];
+    if (fullName != nil)
+        [attributes setObject: fullName forKey: (NSString *) kCTFontDisplayNameAttribute];
+    if (style != nil)
+        [attributes setObject: style forKey: (NSString *) kCTFontStyleNameAttribute];
+    if (url != nil)
+        [attributes setObject: url forKey: (NSString *) kCTFontURLAttribute];
     [name release];
     [family release];
+    [fullName release];
+    [style release];
     CGFontRelease(font);
+    return KTFontDescriptorCreateWithFontDataAndFaceIndex((CFDictionaryRef) attributes, data,
+                                                          faceIndex);
+}
 
-    // The descriptor keeps the data, so CTFontCreateWithFontDescriptor
-    // makes its font from these bytes rather than looking the name up
-    // among the installed fonts.
-    return KTFontDescriptorCreateWithFontData((CFDictionaryRef) attributes, data);
+// One descriptor per face of the data: every face of a font collection, every 'sfnt' resource of a
+// font suitcase (".dfont"), the one face of a plain font file. Returns an empty array for data
+// that holds no font.
+static CFArrayRef createDescriptorsFromData(CFDataRef data, NSURL *url)
+{
+    NSMutableArray *descriptors = [NSMutableArray array];
+    NSArray *suitcase = KTFontSuitcaseCopyFaces((NSData *) data);
+    long count = suitcase != nil ? (long) [suitcase count]
+                                 : O2FontFaceCountOfData(CFDataGetBytePtr(data),
+                                                         (size_t) CFDataGetLength(data));
+    for (long position = 0; position < count; position++) {
+        // A suitcase lists its faces in the order of its family records, which is not the order
+        // of the font resources that the face index counts.
+        NSDictionary *entry = suitcase != nil ? [suitcase objectAtIndex: (NSUInteger) position] : nil;
+        int faceIndex = entry != nil ? [[entry objectForKey: @"faceIndex"] intValue] : (int) position;
+        CTFontDescriptorRef descriptor = createDescriptorForFace(
+                data, faceIndex, [entry objectForKey: @"postScriptName"], url);
+        if (descriptor != NULL) {
+            [descriptors addObject: (id) descriptor];
+            CFRelease(descriptor);
+        }
+    }
+    [suitcase release];
+    return (CFArrayRef) [descriptors copy];
+}
+
+CTFontDescriptorRef CTFontManagerCreateFontDescriptorFromData(CFDataRef data)
+{
+    if (data == NULL)
+        return NULL;
+    CFArrayRef descriptors = createDescriptorsFromData(data, nil);
+    CTFontDescriptorRef first = NULL;
+    if (CFArrayGetCount(descriptors) > 0)
+        first = (CTFontDescriptorRef) CFRetain(CFArrayGetValueAtIndex(descriptors, 0));
+    CFRelease(descriptors);
+    return first;
 }
 
 CFArrayRef CTFontManagerCreateFontDescriptorsFromData(CFDataRef data)
 {
-    CTFontDescriptorRef descriptor = CTFontManagerCreateFontDescriptorFromData(data);
-    if (descriptor == NULL)
+    if (data == NULL)
         return CFArrayCreate(NULL, NULL, 0, &kCFTypeArrayCallBacks);
-    CFArrayRef result = CFArrayCreate(NULL, (const void **) &descriptor, 1,
-                                      &kCFTypeArrayCallBacks);
-    CFRelease(descriptor);
-    return result;
+    return createDescriptorsFromData(data, nil);
 }
 
 CFArrayRef CTFontManagerCreateFontDescriptorsFromURL(CFURLRef fileURL)
@@ -109,19 +156,13 @@ CFArrayRef CTFontManagerCreateFontDescriptorsFromURL(CFURLRef fileURL)
     NSData *data = [NSData dataWithContentsOfURL: (NSURL *) fileURL];
     if (data == nil)
         return NULL;
-    CTFontDescriptorRef descriptor = CTFontManagerCreateFontDescriptorFromData((CFDataRef) data);
-    if (descriptor == NULL)
+    // The descriptors report the file they came from.
+    CFArrayRef descriptors = createDescriptorsFromData((CFDataRef) data, (NSURL *) fileURL);
+    if (CFArrayGetCount(descriptors) == 0) {
+        CFRelease(descriptors);
         return NULL;
-
-    // Report the file the descriptor came from.
-    NSDictionary *url = [NSDictionary dictionaryWithObject: (NSURL *) fileURL
-                                                    forKey: (NSString *) kCTFontURLAttribute];
-    CTFontDescriptorRef withURL =
-            CTFontDescriptorCreateCopyWithAttributes(descriptor, (CFDictionaryRef) url);
-    CFRelease(descriptor);
-    CFArrayRef result = CFArrayCreate(NULL, (const void **) &withURL, 1, &kCFTypeArrayCallBacks);
-    CFRelease(withURL);
-    return result;
+    }
+    return descriptors;
 }
 
 // CTFontManagerIsSupportedFont decides from the file name and the file's size, without looking at the font data: a

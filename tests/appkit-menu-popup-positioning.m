@@ -179,7 +179,7 @@ int main(int argc, char **argv) {
 
         // The menu stays on the screen: opened at the bottom right corner of
         // the screen's visible area, it is moved up and to the left to fit.
-        // The probe checks it and cancels the tracking with Escape.
+        // The probe checks it and cancels the tracking with -cancelTracking.
         NSRect visible = [([host screen] ?: [NSScreen mainScreen]) visibleFrame];
         __block BOOL clampSeen = NO;
         NSTimer *clamp = [NSTimer timerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *timer) {
@@ -195,17 +195,7 @@ int main(int argc, char **argv) {
               printf("FAIL clamp: menu at %g,%g %gx%g, visible frame %g,%g %gx%g\n", f.origin.x, f.origin.y,
                      f.size.width, f.size.height, visible.origin.x, visible.origin.y, visible.size.width,
                      visible.size.height);
-          [NSApp postEvent: [NSEvent keyEventWithType: NSKeyDown
-                                             location: NSZeroPoint
-                                        modifierFlags: 0
-                                            timestamp: [[NSProcessInfo processInfo] systemUptime]
-                                         windowNumber: [window windowNumber]
-                                              context: nil
-                                           characters: @"\033"
-                          charactersIgnoringModifiers: @"\033"
-                                            isARepeat: NO
-                                              keyCode: 53]
-                   atStart: NO];
+          [menu cancelTracking];
         }];
         [[NSRunLoop currentRunLoop] addTimer: clamp forMode: NSRunLoopCommonModes];
         [[NSRunLoop currentRunLoop] addTimer: clamp forMode: NSEventTrackingRunLoopMode];

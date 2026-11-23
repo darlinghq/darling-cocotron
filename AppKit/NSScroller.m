@@ -105,6 +105,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSScroller
 
+// Operated at once: the click that activates the window is delivered to it
+// (see -[NSWindow sendEvent:]).
+- (BOOL) acceptsFirstMouse: (NSEvent *) event {
+    return YES;
+}
+
 NS_EXTRA_DEALLOC(NSScroller)
 
 + (CGFloat) scrollerWidth {

@@ -133,6 +133,8 @@ extern CGError CGSGetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurf
 extern CGError CGSGetWindowBounds(CGSConnectionID cid, CGSWindowID wid, CGRect *outBounds);
 // Shows the cursor and forgets all pending counted hides. Returns nothing.
 extern void CGSForceShowCursor(CGSConnectionID cid);
+// The image and hot spot of a registered cursor; NULL when there is none.
+extern CGImageRef CGSCreateRegisteredCursorImage(CGSConnectionID cid, const char *cursorName, CGPoint *outHotspot);
 extern CGError CGSOrderSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid, int a, int b);
 //extern CGLError CGLSetSurface(CGLContextObj gl, CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid); // in CGL
 

@@ -17,12 +17,14 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSDelegateNotifications.h"
 #import <AppKit/NSAlert.h>
 #import <AppKit/NSAppearance.h>
 #import <AppKit/NSApplication.h>
 #import "DarlingLayout.h"
 #import <AppKit/NSUserInterfaceItemSearching.h>
 #import <AppKit/NSColorPanel.h>
+#import <AppKit/NSColor.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSGlobalMenu+Private.h>
 #import <AppKit/NSDockTile.h>
@@ -55,8 +57,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "private-include/AppKit/NSEventTime.h"
 #import <Foundation/NSAppleEventDescriptor.h>
 #import <objc/message.h>
-#include <notify.h>
 #import <pthread.h>
+#include <notify.h>
+#include <mach-o/dyld_priv.h>
+
+@interface NSApplication (AppearancePrivate)
+- (void) _systemAppearanceDidChange;
+- (void) _captureSystemAppearanceState;
+@end
+
+BOOL NSAccessibilityDisplayShouldIncreaseContrast(void);
+
+// The state the last system appearance change left, so that a change is only reported when a value differs.
+static id s_lastAccent = nil;
+static id s_lastHighlight = nil;
+static NSAppearanceName s_lastEffectiveAppearanceName = nil;
+static BOOL s_lastIncreaseContrast = NO;
+
+// QUIRK: macOS announces a change of the interface style as AppleInterfaceThemeChangedNotification and a
+// change of the accent or highlight colour as AppleColorPreferencesChangedNotification, both through the
+// distributed notification center. Neither is documented by Apple.
+// Evidence: widely reported behaviour (tier 4): tools that follow the theme observe the former through
+// DistributedNotificationCenter (https://samasaur1.github.io/blog/terminal-apps-respecting-system-dark-mode,
+// https://docs.rs/crate/dark-light/0.1.1/source/src/macos.rs) and posting the latter is how a changed accent is
+// applied (https://alexwlchan.net/2022/changing-the-macos-accent-colour/).
+// Test: tests/appkit-appearance-theme.m (the notification is posted from another process)
+static void _themeChangedNotificationCallback(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    [(NSApplication *)observer _systemAppearanceDidChange];
+}
 
 // Runs the +[NSEvent addLocalMonitorForEventsMatchingMask:handler:] handlers.
 extern NSEvent *NSEventApplyLocalMonitors(NSEvent *event);
@@ -180,6 +208,11 @@ static NSArray *NSApplicationDocumentsInArguments(NSArray *arguments) {
     }
     return documents;
 }
+
+@interface NSDisplay (DarlingApplicationIcon)
+// Implemented by the backends (see DarlingDisplay.h).
+- (void) applicationIconImageChanged;
+@end
 
 @implementation NSApplication
 
@@ -348,6 +381,27 @@ static void observeProcessCommands(NSApplication *application) {
                selector: @selector(_windowWillClose:)
                    name: NSWindowWillCloseNotification
                  object: nil];
+
+    CFNotificationCenterRef distCenter = CFNotificationCenterGetDistributedCenter();
+    if (distCenter != NULL) {
+        CFNotificationCenterAddObserver(
+            distCenter,
+            (void *)self,
+            _themeChangedNotificationCallback,
+            CFSTR("AppleInterfaceThemeChangedNotification"),
+            NULL,
+            CFNotificationSuspensionBehaviorDeliverImmediately
+        );
+        CFNotificationCenterAddObserver(
+            distCenter,
+            (void *)self,
+            _themeChangedNotificationCallback,
+            CFSTR("AppleColorPreferencesChangedNotification"),
+            NULL,
+            CFNotificationSuspensionBehaviorDeliverImmediately
+        );
+    }
+    [self _captureSystemAppearanceState];
 
     [self _showSplashImage];
 
@@ -740,31 +794,160 @@ static NSMutableArray *pendingOpenURLs = nil;
 // Observers of a window's effectiveAppearance are told when the application's
 // appearance changes, because a window without an appearance of its own
 // follows the application's.
+static void _propagateAppearanceChangeToView(NSView *view) {
+    if (view == nil)
+        return;
+    if ([view appearance] != nil)
+        return; // View has an explicit appearance; its effectiveAppearance did not change.
+    [view viewDidChangeEffectiveAppearance];
+    [view setNeedsDisplay: YES];
+    for (NSView *subview in [view subviews]) {
+        _propagateAppearanceChangeToView(subview);
+    }
+}
+
 - (void) setAppearance: (NSAppearance *) appearance {
+    if (_appearance == appearance)
+        return;
     NSArray *windows = [[self windows] copy];
 
-    for (NSWindow *window in windows)
-        [window willChangeValueForKey: @"effectiveAppearance"];
+    [self willChangeValueForKey: @"effectiveAppearance"];
+    for (NSWindow *window in windows) {
+        if ([window appearance] == nil)
+            [window willChangeValueForKey: @"effectiveAppearance"];
+    }
     appearance = [appearance retain];
     [_appearance release];
     _appearance = appearance;
-    for (NSWindow *window in windows)
-        [window didChangeValueForKey: @"effectiveAppearance"];
+    [self didChangeValueForKey: @"effectiveAppearance"];
+    for (NSWindow *window in windows) {
+        if ([window appearance] == nil) {
+            [window didChangeValueForKey: @"effectiveAppearance"];
+            _propagateAppearanceChangeToView([window contentView]);
+        }
+    }
     [windows release];
 }
 
-// Without an explicit appearance the application follows the system one,
-// which is always Aqua here.
-- (NSAppearance *) effectiveAppearance {
-    static NSAppearance *systemAppearance;
+// Records the appearance, accent, highlight and contrast in effect, as the reference for later changes.
+- (void) _captureSystemAppearanceState {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
 
+    [s_lastAccent release];
+    s_lastAccent = [[defaults objectForKey: @"AppleAccentColor"] retain];
+    [s_lastHighlight release];
+    s_lastHighlight = [[defaults objectForKey: @"AppleHighlightColor"] retain];
+    [s_lastEffectiveAppearanceName release];
+    s_lastEffectiveAppearanceName = [[[self effectiveAppearance] name] copy];
+    s_lastIncreaseContrast = NSAccessibilityDisplayShouldIncreaseContrast();
+}
+
+- (void) _systemAppearanceDidChange {
+    CFPreferencesAppSynchronize(kCFPreferencesCurrentApplication);
+    CFPreferencesAppSynchronize(kCFPreferencesAnyApplication);
+    CFPreferencesAppSynchronize(CFSTR("com.apple.universalaccess"));
+    [[NSUserDefaults standardUserDefaults] synchronize];
+
+    BOOL contrast = NSAccessibilityDisplayShouldIncreaseContrast();
+    BOOL contrastChanged = (contrast != s_lastIncreaseContrast);
+    s_lastIncreaseContrast = contrast;
+    if (contrastChanged) {
+        [[[NSWorkspace sharedWorkspace] notificationCenter]
+                postNotificationName: NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification
+                              object: [NSWorkspace sharedWorkspace]];
+    }
+
+    id currentAccent = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleAccentColor"];
+    id currentHighlight = [[NSUserDefaults standardUserDefaults] objectForKey: @"AppleHighlightColor"];
+    BOOL colorsChanged = NO;
+    if ((currentAccent != nil || s_lastAccent != nil) && ![currentAccent isEqual: s_lastAccent]) {
+        colorsChanged = YES;
+    }
+    if ((currentHighlight != nil || s_lastHighlight != nil) && ![currentHighlight isEqual: s_lastHighlight]) {
+        colorsChanged = YES;
+    }
+    [s_lastAccent release];
+    s_lastAccent = [currentAccent retain];
+    [s_lastHighlight release];
+    s_lastHighlight = [currentHighlight retain];
+
+    if (colorsChanged) {
+        [[NSNotificationCenter defaultCenter] postNotificationName: NSSystemColorsDidChangeNotification object: nil];
+    }
+
+    NSAppearance *newAppAppearance = [self effectiveAppearance];
+    NSAppearanceName newName = [newAppAppearance name];
+    BOOL appAppearanceChanged = (_appearance == nil && (![newName isEqualToString: s_lastEffectiveAppearanceName]));
+    if (appAppearanceChanged) {
+        [s_lastEffectiveAppearanceName release];
+        s_lastEffectiveAppearanceName = [newName copy];
+    }
+
+    if (appAppearanceChanged) {
+        [self willChangeValueForKey: @"effectiveAppearance"];
+        [self didChangeValueForKey: @"effectiveAppearance"];
+    }
+
+    if (appAppearanceChanged || colorsChanged || contrastChanged) {
+        NSArray *windows = [[self windows] copy];
+        for (NSWindow *window in windows) {
+            BOOL windowHasExplicitAppearance = ([window appearance] != nil);
+            if (appAppearanceChanged && !windowHasExplicitAppearance) {
+                [window willChangeValueForKey: @"effectiveAppearance"];
+                [window didChangeValueForKey: @"effectiveAppearance"];
+            }
+            NSView *contentView = [window contentView];
+            if (contentView != nil) {
+                if (appAppearanceChanged && !windowHasExplicitAppearance) {
+                    _propagateAppearanceChangeToView(contentView);
+                } else {
+                    [contentView setNeedsDisplay: YES];
+                }
+            }
+        }
+        [windows release];
+    }
+}
+
+// Without an explicit appearance the application follows the system one,
+// derived from AppleInterfaceStyle.
+- (NSAppearance *) effectiveAppearance {
     if (_appearance != nil)
         return _appearance;
 
-    if (systemAppearance == nil)
-        systemAppearance =
-                [[NSAppearance appearanceNamed: NSAppearanceNameAqua] retain];
-    return systemAppearance;
+    // Applications linked against an SDK before 10.14 keep the Aqua appearance, as Apple documents for Dark
+    // Mode (https://developer.apple.com/documentation/appkit/choosing-a-specific-appearance-for-your-macos-app).
+    // This is not observed black-box here (the ssh sessions of the Macs have no window server session).
+    // Test: tests/appkit-appearance-theme.m
+    uint32_t sdk = dyld_get_program_sdk_version();
+    if (sdk != 0 && sdk < 0x000A0E00) {
+        return [NSAppearance appearanceNamed: NSAppearanceNameAqua];
+    }
+
+    // QUIRK: NSRequiresAquaSystemAppearance forces Aqua when it is an Info.plist key, as Apple documents (same page),
+    // and also when it is a user default (`defaults write <bundle id> NSRequiresAquaSystemAppearance -bool YES`),
+    // which the documentation does not say.
+    // Evidence: widely reported Mojave behaviour (tier 4); the Info.plist key is documented.
+    // Test: tests/appkit-appearance-theme.m
+    id reqAqua = [[NSUserDefaults standardUserDefaults] objectForKey: @"NSRequiresAquaSystemAppearance"];
+    if (reqAqua == nil) {
+        reqAqua = [[NSBundle mainBundle] objectForInfoDictionaryKey: @"NSRequiresAquaSystemAppearance"];
+    }
+    if (reqAqua != nil && [reqAqua boolValue]) {
+        return [NSAppearance appearanceNamed: NSAppearanceNameAqua];
+    }
+
+    // QUIRK: AppleInterfaceStyle in the global domain is "Dark" in dark mode and absent in light mode.
+    // Evidence: widely reported (tier 4), for example `defaults read -g AppleInterfaceStyle` in
+    // https://gist.github.com/jerblack/869a303d1a604171bf8f00bbbefa59c2 and
+    // https://samasaur1.github.io/blog/terminal-apps-respecting-system-dark-mode.
+    // Test: tests/appkit-appearance-theme.m
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *style = [defaults stringForKey: @"AppleInterfaceStyle"];
+    if (style != nil && [style isEqualToString: @"Dark"]) {
+        return [NSAppearance appearanceNamed: NSAppearanceNameDarkAqua];
+    }
+    return [NSAppearance appearanceNamed: NSAppearanceNameAqua];
 }
 
 - (NSWindow *) makeWindowsPerform: (SEL) selector inOrder: (BOOL) inOrder {
@@ -811,76 +994,46 @@ static NSMutableArray *pendingOpenURLs = nil;
     NSUnimplementedMethod();
 }
 
+// The delegate is an observer of the application's notifications for the methods it implements.
+static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
+    NSDelegateNotification table[] = {
+        {NSApplicationWillFinishLaunchingNotification, @selector(applicationWillFinishLaunching:)},
+        {NSApplicationDidFinishLaunchingNotification, @selector(applicationDidFinishLaunching:)},
+        {NSApplicationWillBecomeActiveNotification, @selector(applicationWillBecomeActive:)},
+        {NSApplicationDidBecomeActiveNotification, @selector(applicationDidBecomeActive:)},
+        {NSApplicationWillResignActiveNotification, @selector(applicationWillResignActive:)},
+        {NSApplicationDidResignActiveNotification, @selector(applicationDidResignActive:)},
+        {NSApplicationWillHideNotification, @selector(applicationWillHide:)},
+        {NSApplicationDidHideNotification, @selector(applicationDidHide:)},
+        {NSApplicationWillUnhideNotification, @selector(applicationWillUnhide:)},
+        {NSApplicationDidUnhideNotification, @selector(applicationDidUnhide:)},
+        {NSApplicationWillUpdateNotification, @selector(applicationWillUpdate:)},
+        {NSApplicationDidUpdateNotification, @selector(applicationDidUpdate:)},
+        {NSApplicationWillTerminateNotification, @selector(applicationWillTerminate:)},
+        {NSApplicationDidChangeScreenParametersNotification, @selector(applicationDidChangeScreenParameters:)},
+        {NSApplicationDidChangeOcclusionStateNotification, @selector(applicationDidChangeOcclusionState:)},
+        {nil, NULL}};
+    memcpy(notes, table, sizeof table);
+}
+
 - (void) unregisterDelegate {
-    if ([_delegate respondsToSelector: @selector
-                   (applicationWillFinishLaunching:)]) {
-        [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
-                          name: NSApplicationWillFinishLaunchingNotification
-                        object: self];
-    }
-    if ([_delegate respondsToSelector: @selector
-                   (applicationDidFinishLaunching:)]) {
-        [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
-                          name: NSApplicationDidFinishLaunchingNotification
-                        object: self];
-    }
-    if ([_delegate
-                respondsToSelector: @selector(applicationDidBecomeActive:)]) {
-        [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
-                          name: NSApplicationDidBecomeActiveNotification
-                        object: self];
-    }
-    if ([_delegate respondsToSelector: @selector(applicationWillTerminate:)]) {
-        [[NSNotificationCenter defaultCenter]
-                removeObserver: _delegate
-                          name: NSApplicationWillTerminateNotification
-                        object: self];
-    }
+    NSDelegateNotification notes[16];
+
+    applicationDelegateNotifications(notes);
+    NSDelegateNotificationsRemove(_delegate, self, notes);
 }
 
 - (void) registerDelegate {
-    if ([_delegate respondsToSelector: @selector
-                   (applicationWillFinishLaunching:)]) {
-        [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
-                   selector: @selector(applicationWillFinishLaunching:)
-                       name: NSApplicationWillFinishLaunchingNotification
-                     object: self];
-    }
-    if ([_delegate respondsToSelector: @selector
-                   (applicationDidFinishLaunching:)]) {
-        [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
-                   selector: @selector(applicationDidFinishLaunching:)
-                       name: NSApplicationDidFinishLaunchingNotification
-                     object: self];
-    }
-    if ([_delegate
-                respondsToSelector: @selector(applicationDidBecomeActive:)]) {
-        [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
-                   selector: @selector(applicationDidBecomeActive:)
-                       name: NSApplicationDidBecomeActiveNotification
-                     object: self];
-    }
-    if ([_delegate respondsToSelector: @selector(applicationWillTerminate:)]) {
-        [[NSNotificationCenter defaultCenter]
-                addObserver: _delegate
-                   selector: @selector(applicationWillTerminate:)
-                       name: NSApplicationWillTerminateNotification
-                     object: self];
-    }
+    NSDelegateNotification notes[16];
+
+    applicationDelegateNotifications(notes);
+    NSDelegateNotificationsAdd(_delegate, self, notes);
 }
 
 - (void) setDelegate: delegate {
-    if (delegate != _delegate) {
-        [self unregisterDelegate];
-        _delegate = delegate;
-        [self registerDelegate];
-    }
+    [self unregisterDelegate];
+    _delegate = delegate;
+    [self registerDelegate];
 }
 
 - (void) setMainMenu: (NSMenu *) menu {
@@ -929,16 +1082,30 @@ static NSMutableArray *pendingOpenURLs = nil;
     NS_EXTRA(NSApplication, self)->_applicationIconImage = image;
 
     [image setName: NSImageNameApplicationIcon];
+
+    // Windows already shown carry the previous icon in the window system.
+    NSDisplay *display = NS_EXTRA(NSApplication, self)->_display;
+    if ([display respondsToSelector: @selector(applicationIconImageChanged)])
+        [(id) display applicationIconImageChanged];
 }
 
+// Until the program sets one, the policy is what the bundle declares (LSUIElement: accessory,
+// LSBackgroundOnly: prohibited; see -[NSRunningApplication activationPolicy]); a program without a
+// bundle is a regular application.
 - (NSApplicationActivationPolicy) activationPolicy {
-    // TODO: Implement
-    return NSApplicationActivationPolicyRegular;
+    if (NS_EXTRA(NSApplication, self)->_activationPolicySet)
+        return (NSApplicationActivationPolicy) NS_EXTRA(NSApplication, self)->_activationPolicy;
+    return [[NSRunningApplication currentApplication] activationPolicy];
 }
 
 - (BOOL) setActivationPolicy: (NSApplicationActivationPolicy) activationPolicy {
-    // TODO: Implement
-    return NO;
+    if (activationPolicy != NSApplicationActivationPolicyRegular &&
+        activationPolicy != NSApplicationActivationPolicyAccessory &&
+        activationPolicy != NSApplicationActivationPolicyProhibited)
+        return NO;
+    NS_EXTRA(NSApplication, self)->_activationPolicy = activationPolicy;
+    NS_EXTRA(NSApplication, self)->_activationPolicySet = YES;
+    return YES;
 }
 
 - (void) setWindowsMenu: (NSMenu *) menu {
@@ -1088,6 +1255,17 @@ static NSMutableArray *pendingOpenURLs = nil;
         if ([_delegate respondsToSelector: @selector(application:openFiles:)]) {
             [_delegate application: self openFiles: one];
             opened = YES;
+        } else if ([_delegate respondsToSelector: @selector(application:openFile:)]) {
+            BOOL taken = [_delegate application: self openFile: document];
+
+            // QUIRK: a document named in the process arguments that the delegate's -application:openFile: does
+            // not take (answers NO) is then tried by the document controller, which presents an error when it
+            // cannot open it. Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2), a
+            // document-based application started from its executable with words that are no documents.
+            // Test: appkit-argument-documents (-delegate openFile)
+            if (!taken)
+                taken = [[NSDocumentController sharedDocumentController] application: self openFile: document];
+            opened |= taken;
         } else {
             opened |= [self _openFileNames: one];
         }
@@ -1343,6 +1521,8 @@ static NSMutableArray *pendingOpenURLs = nil;
         NS_HANDLER [self reportException: localException];
         NS_ENDHANDLER
 
+        // The windows are brought up to date after each event
+        [self updateWindows];
                 [self _checkForReleasedWindows];
         [self _checkForTerminate];
 
@@ -1624,12 +1804,24 @@ static NSMutableArray *pendingOpenURLs = nil;
     NSUnimplementedMethod();
 }
 
-// Only the windows on screen are updated (and their toolbars validated), as documented.
-// Test: tests/appkit-toolbar-closed-window-validation.m
+// The windows are updated between the two notifications; only the windows on screen are updated (and their
+// toolbars validated), as documented. Test: tests/appkit-toolbar-closed-window-validation.m
 - (void) updateWindows {
+    [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationWillUpdateNotification object: self];
     for (NSWindow *window in [[_windows copy] autorelease])
         if ([window isVisible])
             [window update];
+    [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationDidUpdateNotification object: self];
+}
+
+// Whether a window of this application may ask the window system for the input focus now. Ordering a
+// window in and making it key does not make an inactive application the active one (activation is
+// -activateIgnoringOtherApps:, or the user choosing one of its windows), so once launching is over an
+// application that is not active leaves the focus where it is.
+static BOOL activationInProgress;
+
+- (BOOL) _mayTakeInputFocus {
+    return !launchComplete || activationInProgress || [self isActive];
 }
 
 // Unless the display backend activates the process itself, activating means
@@ -1659,10 +1851,12 @@ static NSMutableArray *pendingOpenURLs = nil;
         }
     }
 
+    activationInProgress = YES;
     if (window != nil)
         [window makeKeyAndOrderFront: self];
     else
         [self _becomeActive];
+    activationInProgress = NO;
 }
 
 - (void) activate {
@@ -2301,6 +2495,8 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 // decision to resign is taken once the current run-loop pass has finished,
 // and is dropped when a window has taken the focus by then.
 static BOOL resignPending;
+// Set when the window system itself reported another client having the focus.
+static BOOL resignForced;
 
 - (void) _windowDidBecomeActive: (NSWindow *) window {
     resignPending = NO;
@@ -2330,11 +2526,45 @@ static BOOL resignPending;
     // Resigning, if it happens, is decided by -_resignIfNoWindowIsActive.
 }
 
+// Whether a window of the application, other than the ones AppKit makes for
+// itself (menus, tool tips, the menu bar), is shown or minimized.
+- (BOOL) _hasOnScreenWindow {
+    for (NSWindow *window in _windows) {
+        if ([window styleMask] & NSAppKitPrivateWindow)
+            continue;
+        if ([window isVisible] || [window isMiniaturized])
+            return YES;
+    }
+    return NO;
+}
+
+// The window system reports that another client has the input focus. An application becomes active at the
+// end of launching whether or not a window of it ever takes the focus, so for one whose windows never held
+// the focus (they cannot become key, or are never shown) no focus-out arrives that would end it. Without
+// this it would stay active for good and keep asking for the focus when its windows are ordered in. An
+// application one of whose windows still has the focus waits for the focus-out for that window instead.
+- (void) _systemFocusMovedToAnotherClient {
+    if (!NS_EXTRA(NSApplication, self)->_isActive || activationInProgress)
+        return;
+    resignPending = YES;
+    resignForced = YES;
+    [self _resignIfNoWindowIsActive];
+}
+
+// The focus leaving the last window of the application because that window
+// was closed or hidden is not the user activating another application: the
+// application stays active, and keeps its menu bar, until another application
+// is activated. The focus leaving a window that is still shown resigns.
+
 - (void) _resignIfNoWindowIsActive {
     if (!resignPending)
         return;
     resignPending = NO;
+    BOOL forced = resignForced;
+    resignForced = NO;
     if ([self isActiveExcludingWindow: nil])
+        return;
+    if (!forced && ![self _hasOnScreenWindow])
         return;
 
     [[NSNotificationCenter defaultCenter]

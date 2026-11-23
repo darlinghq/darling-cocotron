@@ -21,8 +21,9 @@
 # Cases, each checked on Wayland and on X11:
 #   - a global menu exists: the menu is exported (GetLayout has the items),
 #     KWin reports its address for the window, and the window has no strip;
-#   - none exists: Wayland draws the strip in the window (KWin reports no
-#     menu); X11 shows its own menu bar along the top of the screen.
+#   - none exists: Wayland shows the menu bar as a layer surface (see
+#     run-kwin-bar.py) and no strip in the window; X11 shows its own menu bar
+#     along the top of the screen.
 import argparse
 import glob
 import os
@@ -194,8 +195,9 @@ def main():
             time.sleep(2)
             menus = watcher_menus(read(watch)[seen:])
             if backend == "wayland":
-                check("strip window=1" in log, "wayland without a global menu: the window draws the strip")
-                check(menus == [], "wayland without a global menu: no menu address for KWin")
+                # KWin offers wlr-layer-shell: the menu bar is a layer surface (run-kwin-bar.py), not a
+                # strip in the window. The menu stays exported, for a global menu that appears later.
+                check("strip window=0" in log, "wayland without a global menu: no strip in the window")
             else:
                 check("strip window=0" in log and "bar frame x=0 y=0 width=1280" in log,
                       "x11 without a global menu: the application's menu bar along the top of the screen")

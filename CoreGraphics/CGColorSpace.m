@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGColorSpace.h>
 #import <Onyx2D/O2ColorSpace.h>
+#import <Onyx2D/O2DataProvider.h>
 
 const CFStringRef kCGColorSpaceDisplayP3 = CFSTR("kCGColorSpaceDisplayP3");
 const CFStringRef kCGColorSpaceExtendedDisplayP3 =
@@ -135,6 +136,28 @@ CFDataRef CGColorSpaceCopyICCProfile(CGColorSpaceRef colorSpace) {
 
 CGColorSpaceRef CGColorSpaceCreateWithICCProfile(CFDataRef data) {
     return (CGColorSpaceRef) O2ColorSpaceCreateWithICCData(data);
+}
+
+// QUIRK: the documentation types the parameter CFTypeRef without saying which
+// types it takes. Black-box observation of macOS 26.7.3 (tier 2): a CFData
+// holding an ICC profile and a CGDataProvider over the same data both give a
+// colour space; NULL, an object of another type (a CFString) and data that is no
+// profile give NULL.
+// Test: the provider case of tests/coregraphics-colorspace-create-with-icc-data.c
+CGColorSpaceRef CGColorSpaceCreateWithICCData(CFTypeRef data) {
+    if (data == NULL)
+        return NULL;
+    if (CFGetTypeID(data) == CFDataGetTypeID())
+        return CGColorSpaceCreateWithICCProfile((CFDataRef) data);
+    if ([(id) data isKindOfClass: [O2DataProvider class]]) {
+        CFDataRef copied = CGDataProviderCopyData((CGDataProviderRef) data);
+        CGColorSpaceRef space = copied != NULL ? CGColorSpaceCreateWithICCProfile(copied) : NULL;
+
+        if (copied != NULL)
+            CFRelease(copied);
+        return space;
+    }
+    return NULL;
 }
 
 CGColorSpaceRef CGColorSpaceCreateICCBased(size_t nComponents, const CGFloat *range,

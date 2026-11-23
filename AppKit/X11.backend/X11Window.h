@@ -59,6 +59,7 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _fullscreenRequested;
     BOOL _fullscreenReported; // what the window manager last said, told to the delegate
     BOOL _isOpaque;
+    NSSize _opaqueRegionSize; // device size of the _NET_WM_OPAQUE_REGION currently set, zero for none (see -updateOpaqueRegion)
     BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
     BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
@@ -100,6 +101,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _miniaturizedReported;
     // Whether X11Display found the window covered (see X11Occlusion.h).
     BOOL _occluded;
+    // Geometry of the last ConfigureNotify (see -noteConfigureGeometryChanged:).
+    BOOL _configureKnown;
+    int _configureX, _configureY, _configureWidth, _configureHeight;
 }
 
 + (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
@@ -132,6 +136,7 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 // Called by the display after it re-read a changed scale (see
 // -[X11Display reevaluateBackingScale]).
 - (void) displayBackingScaleChangedFrom: (CGFloat) oldScale;
+- (void) setWindowIcon;
 
 // Points to the device pixels libX11 takes. AppKit-level geometry is in points;
 // every value handed to X is in device pixels. One rounding serves the X window
@@ -154,6 +159,8 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 - (void) restackForLevels;
 - (BOOL) isMapped;
 - (void) setOccluded: (BOOL) occluded;
+// Records the geometry of a ConfigureNotify; NO when it repeats the previous one.
+- (BOOL) noteConfigureGeometryChanged: (XConfigureEvent *) event;
 // Whether the window is fullscreen (_NET_WM_STATE_FULLSCREEN), as last asked
 // for or as the window manager last set it.
 - (BOOL) isFullscreen;

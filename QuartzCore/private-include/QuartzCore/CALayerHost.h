@@ -31,6 +31,13 @@
     NS_EXTRA_IVARS_BEGIN(CALayerHost)
         CAContextID _contextId;
         CALayerHostConnection *_connection;
+        // The texture state (see -_textureId) of the surface that is not the
+        // one on screen: the two surfaces each keep a texture, so that each is
+        // bound to its texture once rather than every frame.
+        int _activeSlot;
+        NSNumber *_otherTextureId;
+        id _otherTextureContents;
+        uint32_t _otherTextureSeed;
     NS_SIDE_IVARS_END(CALayerHost)
 }
 

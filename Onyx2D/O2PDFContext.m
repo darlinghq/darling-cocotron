@@ -154,6 +154,7 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
 
 - (void) dealloc {
     [_dataConsumer release];
+    [_outline release];
     [_fontCache release];
     if (_objectToRef != NULL)
         NSFreeMapTable(_objectToRef);
@@ -797,7 +798,69 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
     // _pages, _catalog, nil]];
 }
 
+- (void) setOutline: (NSDictionary *) outline {
+    [_outline autorelease];
+    _outline = [outline copy];
+}
+
+// Writes the children of an outline item as indirect items linked with /Parent, /First, /Last, /Next and
+// /Prev (PDF 32000-1 12.3.3); returns the item count of the level. `parent` is the reference of the parent
+// item or of the outline root.
+- (void) writeOutlineChildren: (NSArray *) children
+                       parent: (O2PDFDictionary *) parent
+                    parentRef: (O2PDFObject *) parentRef
+{
+    NSMutableArray *items = [NSMutableArray array];
+
+    for (id child in children) {
+        if (![child isKindOfClass: [NSDictionary class]])
+            continue;
+        O2PDFDictionary *item = [O2PDFDictionary pdfDictionary];
+        NSString *title = [child objectForKey: @"Title"];
+
+        [item setObjectForKey: "Title"
+                        value: [O2PDFString pdfObjectWithString: [title isKindOfClass: [NSString class]] ? title : @""]];
+        [item setObjectForKey: "Parent" value: parentRef];
+        [items addObject: item];
+    }
+    if ([items count] == 0)
+        return;
+
+    NSUInteger i = 0;
+
+    for (id child in children) {
+        if (![child isKindOfClass: [NSDictionary class]])
+            continue;
+        O2PDFDictionary *item = [items objectAtIndex: i];
+
+        if (i > 0)
+            [item setObjectForKey: "Prev" value: [self referenceForObject: [items objectAtIndex: i - 1]]];
+        if (i + 1 < [items count])
+            [item setObjectForKey: "Next" value: [self referenceForObject: [items objectAtIndex: i + 1]]];
+
+        NSArray *grandchildren = [child objectForKey: @"Children"];
+
+        if ([grandchildren isKindOfClass: [NSArray class]])
+            [self writeOutlineChildren: grandchildren parent: item parentRef: [self referenceForObject: item]];
+        i++;
+    }
+    [parent setObjectForKey: "First" value: [self referenceForObject: [items objectAtIndex: 0]]];
+    [parent setObjectForKey: "Last" value: [self referenceForObject: [items lastObject]]];
+    [parent setIntegerForKey: "Count" value: [items count]];
+}
+
 - (void) close {
+    if (_outline != nil) {
+        O2PDFDictionary *root = [O2PDFDictionary pdfDictionary];
+        NSArray *children = [_outline objectForKey: @"Children"];
+
+        [root setNameForKey: "Type" value: "Outlines"];
+        if ([children isKindOfClass: [NSArray class]])
+            [self writeOutlineChildren: children parent: root parentRef: [self referenceForObject: root]];
+        [_catalog setObjectForKey: "Outlines" value: [self referenceForObject: root]];
+        [_outline release];
+        _outline = nil;
+    }
     // Encode the remaining references
     [self internIndirectObjects];
     [self encodePDFObject: (id) _xref];

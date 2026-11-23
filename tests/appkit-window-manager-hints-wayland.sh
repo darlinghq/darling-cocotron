@@ -5,8 +5,9 @@
 # Runs tests/appkit-window-manager-hints.m with the Wayland backend (DARLING_APPKIT_BACKEND=wayland and
 # WAYLAND_DISPLAY in the command's environment) and checks the roles it gave its windows in the protocol
 # trace (WAYLAND_DEBUG=client, which this script sets):
-#  - the main window and the window that draws its own chrome are toplevels without a parent;
-#  - the panel and the window that cannot become main are toplevels related to an application window
+#  - the main window, the window that draws its own chrome and the borderless window that cannot become main are
+#    toplevels without a parent (all application windows of a regular application);
+#  - the panel is a toplevel related to an application window
 #    (xdg_toplevel.set_parent), so that the compositor keeps them in front of it and out of the task bar;
 #  - the pop-up windows and the tool tip are xdg_popups of the main window, at the offset from the main
 #    window's frame (as AppKit reports it) that AppKit gave them, and the compositor put them there
@@ -35,11 +36,11 @@ H = int(os.environ["SCREEN_H"])
 # name: requested Cocoa frame, expected role, expected parent
 # The main window is where AppKit says it is (the compositor chooses its size), the others where they were asked to be.
 mf = [float(v) for v in os.environ["MAIN_FRAME"].split()[:4]]
-APP = ("wmh-main", "wmh-chrome")
+APP = ("wmh-main", "wmh-chrome", "wmh-loose")
 want = {
     "wmh-main":        ((mf[0], mf[1], mf[2], mf[3]), "toplevel", None),
     "wmh-chrome":      ((1400, 400, 210, 140), "toplevel", None),
-    "wmh-loose":       ((1400, 700, 170, 110), "toplevel", APP),
+    "wmh-loose":       ((1400, 700, 170, 110), "toplevel", None),
     "wmh-panel":       ((1000, 300, 180, 130), "toplevel", APP),
     "wmh-popup":       ((820, 560, 160, 120), "popup", "wmh-main"),
     "wmh-popup-level": ((1100, 640, 200, 150), "popup", "wmh-main"),
@@ -135,12 +136,12 @@ grep -q '^FAIL' <<< "$result" && status=1
 
 if [ -n "${KWIN_QUERY:-}" ]; then
     kw=$($KWIN_QUERY)
-    for n in wmh-main wmh-chrome; do
+    for n in wmh-main wmh-chrome wmh-loose; do
         l=$(grep "^KWINWIN $n " <<< "$kw")
         if grep -q 'skipTaskbar=false' <<< "$l"; then echo "PASS: KWin lists $n in the task bar"; else echo "FAIL: KWin does not list $n: $l"; status=1; fi
     done
     # A popup is not a window KWin lists at all; a window with a parent is a transient of it.
-    for n in wmh-popup wmh-popup-level wmh-loose wmh-child wmh-panel wmh-tooltip; do
+    for n in wmh-popup wmh-popup-level wmh-child wmh-panel wmh-tooltip; do
         l=$(grep "^KWINWIN $n " <<< "$kw")
         if [ -z "$l" ] || grep -q 'skipTaskbar=true' <<< "$l" || grep -q 'transient=true' <<< "$l"; then echo "PASS: KWin keeps $n out of the task bar"; else echo "FAIL: KWin lists $n in the task bar: $l"; status=1; fi
     done
