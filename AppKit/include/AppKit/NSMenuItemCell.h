@@ -38,4 +38,8 @@
 - (CGFloat) titleWidth;
 - (CGFloat) keyEquivalentWidth;
 
+// Draws the cell's border and background, which for this button-based cell is its bezel; called by
+// -drawWithFrame:inView: before the interior.
+- (void) drawBorderAndBackgroundWithFrame: (NSRect) cellFrame inView: (NSView *) controlView;
+
 @end

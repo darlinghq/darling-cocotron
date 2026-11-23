@@ -103,4 +103,28 @@
     return 0;
 }
 
+// Per the documentation this is the part of a menu item cell's drawing that covers whatever
+// frames or backs the item, and it runs ahead of the cell's other drawing steps; whole-cell drawing
+// is described as the border first and then the interior. So the cell draws the border and
+// background, then the interior, and for a button-based cell the border and background is its
+// bezel (-drawBezelWithFrame:inView:, which a pop-up cell extends with its arrows).
+// -drawWithFrame:inView: is NSButtonCell's, with the bezel step made this method, so a
+// cell that overrides neither draws what it did before and a subclass that overrides this method,
+// or calls super from it, gets the bezel once.
+// GUESS: "borders and background" means the bezel for a button-based cell; a menu item's own
+// background (highlight) is not drawn.
+- (void) drawBorderAndBackgroundWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    [self drawBezelWithFrame: cellFrame inView: controlView];
+}
+
+- (void) drawWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    _controlView = controlView;
+
+    if ([self isTransparent])
+        return;
+
+    [self drawBorderAndBackgroundWithFrame: cellFrame inView: controlView];
+    [self drawInteriorWithFrame: cellFrame inView: controlView];
+}
+
  @end
