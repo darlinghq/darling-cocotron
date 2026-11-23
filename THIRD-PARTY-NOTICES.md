@@ -61,3 +61,15 @@ and the licence.
   copy, modify, merge, publish, distribute, sublicense, and/or sell copies, subject to the above copyright notice and
   this permission notice being included in all copies or substantial portions of the software. The software is
   provided "as is", without warranty of any kind.
+
+## Swift CoreData overlay (`NSManagedObjectContext.fetch`)
+
+- Location: `CoreData/swift/NSManagedObjectContext.swift` (adapted, not unmodified)
+- Source: https://github.com/swiftlang/swift (`stdlib/public/SDK/CoreData/NSManagedObjectContext.swift`)
+- Commit: ba33f9e0b772015326bdecc0d597b2ac9fc61717
+- Use: the public signature of `fetch(_:)` (a generic, throwing, typed-array method) and the file header follow that
+  file; the body is rewritten to call a small Objective-C bridge (`CoreData/swift/Bridge/`) instead of the
+  body in that source file. The header, with the copyright and licence lines, is kept in the file.
+- Copyright: 2014 - 2017 Apple Inc. and the Swift project authors
+- Licence: Apache License v2.0 with Runtime Library Exception (https://swift.org/LICENSE.txt). The Apache 2.0 licence
+  is compatible with Darling's GPLv3 and with the licence of this repository.
