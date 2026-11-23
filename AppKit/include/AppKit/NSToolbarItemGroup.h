@@ -18,8 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSToolbarItem.h>
 #import <AppKit/AppKitIvarLayout.h>
-
-@class NSArray;
+#import <Foundation/NSArray.h>
 
 typedef NS_ENUM(NSInteger, NSToolbarItemGroupSelectionMode) {
     NSToolbarItemGroupSelectionModeSelectOne = 0,
@@ -33,12 +32,33 @@ typedef NS_ENUM(NSInteger, NSToolbarItemGroupControlRepresentation) {
     NSToolbarItemGroupControlRepresentationCollapsed,
 };
 
+NS_ASSUME_NONNULL_BEGIN
+
+#define _NS_SIDE_NSToolbarItemGroup 0, 1,
+// Legacy ObjC ABI (i386): the instance size must stay 0x54, Apple's. New state goes to the side struct, never
+// to an ivar of its own.
 @interface NSToolbarItemGroup : NSToolbarItem {
     NSArray *_subitems;
     NS_LEGACY_IVAR_PAD(_NSToolbarItemGroupReserved, 8)
+    NS_EXTRA_IVARS_BEGIN(NSToolbarItemGroup)
+        NSToolbarItemGroupSelectionMode _selectionMode;
+    NS_SIDE_IVARS_END(NSToolbarItemGroup)
 }
+
+// Makes a group with one subitem per image. The subitems take the image and, when there is one at the same
+// position, the label; the target and action are the group's own. The selection mode is stored.
++ (instancetype) groupWithItemIdentifier: (NSToolbarItemIdentifier) itemIdentifier
+                                  images: (NSArray<NSImage *> *) images
+                           selectionMode: (NSToolbarItemGroupSelectionMode) selectionMode
+                                  labels: (nullable NSArray<NSString *> *) labels
+                                  target: (nullable id) target
+                                  action: (nullable SEL) action API_AVAILABLE(macos(10.15));
+
+@property(nonatomic) NSToolbarItemGroupSelectionMode selectionMode API_AVAILABLE(macos(10.15));
 
 - (NSArray *) subitems;
 - (void) setSubitems: (NSArray *) subitems;
 
 @end
+
+NS_ASSUME_NONNULL_END
