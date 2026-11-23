@@ -109,6 +109,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                  forTypes: (NSArray *) extensions;
 - (NSArray *) fileNamesFromRunningOpenPanel;
 - (NSArray *) URLsFromRunningOpenPanel;
+// Presents an open panel for the types of the document types and calls the handler with the
+// chosen URLs, or nil. Runs -runModalOpenPanel:forTypes: when only that is overridden.
+- (void) beginOpenPanelWithCompletionHandler: (void (^)(NSArray<NSURL *> *_Nullable urls)) completionHandler;
+// Shows the (non-modal) panel for the types, which can be content type identifiers or
+// extensions, and calls the handler with how it was dismissed. Override to customize the panel.
+- (void) beginOpenPanel: (NSOpenPanel *) openPanel
+               forTypes: (nullable NSArray<NSString *> *) types
+      completionHandler: (void (^)(NSInteger result)) completionHandler;
 
 - (NSArray *) recentDocumentURLs;
 - (NSArray *) _recentDocumentURLsForKey: (NSString *) key;

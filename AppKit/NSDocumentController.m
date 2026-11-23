@@ -19,6 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "NSDocumentTypeName.h"
+#import <AppKit/NSAlert.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSDocumentController.h>
@@ -771,6 +772,75 @@ static NSError *UntitledDocumentError(void) {
     return [[self _runOpenPanel] URLs];
 }
 
+// The types an open panel offers: the content type identifiers and extensions of every document
+// type, or nil (all files) when a type accepts any extension.
+- (NSArray *) _allOpenableTypes {
+    NSMutableArray *types = [NSMutableArray array];
+
+    for (NSDictionary *fileType in _fileTypes) {
+        for (NSString *key in [NSArray arrayWithObjects: @"LSItemContentTypes", @"CFBundleTypeExtensions", nil]) {
+            id list = [fileType objectForKey: key];
+            if (![list isKindOfClass: [NSArray class]])
+                continue;
+            for (NSString *type in list) {
+                if ([type isEqual: @"*"])
+                    return nil;
+                if (![types containsObject: type])
+                    [types addObject: type];
+            }
+        }
+    }
+
+    // An application that declares no types offers every file.
+    return [types count] > 0 ? types : nil;
+}
+
+- (void) beginOpenPanel: (NSOpenPanel *) openPanel
+               forTypes: (NSArray *) types
+      completionHandler: (void (^)(NSInteger result)) completionHandler
+{
+    NSString *directory = [self currentDirectory];
+    if (directory != nil)
+        [openPanel setDirectoryURL: [NSURL fileURLWithPath: directory isDirectory: YES]];
+    if (types != nil)
+        [openPanel setAllowedFileTypes: types];
+
+    [openPanel beginWithCompletionHandler: ^(NSModalResponse result) {
+      if (result == NSModalResponseOK)
+          [[NSUserDefaults standardUserDefaults] setObject: [[openPanel directoryURL] path]
+                                                    forKey: @"NSNavLastRootDirectory"];
+      if (completionHandler != nil)
+          completionHandler(result);
+    }];
+}
+
+- (void) beginOpenPanelWithCompletionHandler: (void (^)(NSArray<NSURL *> *urls)) completionHandler {
+    NSOpenPanel *openPanel = [NSOpenPanel openPanel];
+    [openPanel setAllowsMultipleSelection: YES];
+    NSArray *types = [self _allOpenableTypes];
+
+    IMP begin = [NSDocumentController instanceMethodForSelector: @selector(beginOpenPanel:forTypes:completionHandler:)];
+    IMP modal = [NSDocumentController instanceMethodForSelector: @selector(runModalOpenPanel:forTypes:)];
+    BOOL beginOverridden = [self methodForSelector: @selector(beginOpenPanel:forTypes:completionHandler:)] != begin;
+    BOOL modalOverridden = [self methodForSelector: @selector(runModalOpenPanel:forTypes:)] != modal;
+
+    // Documented compatibility rule: a subclass that overrides only the application-modal
+    // method has that method used.
+    if (modalOverridden && !beginOverridden) {
+        NSInteger result = [self runModalOpenPanel: openPanel forTypes: types];
+        if (completionHandler != nil)
+            completionHandler(result == NSModalResponseOK ? [openPanel URLs] : nil);
+        return;
+    }
+
+    [self beginOpenPanel: openPanel
+                forTypes: types
+       completionHandler: ^(NSInteger result) {
+         if (completionHandler != nil)
+             completionHandler(result == NSModalResponseOK ? [openPanel URLs] : nil);
+       }];
+}
+
 - (NSMutableArray *) _recentDocumentPaths {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSMutableArray *paths = [NSMutableArray
@@ -977,16 +1047,28 @@ static NSError *UntitledDocumentError(void) {
 }
 
 - (void) openDocument: sender {
-    NSArray *files = [self fileNamesFromRunningOpenPanel];
-    int i, count = [files count];
+    IMP legacy = [self methodForSelector: @selector(fileNamesFromRunningOpenPanel)];
+    if (legacy != [NSDocumentController instanceMethodForSelector: @selector(fileNamesFromRunningOpenPanel)]) {
+        // Documented compatibility rule: an override of the Mac OS 10.3 method is used instead.
+        NSArray *files = [self fileNamesFromRunningOpenPanel];
+        for (NSString *file in files) {
+            NSError *error = nil;
+            NSURL *url = [NSURL fileURLWithPath: file];
 
-    for (i = 0; i < count; i++) {
-        NSError *error = nil;
-        NSURL *url = [NSURL fileURLWithPath: [files objectAtIndex: i]];
-
-        if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
-            [self _presentOpenError: error forURL: url];
+            if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+                [self _presentOpenError: error forURL: url];
+        }
+        return;
     }
+
+    [self beginOpenPanelWithCompletionHandler: ^(NSArray<NSURL *> *urls) {
+      for (NSURL *url in urls) {
+          NSError *error = nil;
+
+          if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+              [self _presentOpenError: error forURL: url];
+      }
+    }];
 }
 
 - (void) saveAllDocuments: sender {
