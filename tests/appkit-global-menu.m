@@ -58,6 +58,10 @@ static void note(const char *format, ...) {
 @end
 
 @implementation Target
+// The program's own arguments (a log path, a mode) are not documents: taking them here ends the alert the document
+// controller would show for each of them, as on macOS.
+- (void) application: (NSApplication *) application openFiles: (NSArray *) files {
+}
 - (void) preferences: (id) sender {
     note("action preferences active=%d key=%d", (int) [NSApp isActive], (int) ([NSApp keyWindow] != nil));
 }

@@ -24,6 +24,7 @@
 #import "X11DraggingManager.h"
 #import "X11Pasteboard.h"
 #import "X11LevelStacking.h"
+#import "X11Crossing.h"
 #import "../private-include/AppKit/NSEventTime.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
@@ -54,6 +55,7 @@
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import "X11KeyEvent.h"
 #import "X11Touch.h"
+#import "X11Gesture.h"
 #import "X11Occlusion.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
@@ -933,6 +935,34 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     }
 }
 
+- (BOOL) cursorAwaitsPointerMotion {
+    return _cursorHiddenUntilMouseMoves;
+}
+
+// Windows re-select their events when the wait for motion starts and when it ends.
+- (void) selectPointerMotionOnWindows {
+    for (id window in [_windowsByID allValues]) {
+        if ([window isKindOfClass: [X11Window class]])
+            [window syncDelegateProperties];
+    }
+}
+
+- (void) setCursorHiddenUntilMouseMoves: (BOOL) flag {
+    BOOL awaited = _cursorHiddenUntilMouseMoves;
+
+    [super setCursorHiddenUntilMouseMoves: flag];
+    if (awaited != _cursorHiddenUntilMouseMoves)
+        [self selectPointerMotionOnWindows];
+}
+
+- (void) pointerMoved {
+    BOOL awaited = _cursorHiddenUntilMouseMoves;
+
+    [super pointerMoved];
+    if (awaited)
+        [self selectPointerMotionOnWindows];
+}
+
 // Arrow, IBeam, HorizontalResize, VerticalResize
 - (id) cursorWithName: (NSString *) name {
     unsigned int shape = XC_left_ptr;
@@ -1096,6 +1126,9 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
                    forKey: [NSNumber
                                    numberWithUnsignedLong: (unsigned long) i]];
     else {
+        // A window replaced by another X window ends its pinch here, while it is still known and
+        // has its delegate; -[X11Window invalidate] ends it earlier.
+        [self cancelPinchOnWindow: i];
         [_windowsByID removeObjectForKey: [NSNumber numberWithUnsignedLong:
                                                             (unsigned long) i]];
 
@@ -2174,6 +2207,18 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case LeaveNotify:
+        // The pointer left the window (X11Crossing.h says which crossings mean that), and the event carries where it
+        // was. The window re-evaluates its tracking areas at that position, as it does for a motion, and sends the
+        // exits for the areas the position is outside. A leave that comes with the pointer still inside the window's
+        // rectangle (another window mapped over it) finds the areas still containing it and sends nothing. A pointer
+        // on another screen has no usable position here.
+        if (window == nil || _relativeMouse.active || !ev->xcrossing.same_screen ||
+            !X11LeaveNotifyMeansPointerLeft(ev->xcrossing.mode, ev->xcrossing.detail))
+            break;
+        [window setLastKnownCursorPosition:
+                        [window logicalPoint: NSMakePoint(ev->xcrossing.x,
+                                                          ev->xcrossing.y)]];
+        [delegate platformWindowSetCursorEvent: window];
         break;
 
     case FocusIn:

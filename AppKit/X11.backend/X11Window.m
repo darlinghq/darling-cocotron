@@ -41,14 +41,17 @@
 #import <QuartzCore/CAWindowOpenGLContext.h>
 
 #import "X11Display.h"
+#import "X11Gesture.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "X11Fullscreen.h"
 #import "X11InputShape.h"
 #import "X11RoundedShape.h"
 #import "X11InvisibleWindow.h"
+#import "X11PointerMotion.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
+#import "X11OpaqueRegion.h"
 #import "X11AppMenu.h"
 #import <X11/Xatom.h>
 #import <X11/Xutil.h>
@@ -644,6 +647,10 @@ static NSData *makeWindowIcon(X11Display *display) {
 
     [self setWindowIcon];
 
+    // The new X window has no region yet.
+    _opaqueRegionSize = NSZeroSize;
+    [self updateOpaqueRegion];
+
     return YES;
 }
 
@@ -1068,6 +1075,22 @@ static const int X11ChromelessCornerRadius = 5;
         _roundedShapeSet = _chromeless;
 }
 
+// The promise to a compositing manager that all of an opaque window with an alpha channel is opaque, an occlusion
+// hint it may ignore (see X11OpaqueRegion.h).
+// Asked again when the opacity or the size changes; a request is made only for a change.
+- (void) updateOpaqueRegion {
+    if (_window == 0 || _delegate == nil || _visualInfo == NULL)
+        return;
+    BOOL windowIsOpaque = [_delegate isOpaque];
+    NSSize device = [self deviceSize: _frame.size];
+    NSSize wanted = X11OpaqueRegionApplies(_visualInfo->depth, windowIsOpaque) ? device : NSZeroSize;
+    if (NSEqualSizes(wanted, _opaqueRegionSize))
+        return;
+    X11WindowSetOpaqueRegion(_display, _window, _visualInfo->depth, windowIsOpaque, (int) device.width,
+                             (int) device.height);
+    _opaqueRegionSize = wanted;
+}
+
 // The outline of a window without a frame: one device pixel along the rounded edge, drawn over the content
 // every time the window is flushed. The window's backing keeps what is drawn on it, so drawing it again must
 // change nothing: every pixel is either the opaque outline colour or untouched. The straight sides are
@@ -1333,9 +1356,9 @@ static const int X11ChromelessCornerRadius = 5;
                 VisibilityChangeMask | FocusChangeMask | PropertyChangeMask |
                 SubstructureRedirectMask;
 
-    if ([_delegate acceptsMouseMovedEvents]) {
-        mask |= PointerMotionMask;
-    }
+    mask |= X11PointerMotionEventMask(
+            [_delegate acceptsMouseMovedEvents],
+            [(X11Display *) [NSDisplay currentDisplay] cursorAwaitsPointerMotion]);
     XSelectInput(_display, _window, mask);
     X11TouchSelectWindow(_display, _window);
 
@@ -1408,6 +1431,10 @@ static const int X11ChromelessCornerRadius = 5;
     // several times, so set everything to nil/NULL/0.
     [_context release];
     _context = nil;
+
+    // An active pinch on this window ends while its delegate can still be told.
+    if (_window != 0)
+        [(X11Display *) [NSDisplay currentDisplay] cancelPinchOnWindow: _window];
 
     [_delegate platformWindowDidInvalidateCGContext: self];
     _delegate = nil;
@@ -1551,6 +1578,7 @@ static const int X11ChromelessCornerRadius = 5;
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
     [self updateWindowShape];
+    [self updateOpaqueRegion];
     // A non-resizable window hints PMinSize == PMaxSize, and a window manager
     // refuses any resize that falls outside the pair, so the hints have to follow
     // the size. Only on a real change so a drag does not re-issue them per pixel.
@@ -1590,6 +1618,7 @@ static const int X11ChromelessCornerRadius = 5;
 
 - (void) setOpaque: (BOOL) value {
     _isOpaque = value;
+    [self updateOpaqueRegion];
 }
 
 - (void) sheetOrderFrontFromFrame: (NSRect) frame
@@ -2119,6 +2148,7 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
         [self invalidateContextWithNewSize: rect.size];
         _frame = rect;
         [self updateWindowShape];
+        [self updateOpaqueRegion];
     } @finally {
         XSetErrorHandler(previousHandler);
     }

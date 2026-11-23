@@ -1238,6 +1238,17 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
         if ([_delegate respondsToSelector: @selector(application:openFiles:)]) {
             [_delegate application: self openFiles: one];
             opened = YES;
+        } else if ([_delegate respondsToSelector: @selector(application:openFile:)]) {
+            BOOL taken = [_delegate application: self openFile: document];
+
+            // QUIRK: a document named in the process arguments that the delegate's -application:openFile: does
+            // not take (answers NO) is then tried by the document controller, which presents an error when it
+            // cannot open it. Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2), a
+            // document-based application started from its executable with words that are no documents.
+            // Test: appkit-argument-documents (-delegate openFile)
+            if (!taken)
+                taken = [[NSDocumentController sharedDocumentController] application: self openFile: document];
+            opened |= taken;
         } else {
             opened |= [self _openFileNames: one];
         }
