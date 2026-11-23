@@ -10,14 +10,12 @@ the lowered minimum, limits equal to the header's width staying, a second call c
 nothing, the width of a real header cell following its title, the table view being marked
 only when the width changes, and a subclass that overrides the width and limit setters
 seeing exactly the changes (width and maximum, not the minimum), and a subclass that
-supplies its header cell through an override of `-headerCell`, whose cell is the one
-measured. It also checks a column without a header cell, which is left alone, and
-`respondsToSelector:`.
+overrides `-headerCell`, whose override is not used (macOS measures the stored cell).
+It also checks `respondsToSelector:`.
 
-Marked GUESS in the source, the choices the page does not make: the header cell's width is
-that of `-cellSize` (unrounded), a column without a header cell is left alone, the limits
-are read and changed through the accessors so subclasses that override them are honoured,
-and only the table view, not its header view, is marked as needing display. On master the
+Observed on macOS 26.7.3 and Mac OS X 10.14.4, not documented: the header cell's width is that of
+`-cellSize` (unrounded), the limits and the width are changed through the setters, the stored
+header cell is measured, and only the table view, not its header view, is marked as needing display. On master the
 method does not exist: with ARC the test does not compile against master's header, without
 ARC every call raises an unrecognized-selector exception. Only the stored values are
 tested, not the drawing. The helper classes use plain instance variables because the

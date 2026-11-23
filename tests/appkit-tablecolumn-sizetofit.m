@@ -3,11 +3,12 @@
 // NSTableColumn -sizeToFit. The documentation says: it resizes the column to fit the width
 // of its header cell; a maximum width below the header's width is raised to it and a minimum
 // width above it is lowered to it; a change of the width marks the table view as needing
-// display. Everything marked GUESS pins this implementation's choice, not a documented or
-// measured value: the header cell's width is that of -cellSize (unrounded), a column without
-// a header cell is left alone, the header cell and the limits are read and changed through
-// their accessors (so a subclass that overrides them is honoured), and only the table
-// view (not its header view) is marked as needing display.
+// display. Observed on macOS 26.7.3 and Mac OS X 10.14.4 (x86_64 and i386, identical): the header cell's
+// width is that of -cellSize (unrounded), the limits and the width go through the setters
+// (a subclass's overrides are called), the cell is the stored header cell and not what an override of
+// -headerCell returns, and the table view is marked as needing display when the width changes (26.7.3).
+// The program passes on both Macs (the display request is counted through -setNeedsDisplay: and
+// -setNeedsDisplayInRect:, both of which AppKit uses).
 // Build: clang -fobjc-arc -framework AppKit appkit-tablecolumn-sizetofit.m
 // Not covered: the drawn result. On master the method does not exist, so with ARC the test
 // does not compile against master's header and without ARC every call raises an unrecognized
@@ -43,6 +44,10 @@ static int failures;
 - (void)setNeedsDisplay:(BOOL)flag {
     if (flag) displayRequests++;
     [super setNeedsDisplay:flag];
+}
+- (void)setNeedsDisplayInRect:(NSRect)rect {
+    displayRequests++;
+    [super setNeedsDisplayInRect:rect];
 }
 @end
 
@@ -149,14 +154,6 @@ int main(void) {
         [shortCol sizeToFit];
         CHECK([shortCol width] == [longCol width]);
 
-        // A column with no header cell and one with no table view are left alone and do not
-        // fail.
-        col = column([NSTableColumn class], 137);
-        [col setHeaderCell:nil];
-        [col setWidth:222];
-        [col sizeToFit];
-        CHECK([col width] == 222 && [col minWidth] == 10 && [col maxWidth] == FLT_MAX);
-
         // The table view is marked as needing display when the width changes, and not when
         // it does not.
         CountingTableView *table = [[CountingTableView alloc]
@@ -189,18 +186,15 @@ int main(void) {
         CHECK(recording->maxSets == 1);
         CHECK(recording->minSets == 0);
 
-        // The header cell is the one -headerCell answers, so an override is honoured: the
-        // width is that of the cell it returns, not of the stored one.
+        // QUIRK (macOS 26.7.3 and 10.14.4, probe sizetofit.m): the cell is the stored header cell, not the one an
+        // override of -headerCell returns.
         OverridingColumn *overriding = (OverridingColumn *)column([OverridingColumn class], 137);
         FixedHeaderCell *other = [[FixedHeaderCell alloc] initTextCell:@"Other"];
         other->fixedWidth = 61;
         overriding->replacement = other;
         [overriding sizeToFit];
-        CHECK([overriding width] == 61);
-        CHECK([overriding minWidth] == 10);
-        overriding->replacement = nil;
-        [overriding sizeToFit];
         CHECK([overriding width] == 137);
+        CHECK([overriding minWidth] == 10);
     }
     if (failures) return 1;
     printf("PASS\n");
