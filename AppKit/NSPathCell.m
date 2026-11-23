@@ -103,10 +103,16 @@
     return [_placeholder string];
 }
 
+// The documented property is optional: nil clears the placeholder, and it is the
+// normal value of a cell decoded from an archive that has none.
 - (void) setPlaceholderString: (NSString *) string {
-    [self setPlaceholderAttributedString: [[[NSAttributedString alloc]
-                                                  initWithString: string]
-                                                  autorelease]];
+    NSAttributedString *value = nil;
+
+    if (string != nil)
+        value = [[[NSAttributedString alloc] initWithString: string]
+                autorelease];
+
+    [self setPlaceholderAttributedString: value];
 }
 
 - (NSColor *) backgroundColor {
