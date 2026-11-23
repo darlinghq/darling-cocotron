@@ -1,20 +1,20 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
 // NSSplitViewItem +inspectorWithViewController:, minimumThickness, maximumThickness,
-// collapseBehavior, springLoaded and allowsFullHeightLayout. The documentation only
-// says: minimumThickness and maximumThickness (read-write, macOS 10.11) default to
-// unspecifiedDimension, which means the item enforces no limit, and unspecifiedDimension
-// resets a sizing property to the standard system default; collapseBehavior defaults to
+// collapseBehavior, springLoaded and allowsFullHeightLayout. The documentation says:
+// minimumThickness and maximumThickness (read-write, macOS 10.11) default to
+// unspecifiedDimension, which means the item enforces no limit; collapseBehavior defaults to
 // "default" and has the cases default, preferResizingSplitViewWithFixedSiblings,
 // preferResizingSiblingsWithFixedSplitView and useConstraints; isSpringLoaded defaults
 // to false; allowsFullHeightLayout (macOS 11.0) defaults to true; Behavior has an
-// inspector case, the behavior of items made with init(inspectorWithViewController:),
-// and from macOS 14 an inspector can collapse and has a minimum and maximum thickness of
-// 270. Everything marked GUESS pins this implementation's choice, not a documented or
-// measured value: the number -1 of NSSplitViewItemUnspecifiedDimension, the number 3 of
-// NSSplitViewItemBehaviorInspector, the inspector thickness of 270 on every macOS
-// version, an inspector keeping the default holding priority, and assigning the
-// unspecified constant restoring the behavior's default.
+// inspector case, the behavior of items made with init(inspectorWithViewController:), and
+// from macOS 14 an inspector can collapse and has a minimum and maximum thickness of 270.
+// The rest is black-box behaviour of macOS 26.7.3 (the inspector API is new in 11; the sidebar
+// and content list values are the same on Mac OS X 10.14.4), marked QUIRK where it is not
+// documented: NSSplitViewItemUnspecifiedDimension is -1, NSSplitViewItemBehaviorInspector is 3,
+// an inspector's holding priority is 261, a sidebar is spring loaded and has a minimum
+// thickness of 140, a content list has a minimum of 200 and a holding priority of 255, and
+// assigning the unspecified constant to a limit stores it.
 // Build: clang -fobjc-arc -framework AppKit appkit-splitviewitem-inspector-thickness.m
 // Not covered: the "Stub called" log line of the catch-all (NSLog cannot be captured
 // here), and any effect on layout (the values are stored only). On master the factory
@@ -87,7 +87,7 @@ static void checkAccessors(NSSplitViewItem *item) {
     CHECK([item respondsToSelector:@selector(setAllowsFullHeightLayout:)]);
 }
 
-// The documented defaults of an item that is not an inspector.
+// The documented defaults of an item that is neither an inspector, a sidebar nor a content list.
 static void checkDefaults(NSSplitViewItem *item) {
     CHECK([item minimumThickness] == NSSplitViewItemUnspecifiedDimension);
     CHECK([item maximumThickness] == NSSplitViewItemUnspecifiedDimension);
@@ -148,7 +148,7 @@ static void checkRoundTrip(NSSplitViewItem *item) {
 
 int main(void) {
     @autoreleasepool {
-        // GUESS: the numbers of the constant and of the new enum case
+        // the numbers of the constant and of the new enum case (macOS 26.7.3)
         CHECK(NSSplitViewItemUnspecifiedDimension == -1);
         CHECK(NSSplitViewItemBehaviorInspector == 3);
         CHECK(NSSplitViewItemBehaviorDefault == 0);
@@ -167,7 +167,7 @@ int main(void) {
         CHECK([inspector viewController] == inspectorController);
         // documented for macOS 14 and later: an inspector can collapse, with a fixed
         // thickness of 270
-        // (GUESS: applied on every version)
+        // (applied on every version)
         CHECK([inspector canCollapse]);
         CHECK([inspector minimumThickness] == 270);
         CHECK([inspector maximumThickness] == 270);
@@ -175,8 +175,8 @@ int main(void) {
         CHECK(![inspector isSpringLoaded]);
         CHECK([inspector allowsFullHeightLayout]);
         CHECK(![inspector isCollapsed]);
-        // GUESS: an inspector keeps the default holding priority
-        CHECK([inspector holdingPriority] == NSLayoutPriorityDefaultLow);
+        // QUIRK (macOS 26.7.3, probe splititem.m): an inspector's holding priority is 261
+        CHECK([inspector holdingPriority] == NSLayoutPriorityDefaultLow + 11);
         // the other factories are not changed by the new one
         NSSplitViewItem *plain =
             [NSSplitViewItem splitViewItemWithViewController:controller()];
@@ -189,11 +189,16 @@ int main(void) {
             [NSSplitViewItem contentListWithViewController:controller()];
         CHECK([list behavior] == NSSplitViewItemBehaviorContentList);
 
-        // Documented defaults of every other kind of item, and of a bare -init.
+        // Documented defaults of a plain item, and of a bare -init.
         checkDefaults(plain);
-        checkDefaults(sidebar);
-        checkDefaults(list);
         checkDefaults([[NSSplitViewItem alloc] init]);
+        // QUIRK (macOS 26.7.3 and 10.14.4, probe splititem.m): the system standards of a sidebar and of a
+        // content list
+        CHECK([sidebar minimumThickness] == 140 && [sidebar maximumThickness] == NSSplitViewItemUnspecifiedDimension);
+        CHECK([sidebar isSpringLoaded] && [sidebar holdingPriority] == NSLayoutPriorityDefaultLow + 10);
+        CHECK([list minimumThickness] == 200 && [list maximumThickness] == NSSplitViewItemUnspecifiedDimension);
+        CHECK(![list isSpringLoaded] && [list holdingPriority] == NSLayoutPriorityDefaultLow + 5);
+        CHECK([sidebar collapseBehavior] == NSSplitViewItemCollapseBehaviorDefault && [sidebar allowsFullHeightLayout]);
 
         // Round trips on every kind of item.
         checkRoundTrip(plain);
@@ -212,7 +217,8 @@ int main(void) {
         checkDefaults(plainSub);
         checkRoundTrip(plainSub);
 
-        // GUESS: assigning the unspecified constant restores the behavior's default
+        // QUIRK (macOS 26.7.3, probe splititem.m): assigning the unspecified constant stores it, also for
+        // an inspector, whose 270 is only the starting value
         NSSplitViewItem *reset =
             [NSSplitViewItem splitViewItemWithViewController:controller()];
         [reset setMinimumThickness:100];
@@ -223,10 +229,11 @@ int main(void) {
         CHECK([reset maximumThickness] == NSSplitViewItemUnspecifiedDimension);
         [inspector setMinimumThickness:100];
         [inspector setMaximumThickness:300];
+        CHECK([inspector minimumThickness] == 100 && [inspector maximumThickness] == 300);
         [inspector setMinimumThickness:NSSplitViewItemUnspecifiedDimension];
         [inspector setMaximumThickness:NSSplitViewItemUnspecifiedDimension];
-        CHECK([inspector minimumThickness] == 270);
-        CHECK([inspector maximumThickness] == 270);
+        CHECK([inspector minimumThickness] == NSSplitViewItemUnspecifiedDimension);
+        CHECK([inspector maximumThickness] == NSSplitViewItemUnspecifiedDimension);
 
         // Items decoded from a keyed archive start from the same defaults.
         NSSplitViewItem *fromArchive = decoded(NSSplitViewItemBehaviorDefault);
@@ -237,13 +244,11 @@ int main(void) {
         CHECK([inspectorFromArchive behavior] == NSSplitViewItemBehaviorInspector);
         CHECK([inspectorFromArchive allowsFullHeightLayout]);
         CHECK(![inspectorFromArchive isSpringLoaded]);
-        // the documented inspector thickness applies to a decoded inspector too, and
-        // assigning the unspecified constant restores it
+        // the documented inspector thickness applies to a decoded inspector too
         CHECK([inspectorFromArchive minimumThickness] == 270);
         CHECK([inspectorFromArchive maximumThickness] == 270);
         [inspectorFromArchive setMinimumThickness:100];
-        [inspectorFromArchive setMinimumThickness:NSSplitViewItemUnspecifiedDimension];
-        CHECK([inspectorFromArchive minimumThickness] == 270);
+        CHECK([inspectorFromArchive minimumThickness] == 100);
         checkRoundTrip(inspectorFromArchive);
     }
     if (failures) return 1;

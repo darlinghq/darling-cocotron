@@ -22,10 +22,26 @@
 
 const CGFloat NSSplitViewItemUnspecifiedDimension = -1.0;
 
-// Documented for inspectors on macOS 14 and later: minimum and maximum thickness are 270.
+// The thickness limits an item starts with. The inspector's 270 is documented for macOS 14 and later;
+// the others are the system standards observed on macOS 26.7.3 and Mac OS X 10.14.4 (identical where
+// both have the item; black-box, probe splititem.m): a sidebar has a minimum of 140, a content list of 200,
+// neither has a maximum.
 static const CGFloat inspectorThickness = 270;
 
-static CGFloat defaultThickness(NSSplitViewItemBehavior behavior) {
+static CGFloat defaultMinimumThickness(NSSplitViewItemBehavior behavior) {
+    switch (behavior) {
+    case NSSplitViewItemBehaviorInspector:
+        return inspectorThickness;
+    case NSSplitViewItemBehaviorSidebar:
+        return 140;
+    case NSSplitViewItemBehaviorContentList:
+        return 200;
+    default:
+        return NSSplitViewItemUnspecifiedDimension;
+    }
+}
+
+static CGFloat defaultMaximumThickness(NSSplitViewItemBehavior behavior) {
     return behavior == NSSplitViewItemBehaviorInspector ? inspectorThickness
                                                         : NSSplitViewItemUnspecifiedDimension;
 }
@@ -65,8 +81,6 @@ static CGFloat defaultThickness(NSSplitViewItemBehavior behavior) {
 }
 
 - (void) setMinimumThickness: (CGFloat) minimumThickness {
-    if (minimumThickness == NSSplitViewItemUnspecifiedDimension)
-        minimumThickness = defaultThickness([self behavior]);
     NS_EXTRA(NSSplitViewItem, self)->_minimumThickness = minimumThickness;
 }
 
@@ -75,8 +89,6 @@ static CGFloat defaultThickness(NSSplitViewItemBehavior behavior) {
 }
 
 - (void) setMaximumThickness: (CGFloat) maximumThickness {
-    if (maximumThickness == NSSplitViewItemUnspecifiedDimension)
-        maximumThickness = defaultThickness([self behavior]);
     NS_EXTRA(NSSplitViewItem, self)->_maximumThickness = maximumThickness;
 }
 
@@ -115,12 +127,16 @@ static CGFloat defaultThickness(NSSplitViewItemBehavior behavior) {
     NS_EXTRA(NSSplitViewItem, item)->_behavior = NSSplitViewItemBehaviorSidebar;
     NS_EXTRA(NSSplitViewItem, item)->_canCollapse = YES;
     NS_EXTRA(NSSplitViewItem, item)->_holdingPriority = NSLayoutPriorityDefaultLow + 10;
+    NS_EXTRA(NSSplitViewItem, item)->_minimumThickness = defaultMinimumThickness(NSSplitViewItemBehaviorSidebar);
+    NS_EXTRA(NSSplitViewItem, item)->_springLoaded = YES;
     return item;
 }
 
 + (instancetype) contentListWithViewController: (NSViewController *) viewController {
     NSSplitViewItem *item = [self splitViewItemWithViewController: viewController];
     NS_EXTRA(NSSplitViewItem, item)->_behavior = NSSplitViewItemBehaviorContentList;
+    NS_EXTRA(NSSplitViewItem, item)->_holdingPriority = NSLayoutPriorityDefaultLow + 5;
+    NS_EXTRA(NSSplitViewItem, item)->_minimumThickness = defaultMinimumThickness(NSSplitViewItemBehaviorContentList);
     return item;
 }
 
@@ -128,6 +144,7 @@ static CGFloat defaultThickness(NSSplitViewItemBehavior behavior) {
     NSSplitViewItem *item = [self splitViewItemWithViewController: viewController];
     NS_EXTRA(NSSplitViewItem, item)->_behavior = NSSplitViewItemBehaviorInspector;
     NS_EXTRA(NSSplitViewItem, item)->_canCollapse = YES;
+    NS_EXTRA(NSSplitViewItem, item)->_holdingPriority = NSLayoutPriorityDefaultLow + 11;
     NS_EXTRA(NSSplitViewItem, item)->_minimumThickness = inspectorThickness;
     NS_EXTRA(NSSplitViewItem, item)->_maximumThickness = inspectorThickness;
     return item;
@@ -157,11 +174,12 @@ static CGFloat defaultThickness(NSSplitViewItemBehavior behavior) {
         NS_EXTRA(NSSplitViewItem, self)->_holdingPriority = [coder decodeFloatForKey: @"NSHoldingPriority"];
     NS_EXTRA(NSSplitViewItem, self)->_collapsed = [coder decodeBoolForKey: @"NSCollapsed"];
     NS_EXTRA(NSSplitViewItem, self)->_behavior = [coder decodeIntegerForKey: @"NSBehavior"];
-    // An inspector's documented thickness applies to a decoded one too; the limits
-    // themselves are not decoded (their keys are not documented).
+    // The limits of a decoded item start from those of its behavior; they are not decoded (their keys are
+    // not documented).
     NSSplitViewItemBehavior behavior = NS_EXTRA(NSSplitViewItem, self)->_behavior;
-    NS_EXTRA(NSSplitViewItem, self)->_minimumThickness = defaultThickness(behavior);
-    NS_EXTRA(NSSplitViewItem, self)->_maximumThickness = defaultThickness(behavior);
+    NS_EXTRA(NSSplitViewItem, self)->_minimumThickness = defaultMinimumThickness(behavior);
+    NS_EXTRA(NSSplitViewItem, self)->_maximumThickness = defaultMaximumThickness(behavior);
+    NS_EXTRA(NSSplitViewItem, self)->_springLoaded = behavior == NSSplitViewItemBehaviorSidebar;
     return self;
 }
 

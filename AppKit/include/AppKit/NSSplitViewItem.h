@@ -28,8 +28,6 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemBehavior) {
     NSSplitViewItemBehaviorDefault,
     NSSplitViewItemBehaviorSidebar,
     NSSplitViewItemBehaviorContentList,
-    // GUESS: the value 3 follows the order in which the documentation lists the
-    // cases (the inspector comes after the content list; macOS 11.0).
     NSSplitViewItemBehaviorInspector,
 };
 
@@ -40,8 +38,7 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
     NSSplitViewItemCollapseBehaviorUseConstraints,
 };
 
-// Resets a sizing property to its default. The documentation does not state the
-// value (GUESS: -1).
+// The value of a sizing property that sets no limit (-1 on macOS).
 APPKIT_EXPORT const CGFloat NSSplitViewItemUnspecifiedDimension;
 
 @interface NSSplitViewItem : NSObject <NSCoding> {
@@ -65,7 +62,7 @@ APPKIT_EXPORT const CGFloat NSSplitViewItemUnspecifiedDimension;
 + (instancetype) sidebarWithViewController: (NSViewController *) viewController;
 + (instancetype) contentListWithViewController: (NSViewController *) viewController;
 // A collapsible item whose thickness is fixed at 270 (the documented macOS 14
-// inspector size).
+// inspector size) and whose holding priority is NSLayoutPriorityDefaultLow + 11.
 + (instancetype) inspectorWithViewController: (NSViewController *) viewController;
 
 @property(readonly) NSSplitViewItemBehavior behavior;
@@ -78,8 +75,9 @@ APPKIT_EXPORT const CGFloat NSSplitViewItemUnspecifiedDimension;
 
 // Stored only: the split view controller does not apply the thickness limits or the
 // collapse behavior, and the spring-loaded and full-height flags have no effect.
-// Both limits default to NSSplitViewItemUnspecifiedDimension (270 for an inspector);
-// assigning NSSplitViewItemUnspecifiedDimension restores that default.
+// Both limits default to NSSplitViewItemUnspecifiedDimension (270 for an inspector,
+// a minimum of 140 for a sidebar and of 200 for a content list); assigning
+// NSSplitViewItemUnspecifiedDimension stores it, which sets no limit.
 @property CGFloat minimumThickness;
 @property CGFloat maximumThickness;
 @property NSSplitViewItemCollapseBehavior collapseBehavior;
