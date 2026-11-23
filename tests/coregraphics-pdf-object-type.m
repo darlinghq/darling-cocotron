@@ -1,6 +1,7 @@
 // Contract: Apple CoreGraphics documentation for CGPDFObject (CGPDFObjectGetType, CGPDFObjectGetValue) and
 // CGPDFObjectType (https://developer.apple.com/documentation/coregraphics). Exit codes identify the failing check.
-// Only the case names of CGPDFObjectType are used, never their numeric values.
+// The numeric values of CGPDFObjectType (1 to 9 in the order of the cases) were read from the type on macOS 26.7.3
+// and 10.14.4 and are pinned below. The document has a page because macOS refuses a document without one.
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
 #include <stdio.h>
@@ -10,27 +11,28 @@ static NSData *documentData(void) {
     NSMutableData *data = [NSMutableData dataWithData:[@"%PDF-1.4\n" dataUsingEncoding:NSASCIIStringEncoding]];
     const char *objects[] = {
         "<< /Type /Catalog /Pages 2 0 R >>",
-        "<< /Type /Pages /Kids [] /Count 0 >>",
+        "<< /Type /Pages /Kids [5 0 R] /Count 1 >>",
         "<< /Title (Fixture) /Flag true /Off false /Count 7 /Ratio 2.5 /Kind /Fixture"
         " /List [1 2.5 (s) /Nm true null [3] << /K 1 >> 4 0 R 99 0 R]"
         " /Sub << /Depth 1 >> /Data 4 0 R /Nothing null /Dangling 99 0 R >>",
-        "<< /Length 5 >>\nstream\nhello\nendstream"
+        "<< /Length 5 >>\nstream\nhello\nendstream",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] >>"
     };
-    NSUInteger offsets[4];
-    for (NSUInteger i = 0; i < 4; i++) {
+    NSUInteger offsets[5];
+    for (NSUInteger i = 0; i < 5; i++) {
         offsets[i] = [data length];
         NSString *object = [NSString stringWithFormat:@"%lu 0 obj\n%s\nendobj\n",
             (unsigned long)i + 1, objects[i]];
         [data appendData:[object dataUsingEncoding:NSASCIIStringEncoding]];
     }
     NSUInteger xref = [data length];
-    [data appendData:[@"xref\n0 5\n0000000000 65535 f \n" dataUsingEncoding:NSASCIIStringEncoding]];
-    for (NSUInteger i = 0; i < 4; i++) {
+    [data appendData:[@"xref\n0 6\n0000000000 65535 f \n" dataUsingEncoding:NSASCIIStringEncoding]];
+    for (NSUInteger i = 0; i < 5; i++) {
         NSString *entry = [NSString stringWithFormat:@"%010lu 00000 n \n", (unsigned long)offsets[i]];
         [data appendData:[entry dataUsingEncoding:NSASCIIStringEncoding]];
     }
     NSString *trailer = [NSString stringWithFormat:
-        @"trailer\n<< /Size 5 /Root 1 0 R /Info 3 0 R >>\nstartxref\n%lu\n%%%%EOF\n",
+        @"trailer\n<< /Size 6 /Root 1 0 R /Info 3 0 R >>\nstartxref\n%lu\n%%%%EOF\n",
         (unsigned long)xref];
     [data appendData:[trailer dataUsingEncoding:NSASCIIStringEncoding]];
     return data;
@@ -90,11 +92,12 @@ int main(void) {
 
         CGPDFObjectRef object = NULL;
         if (!CGPDFDictionaryGetObject(dict, "Dangling", &object) || CGPDFObjectGetType(object) != kCGPDFObjectTypeNull) return 31;
-        if (!CGPDFObjectGetValue(object, kCGPDFObjectTypeNull, NULL)) return 32;
+        // (Whether the object is NULL or a null object differs between macOS 26.7.3 and 10.14.4, so no value is read from it.)
 
         CGPDFArrayRef list = NULL;
         if (!CGPDFDictionaryGetArray(dict, "List", &list)) return 40;
-        if (!CGPDFArrayGetObject(list, 9, &object) || CGPDFObjectGetType(object) != kCGPDFObjectTypeNull) return 41;
+        object = NULL; CGPDFArrayGetObject(list, 9, &object); /* no object is given for it on macOS 26.7.3 */
+        if (CGPDFObjectGetType(object) != kCGPDFObjectTypeNull) return 41;
 
         // Value copy, a NULL pointer as a type test, integer widened to real, mismatches.
         CGPDFInteger integer = 0;
@@ -122,6 +125,28 @@ int main(void) {
         if (!CGPDFArrayGetObject(list, 7, &object) || !CGPDFObjectGetValue(object, kCGPDFObjectTypeDictionary, &element) || !element) return 63;
         CGPDFStreamRef stream = NULL;
         if (!CGPDFArrayGetObject(list, 8, &object) || !CGPDFObjectGetValue(object, kCGPDFObjectTypeStream, &stream) || !stream) return 64;
+
+        // The type of a NULL object is null, and no value is given for it.
+        CGPDFInteger untouched = 5;
+        if (CGPDFObjectGetType(NULL) != kCGPDFObjectTypeNull) return 75;
+        if (CGPDFObjectGetValue(NULL, kCGPDFObjectTypeNull, NULL) || CGPDFObjectGetValue(NULL, kCGPDFObjectTypeInteger, &untouched) || untouched != 5) return 76;
+
+        // The values of the cases, as printed by the type on macOS 26.7.3 and 10.14.4.
+        if (kCGPDFObjectTypeNull != 1 || kCGPDFObjectTypeBoolean != 2 || kCGPDFObjectTypeInteger != 3 ||
+            kCGPDFObjectTypeReal != 4 || kCGPDFObjectTypeName != 5 || kCGPDFObjectTypeString != 6 ||
+            kCGPDFObjectTypeArray != 7 || kCGPDFObjectTypeDictionary != 8 || kCGPDFObjectTypeStream != 9 ||
+            sizeof(CGPDFObjectType) != 4) return 70;
+
+        // A value is only given for its own type: a stream is not read as a dictionary, nor a dictionary as a stream,
+        // and values that are not one of the nine types are refused (same on both Macs).
+        CGPDFDictionaryRef asDictionary = NULL;
+        if (!CGPDFDictionaryGetObject(dict, "Data", &object) || CGPDFObjectGetValue(object, kCGPDFObjectTypeDictionary, &asDictionary) || asDictionary) return 71;
+        CGPDFStreamRef asStream = NULL;
+        if (!CGPDFDictionaryGetObject(dict, "Sub", &object) || CGPDFObjectGetValue(object, kCGPDFObjectTypeStream, &asStream) || asStream) return 72;
+        if (!CGPDFArrayGetObject(list, 0, &object)) return 73;
+        integer = 123;
+        if (CGPDFObjectGetValue(object, (CGPDFObjectType)0, &integer) || CGPDFObjectGetValue(object, (CGPDFObjectType)10, &integer) ||
+            CGPDFObjectGetValue(object, (CGPDFObjectType)-1, &integer) || integer != 123) return 74;
 
         CGPDFDocumentRelease(document);
         puts("CGPDF object type and value accessors passed");

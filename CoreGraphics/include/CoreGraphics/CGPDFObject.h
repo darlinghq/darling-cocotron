@@ -13,9 +13,8 @@ typedef unsigned char CGPDFBoolean;
 typedef long int CGPDFInteger;
 typedef CGFloat CGPDFReal;
 
-// INFERRED, UNCONFIRMED (BLOCKED-NEEDS-VALUES): the documentation lists only the case names. The
-// values are those of the matching O2PDFObjectType constants in Onyx2D, which CGPDFObject.m checks
-// at compile time. They are not from a header that declares this type.
+// The values were read from the type on macOS 26.7.3 and 10.14.4 (1 to 9 in the order of the cases) and are the same
+// as the matching O2PDFObjectType constants in Onyx2D, which CGPDFObject.m checks at compile time.
 typedef CF_ENUM(int32_t, CGPDFObjectType) {
     kCGPDFObjectTypeNull = 1,
     kCGPDFObjectTypeBoolean,

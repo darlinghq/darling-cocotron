@@ -15,7 +15,12 @@ _Static_assert((int)kCGPDFObjectTypeArray == (int)kO2PDFObjectTypeArray, "CGPDFO
 _Static_assert((int)kCGPDFObjectTypeDictionary == (int)kO2PDFObjectTypeDictionary, "CGPDFObjectType must match O2PDFObjectType");
 _Static_assert((int)kCGPDFObjectTypeStream == (int)kO2PDFObjectTypeStream, "CGPDFObjectType must match O2PDFObjectType");
 
+// A NULL object is what CGPDFDictionaryGetObject and the applier hand out for a reference to an object that does not
+// exist; macOS 26.7.3 and 10.14.4 report its type as the null type, while GetValue refuses it for every type.
+// Test: tests/coregraphics-pdf-object-type.m
 CGPDFObjectType CGPDFObjectGetType(CGPDFObjectRef object) {
+    if (object == NULL)
+        return kCGPDFObjectTypeNull;
     return (CGPDFObjectType)[(O2PDFObject *)object objectType];
 }
 
