@@ -2680,8 +2680,11 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if ([self initialFirstResponder] != nil) {
         [self makeFirstResponder: [self initialFirstResponder]];
     } else {
-        // Otherwise calculate one and set the first responder.
-        if ([self autorecalculatesKeyViewLoop]) {
+        // Otherwise calculate one and set the first responder. A window that
+        // does not recalculate its loop automatically still gets one when it
+        // has none (documented for -recalculateKeyViewLoop).
+        if ([self autorecalculatesKeyViewLoop] ||
+            ![self _hasEstablishedKeyViewLoop]) {
             [self recalculateKeyViewLoop];
         }
         if ([self firstResponder] == self) {
@@ -2785,6 +2788,27 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
 - (void) selectKeyViewPrecedingView: (NSView *) view {
     [self _makeFirstResponder: [view previousValidKeyView] selecting: NSSelectingPrevious];
+}
+
+// YES when some view of the window can hand the key focus on to another one,
+// that is when somebody has set up a key view loop. A manual chain whose next
+// views are all hidden or refuse first responder status counts as no loop. The
+// check runs once, when the window first becomes key, so views added later
+// get no links from it.
+- (BOOL) _hasEstablishedKeyViewLoop {
+    NSMutableArray *pending = [NSMutableArray array];
+
+    if (_contentView != nil)
+        [pending addObject: _contentView];
+    while ([pending count] > 0) {
+        NSView *view = [pending lastObject];
+
+        [pending removeLastObject];
+        if ([view canBecomeKeyView] && [view nextValidKeyView] != nil)
+            return YES;
+        [pending addObjectsFromArray: [view subviews]];
+    }
+    return NO;
 }
 
 - (void) recalculateKeyViewLoopIfNeeded {
