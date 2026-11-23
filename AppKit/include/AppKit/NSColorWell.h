@@ -22,9 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @class NSColor;
 
-// The looks and click behaviour a color well can be given (macOS 13). Three cases are listed, a standard
-// well, a slimmer one and one with an extra button; no numeric values are given, so these are this
-// implementation's, in the order listed.
+// The looks and click behaviour a color well can be given (macOS 13): a standard well, a slimmer one and one with
+// an extra button. The values are those of the public header.
 typedef NS_ENUM(NSInteger, NSColorWellStyle) {
     NSColorWellStyleDefault = 0,
     NSColorWellStyleMinimal = 1,
@@ -54,8 +53,7 @@ typedef NS_ENUM(NSInteger, NSColorWellStyle) {
 - (BOOL) isBordered;
 - (BOOL) isActive;
 
-// Which of the styles the well uses; stored only. GUESS: it starts as NSColorWellStyleDefault, no starting
-// value is given.
+// Which of the styles the well uses; stored only. Starts as NSColorWellStyleDefault.
 @property NSColorWellStyle colorWellStyle API_AVAILABLE(macos(13.0));
 
 - (void) setColor: (NSColor *) color;

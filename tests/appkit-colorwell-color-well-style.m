@@ -2,10 +2,10 @@
 //
 // NSColorWell colorWellStyle. The documentation (macOS 13) lists it as a settable property whose
 // type is an enumeration of three styles named default, minimal and expanded. It gives neither a
-// starting value for the property nor numbers for the styles. Everything marked GUESS pins this implementation's choice, not a
-// documented or measured value: the property starts as the default style, the cases are 0, 1 and 2
-// in that order (the test does not rely on the numbers), and the value is independent of the well's
-// color, border and active state.
+// starting value for the property nor numbers for the styles; the public header gives 0, 1 and 2 in that order.
+// Observed on macOS 26.7.3 (mac-probes/cristim/batch12a/p770.m): the property starts as the default style,
+// any value is stored (a number that is not a case too), the value is independent of the well's color and
+// border, and an archive carries it under the key NSColorWellStyle (only when it is not the default).
 // Build: clang -fobjc-arc -framework AppKit appkit-colorwell-color-well-style.m
 // Needs the Darling guest with a display: creating a color well reaches the shared color panel.
 // Not covered: any effect of the style on how the well looks or reacts (the value is only stored).
@@ -13,6 +13,32 @@
 // compile against master's header (with or without ARC), and could not run.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
+
+// Stands in for the object in a keyed archive: it writes only the one key (as an archive of a program that
+// does not know the property would not have it, and as macOS writes it), and is decoded as the class under test.
+static NSString *standInKey;
+static NSInteger standInValue;
+@interface ArchivedStandIn : NSObject <NSCoding>
+@end
+@implementation ArchivedStandIn
+- (void)encodeWithCoder:(NSCoder *)coder {
+    if (standInKey != nil)
+        [coder encodeInteger:standInValue forKey:standInKey];
+}
+- (id)initWithCoder:(NSCoder *)coder { return [super init]; }
+@end
+
+static id decodedAs(Class cls, NSString *key, NSInteger value) {
+    standInKey = key;
+    standInValue = value;
+    NSMutableData *data = [NSMutableData data];
+    NSKeyedArchiver *archiver = [[NSKeyedArchiver alloc] initForWritingWithMutableData:data];
+    [archiver encodeObject:[ArchivedStandIn new] forKey:@"root"];
+    [archiver finishEncoding];
+    NSKeyedUnarchiver *unarchiver = [[NSKeyedUnarchiver alloc] initForReadingWithData:data];
+    [unarchiver setClass:cls forClassName:@"ArchivedStandIn"];
+    return [unarchiver decodeObjectForKey:@"root"];
+}
 
 // the property is macOS 13 API; the guest has it whatever the build's deployment target is
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
@@ -34,7 +60,7 @@ static int failures;
 @end
 
 static void checkWell(NSColorWell *well) {
-    CHECK([well colorWellStyle] == NSColorWellStyleDefault);      // GUESS: the default
+    CHECK([well colorWellStyle] == NSColorWellStyleDefault);      // the default
 
     NSColorWellStyle cases[] = { NSColorWellStyleMinimal, NSColorWellStyleExpanded,
         NSColorWellStyleDefault, NSColorWellStyleExpanded, NSColorWellStyleMinimal };
@@ -48,7 +74,7 @@ static void checkWell(NSColorWell *well) {
     [well setColorWellStyle:NSColorWellStyleExpanded];
     [well setColor:color];
     [well setBordered:NO];
-    CHECK([well colorWellStyle] == NSColorWellStyleExpanded);     // GUESS: not reset by the others
+    CHECK([well colorWellStyle] == NSColorWellStyleExpanded);     // not reset by the others
     [well setColorWellStyle:NSColorWellStyleMinimal];
     CHECK([well color] == color);
     CHECK(![well isBordered]);
@@ -58,6 +84,13 @@ static void checkWell(NSColorWell *well) {
 
 int main(void) {
     @autoreleasepool {
+        // the public header's numbers
+        CHECK(NSColorWellStyleDefault == 0 && NSColorWellStyleMinimal == 1 && NSColorWellStyleExpanded == 2);
+        // the archive key, absent for the default style
+        CHECK([(NSColorWell *)decodedAs([NSColorWell class], nil, 0) colorWellStyle] == NSColorWellStyleDefault);
+        CHECK([(NSColorWell *)decodedAs([NSColorWell class], @"NSColorWellStyle", 1) colorWellStyle] == NSColorWellStyleMinimal);
+        CHECK([(NSColorWell *)decodedAs([NSColorWell class], @"NSColorWellStyle", 2) colorWellStyle] == NSColorWellStyleExpanded);
+
         // creating a color well reaches the shared color panel, which needs the display
         [NSApplication sharedApplication];
         CHECK([NSColorWell instancesRespondToSelector:@selector(colorWellStyle)]);

@@ -12,8 +12,9 @@ receiver in a real application was a subclass): the default, set/get round trips
 the value and the well's color and border not overwriting one another, two wells not sharing it,
 the three cases being distinct, and `respondsToSelector:` for both accessors.
 
-Marked GUESS in the source and test: the default is the style called default; the cases are 0, 1
-and 2 in the documented order (the test does not depend on the numbers); the value is not reset by
-the well's other properties. On master the enumeration and its constants do not exist, so the test
+The public header numbers the cases 0, 1 and 2, and the test checks that. Observed on macOS 26.7.3
+(probe `p770.m` of batch 12a): the default is the style called default; any value is stored; the value
+is not reset by the well's other properties; an archive carries it under the key `NSColorWellStyle`
+(only when it is not the default), which the test decodes. On master the enumeration and its constants do not exist, so the test
 does not compile against master's header. The value is only stored: how the well looks or reacts
 for a style is not implemented or tested.
