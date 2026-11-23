@@ -12,6 +12,12 @@
 #import <QuartzCore/CALayer.h>
 #import <Foundation/Foundation.h>
 
+/* CAEAGLLayer conforms to EAGLDrawable, which belongs to the OpenGLES framework along with the
+ * color formats and EAGLContext's drawable methods. A build without OpenGLES's headers declares
+ * only the protocol. */
+#if __has_include(<OpenGLES/EAGLDrawable.h>)
+#import <OpenGLES/EAGLDrawable.h>
+#endif
 /* OpenGLES's EAGLDrawable.h declares the same protocol. */
 #ifndef EAGL_DRAWABLE_PROTOCOL
 #define EAGL_DRAWABLE_PROTOCOL
