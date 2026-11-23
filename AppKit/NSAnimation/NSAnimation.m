@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAnimation.h>
+#include <math.h>
 #import <AppKit/NSRaise.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
@@ -29,8 +30,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 NSString *const NSAnimationProgressMarkNotification =
         @"NSAnimationProgressMarkNotification";
 
-// GUESS: the public header declares the key but gives no value; the
-// documentation names it NSAnimationProgressMark, so the string is that name
+// The public header declares the key without a value; the string is the key's own name (observed
+// on macOS 10.14.4 and 26.7.3).
 NSString *NSAnimationProgressMark = @"NSAnimationProgressMark";
 
 NSString *NSAnimationTriggerOrderIn = @"NSAnimationTriggerOrderIn";
@@ -120,13 +121,24 @@ static void removeLink(NSAnimation *trigger, NSAnimation *dependent, BOOL stop) 
     result->_isAnimating = NO;
     result->_timer = nil;
 
-    // GUESS: the documentation does not say whether a copy keeps the links
-    // of the original; it starts without any (rejected alternative: link the
-    // copy to the same animations)
+    // Observed on macOS 10.14.4 and 26.7.3: a copy starts and stops with the same animations at the
+    // same progress as the original (the animations that depend on the original are not copied).
+    // Test: appkit-nsanimation-linked-animations.
     NS_EXTRA_COPY(NSAnimation, result, self);
-    NS_EXTRA(NSAnimation, result)->_startAnimation = nil;
-    NS_EXTRA(NSAnimation, result)->_stopAnimation = nil;
     NS_EXTRA(NSAnimation, result)->_linkedAnimations = nil;
+    NS_EXTRA(NSAnimation, result)->_markLowInclusive = NO;
+    NS_EXTRA(NSAnimation, result)->_markLow = 0;
+    for (int stop = 0; stop <= 1; stop++) {
+        NSAnimation *trigger = stop ? NS_EXTRA(NSAnimation, self)->_stopAnimation
+                                    : NS_EXTRA(NSAnimation, self)->_startAnimation;
+        if (trigger == nil)
+            continue;
+        for (NSDictionary *link in NS_EXTRA(NSAnimation, trigger)->_linkedAnimations) {
+            if ([[link objectForKey: @"animation"] nonretainedObjectValue] == self &&
+                    [[link objectForKey: @"stop"] boolValue] == (BOOL) stop)
+                addLink(trigger, result, [[link objectForKey: @"progress"] floatValue], stop);
+        }
+    }
 
     return result;
 }
@@ -183,22 +195,21 @@ static void removeLink(NSAnimation *trigger, NSAnimation *dependent, BOOL stop) 
     _progressMarks = mcopy;
 }
 
+// Observed on macOS 10.14.4 and 26.7.3 (black-box, tier 2; probe 7 of the cristim batch10b
+// evidence): a mark outside 0.0 ... 1.0 is ignored, not pinned; the marks are kept in ascending
+// order, equal values included; removing a value removes every entry with it.
+// Test: appkit-nsanimation-progress-marks.
 - (void) addProgressMark: (NSAnimationProgress) mark {
-    if (mark < 0)
-        mark = 0;
-    else if (mark > 1)
-        mark = 1;
+    if (!(mark >= 0 && mark <= 1))
+        return;
 
-    [_progressMarks addObject: [NSNumber numberWithFloat: mark]];
+    NSUInteger index = 0;
+    while (index < [_progressMarks count] && [[_progressMarks objectAtIndex: index] floatValue] <= mark)
+        index++;
+    [_progressMarks insertObject: [NSNumber numberWithFloat: mark] atIndex: index];
 }
 
 - (void) removeProgressMark: (NSAnimationProgress) mark {
-    // GUESS: the argument is pinned like -addProgressMark: pins it, so
-    // removing -3 removes the mark that adding -3 stored (at 0.0)
-    mark = MAX(0.0f, MIN(1.0f, mark));
-    // GUESS: the documentation does not say what happens when the same value
-    // was added twice; every entry with that value is removed (rejected
-    // alternative: remove only the first one added)
     for (NSInteger i = [_progressMarks count] - 1; i >= 0; i--)
         if ([[_progressMarks objectAtIndex: i] floatValue] == mark)
             [_progressMarks removeObjectAtIndex: i];
@@ -214,21 +225,19 @@ static void removeLink(NSAnimation *trigger, NSAnimation *dependent, BOOL stop) 
     if ([_delegate respondsToSelector: @selector(animation:valueForProgress:)])
         return [_delegate animation: self valueForProgress: _currentProgress];
 
-    // The direction of the curves is documented (NSAnimationEaseIn "slows
-    // down as it reaches the end", so its value runs ahead of the progress;
-    // NSAnimationEaseOut "slowly speeds up from the start", so it lags), the
-    // formula is not. GUESS: the usual polynomial curves (rejected
-    // alternatives: a cubic Bezier as Core Animation's timing functions use,
-    // a sine ease). All of them map 0.0 to 0.0 and 1.0 to 1.0.
-    float progress = _currentProgress;
+    // The value of the curve at the current progress. Observed on macOS 10.14.4 and 26.7.3
+    // (black-box, tier 2; probe 7 of the cristim batch10b evidence): sine curves, EaseIn
+    // 1 - cos(progress * pi / 2) (starts slowly), EaseOut sin(progress * pi / 2) and EaseInOut
+    // (1 - cos(progress * pi)) / 2. Test: appkit-nsanimation-current-value.
+    double progress = _currentProgress;
 
     switch (_curve) {
     case NSAnimationEaseIn:
-        return 1 - (1 - progress) * (1 - progress);
+        return 1 - cos(progress * M_PI_2);
     case NSAnimationEaseOut:
-        return progress * progress;
+        return sin(progress * M_PI_2);
     case NSAnimationEaseInOut:
-        return progress * progress * (3 - 2 * progress);
+        return (1 - cos(progress * M_PI)) / 2;
     case NSAnimationLinear:
         break;
     }
@@ -243,78 +252,86 @@ static void removeLink(NSAnimation *trigger, NSAnimation *dependent, BOOL stop) 
     return _runLoopModes;
 }
 
+// Progress marks and links. Observed on macOS 10.14.4 and 26.7.3 (black-box, tier 2; probe 7 of
+// the cristim batch10b evidence):
+// - values outside 0.0 ... 1.0 are pinned;
+// - nothing is reported while the animation is not running;
+// - starting the animation starts a pass over the marks at the current progress (0.0 for one that
+//   finished); a running animation reports every mark whose value was reached since the last
+//   report, in ascending order, a value added twice twice, and a mark at 0.0 with the first
+//   update. A mark is reported once per pass: moving the progress backwards and forwards again
+//   reports nothing more, and marks below the progress the animation started at are never
+//   reported;
+// - a delegate that stops the animation from a callback does not end the reports of that update;
+// - the delegate is told, then NSAnimationProgressMarkNotification is posted;
+// - the animations linked with -startWhenAnimation: / -stopWhenAnimation: take part in the same
+//   pass as the marks of the animation they wait for, without showing as marks (not in
+//   -progressMarks, no delegate message).
+// Tests: appkit-nsanimation-progress-marks, appkit-nsanimation-linked-animations.
 - (void) setCurrentProgress: (NSAnimationProgress) progress {
-    NSAnimationProgress previous = _currentProgress;
-
     // documented: values outside 0.0 ... 1.0 are pinned
     _currentProgress = MAX(0.0f, MIN(1.0f, progress));
 
-    // GUESS: the documentation does not say when a mark counts as reached. A
-    // running animation reaches a mark when its progress moves forward from
-    // below the mark to the mark or beyond. A mark is not reached when
-    // progress moves backwards or when the animation is not running, and a
-    // mark at 0.0 is never reached (progress starts there; rejected
-    // alternative: fire marks at 0.0 when the animation starts).
-    if (!_isAnimating || _currentProgress <= previous)
+    if (!_isAnimating)
         return;
+
     NSAnimationProgress reached = _currentProgress;
+    float low = NS_EXTRA(NSAnimation, self)->_markLow;
+    BOOL inclusive = NS_EXTRA(NSAnimation, self)->_markLowInclusive;
 
-    // GUESS: marks reached in one step are reported in ascending order, and a
-    // value that was added more than once is reported once
-    NSArray *ordered = [_progressMarks sortedArrayUsingSelector: @selector(compare:)];
-    float lastReported = -1;
-    for (NSNumber *entry in ordered) {
-        // a delegate callback may have stopped the animation
-        if (!_isAnimating)
-            break;
+    if (reached < low || (reached == low && !inclusive))
+        return;
+    NS_EXTRA(NSAnimation, self)->_markLow = reached;
+    NS_EXTRA(NSAnimation, self)->_markLowInclusive = NO;
 
+    // the events of this update: marks and links, ascending by progress, marks first
+    NSMutableArray *events = [NSMutableArray array];
+    for (NSNumber *entry in _progressMarks) {
         float mark = [entry floatValue];
-        if (mark == lastReported || mark <= previous || mark > reached)
-            continue;
-        lastReported = mark;
-
-        if ([_delegate respondsToSelector: @selector(animation:didReachProgressMark:)])
-            [_delegate animation: self didReachProgressMark: mark];
-
-        [[NSNotificationCenter defaultCenter]
-                postNotificationName: NSAnimationProgressMarkNotification
-                              object: self
-                            userInfo: [NSDictionary dictionaryWithObject: entry
-                                                                  forKey: NSAnimationProgressMark]];
+        if ((inclusive ? mark >= low : mark > low) && mark <= reached)
+            [events addObject: [NSDictionary dictionaryWithObjectsAndKeys:
+                                                     entry, @"progress", nil]];
+    }
+    for (NSDictionary *link in NS_EXTRA_ALLOCATED(NSAnimation, self) ? NS_EXTRA(NSAnimation, self)->_linkedAnimations : nil) {
+        float trigger = [[link objectForKey: @"progress"] floatValue];
+        if ((inclusive ? trigger >= low : trigger > low) && trigger <= reached)
+            [events addObject: link];
+    }
+    // insertion sort by progress; equal values keep their order (marks before links)
+    for (NSUInteger i = 1; i < [events count]; i++) {
+        NSDictionary *event = [[[events objectAtIndex: i] retain] autorelease];
+        NSInteger j = i - 1;
+        while (j >= 0 && [[[events objectAtIndex: j] objectForKey: @"progress"]
+                                 compare: [event objectForKey: @"progress"]] == NSOrderedDescending) {
+            [events replaceObjectAtIndex: j + 1 withObject: [events objectAtIndex: j]];
+            j--;
+        }
+        [events replaceObjectAtIndex: j + 1 withObject: event];
     }
 
-    // animations linked to this one start or stop when it reaches the progress
-    // they asked for.
-    // GUESS: a link stays in place after it triggered, until it is cleared or
-    // replaced (rejected alternative: a link triggers once).
-    // GUESS: a link is not a progress mark of this animation, so it does not
-    // show in -progressMarks and does not reach the delegate (the page says
-    // the progress "specifies a progress mark of the other animation"; the
-    // rejected alternative adds a real mark to the other animation).
-    // GUESS: the crossing rule of the marks applies, so a link at 0.0 never
-    // triggers (rejected alternative: it triggers when this animation starts).
-    // A dependent in NSAnimationBlocking mode runs its own run loop inside
-    // this call, as -startAnimation does for any caller; a dependent that is
-    // not meant to hold up this animation needs a non-blocking mode.
-    // A delegate that stopped this animation from a mark callback ends the
-    // step here, as it does for the marks: a stopped animation does not
-    // reach the linked progress.
-    if (!_isAnimating || !NS_EXTRA_ALLOCATED(NSAnimation, self))
-        return;
-    for (NSDictionary *link in [[NS_EXTRA(NSAnimation, self)->_linkedAnimations copy] autorelease]) {
-        if (!_isAnimating)
-            break;
+    for (NSDictionary *event in events) {
+        NSNumber *entry = [event objectForKey: @"progress"];
 
-        float trigger = [[link objectForKey: @"progress"] floatValue];
-        if (trigger <= previous || trigger > reached)
+        if ([event objectForKey: @"animation"] == nil) {
+            if ([_delegate respondsToSelector: @selector(animation:didReachProgressMark:)])
+                [_delegate animation: self didReachProgressMark: [entry floatValue]];
+
+            [[NSNotificationCenter defaultCenter]
+                    postNotificationName: NSAnimationProgressMarkNotification
+                                  object: self
+                                userInfo: [NSDictionary dictionaryWithObject: entry
+                                                                      forKey: NSAnimationProgressMark]];
             continue;
-        // an earlier dependent's delegate may have cleared this link or freed
-        // its animation, which removes the link
-        if (![NS_EXTRA(NSAnimation, self)->_linkedAnimations containsObject: link])
+        }
+
+        // an earlier callback may have cleared this link or freed its animation, which removes the link
+        if (![NS_EXTRA(NSAnimation, self)->_linkedAnimations containsObject: event])
             continue;
 
-        NSAnimation *dependent = [[[link objectForKey: @"animation"] nonretainedObjectValue] retain];
-        if ([[link objectForKey: @"stop"] boolValue])
+        // A dependent in NSAnimationBlocking mode runs its own run loop inside this call, as
+        // -startAnimation does for any caller.
+        NSAnimation *dependent = [[[event objectForKey: @"animation"] nonretainedObjectValue] retain];
+        if ([[event objectForKey: @"stop"] boolValue])
             [dependent stopAnimation];
         else
             [dependent startAnimation];
@@ -372,6 +389,8 @@ static void removeLink(NSAnimation *trigger, NSAnimation *dependent, BOOL stop) 
 
         [self retain];
         _isAnimating = YES;
+        NS_EXTRA(NSAnimation, self)->_markLow = _currentProgress;
+        NS_EXTRA(NSAnimation, self)->_markLowInclusive = YES;
         _startTime = [NSDate timeIntervalSinceReferenceDate];
 
         switch (_blockingMode) {
@@ -424,13 +443,11 @@ static void removeLink(NSAnimation *trigger, NSAnimation *dependent, BOOL stop) 
 {
     // documented: a new start animation replaces the previous one
     [self clearStartAnimation];
-    // GUESS: nil only clears the link (rejected alternative: raise)
-    if (animation == nil)
+    // Observed on macOS 10.14.4 and 26.7.3: nil only clears the link, and a progress outside
+    // 0.0 ... 1.0 never triggers (like a mark outside the range, it is not kept).
+    if (animation == nil || !(progress >= 0 && progress <= 1))
         return;
 
-    // GUESS: the progress is pinned to 0.0 ... 1.0 like a progress mark is
-    // (the page does not say; rejected alternative: raise for a value outside)
-    progress = MAX(0.0f, MIN(1.0f, progress));
     NS_EXTRA(NSAnimation, self)->_startAnimation = animation;
     addLink(animation, self, progress, NO);
 }
@@ -440,13 +457,11 @@ static void removeLink(NSAnimation *trigger, NSAnimation *dependent, BOOL stop) 
 {
     // documented: a new stop animation replaces the previous one
     [self clearStopAnimation];
-    // GUESS: nil only clears the link (rejected alternative: raise)
-    if (animation == nil)
+    // Observed on macOS 10.14.4 and 26.7.3: nil only clears the link, and a progress outside
+    // 0.0 ... 1.0 never triggers (like a mark outside the range, it is not kept).
+    if (animation == nil || !(progress >= 0 && progress <= 1))
         return;
 
-    // GUESS: the progress is pinned to 0.0 ... 1.0 like a progress mark is
-    // (the page does not say; rejected alternative: raise for a value outside)
-    progress = MAX(0.0f, MIN(1.0f, progress));
     NS_EXTRA(NSAnimation, self)->_stopAnimation = animation;
     addLink(animation, self, progress, YES);
 }

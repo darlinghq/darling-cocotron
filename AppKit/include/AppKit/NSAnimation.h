@@ -80,6 +80,10 @@ APPKIT_EXPORT NSString *NSAnimationTriggerOrderOut;
     NSAnimation *_startAnimation;
     NSAnimation *_stopAnimation;
     NSMutableArray *_linkedAnimations;
+    // the progress up to which the marks and links were reported in the running pass, and whether
+    // a mark exactly at it still counts
+    float _markLow;
+    BOOL _markLowInclusive;
     NS_SIDE_IVARS_END(NSAnimation)
 }
 

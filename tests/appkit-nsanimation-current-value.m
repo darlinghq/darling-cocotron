@@ -7,14 +7,11 @@
 //    for the current progress is the current value, even outside 0.0 ... 1.0;
 //  - otherwise the value is computed from the current progress and the
 //    animation curve.
-// The curve pages (https://developer.apple.com/documentation/appkit/nsanimation/curve/easein
-// and .../easeout) say ease in "slows down as it reaches the end" and ease out
-// "slowly speeds up from the start", so the ease-in value leads the linear one
-// and the ease-out value lags it. They give no formula. The test pins only
-// that direction and what the choice in the implementation promises: every
-// curve maps 0.0 to 0.0 and 1.0 to 1.0 and rises monotonically, the linear
-// curve is the identity, and the ease-in-out curve is symmetric around the
-// middle and starts slowly.
+// The curve pages give no formula. macOS 10.14.4 and 26.7.3 (black-box observation) use sine
+// curves: ease in 1 - cos(progress * pi / 2) (starts slowly, so its value lags the linear one),
+// ease out sin(progress * pi / 2) (leads it) and ease in-out (1 - cos(progress * pi)) / 2; the
+// linear curve is the identity. The test pins those values (QUIRK-free: they are the only
+// definition of the curves).
 #import <AppKit/AppKit.h>
 #include <math.h>
 #include <stdio.h>
@@ -58,7 +55,7 @@ int main(void) {
         for (int i = 0; i < 4; i++) {
             NSAnimation *animation = [[NSAnimation alloc] initWithDuration: 1 animationCurve: curves[i]];
             byCurve[i] = animation;
-            CHECK(valueAt(animation, 0) == 0, "curve %d: value at 0.0", i);
+            CHECK(fabsf(valueAt(animation, 0)) < 1e-6f, "curve %d: value at 0.0", i);
             CHECK(fabsf(valueAt(animation, 1) - 1) < 1e-6f, "curve %d: value at 1.0", i);
             float previous = 0;
             for (int step = 1; step <= 20; step++) {
@@ -69,11 +66,16 @@ int main(void) {
         }
         NSAnimation *inOut = byCurve[0], *in = byCurve[1], *out = byCurve[2], *linear = byCurve[3];
         CHECK(valueAt(linear, 0.3f) == 0.3f, "linear is the identity");
-        CHECK(valueAt(in, 0.5f) > 0.5f, "ease in slows down at the end, so it leads the linear value");
-        CHECK(valueAt(out, 0.5f) < 0.5f, "ease out speeds up from the start, so it lags the linear value");
-        CHECK(fabsf(valueAt(inOut, 0.5f) - 0.5f) < 1e-6f, "ease in-out passes through the middle");
-        CHECK(fabsf(valueAt(inOut, 0.25f) + valueAt(inOut, 0.75f) - 1) < 1e-6f, "ease in-out is symmetric");
-        CHECK(valueAt(inOut, 0.25f) < 0.25f, "ease in-out starts slowly");
+        for (int step = 0; step <= 8; step++) {
+            double p = step / 8.0;
+            CHECK(fabs(valueAt(in, p) - (1 - cos(p * M_PI_2))) < 1e-6, "ease in at %g", p);
+            CHECK(fabs(valueAt(out, p) - sin(p * M_PI_2)) < 1e-6, "ease out at %g", p);
+            CHECK(fabs(valueAt(inOut, p) - (1 - cos(p * M_PI)) / 2) < 1e-6, "ease in-out at %g", p);
+        }
+        // observed values (macOS 26.7.3 and 10.14.4)
+        CHECK(fabsf(valueAt(in, 0.5f) - 0.29289f) < 1e-4f, "ease in at 0.5 is 0.29289");
+        CHECK(fabsf(valueAt(out, 0.5f) - 0.70711f) < 1e-4f, "ease out at 0.5 is 0.70711");
+        CHECK(fabsf(valueAt(inOut, 0.125f) - 0.03806f) < 1e-4f, "ease in-out at 0.125 is 0.03806");
 
         // a delegate's value wins, receives the animation and the current progress
         ValueDelegate *delegate = [ValueDelegate new];
