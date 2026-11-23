@@ -68,7 +68,8 @@ static void checkRejected(const char *name, const unsigned char *bytes, size_t l
 
 int main(void) {
     checkRejected("no image (SOI, EOI)", kNoImage, sizeof(kNoImage));
-    // The valid file cut inside its first Huffman table: no complete header.
+    // The valid file cut inside its first Huffman table: no complete header. macOS 10.14.4 gives no
+    // properties and no image for it; 26.7.3 gives the properties of the part it could parse but no image.
     checkRejected("header truncated at 100 bytes", kGreyJPEG, 100);
 
     CFDataRef data = CFDataCreate(NULL, kGreyJPEG, sizeof(kGreyJPEG));
@@ -84,13 +85,17 @@ int main(void) {
         if (pixels != NULL) {
             size_t rowBytes = CGImageGetBytesPerRow(image);
             size_t pixelBytes = CGImageGetBitsPerPixel(image) / 8;
-            CHECK(pixelBytes >= 3 && CFDataGetLength(pixels) >= (CFIndex) (rowBytes + 3 * pixelBytes),
+            // A grey JPEG decodes to one grey component per pixel on macOS (8 bits per pixel on 10.14.4 and
+            // 26.7.3); an RGB layout carries the grey in all three colour components.
+            size_t colorBytes = pixelBytes >= 3 ? 3 : 1;
+            CHECK(pixelBytes >= 1 && CFDataGetLength(pixels) >= (CFIndex) (rowBytes + 3 * pixelBytes),
                   "pixel layout");
             const unsigned char *p = CFDataGetBytePtr(pixels);
-            for (size_t y = 0; y < 2 && pixelBytes >= 3; y++) {
+            for (size_t y = 0; y < 2 && pixelBytes >= 1; y++) {
                 for (size_t x = 0; x < 3; x++) {
                     const unsigned char *px = p + y * rowBytes + x * pixelBytes;
-                    CHECK(px[0] == 0x50 && px[1] == 0x50 && px[2] == 0x50, "grey pixel value");
+                    for (size_t c = 0; c < colorBytes; c++)
+                        CHECK(px[c] == 0x50, "grey pixel value");
                 }
             }
             CFRelease(pixels);
