@@ -694,6 +694,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 // The columns that the rect touches, as one range: it starts at the first column that is not hidden and ends
 // beyond the rect's right edge, and so may hold hidden columns between its ends.
+// QUIRK: a rect that reaches past the last shown column gets a range that runs to the last column, hidden
+// columns after the last shown one included; the documentation does not mention hidden columns. Observed on
+// macOS 26.1 (arm64) with 5 columns, column 4 hidden and the rect covering the table: the range was 0..4
+// (probe 657.1 "hidden=4 ... columnsInRect(full)=0..4"; "hidden=0,4 ... =1..4"; "hidden=all but 2 ... =2..4"),
+// while a rect ending inside a shown column stopped at it (probe 657.2 "hidden=4 ... x120+150:1..3").
+// Test: tests/appkit-table-hidden-columns.m (test_ranges_over_whole_rects)
 - (NSRange) columnsInRect: (NSRect) rect {
     NSInteger numberOfColumns = [self numberOfColumns];
     NSInteger i, first = -1, last = -1;
@@ -717,6 +723,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     if (first < 0)
         return NSMakeRange(0, 0); // returns 0,0 if not found, not NSNotFound
+    if (i == numberOfColumns)
+        last = numberOfColumns - 1;
     return NSMakeRange(first, last - first + 1);
 }
 
