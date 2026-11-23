@@ -432,11 +432,32 @@ static NSError *DocumentOpenFailureError(NSURL *url) {
                            userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
 }
 
+// A type with no document class gives nil with the generic error, unlike a class that returns nil without one
+// (see -makeDocumentWithContentsOfURL:ofType:error:). The documentation says an error is returned whenever the
+// document cannot be made, and a missing class is the same case for documentClassForType: whether the type has no
+// NSDocumentClass entry or names a class that does not exist; only the latter was observed.
+// QUIRK: observed on macOS 26.1 (arm64), probe 669.make: "NoClass makeDocumentWithContentsOfURL:ofType:error:
+// -> doc=nil ; error=NSCocoaErrorDomain/256 ... ; calls=[(none)]" and the same for
+// makeDocumentForURL:withContentsOfURL:ofType:error:, for a type whose NSDocumentClass names a class that does
+// not exist (documentClassForType: is nil there). The documentation does not give the domain or code. Only the
+// domain and the code were observed, not the userInfo.
+// Test: tests/appkit-document-controller-make-document-errors.m
+static BOOL ReportMissingDocumentClass(Class class, NSURL *url, NSError **error) {
+    if (class != Nil)
+        return NO;
+    if (error != NULL)
+        *error = DocumentOpenFailureError(url);
+    return YES;
+}
+
 - makeDocumentWithContentsOfURL: (NSURL *) url
                          ofType: (NSString *) type
                           error: (NSError **) error
 {
     Class class = [self documentClassForType: type];
+
+    if (ReportMissingDocumentClass(class, url, error))
+        return nil;
     NSError *initError = nil;
     id result = [[[class alloc] initWithContentsOfURL: url
                                                ofType: type
@@ -458,6 +479,8 @@ static NSError *DocumentOpenFailureError(NSURL *url) {
     id result = nil;
     Class class = [self documentClassForType: type];
 
+    if (ReportMissingDocumentClass(class, contentsURL, error))
+        return nil;
     result = [[[class alloc] initForURL: url
                       withContentsOfURL: contentsURL
                                  ofType: type
