@@ -559,6 +559,26 @@ static BOOL isStandardItemIdentifier(NSString *identifier) {
     _allowsUserCustomization = flag;
 }
 
+// GUESS: the display mode flag is only stored. The documentation says it defaults to YES for apps linked on
+// macOS 15 and later; this implementation has no link-time version, so the default applies to every app.
+// Nothing here keeps the user from changing the display mode, because the toolbar has no such control yet.
+- (BOOL) allowsDisplayModeCustomization {
+    return !NS_EXTRA(NSToolbar, self)->_displayModeCustomizationDisabled;
+}
+
+- (void) setAllowsDisplayModeCustomization: (BOOL) flag {
+    NS_EXTRA(NSToolbar, self)->_displayModeCustomizationDisabled = !flag;
+}
+
+// The flag is only stored: the configuration panel does not offer Action extension items.
+- (BOOL) allowsExtensionItems {
+    return NS_EXTRA(NSToolbar, self)->_extensionItemsAllowed;
+}
+
+- (void) setAllowsExtensionItems: (BOOL) flag {
+    NS_EXTRA(NSToolbar, self)->_extensionItemsAllowed = flag;
+}
+
 - (void) setSelectedItemIdentifier: (NSString *) identifier {
     identifier = [identifier copy];
     [_selectedItemIdentifier release];
