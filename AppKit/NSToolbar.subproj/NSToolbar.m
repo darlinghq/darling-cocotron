@@ -16,6 +16,7 @@ FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
+#import <AppKit/NSLinkedOnOrAfter.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSFont.h>
@@ -556,18 +557,30 @@ static BOOL isStandardItemIdentifier(NSString *identifier) {
 }
 
 - (void) setAllowsUserCustomization: (BOOL) flag {
+    if (!_allowsUserCustomization != !flag && !NSProgramLinkedOnOrAfterSDK(NS_SDK_VERSION_MACOSX_15_0))
+        NS_EXTRA(NSToolbar, self)->_displayModeCustomizationSet = NO;
     _allowsUserCustomization = flag;
 }
 
-// GUESS: the display mode flag is only stored. The documentation says it defaults to YES for apps linked on
-// macOS 15 and later; this implementation has no link-time version, so the default applies to every app.
+// The display mode flag is only stored. The documentation says it defaults to YES for apps linked on
+// macOS 15 and later.
+// QUIRK: for a program built against an older SDK the value follows allowsUserCustomization: that is the
+// default, and a change of allowsUserCustomization (not setting the value it already has) replaces a value set
+// before. Not documented. Evidence: black-box observation on macOS 26.7.3 of the same program built against an old
+// and against the current SDK (tier 2; the property is new in macOS 15, Mac OS X 10.14.4 has none; probes
+// toolbar.m and toolbar4.m). Test: appkit-toolbar-extension-and-display-mode-flags.
 // Nothing here keeps the user from changing the display mode, because the toolbar has no such control yet.
 - (BOOL) allowsDisplayModeCustomization {
-    return !NS_EXTRA(NSToolbar, self)->_displayModeCustomizationDisabled;
+    if (NS_EXTRA(NSToolbar, self)->_displayModeCustomizationSet)
+        return NS_EXTRA(NSToolbar, self)->_displayModeCustomization;
+    if (NSProgramLinkedOnOrAfterSDK(NS_SDK_VERSION_MACOSX_15_0))
+        return YES;
+    return [self allowsUserCustomization];
 }
 
 - (void) setAllowsDisplayModeCustomization: (BOOL) flag {
-    NS_EXTRA(NSToolbar, self)->_displayModeCustomizationDisabled = !flag;
+    NS_EXTRA(NSToolbar, self)->_displayModeCustomizationSet = YES;
+    NS_EXTRA(NSToolbar, self)->_displayModeCustomization = flag;
 }
 
 // The flag is only stored: the configuration panel does not offer Action extension items.

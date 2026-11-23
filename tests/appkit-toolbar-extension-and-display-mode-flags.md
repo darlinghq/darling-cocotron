@@ -18,10 +18,11 @@ without keys is disabled), round trips, independence from `tag`, `enabled`,
 handed to a view that has `-setBordered:` (a recording view and an `NSButton`) and a view
 without it being left alone; `respondsToSelector:` for all six accessors.
 
-Marked GUESS in the source, the choices the pages do not make: the display mode default of
-YES applies to every app (the implementation has no link-time version), a view set after
-the flag is not given the flag, and the getter answers the item's own value, not the
-view's. On master none of the selectors exists: with ARC the test does not compile against
+Marked QUIRK in the source, black-box behaviour of macOS 26.7.3: the display mode default is
+YES only for a program built against the macOS 15 SDK or later (the test compares with the SDK
+version of its own binary), a view set after the flag is not given the flag, an item with a view
+that answers `-isBordered` answers that view's value, and a menu toolbar item is bordered until
+told otherwise. On master none of the selectors exists: with ARC the test does not compile against
 master's headers, without ARC the calls raise unrecognized-selector exceptions. The values
 are only stored, so no effect on the toolbar or its drawing is tested. The helper classes
 use plain instance variables because the legacy (i386) Objective-C runtime does not
