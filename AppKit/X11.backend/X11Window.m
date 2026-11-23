@@ -1267,6 +1267,11 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 - (void) ensureMapped {
+    if (_unmapPending) {
+        // Ordered out and in again within one pass of the run loop: nothing changed for the window.
+        _unmapPending = NO;
+        return;
+    }
     if (!_mapped) {
         // What the window is can have changed since it was created or last shown.
         [self updateWindowManagerHints];
@@ -1640,7 +1645,34 @@ static const int X11ChromelessCornerRadius = 5;
     /* Ignored */
 }
 
+// Ordering a window out and in again within one pass of the run loop is invisible on macOS: the window
+// stays where it is and keeps the focus. Toolkits do it for each pass of a frame loop. Unmapping and
+// mapping a window makes the window manager withdraw it, place it again and give the focus away and
+// back, so the unmap waits for the end of the pass and is dropped if the window is ordered in by then.
+// Menus and the menu bar unmap at once.
 - (void) hideWindow {
+    if (!_mapped || _menuWindow || _dock) {
+        [self unmapNow];
+        return;
+    }
+    if (_unmapPending)
+        return;
+    _unmapPending = YES;
+    // A focus request still waiting for MapNotify is void once the window is ordered out; otherwise a
+    // later non-key orderFront would take focus.
+    _wantsInputFocus = NO;
+    _keyRequested = NO;
+    CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
+        if (self->_unmapPending)
+            [self unmapNow];
+    });
+    CFRunLoopWakeUp(CFRunLoopGetMain());
+}
+
+- (void) unmapNow {
+    _unmapPending = NO;
+    if (_window == 0)
+        return;
     XUnmapWindow(_display, _window);
     _mapped = NO;
     _occluded = NO;

@@ -49,6 +49,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     O2Rect _frame;
     NSUInteger _styleMask;
     BOOL _mapped;
+    // The window was ordered out and is still mapped: the unmap waits for the end of the run loop pass, in
+    // case the window is ordered in again within it (see -hideWindow).
+    BOOL _unmapPending;
     CGPoint _lastMotionPos;
     BOOL _isModal;
     BOOL _overrideRedirect;
