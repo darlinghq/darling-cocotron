@@ -74,11 +74,18 @@ static CGAffineTransform fontMatrix(CTFontRef font) {
     return matrix;
 }
 
+// Observed on macOS 10.14.4 (x86_64, i386) and 26.7.3 (black-box, tier 2; probe 8 of the cristim
+// batch10b evidence): CTFontGetMatrix returns the matrix the font was created with without its
+// translation (tx and ty read 0). Test: coretext-font-matrix.
 static CTFontRef fontWithMatrix(CTFontRef font, const CGAffineTransform *matrix) {
-    if (font != NULL && matrix != NULL && !CGAffineTransformIsIdentity(*matrix))
-        objc_setAssociatedObject(ktFont(font), &fontMatrixKey,
-                                 [NSData dataWithBytes: matrix length: sizeof(*matrix)],
-                                 OBJC_ASSOCIATION_RETAIN);
+    if (font != NULL && matrix != NULL) {
+        CGAffineTransform linear = *matrix;
+        linear.tx = linear.ty = 0;
+        if (!CGAffineTransformIsIdentity(linear))
+            objc_setAssociatedObject(ktFont(font), &fontMatrixKey,
+                                     [NSData dataWithBytes: &linear length: sizeof(linear)],
+                                     OBJC_ASSOCIATION_RETAIN);
+    }
     return font;
 }
 
@@ -318,14 +325,14 @@ static CGFloat weightOfFont(CTFontRef font) {
 }
 
 // A new font of `family` whose style traits, over the bits in `compared`, are those of `wanted`,
-// or NULL when the family has no such face. A size of 0 keeps the size of the original and a NULL
+// or NULL when the family has no such face. A size of 0 keeps the size of the original and (with keepMatrix) a NULL
 // matrix keeps the original's matrix. The cascade list of the original is carried over to
 // the copy (observed on macOS 26.7.3 and Mac OS X 10.14.4, together with the feature settings, which fonts here do
 // not have); the variation is not.
 // GUESS: when several faces have the wanted traits (a family with Light, Regular and Medium
 // has three non-bold faces) the one whose weight trait is nearest to `targetWeight` is taken,
 // the first listed among equals. The documentation names no rule.
-static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTransform *matrix,
+static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTransform *matrix, BOOL keepMatrix,
                                   CFStringRef family, CTFontSymbolicTraits wanted,
                                   CTFontSymbolicTraits compared, CGFloat targetWeight)
 {
@@ -334,7 +341,7 @@ static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTr
     if (size == 0)
         size = CTFontGetSize(font);
     CGAffineTransform originalMatrix = fontMatrix(font);
-    if (matrix == NULL)
+    if (matrix == NULL && keepMatrix)
         matrix = &originalMatrix;
 
     const void *keys[] = { kCTFontFamilyNameAttribute };
@@ -390,7 +397,7 @@ CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
     CGFloat targetWeight = ((original & kCTFontTraitBold) && !(wanted & kCTFontTraitBold))
             ? 0 : weightOfFont(font);
     CFStringRef family = CTFontCopyFamilyName(font);
-    CTFontRef result = copyFontInFamily(font, size, matrix, family, wanted,
+    CTFontRef result = copyFontInFamily(font, size, matrix, YES, family, wanted,
                                         sameFamilyStyleTraits, targetWeight);
     if (family != NULL)
         CFRelease(family);
@@ -402,7 +409,11 @@ CTFontRef CTFontCreateCopyWithFamily(CTFontRef font, CGFloat size,
 {
     if (ktFont(font) == nil)
         return NULL;
-    return copyFontInFamily(font, size, matrix, family, CTFontGetSymbolicTraits(font),
+    // QUIRK: a NULL matrix gives the identity matrix here, not the original's (unlike
+    // CTFontCreateCopyWithSymbolicTraits and CTFontCreateCopyWithAttributes, which keep it).
+    // Evidence: black-box observation on macOS 10.14.4 (x86_64, i386) and 26.7.3 (tier 2); the
+    // documentation says NULL keeps the original's matrix. Test: coretext-font-matrix.
+    return copyFontInFamily(font, size, matrix, NO, family, CTFontGetSymbolicTraits(font),
                             crossFamilyStyleTraits, weightOfFont(font));
 }
 

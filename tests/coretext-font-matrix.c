@@ -2,7 +2,9 @@
  * Copyright (C) 2026 Lubos Dolezel
  *
  * A font keeps the transformation matrix it was created with and CTFontGetMatrix returns it; a NULL
- * matrix means the identity matrix, and a copy made with a NULL matrix keeps the original font's matrix:
+ * matrix means the identity matrix, and a copy made with a NULL matrix keeps the original font's matrix (not
+ * so for CTFontCreateCopyWithFamily, which gives the identity matrix, and the translation of a matrix is
+ * not kept; both observed on macOS 10.14.4 and 26.7.3):
  * https://developer.apple.com/documentation/coretext/ctfontgetmatrix(_:)
  * https://developer.apple.com/documentation/coretext/ctfontcreatewithname(_:_:_:)
  * https://developer.apple.com/documentation/coretext/ctfontcreatecopywithattributes(_:_:_:_:)
@@ -11,7 +13,8 @@
  * A copy that applies a variation, and a font made from font data, are separate paths in the implementation
  * and are checked separately; each prints SKIP when no installed font can exercise it.
  *
- * The pages do not say that the matrix changes metrics or outlines, so the test does not check that. It
+ * The matrix scales the metrics of a font on macOS (the ascent follows it); that is not implemented here and
+ * the test does not check it. It
  * finds a font among the installed ones, so it works with whatever fonts the system has.
  *
  * Usage: coretext-font-matrix
@@ -143,7 +146,7 @@ int main(void)
 		return 0;
 	}
 
-	CGAffineTransform skew = CGAffineTransformMake(1, 0, 0.25, 1, 2, -3);
+	CGAffineTransform skew = CGAffineTransformMake(1, 0, 0.25, 1, 0, 0);
 	CGAffineTransform scale = CGAffineTransformMake(2, 0, 0, 0.5, 0, 0);
 
 	// NULL is the identity matrix.
@@ -155,6 +158,11 @@ int main(void)
 	CTFontRef skewed = CTFontCreateWithName(name, 14, &skew);
 	expect(skewed != NULL && same(CTFontGetMatrix(skewed), skew), "CTFontCreateWithName keeps the matrix");
 	expect(skewed != NULL && CTFontGetSize(skewed) == 14, "the size is as given");
+	CGAffineTransform translated = CGAffineTransformMake(1, 0, 0.25, 1, 2, -3);
+	CTFontRef translatedFont = CTFontCreateWithName(name, 14, &translated);
+	expect(translatedFont != NULL && same(CTFontGetMatrix(translatedFont), skew), "the translation of the matrix is not kept");
+	if (translatedFont != NULL)
+		CFRelease(translatedFont);
 	CTFontRef identity = CTFontCreateWithName(name, 14, &CGAffineTransformIdentity);
 	expect(identity != NULL && isIdentity(identity), "the identity matrix reads as the identity matrix");
 	CTFontRef options = CTFontCreateWithNameAndOptions(name, 14, &skew, 0);
@@ -185,7 +193,7 @@ int main(void)
 		CFStringRef family = CTFontCopyFamilyName(skewed);
 		CTFontRef sameFamily = family != NULL ? CTFontCreateCopyWithFamily(skewed, 0, NULL, family) : NULL;
 		if (sameFamily != NULL) {
-			expect(same(CTFontGetMatrix(sameFamily), skew), "CTFontCreateCopyWithFamily with NULL keeps the matrix");
+			expect(isIdentity(sameFamily), "CTFontCreateCopyWithFamily with NULL gives the identity matrix (QUIRK)");
 			CFRelease(sameFamily);
 			sameFamily = CTFontCreateCopyWithFamily(skewed, 0, &scale, family);
 			expect(sameFamily != NULL && same(CTFontGetMatrix(sameFamily), scale),
