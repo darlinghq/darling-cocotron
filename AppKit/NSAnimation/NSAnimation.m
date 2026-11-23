@@ -151,7 +151,30 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
 }
 
 - (float) currentValue {
-    return _currentValue;
+    // documented: the delegate's value for the current progress wins, and it
+    // may lie outside 0.0 ... 1.0
+    if ([_delegate respondsToSelector: @selector(animation:valueForProgress:)])
+        return [_delegate animation: self valueForProgress: _currentProgress];
+
+    // The direction of the curves is documented (NSAnimationEaseIn "slows
+    // down as it reaches the end", so its value runs ahead of the progress;
+    // NSAnimationEaseOut "slowly speeds up from the start", so it lags), the
+    // formula is not. GUESS: the usual polynomial curves (rejected
+    // alternatives: a cubic Bezier as Core Animation's timing functions use,
+    // a sine ease). All of them map 0.0 to 0.0 and 1.0 to 1.0.
+    float progress = _currentProgress;
+
+    switch (_curve) {
+    case NSAnimationEaseIn:
+        return 1 - (1 - progress) * (1 - progress);
+    case NSAnimationEaseOut:
+        return progress * progress;
+    case NSAnimationEaseInOut:
+        return progress * progress * (3 - 2 * progress);
+    case NSAnimationLinear:
+        break;
+    }
+    return progress;
 }
 
 - (BOOL) isAnimating {
