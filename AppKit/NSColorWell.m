@@ -144,6 +144,18 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
     [self registerForDraggedTypes: @[ NSColorPboardType ]];
 }
 
+// No starting value is given for the property; the standard style is the natural one for a plain color
+// well, so the property starts there (the side storage starts zeroed).
+// GUESS: the default is NSColorWellStyleDefault; any value is stored, one that is not a case included. The
+// well is not yet drawn or driven differently for the minimal or expanded style.
+- (NSColorWellStyle) colorWellStyle {
+    return NS_EXTRA(NSColorWell, self)->_colorWellStyle;
+}
+
+- (void) setColorWellStyle: (NSColorWellStyle) style {
+    NS_EXTRA(NSColorWell, self)->_colorWellStyle = style;
+}
+
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_color release];
