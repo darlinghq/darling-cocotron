@@ -18,10 +18,34 @@ static void expect(BOOL condition, NSString *message)
 
 @interface NSApplication (CatalystPrivate)
 - (NSWindow *)_findWindowUsingContextID:(uint32_t)contextID;
+- (BOOL)_restoreMiniaturizedWindow;
 @end
 
+static NSMutableArray *gOrder;
 
+@interface FakeWindow : NSObject
+{
+@public
+    NSString *name;
+    BOOL visible, miniaturized, canBeKey, restored;
+}
+@end
 
+@implementation FakeWindow
+- (BOOL)isVisible { return visible; }
+- (BOOL)isMiniaturized { return miniaturized; }
+- (BOOL)canBecomeKeyWindow { return canBeKey; }
+- (void)deminiaturize:(id)sender { restored = YES; miniaturized = NO; }
+@end
+
+static FakeWindow *fake(NSString *name)
+{
+    FakeWindow *w = [[[FakeWindow alloc] init] autorelease];
+    w->name = name;
+    w->visible = YES;
+    w->canBeKey = YES;
+    return w;
+}
 
 int main(void)
 {
@@ -42,13 +66,20 @@ int main(void)
                @"the application's context id finds no window");
         [window release];
 
+        // Fake window model from here on.
+        method_setImplementation(class_getInstanceMethod([NSApplication class], @selector(orderedWindows)),
+                                 imp_implementationWithBlock(^NSArray *(id s) { return [[gOrder copy] autorelease]; }));
 
-
-
-
-
-
-
+        // -_restoreMiniaturizedWindow restores the frontmost miniaturized window only.
+        expect([app respondsToSelector:@selector(_restoreMiniaturizedWindow)],
+               @"NSApplication answers -_restoreMiniaturizedWindow");
+        FakeWindow *front = fake(@"front"), *mid = fake(@"mid"), *back = fake(@"back");
+        gOrder = [[NSMutableArray alloc] initWithObjects:front, mid, back, nil];
+        expect(![app _restoreMiniaturizedWindow], @"nothing is restored when no window is miniaturized");
+        mid->miniaturized = back->miniaturized = YES;
+        expect([app _restoreMiniaturizedWindow] && mid->restored && !back->restored,
+               @"the frontmost miniaturized window is restored, and only it");
+        [gOrder release];
 
         if (failures == 0)
             NSLog(@"PASS: NSApplication catalyst methods");

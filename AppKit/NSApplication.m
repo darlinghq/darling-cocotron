@@ -957,6 +957,20 @@ static void _propagateAppearanceChangeToView(NSView *view) {
         [[_windows objectAtIndex: count] miniaturize: sender];
 }
 
+// Private, required by Mac Catalyst frameworks and not documented. It restores
+// one minimized window, as a click on the application's Dock tile does: the
+// frontmost miniaturized window in -orderedWindows order. Returns whether a
+// window was restored, so a caller that ignores the result is unaffected.
+- (BOOL) _restoreMiniaturizedWindow {
+    for (NSWindow *window in [self orderedWindows]) {
+        if ([window isMiniaturized]) {
+            [window deminiaturize: nil];
+            return YES;
+        }
+    }
+    return NO;
+}
+
 - (NSArray *) orderedDocuments {
     NSMutableArray *result = [NSMutableArray array];
     NSArray *orderedWindows = [self orderedWindows];
