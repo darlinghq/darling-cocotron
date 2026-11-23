@@ -70,7 +70,9 @@ extern void CGRegionRelease(CGRegionRef region);
 // CGSEventRecord whose data.compound.subType is kCGSHotKeyPressedSubtype or
 // kCGSHotKeyReleasedSubtype, whose data.compound.misc.L[0] is the uid, and whose flags,
 // location and time are those of the key event. AppKit turns it into an NSEvent of type
-// NSSystemDefined, which NSApplication hands to HIToolbox.
+// NSSystemDefined, which NSApplication hands to HIToolbox. A process with no such proc (a
+// Carbon application without AppKit) gets the same event, made with CGEventCreateWithEventRecord(),
+// in its event stream (_CGSEventStreamPost), through the event taps, where HIToolbox reads it.
 // QUIRK: system-defined subtype 6 is a hot key press, 9 a release, and the event's data1 names
 // the hot key (the uid given when it was set). Not documented. Evidence: public write-ups of
 // the observed event (The Register, 2009, https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/;
