@@ -66,6 +66,8 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
         BOOL _autosaveScheduled;
         NSString *_displayName;
         BOOL _displayNameReset;
+        NSString *_duplicateBaseName; // the name a duplicate's copies are numbered from
+        BOOL _removesAutosavedContents; // autosavedContentsFileURL is a temporary file of -duplicateAndReturnError:
     NS_EXTRA_IVARS_END(NSDocument)
 }
 
@@ -167,6 +169,12 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
                contextInfo: (void *) info;
 
 - (NSArray *) writableTypesForSaveOperation: (NSSaveOperationType) operation;
+// The extension to append to a base file name for a type: the preferred
+// extension when the type is a content type identifier, otherwise the first
+// extension -[NSDocumentController fileExtensionsFromType:] lists. nil when
+// there is none.
+- (NSString *) fileNameExtensionForType: (NSString *) typeName
+                          saveOperation: (NSSaveOperationType) saveOperation;
 - (BOOL) shouldRunSavePanelWithAccessoryView;
 - (BOOL) prepareSavePanel: (NSSavePanel *) panel;
 - (BOOL) fileNameExtensionWasHiddenInLastRunSavePanel;
@@ -215,6 +223,18 @@ typedef NS_ENUM(NSUInteger, NSSaveOperationType) {
                             delegate: delegate
                  shouldCloseSelector: (SEL) selector
                          contextInfo: (void *) info;
+
+// Creates a new, unsaved document with the same contents, named after the
+// receiver, added to the document controller. Returns nil with an error when
+// the contents cannot be written or read back.
+- (NSDocument *) duplicateAndReturnError: (NSError **) outError;
+- (void) duplicateDocumentWithDelegate: delegate
+                  didDuplicateSelector: (SEL) selector
+                           contextInfo: (void *) info;
+- (void) duplicateDocument: sender;
+
+// The default has no document-specific reason to refuse: YES, without an error.
+- (BOOL) checkAutosavingSafetyAndReturnError: (NSError **) outError;
 
 - (void) revertDocumentToSaved: sender;
 - (void) saveDocument: sender;
@@ -276,6 +296,10 @@ completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
 
 - (void)autosaveWithImplicitCancellability: (BOOL) autosavingIsImplicitlyCancellable 
                          completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
+
+// Cocotron has no asynchronous file access: the block runs at once on the
+// calling thread, which also covers a nested call.
+- (void) performSynchronousFileAccessUsingBlock: (void (NS_NOESCAPE ^)(void)) block;
 
 // Cocotron has no document activity queue: each block runs at once on the
 // calling thread, and completion handlers passed to it do nothing.

@@ -3740,7 +3740,7 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
     return NSZeroPoint;
 }
 
-- (NSRect) rectForPage: (int) page {
+- (NSRect) rectForPage: (NSInteger) page {
     return NSZeroRect;
 }
 
