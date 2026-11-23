@@ -386,6 +386,12 @@ CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
 {
     if (ktFont(font) == nil)
         return NULL;
+    // QUIRK: a negative size keeps the original's size, like the documented 0.0. Evidence:
+    // black-box observation of CTFontCreateCopyWithSymbolicTraits on macOS 26.1 (arm64): Helvetica
+    // at 17 with size -5 gives a copy of size 17 (probe 639.B.size). Not probed for
+    // CTFontCreateCopyWithFamily, which is left as it is. Test: coretext-font-copy-with-traits-and-family.
+    if (size < 0)
+        size = 0;
     // GUESS: the documentation gives "the value of the symbolic traits" and "the mask bits"
     // without saying how they combine. The mask is taken to select the bits of the value that
     // replace the original's traits; the original's other bits stay.

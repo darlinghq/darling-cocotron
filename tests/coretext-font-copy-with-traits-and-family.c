@@ -154,6 +154,12 @@ int main(void)
 		expect(copy != NULL && CTFontGetSize(copy) == 21, "an explicit size is used");
 		release(copy);
 
+		// QUIRK (macOS 26.1, probe 639.B.size): a negative size keeps the original's size.
+		copy = CTFontCreateCopyWithSymbolicTraits(plain, -5, NULL, kCTFontTraitBold, kCTFontTraitBold);
+		expect(copy != NULL && CTFontGetSize(copy) == CTFontGetSize(plain),
+				"QUIRK: a negative size keeps the original size");
+		release(copy);
+
 		// GUESS (value and mask are not defined by the documentation): the mask selects the
 		// bits of the value that replace the original's.
 		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, kCTFontTraitBold | kCTFontTraitItalic,
