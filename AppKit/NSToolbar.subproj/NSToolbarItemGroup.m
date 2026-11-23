@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSToolbarItemGroup.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSString.h>
 
 @implementation NSToolbarItemGroup
 
@@ -25,6 +26,68 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [super initWithItemIdentifier: identifier];
     _subitems = [[NSArray alloc] init];
     return self;
+}
+
+// The documentation does not say how the subitems are identified, what happens when there are fewer labels than
+// images or more, or where the target and action go.
+// GUESS: a subitem's identifier is the group's followed by a dot and the subitem's position, so each is unique
+// and none is taken for the group; labels beyond the images are ignored and images beyond the labels have none;
+// the target and action are those of the group, which the documentation says the system falls back to for a
+// subitem without an action, and the subitems get none.
++ (instancetype) groupWithItemIdentifier: (NSToolbarItemIdentifier) itemIdentifier
+                                  images: (NSArray<NSImage *> *) images
+                           selectionMode: (NSToolbarItemGroupSelectionMode) selectionMode
+                                  labels: (NSArray<NSString *> *) labels
+                                  target: (id) target
+                                  action: (SEL) action
+{
+    NSToolbarItemGroup *group = [[[self alloc] initWithItemIdentifier: itemIdentifier] autorelease];
+    NSMutableArray *subitems = [NSMutableArray arrayWithCapacity: [images count]];
+    NSUInteger index;
+
+    for (index = 0; index < [images count]; index++) {
+        NSString *identifier = [NSString stringWithFormat: @"%@.%lu", itemIdentifier, (unsigned long) index];
+        NSToolbarItem *subitem = [[[NSToolbarItem alloc] initWithItemIdentifier: identifier] autorelease];
+
+        [subitem setImage: [images objectAtIndex: index]];
+        if (index < [labels count])
+            [subitem setLabel: [labels objectAtIndex: index]];
+        [subitems addObject: subitem];
+    }
+    [group setSubitems: subitems];
+    [group setSelectionMode: selectionMode];
+    [group setTarget: target];
+    [group setAction: action];
+    return group;
+}
+
+// The mode is only stored: the group is not yet drawn as a set of segments, so no selection is made.
+- (NSToolbarItemGroupSelectionMode) selectionMode {
+    return NS_EXTRA(NSToolbarItemGroup, self)->_selectionMode;
+}
+
+- (void) setSelectionMode: (NSToolbarItemGroupSelectionMode) mode {
+    NS_EXTRA(NSToolbarItemGroup, self)->_selectionMode = mode;
+}
+
+// GUESS: the documentation gives no default; it is automatic, the first case. Like the mode, the value is only
+// stored: the group is not yet displayed as a control, so no representation changes anything.
+- (NSToolbarItemGroupControlRepresentation) controlRepresentation {
+    return NS_EXTRA(NSToolbarItemGroup, self)->_controlRepresentation;
+}
+
+- (void) setControlRepresentation: (NSToolbarItemGroupControlRepresentation) representation {
+    NS_EXTRA(NSToolbarItemGroup, self)->_controlRepresentation = representation;
+}
+
+// NSToolbarItem copies with NSCopyObject, which shares _subitems without retaining it and does not copy
+// side storage.
+- (id) copyWithZone: (NSZone *) zone {
+    NSToolbarItemGroup *copy = [super copyWithZone: zone];
+
+    copy->_subitems = [_subitems copy];
+    NS_EXTRA_COPY(NSToolbarItemGroup, copy, self);
+    return copy;
 }
 
 - (void) dealloc {
