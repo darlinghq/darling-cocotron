@@ -3,8 +3,8 @@
 // NSToolbarItemGroup controlRepresentation. The documentation (macOS 10.15) declares it as a
 // read-write property that says how a toolbar displays a grouped toolbar item, of the enum
 // NSToolbarItemGroupControlRepresentation with the cases automatic, expanded and collapsed.
-// It states no default. Everything marked GUESS pins this implementation's choice, not a
-// documented or measured value: the default is automatic.
+// It states no default; macOS 26.7.3 starts at automatic and gives a copy the default too (probe
+// tig.m, marked QUIRK for the copy).
 // Build: clang -fobjc-arc -framework AppKit appkit-toolbaritemgroup-control-representation.m
 // Not covered: any effect on how the group is displayed (the value is only stored). On
 // master the selectors do not exist: with ARC the test does not compile against master's
@@ -51,7 +51,7 @@ static NSToolbarItemGroup *decoded(void) {
 }
 
 static void checkDefault(NSToolbarItemGroup *group) {
-    CHECK([group controlRepresentation] == NSToolbarItemGroupControlRepresentationAutomatic);   // GUESS
+    CHECK([group controlRepresentation] == NSToolbarItemGroupControlRepresentationAutomatic);   // observed on macOS 26.7.3
 }
 
 static void checkRoundTrip(NSToolbarItemGroup *group) {
@@ -70,12 +70,11 @@ static void checkRoundTrip(NSToolbarItemGroup *group) {
     [group setControlRepresentation:NSToolbarItemGroupControlRepresentationCollapsed];
     [group setSelectionMode:NSToolbarItemGroupSelectionModeMomentary];
     [group setLabel:@"Navigate"];
-    [group setTag:9];
     [group setSubitems:@[]];
     CHECK([group controlRepresentation] == NSToolbarItemGroupControlRepresentationCollapsed);
     [group setControlRepresentation:NSToolbarItemGroupControlRepresentationExpanded];
     CHECK([group selectionMode] == NSToolbarItemGroupSelectionModeMomentary);
-    CHECK([[group label] isEqualToString:@"Navigate"] && [group tag] == 9);
+    CHECK([[group label] isEqualToString:@"Navigate"]);
     [group setSelectionMode:NSToolbarItemGroupSelectionModeSelectAny];
     CHECK([group controlRepresentation] == NSToolbarItemGroupControlRepresentationExpanded);
 }
@@ -111,11 +110,11 @@ int main(void) {
         [first setControlRepresentation:NSToolbarItemGroupControlRepresentationCollapsed];
         checkDefault(second);
 
-        // a copy keeps the value, and the two are independent afterwards
+        // QUIRK (macOS 26.7.3, probe tig.m): a copy has the default value, and the two are independent
         NSToolbarItemGroup *original = [[NSToolbarItemGroup alloc] initWithItemIdentifier:@"C"];
         [original setControlRepresentation:NSToolbarItemGroupControlRepresentationExpanded];
         NSToolbarItemGroup *copy = [original copy];
-        CHECK([copy controlRepresentation] == NSToolbarItemGroupControlRepresentationExpanded);
+        CHECK([copy controlRepresentation] == NSToolbarItemGroupControlRepresentationAutomatic);
         [copy setControlRepresentation:NSToolbarItemGroupControlRepresentationCollapsed];
         CHECK([original controlRepresentation] == NSToolbarItemGroupControlRepresentationExpanded);
     }

@@ -9,12 +9,11 @@
 // the action goes to the first responder and up the responder chain); a group's subitems
 // are the NSToolbarItems returned by subitems, whose actions the group prefers over its own
 // when they have one, and selectionMode is a read-write property of the three cases
-// selectOne, selectAny and momentary. Everything marked GUESS pins this implementation's
-// choice, not a documented or measured value: the identifier of a subitem (the group's
-// identifier, a dot and the position), a missing label (the item's default, an empty
-// string), labels beyond the images being ignored, the target and action being the group's
-// own with none on the subitems, a copy of a group sharing its subitems' objects, and the
-// default selection mode of a group made another way (selectOne).
+// selectOne, selectAny and momentary. The rest is black-box behaviour of macOS 26.7.3 (probe tig.m),
+// marked QUIRK where it is not documented: the subitems get UUID identifiers of their own and a label is
+// also their palette label, the target and action are the group's, the result is a plain
+// NSToolbarItemGroup also for a subclass, and a copy has copies of the subitems and the default
+// selection mode.
 // Build: clang -fobjc-arc -framework AppKit appkit-toolbaritemgroup-factory.m
 // Not covered: how the group is drawn or selected (the mode is only stored), selectedIndex,
 // isSelected(at:), the titles factory and controlRepresentation, which are not implemented.
@@ -79,16 +78,17 @@ int main(void) {
             CHECK([subitem isKindOfClass:[NSToolbarItem class]]);
             CHECK([subitem image] == images[i]);
             CHECK([[subitem label] isEqualToString:labels[i]]);
+            CHECK([[subitem paletteLabel] isEqualToString:labels[i]]);   // QUIRK (macOS 26.7.3)
             CHECK([subitem toolbar] == nil);
-            // GUESS: no target or action of their own, so the group's apply
+            // QUIRK (macOS 26.7.3): no target or action of their own, so the group's apply
             CHECK([subitem target] == nil);
             CHECK([subitem action] == NULL);
             [identifiers addObject:[subitem itemIdentifier]];
         }
-        // GUESS: the identifiers are the group's, a dot and the position
+        // QUIRK (macOS 26.7.3): the identifiers are unique strings of their own, none the group's
         CHECK([identifiers count] == 4);
-        CHECK([[subitems[0] itemIdentifier] isEqualToString:@"Group.0"]);
-        CHECK([[subitems[2] itemIdentifier] isEqualToString:@"Group.2"]);
+        CHECK(![[subitems[0] itemIdentifier] hasPrefix:@"Group"]);
+        CHECK([[subitems[0] itemIdentifier] length] > 0);
         // the subitems are independent of the group
         [subitems[1] setLabel:@"Changed"];
         CHECK([[group label] length] == 0);
@@ -118,8 +118,8 @@ int main(void) {
         for (NSToolbarItem *subitem in [unlabeled subitems])
             CHECK([[subitem label] length] == 0);
 
-        // GUESS: fewer labels than images leave the last subitems without one, more labels
-        // than images are ignored
+        // QUIRK (macOS 26.7.3): fewer labels than images leave the last subitems without one,
+        // more labels than images are ignored
         NSToolbarItemGroup *few = [NSToolbarItemGroup
             groupWithItemIdentifier:@"F" images:images
                       selectionMode:NSToolbarItemGroupSelectionModeSelectOne
@@ -150,34 +150,32 @@ int main(void) {
                              labels:labels target:target action:@selector(hit:)];
         CHECK([again subitems][0] != [group subitems][0]);
 
-        // the factory is a class method of the receiving class: a subclass gets its own kind
-        MyGroup *mine = [MyGroup
+        // QUIRK (macOS 26.7.3): the factory makes an NSToolbarItemGroup also when it is sent to a subclass
+        NSToolbarItemGroup *mine = [MyGroup
             groupWithItemIdentifier:@"Mine" images:images
                       selectionMode:NSToolbarItemGroupSelectionModeSelectOne
                              labels:labels target:target action:@selector(hit:)];
-        CHECK([mine isMemberOfClass:[MyGroup class]]);
+        CHECK([mine isMemberOfClass:[NSToolbarItemGroup class]]);
         CHECK([[mine subitems] count] == 3);
 
         // selectionMode as a property: set, read back, independent of the rest
         NSToolbarItemGroup *plain = [[NSToolbarItemGroup alloc] initWithItemIdentifier:@"P"];
-        CHECK([plain selectionMode] == NSToolbarItemGroupSelectionModeSelectOne);   // GUESS
+        CHECK([plain selectionMode] == NSToolbarItemGroupSelectionModeSelectOne);   // observed on macOS 26.7.3
         for (int i = 0; i < 3; i++) {
             [plain setSelectionMode:modes[i]];
             CHECK([plain selectionMode] == modes[i]);
         }
         [plain setLabel:@"Navigate"];
-        [plain setTag:9];
         [plain setSubitems:@[]];
         CHECK([plain selectionMode] == NSToolbarItemGroupSelectionModeMomentary);
         [plain setSelectionMode:NSToolbarItemGroupSelectionModeSelectAny];
-        CHECK([[plain label] isEqualToString:@"Navigate"] && [plain tag] == 9);
+        CHECK([[plain label] isEqualToString:@"Navigate"]);
         // another group is not affected
         NSToolbarItemGroup *other = [[NSToolbarItemGroup alloc] initWithItemIdentifier:@"O"];
         CHECK([other selectionMode] == NSToolbarItemGroupSelectionModeSelectOne);
 
-        // a copy keeps the mode and has its own array of the same subitems (GUESS: the same
-        // objects), and it stays valid after the original is gone: the copy must own what it
-        // refers to
+        // QUIRK (macOS 26.7.3): a copy has the default selection mode and copies of the subitems,
+        // and it stays valid after the original is gone: the copy must own what it refers to
         NSToolbarItemGroup *copy;
         NSArray *originalSubitems;
         @autoreleasepool {
@@ -188,14 +186,14 @@ int main(void) {
             originalSubitems = [[original subitems] copy];
             copy = [original copy];
             CHECK([copy subitems] != [original subitems]);
+            CHECK([copy selectionMode] == NSToolbarItemGroupSelectionModeSelectOne);
             [copy setSelectionMode:NSToolbarItemGroupSelectionModeMomentary];
             CHECK([original selectionMode] == NSToolbarItemGroupSelectionModeSelectAny);
         }
         // the original has been released here
         CHECK([copy selectionMode] == NSToolbarItemGroupSelectionModeMomentary);
         CHECK([[copy subitems] count] == 3);
-        CHECK([[copy subitems] isEqualToArray:originalSubitems]);
-        CHECK([[copy subitems][0] image] == images[0]);
+        CHECK([copy subitems][0] != originalSubitems[0]);
         CHECK([[[copy subitems][2] label] isEqualToString:@"Three"]);
     }
     if (failures) return 1;

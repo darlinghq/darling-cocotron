@@ -47,7 +47,8 @@ NS_ASSUME_NONNULL_BEGIN
 }
 
 // Makes a group with one subitem per image. The subitems take the image and, when there is one at the same
-// position, the label; the target and action are the group's own. The selection mode is stored.
+// position, the label (also as palette label); the target and action are the group's own. The result is an
+// NSToolbarItemGroup whichever class the message is sent to. The selection mode is stored.
 + (instancetype) groupWithItemIdentifier: (NSToolbarItemIdentifier) itemIdentifier
                                   images: (NSArray<NSImage *> *) images
                            selectionMode: (NSToolbarItemGroupSelectionMode) selectionMode

@@ -13,7 +13,7 @@ of every case, the value and the group's other state (`selectionMode`, `label`, 
 `subitems`) not overwriting one another, two groups not sharing the value, a copy keeping
 it and being independent afterwards, and `respondsToSelector:` for both accessors.
 
-Marked GUESS in the source: the default is `automatic`. On master the selectors do not
+Observed on macOS 26.7.3 (probe tig.m): the default is `automatic`, and a copy has the default value. On master the selectors do not
 exist: with ARC the test does not compile against master's header, without ARC the first
 call raises an unrecognized-selector exception. The value is only stored, so no effect on
 how the group is displayed is tested.
