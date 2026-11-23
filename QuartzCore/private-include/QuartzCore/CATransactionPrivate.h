@@ -38,11 +38,11 @@ typedef NS_ENUM(unsigned int, CATransactionPhase) {
                  forPhase: (CATransactionPhase) phase;
 
 
-// Private. Keeps a handler for "an implicit transaction began"; never called, its signature is unknown.
+// Private. A block (no arguments) that is called each time an implicit transaction begins.
 + (void) setImplicitTransactionDidBeginHandler: (id) handler;
 
 
-// Private. Keeps a flag that asks a run loop observer not to commit transactions; has no effect here.
+// Private. A flag that asks a run loop observer not to commit transactions; kept, no effect here.
 + (void) setDisableRunLoopObserverCommits: (BOOL) value;
 
 

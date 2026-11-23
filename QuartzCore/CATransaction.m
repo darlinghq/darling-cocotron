@@ -37,6 +37,8 @@ static CATransactionGroup *currentTransactionGroup() {
     return result;
 }
 
+static id implicitTransactionDidBeginHandler;
+
 static CATransactionGroup *createImplicitTransactionGroupIfNeeded() {
     CATransactionGroup *check = currentTransactionGroup();
 
@@ -52,6 +54,15 @@ static CATransactionGroup *createImplicitTransactionGroupIfNeeded() {
                           order: 0
                           modes: [NSArray arrayWithObject:
                                                   NSDefaultRunLoopMode]];
+
+        id handler = nil;
+        @synchronized([CATransaction class]) {
+            handler = [implicitTransactionDidBeginHandler retain];
+        }
+        if (handler != nil) {
+            ((void (^)(void)) handler)();
+            [handler release];
+        }
     }
 
     return check;
@@ -272,17 +283,14 @@ static void scheduleCompletionBlocks(void) {
     // for a passed phase waits for the next commit".
 }
 
-// Private, sent to the class by Mac Catalyst frameworks and not documented. The
-// name asks for a handler to run when an implicit transaction begins. The
-// block's signature is not known (GUESS), and calling a block with the wrong
-// arguments could corrupt state, so the block is kept (a new one replaces the
-// old one, nil clears it) and never called. Transactions behave exactly as before.
-static id implicitTransactionDidBeginHandler;
-
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The block is kept (a
+// new one replaces the old one, nil clears it) and is called, without arguments, each time an
+// implicit transaction begins (see createImplicitTransactionGroupIfNeeded). Observed on macOS
+// 26.7.3 (black-box, tier 2): the selector takes a block, the block is called once per implicit
+// transaction, synchronously on the thread that began it, and not for an explicit +begin;
+// 10.14.4 has no such selector, which is why this is the superset behaviour.
+// Test: quartzcore-catransaction-implicit-did-begin-handler.
 + (void) setImplicitTransactionDidBeginHandler: (id) handler {
-    if (handler != nil)
-        NSLog(@"CATransaction setImplicitTransactionDidBeginHandler: handler stored, never called");
-
     @synchronized([CATransaction class]) {
         id previous = implicitTransactionDidBeginHandler;
         implicitTransactionDidBeginHandler = [handler copy];
