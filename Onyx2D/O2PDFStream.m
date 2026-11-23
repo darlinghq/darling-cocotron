@@ -169,9 +169,18 @@ static O2PDFStreamImageFilter O2PDFStreamImageFilterNamed(const char *name) {
             }
             if (![parameterArray getDictionaryAtIndex: i value: &parameters])
                 parameters = nil;
-            if (imageFilter && i == count - 1 &&
-                (*imageFilter = O2PDFStreamImageFilterNamed(name)) != kO2PDFStreamNoImageFilter)
-                break;
+            // QUIRK: with an image filter left applied, a DCT or JPX filter that is not the last one is
+            // not decoded either: the data passes through it unchanged and the chain goes on (a later
+            // filter that cannot be applied still gives no data). Only the last filter is reported.
+            // Not documented. Evidence: black-box observation of CGPDFStreamCopyData on macOS 26.7.3 and
+            // 10.14.4 (tier 2): [/DCTDecode /DCTDecode] gives the 21 input bytes, [/DCTDecode
+            // /NoSuchFilter] gives NULL without decoding the image data.
+            // Test: coregraphics-pdf-page-dictionary-and-stream-data ("quirk: image filter before the end")
+            if (imageFilter && O2PDFStreamImageFilterNamed(name) != kO2PDFStreamNoImageFilter) {
+                if (i == count - 1)
+                    *imageFilter = O2PDFStreamImageFilterNamed(name);
+                continue;
+            }
             result = [O2PDFFilter decodeWithName: name
                                             data: result
                                       parameters: parameters

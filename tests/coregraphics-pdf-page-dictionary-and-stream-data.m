@@ -160,7 +160,7 @@ int main(void) {
         if (format != CGPDFDataFormatRaw) return 42;
         CFRelease(data);
 
-        // Placeholder pins: an image filter is left applied and reported by format; a
+        // Observed on macOS 26.7.3 and 10.14.4: an image filter is left applied and reported by format; a
         // Flate filter before it is decoded; a filter name that is not a filter gives NULL and leaves
         // the format as it was.
         if (!CGPDFDictionaryGetStream(pageDict, "Jpeg", &stream)) return 50;
@@ -181,11 +181,12 @@ int main(void) {
         if (!CGPDFDictionaryGetStream(pageDict, "Bad", &stream)) return 56;
         format = (CGPDFDataFormat)99;
         if (CGPDFStreamCopyData(stream, &format) || format != (CGPDFDataFormat)99) return 57;
-        // An image filter that is not the last of the chain is not left applied: it is
-        // decoded, then the unknown filter after it fails the chain, so the result is NULL.
+        // QUIRK test (see Onyx2D/O2PDFStream.m): an image filter before the end of the chain is not decoded,
+        // so the chain [/DCTDecode /NoSuchFilter] gives NULL without reaching the image decoder. macOS also
+        // writes the format in that case, which is not pinned here.
         if (!CGPDFDictionaryGetStream(pageDict, "Mid", &stream)) return 58;
         format = (CGPDFDataFormat)99;
-        if (CGPDFStreamCopyData(stream, &format) || format != (CGPDFDataFormat)99) return 59;
+        if (CGPDFStreamCopyData(stream, &format)) return 59;
 
         // Placeholder pin: a NULL stream gives NULL and leaves the format as it was.
         format = (CGPDFDataFormat)99;
