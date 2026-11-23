@@ -577,14 +577,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     WL.wl_display_flush(_wlDisplay);
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
-                          untilDate: (NSDate *) untilDate
-                             inMode: (NSRunLoopMode) mode
-                            dequeue: (BOOL) dequeue
-{
+// Sends the requests made since the last wait, and handles the events libwayland has already
+// read (which leave the connection's descriptor quiet)
+- (void) willWaitForEvents {
     [self processPendingEvents];
-
-    return [super nextEventMatchingMask: mask untilDate: untilDate inMode: mode dequeue: dequeue];
 }
 
 #pragma mark - Globals
@@ -1393,8 +1389,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                           clickCount: 1
                                               deltaX: location.x - last.x
                                               deltaY: last.y - location.y];
-        // Not coalesced with -discardEventsMatchingMask:beforeEvent:, which
-        // currently removes every older queued event, mouse-downs included.
+        // The event queue coalesces queued motion of the same kind for the same
+        // window, adding up the deltas.
         [self postEvent: event atStart: NO];
     }
 

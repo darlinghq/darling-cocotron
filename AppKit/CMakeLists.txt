@@ -306,6 +306,7 @@ set(AppKit_sources
 	NSFontDescriptor.m
 	UIFontNames.m
 	NSDisplay.m
+	NSEventQueue.m
 	DarlingDisplay.m
 
 	NSOpenGL/NSOpenGLView.m

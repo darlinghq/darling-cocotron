@@ -1180,27 +1180,9 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     return [_windowsByID objectForKey: [NSNumber numberWithUnsignedLong: i]];
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
-                          untilDate: (NSDate *) untilDate
-                             inMode: (NSRunLoopMode) mode
-                            dequeue: (BOOL) dequeue
-{
-#ifndef DARLING
-    [[NSRunLoop currentRunLoop] addInputSource: _inputSource forMode: mode];
-#else
+// Xlib may have read events into its own queue, which leaves the connection's descriptor quiet
+- (void) willWaitForEvents {
     [self processPendingEvents];
-#endif
-
-    NSEvent *result = [super nextEventMatchingMask: mask
-                                         untilDate: untilDate
-                                            inMode: mode
-                                           dequeue: dequeue];
-
-#ifndef DARLING
-    [[NSRunLoop currentRunLoop] removeInputSource: _inputSource forMode: mode];
-#endif
-
-    return result;
 }
 
 // With ControlKeyActsAsCommand set, Control+C, V and X (without Command or
@@ -2159,28 +2141,9 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             if (type == NSMouseMoved && !overlay && ![delegate acceptsMouseMovedEvents])
                 break;
 
-            // Events the queue is about to drop in favour of this one carry
-            // deltas that are all the application gets in relative mode.
-            // Posting any motion discards every queued left drag (below), so
-            // those deltas move to this event whatever its type, and any
-            // moved or dragged event also replaces a directly preceding one
-            // of its type for the same window (-[NSDisplay postEvent:atStart:]).
-            if (_relativeMouse.active) {
-                [_eventQueueLock lock];
-                for (NSEvent *queued in _eventQueue) {
-                    BOOL dropped = [queued type] == NSLeftMouseDragged ||
-                            (queued == [_eventQueue lastObject] &&
-                             [NSEvent isMouseCoalescingEnabled] &&
-                             [queued type] == type &&
-                             [queued window] == delegate);
-                    if (dropped) {
-                        deltaX += [queued deltaX];
-                        deltaY += [queued deltaY];
-                    }
-                }
-                [_eventQueueLock unlock];
-            }
-
+            // Coalescing in the event queue replaces a queued moved or dragged event of
+            // the same type for the same window with this one, and adds its deltas to this
+            // one's (which is all an application gets in relative mode).
             event = [NSEvent
                     mouseEventWithType: type
                               location: pos
@@ -2191,8 +2154,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                                 deltaX: deltaX
                                 deltaY: deltaY];
             [self postEvent: event atStart: NO];
-            [self discardEventsMatchingMask: NSLeftMouseDraggedMask
-                                beforeEvent: event];
 
             [delegate platformWindowSetCursorEvent: window];
             break;
