@@ -563,8 +563,27 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     NSUnimplementedMethod();
 }
 
+// The documentation says every managed object of the context is forgotten and the context
+// returns to its base state. GUESS: "base state" also means the pending changes and the undo
+// stack are dropped (a fresh context has neither). GUESS: no ObjectsDidChange notification is
+// posted (NSInvalidatedAllObjectsKey exists, but its page does not say reset posts it).
+// Not touched: the objects themselves, which the documentation tells the caller to discard.
 - (void) reset {
-    NSUnimplementedMethod();
+    for (NSManagedObject *object in [_registeredObjects allObjects]) {
+        for (NSString *key in [[[object entity] propertiesByName] allKeys])
+            [object removeObserver: self forKeyPath: key];
+    }
+    [_registeredObjects removeAllObjects];
+    NSResetMapTable(_objectIdToObject);
+    [_insertedObjects removeAllObjects];
+    [_updatedObjects removeAllObjects];
+    [_deletedObjects removeAllObjects];
+    [_pendingInserted removeAllObjects];
+    [_pendingUpdated removeAllObjects];
+    [_pendingDeleted removeAllObjects];
+    [_pendingRefreshed removeAllObjects];
+    _hasChanges = NO;
+    [_undoManager removeAllActions];
 }
 
 - (void)rollback {
