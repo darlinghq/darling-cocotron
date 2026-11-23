@@ -73,6 +73,9 @@ typedef NS_OPTIONS(NSUInteger, NSTableColumnResizingOptions) {
 
 - (void) setTitle: (NSString *) title;
 
+// Resizes the column to the width of its header cell. A maximum width below that is raised to it and a
+// minimum width above that is lowered to it. A change of the width marks the table view as needing display.
+- (void) sizeToFit;
 
 - (null_unspecified NSCell *) dataCellForRow: (NSInteger) row;
 

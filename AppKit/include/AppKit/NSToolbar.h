@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitExport.h>
+#import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/NSToolbarItem.h>
 #import <Foundation/NSNotification.h>
 #import <Foundation/NSObject.h>
@@ -49,6 +50,9 @@ typedef NSString *NSToolbarIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
 
 @protocol NSToolbarDelegate;
 
+#define _NS_SIDE_NSToolbar 0, 1,
+// Legacy ObjC ABI (i386): the instance size must not change. New state goes to the side struct, never to
+// an ivar of its own.
 @interface NSToolbar : NSObject {
     NSToolbarIdentifier _identifier;
     id<NSToolbarDelegate> _delegate;
@@ -69,6 +73,13 @@ typedef NSString *NSToolbarIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
     BOOL _allowsUserCustomization;
     BOOL _isLoadingConfiguration;
     BOOL _loadDefaultItems;
+    NS_EXTRA_IVARS_BEGIN(NSToolbar)
+        BOOL _extensionItemsAllowed;
+        // Whether -setAllowsDisplayModeCustomization: was called, and the value; until then the default
+        // depends on the SDK the program was built with.
+        BOOL _displayModeCustomizationSet;
+        BOOL _displayModeCustomization;
+    NS_SIDE_IVARS_END(NSToolbar)
 }
 
 - (instancetype) initWithIdentifier: (NSToolbarIdentifier) identifier;
@@ -84,6 +95,11 @@ typedef NSString *NSToolbarIdentifier NS_SWIFT_BRIDGED_TYPEDEF;
 - (NSDictionary<NSString *, id> *) configurationDictionary;
 @property(nonatomic) BOOL autosavesConfiguration;
 @property(nonatomic) BOOL allowsUserCustomization;
+// Whether the user may change the display mode at run time; the default is YES for a program built
+// against the macOS 15 SDK or later and NO for one built against an older SDK.
+@property(nonatomic) BOOL allowsDisplayModeCustomization API_AVAILABLE(macos(15.0));
+// Whether the configuration panel may offer items for Action extensions; the default is NO.
+@property(nonatomic) BOOL allowsExtensionItems;
 @property(null_unspecified, nonatomic, copy) NSString *selectedItemIdentifier;
 
 - (void) setConfigurationFromDictionary: (NSDictionary<NSString *, id> *) dictionary;

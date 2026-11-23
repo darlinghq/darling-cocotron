@@ -42,6 +42,8 @@ static void setup(void)
     scroll = [[[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 500, 250)] autorelease];
     table = [[[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, 239, 250)] autorelease];
     [table setIntercellSpacing:NSMakeSize(3, 2)];
+    // the columns keep the widths given below (the default would share the clip's width among them on macOS)
+    [table setColumnAutoresizingStyle:NSTableViewNoColumnAutoresizing];
     CGFloat widths[3] = {100, 50, 80};
     NSString *names[3] = {@"a", @"b", @"c"};
     for (int i = 0; i < 3; i++)
@@ -88,6 +90,16 @@ static void test_rects_close_the_gap(void)
     NSRect cell = [table frameOfCellAtColumn:2 row:0];
     CHECK(NSMinX(cell) >= 103 && NSMinX(cell) < 106);
     CHECK([table frameOfCellAtColumn:1 row:0].size.width == 0);
+    // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probes 657.1 and 657.3): a hidden column's rectangle and cell frame are empty ones at
+    // x 0 wherever the column sits; its neighbours are unaffected
+    CHECK(NSMinX([table rectOfColumn:1]) == 0);
+    CHECK(NSMinX([table frameOfCellAtColumn:1 row:0]) == 0);
+    CHECK(NSMinX([table frameOfCellAtColumn:1 row:1]) == 0 && NSWidth([table frameOfCellAtColumn:1 row:1]) == 0);
+    [column(1) setHidden:NO];
+    [column(2) setHidden:YES];
+    CHECK(NSMinX([table rectOfColumn:2]) == 0 && NSWidth([table rectOfColumn:2]) == 0);
+    CHECK(NSMinX([table frameOfCellAtColumn:2 row:0]) == 0);
+    CHECK(NSMinX([table rectOfColumn:1]) == 103 && NSWidth([table rectOfColumn:1]) == 53);
 }
 
 static void test_a_point_is_never_in_a_hidden_column(void)
@@ -118,12 +130,38 @@ static void test_ranges_over_whole_rects(void)
     NSRange inLast = [table columnsInRect:NSMakeRect(220, 0, 10, 20)];
     CHECK(inLast.location == 2 && inLast.length == 1);
 
+    // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 657.1/657.2): hidden columns after the last shown one are in the range of a rect
+    // that reaches past that column; a rect that ends inside the last shown column stops there
+    [column(2) setHidden:YES]; // columns now span 0-203, 203-203 (hidden), 203-203 (hidden)
+    NSRange pastEnd = [table columnsInRect:NSMakeRect(0, 0, 400, 20)];
+    CHECK(pastEnd.location == 0 && pastEnd.length == 3);
+    NSRange insideLast = [table columnsInRect:NSMakeRect(0, 0, 100, 20)];
+    CHECK(insideLast.location == 0 && insideLast.length == 1);
+    NSRange beyond = [table columnsInRect:NSMakeRect(300, 0, 50, 20)];
+    CHECK(beyond.length == 0);
+    [column(2) setHidden:NO];
+
     // unequal widths, nothing hidden: the range reaches the column the rect's right edge is in
     [column(1) setHidden:NO];
     NSRange third = [table columnsInRect:NSMakeRect(0, 0, 260, 20)]; // columns span 0-203, 203-256, 256-339
     CHECK(third.location == 0 && third.length == 3);
     NSRange two = [table columnsInRect:NSMakeRect(0, 0, 250, 20)];
     CHECK(two.location == 0 && two.length == 2);
+}
+
+// Documented (https://developer.apple.com/documentation/appkit/nstableview/columnindexes(in:)): the index set
+// holds the columns that intersect the rect and are not hidden, however many hidden ones the range holds
+static void test_column_indexes_leave_out_hidden_columns(void)
+{
+    setup();
+    [column(1) setHidden:YES];
+    NSIndexSet *all = [table columnIndexesInRect:NSMakeRect(0, 0, 400, 20)];
+    CHECK([all count] == 2 && [all containsIndex:0] && [all containsIndex:2] && ![all containsIndex:1]);
+    [column(2) setHidden:YES];
+    all = [table columnIndexesInRect:NSMakeRect(0, 0, 400, 20)];
+    CHECK([all count] == 1 && [all containsIndex:0]);
+    [column(0) setHidden:YES];
+    CHECK([[table columnIndexesInRect:NSMakeRect(0, 0, 400, 20)] count] == 0);
 }
 
 static void test_a_hidden_first_column(void)
@@ -179,10 +217,15 @@ static void test_header(void)
     NSTableHeaderView *header = (NSTableHeaderView *)[table headerView];
     [column(1) setHidden:YES];
     CHECK(NSWidth([header headerRectOfColumn:1]) == 0);
+    CHECK(NSMinX([header headerRectOfColumn:1]) == 0); // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 657.1): a hidden column's header rect is at x 0
     CHECK(NSMinX([header headerRectOfColumn:2]) == 103);
     CHECK(NSWidth([header headerRectOfColumn:2]) == 83);
     CHECK([header columnAtPoint:NSMakePoint(120, 5)] == 2);
     CHECK([header columnAtPoint:NSMakePoint(10, 5)] == 0);
+    // Documented: -1 when no column header lies under the point
+    // (https://developer.apple.com/documentation/appkit/nstableheaderview/column(at:))
+    CHECK([header columnAtPoint:NSMakePoint(1000, 5)] == -1);
+    CHECK([header columnAtPoint:NSMakePoint(-5, 5)] == -1);
     CHECK([[header tableView] numberOfColumns] == 3);
 }
 
@@ -196,6 +239,7 @@ int main(void)
         test_rects_close_the_gap();
         test_a_point_is_never_in_a_hidden_column();
         test_ranges_over_whole_rects();
+        test_column_indexes_leave_out_hidden_columns();
         test_a_hidden_first_column();
         test_unhiding_restores_the_layout();
         test_size_last_column_to_fit();
