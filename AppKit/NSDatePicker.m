@@ -63,7 +63,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return NS_EXTRA(NSDatePicker, self)->_presentsCalendarOverlay;
 }
 
-// The documentation gives NO as the default. Only the value is kept: no calendar overlay exists to present.
+// Documented to start as NO. Only the value is kept: there is no calendar pop-up to present.
 - (void) setPresentsCalendarOverlay: (BOOL) flag {
     NS_EXTRA(NSDatePicker, self)->_presentsCalendarOverlay = flag;
 }

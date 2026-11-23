@@ -42,8 +42,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic) NSDatePickerElementFlags datePickerElements;
 @property(nonatomic) NSDatePickerMode datePickerMode;
 @property(nonatomic) NSDatePickerStyle datePickerStyle;
-// Whether a graphical calendar overlay is presented when a calendar element of a text-field style picker
-// is edited (macOS 10.15.4); stored only, no overlay is shown. The default is NO.
+// Switch for a pop-up calendar that can appear while a text-field style picker's calendar part is being
+// edited (macOS 10.15.4); stored only, no pop-up exists here. Documented to start as NO.
 @property(nonatomic) BOOL presentsCalendarOverlay API_AVAILABLE(macos(10.15.4));
 
 @property(nullable, nonatomic, retain) NSCalendar *calendar;

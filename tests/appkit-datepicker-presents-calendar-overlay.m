@@ -1,9 +1,9 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
-// NSDatePicker presentsCalendarOverlay. The documentation (macOS 10.15.4) declares it as a
-// read-write Boolean property that says whether a graphical calendar overlay is presented when a
-// calendar element is edited in a text-field style date picker, and states the default is NO.
-// The overlay itself is not implemented and not tested. Everything marked GUESS pins this
+// NSDatePicker presentsCalendarOverlay. The documentation (macOS 10.15.4) lists it as a settable
+// Boolean on NSDatePicker that switches a pop-up calendar on for editing the calendar part of a
+// text-field style picker, and says it starts as NO. The pop-up itself is not implemented and
+// not tested. Everything marked GUESS pins this
 // implementation's choice: the value is independent of the picker's style, elements and mode.
 // Build: clang -fobjc-arc -framework AppKit appkit-datepicker-presents-calendar-overlay.m
 // On master the selectors do not exist: with ARC the test does not compile against master's
