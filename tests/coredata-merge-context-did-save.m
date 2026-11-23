@@ -4,10 +4,13 @@
 // contract (the public NSManagedObjectContext.h and the page
 // https://developer.apple.com/documentation/coredata/nsmanagedobjectcontext/mergechanges(fromcontextdidsave:) ):
 // the merge refreshes objects updated in the other context, faults in newly inserted objects and
-// removes deleted ones (GUESS, a departure from the page: directly, not through deleteObject:).
-// Lines marked GUESS pin what the pages leave open (they are not observed on macOS): that the receiver's own unsaved change to an object stays on top of the refreshed
-// values, that a merge leaves the receiver with no changes of its own, and that the merged
-// objects are reported through the receiver's change notification (inserted, refreshed, deleted).
+// deletes the objects the other context deleted.
+// The rest is what macOS 10.14.4 and 26.7.3 do (they agree; mac-probes mrg1.m of batch11b): a deleted
+// object stays registered and becomes a pending delete of the receiver (it is in deletedObjects until
+// the next save), also when the receiver has changed it; an object the receiver deleted stays deleted
+// and takes the values of a remote update; the receiver's own change to an updated object stays on top
+// of the refreshed values; the merge is reported through one change notification (inserted, refreshed,
+// deleted) before it returns; a notification without user info changes nothing.
 // Prints PASS when everything holds; the exit code is the number of failed checks.
 
 #import <Foundation/Foundation.h>
@@ -15,6 +18,12 @@
 #include <stdio.h>
 
 static int failures;
+/* the 32-bit build has no ARC: a notification kept by a block has to be retained there */
+#if __has_feature(objc_arc)
+#define KEEP(x) (x)
+#else
+#define KEEP(x) [(x) retain]
+#endif
 #define CHECK(...) do { if (!(__VA_ARGS__)) { printf("FAIL line %d: %s\n", __LINE__, #__VA_ARGS__); failures++; } } while (0)
 
 static NSManagedObjectModel *makeModel(void) {
@@ -60,7 +69,7 @@ int main(void) {
         __block NSNotification *saved = nil;
         id observer = [[NSNotificationCenter defaultCenter] addObserverForName:NSManagedObjectContextDidSaveNotification
                                                                         object:source queue:nil
-                                                                    usingBlock:^(NSNotification *n) { saved = n; }];
+                                                                    usingBlock:^(NSNotification *n) { saved = KEEP(n); }];
         [n1 setValue:@"uno" forKey:@"text"];
         [n2 setValue:@"dos" forKey:@"text"];
         NSManagedObject *n4 = newNote(source, @"four");
@@ -74,28 +83,28 @@ int main(void) {
         __block NSDictionary *changes = nil;
         observer = [[NSNotificationCenter defaultCenter] addObserverForName:NSManagedObjectContextObjectsDidChangeNotification
                                                                      object:receiver queue:nil
-                                                                 usingBlock:^(NSNotification *n) { changes = [n userInfo]; }];
+                                                                 usingBlock:^(NSNotification *n) { changes = KEEP([n userInfo]); }];
         [receiver processPendingChanges];
         changes = nil;
         [receiver mergeChangesFromContextDidSaveNotification:saved];
         [[NSNotificationCenter defaultCenter] removeObserver:observer];
 
-        /* the updated object is refreshed, the inserted one is faulted in, the deleted one is gone */
+        /* the updated object is refreshed, the inserted one is faulted in, the deleted one is a pending delete */
         CHECK([[r1 valueForKey:@"text"] isEqual:@"uno"]);
         NSManagedObject *r4 = [receiver objectRegisteredForID:id4];
         CHECK(r4 != nil && [[r4 valueForKey:@"text"] isEqual:@"four"]);
-        CHECK([receiver objectRegisteredForID:id3] == nil);
-        CHECK(![[receiver registeredObjects] containsObject:r3]);
+        CHECK([receiver objectRegisteredForID:id3] == r3);
+        CHECK([[receiver deletedObjects] containsObject:r3]);
+        CHECK([r3 isDeleted]);
 
-        /* GUESS: the receiver's own change stays on top of the refreshed value */
+        /* the receiver's own change stays on top of the refreshed value */
         CHECK([[r2 valueForKey:@"text"] isEqual:@"local"]);
         CHECK([[r2 changedValues] objectForKey:@"text"] != nil);
-        /* GUESS: the merge itself leaves no change of the receiver's own on the merged objects */
+        /* the refreshed and the faulted-in objects are no changes of the receiver's own */
         CHECK(![[receiver updatedObjects] containsObject:r1]);
         CHECK(![[receiver insertedObjects] containsObject:r4]);
-        CHECK(![[receiver deletedObjects] containsObject:r3]);
 
-        /* GUESS: the receiver reports what was merged through its change notification */
+        /* the receiver reports what was merged through its change notification */
         CHECK([[changes objectForKey:NSRefreshedObjectsKey] containsObject:r1]);
         CHECK([[changes objectForKey:NSInsertedObjectsKey] containsObject:r4]);
         CHECK([[changes objectForKey:NSDeletedObjectsKey] containsObject:r3]);
@@ -106,13 +115,33 @@ int main(void) {
             [NSNotification notificationWithName:NSManagedObjectContextDidSaveNotification object:source]];
         CHECK([[receiver registeredObjects] count] == registered);
 
-        /* GUESS: the sets may hold object IDs instead of objects (what the automatic merge passes) */
-        [n1 setValue:@"ein" forKey:@"text"];
+        /* the receiver may save after the merge: the deleted object goes */
+        CHECK([receiver save:NULL]);
+        CHECK([receiver objectRegisteredForID:id3] == nil);
+        CHECK(![receiver hasChanges]);
+
+        /* a local change does not keep an object that the other context deleted; a local delete stays when the
+           other context only updates the object (and the object takes the updated values) */
+        NSManagedObject *m1 = newNote(source, @"m1"), *m2 = newNote(source, @"m2");
         CHECK([source save:NULL]);
-        NSDictionary *idInfo = @{NSUpdatedObjectsKey: [NSSet setWithObject:id1]};
-        [receiver mergeChangesFromContextDidSaveNotification:
-            [NSNotification notificationWithName:NSManagedObjectContextDidSaveNotification object:source userInfo:idInfo]];
-        CHECK([[r1 valueForKey:@"text"] isEqual:@"ein"]);
+        NSManagedObject *q1 = [receiver objectWithID:[m1 objectID]], *q2 = [receiver objectWithID:[m2 objectID]];
+        CHECK([[q1 valueForKey:@"text"] isEqual:@"m1"] && [[q2 valueForKey:@"text"] isEqual:@"m2"]);
+        [q1 setValue:@"local-m1" forKey:@"text"];
+        [receiver deleteObject:q2];
+        observer = [[NSNotificationCenter defaultCenter] addObserverForName:NSManagedObjectContextDidSaveNotification
+                                                                     object:source queue:nil
+                                                                 usingBlock:^(NSNotification *n) { saved = KEEP(n); }];
+        [source deleteObject:m1];
+        [m2 setValue:@"remote-m2" forKey:@"text"];
+        CHECK([source save:NULL]);
+        [[NSNotificationCenter defaultCenter] removeObserver:observer];
+        [receiver mergeChangesFromContextDidSaveNotification:saved];
+        CHECK([[receiver deletedObjects] containsObject:q1]);
+        CHECK([[q1 valueForKey:@"text"] isEqual:@"local-m1"]);
+        CHECK([[receiver deletedObjects] containsObject:q2]);
+        CHECK([[q2 valueForKey:@"text"] isEqual:@"remote-m2"]);
+        CHECK([receiver save:NULL]);
+        CHECK([receiver objectRegisteredForID:[m1 objectID]] == nil);
     }
     if (failures == 0)
         printf("PASS\n");

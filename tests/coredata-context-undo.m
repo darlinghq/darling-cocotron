@@ -1,33 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 //
-// NSManagedObjectContext undo, from the documented contract:
+// NSManagedObjectContext undo and redo, from the documented contract:
 // https://developer.apple.com/documentation/coredata/nsmanagedobjectcontext/undo()
 // https://developer.apple.com/documentation/coredata/nsmanagedobjectcontext/undomanager
-// Documented: the default undoManager is nil, setting one enables undo support, and undo sends an
-// undo message to the undo manager to reverse the latest uncommitted changes of the object graph.
-// The public header NSPropertyDescription.h says transient properties are managed for undo and redo too. Lines
-// marked GUESS pin what the pages leave open (they are not observed on macOS): that a save and a
-// rollback end the context's undo history (only the context's own actions, those of other
-// targets of a shared undo manager stay), that inserting an object records nothing yet, and that
-// an object whose changes were all undone stays among the updated objects.
+// Documented: undo sends an undo message to the undo manager to reverse the latest uncommitted changes
+// of the object graph; the public header NSPropertyDescription.h says transient properties are managed
+// for undo and redo too. The rest is what macOS 10.14.4 and 26.7.3 do (they agree; mac-probes und1.m of
+// batch11b): changes of attribute values, insertions and deletions of objects are recorded; a save does
+// not end the history, a rollback does; undoing every change of an object leaves it not updated and
+// the context without changes; redo applies what undo recorded; replacing the undo manager takes the
+// context's actions out of the old one. Whether a new context has an undo manager differs: macOS
+// 10.14.4 has one (groups by event), macOS 26.7.3 has none; Darling follows 10.14.4 (QUIRK) and the test
+// checks it when started with the argument "default-manager".
 // Prints PASS when everything holds; the exit code is the number of failed checks.
 
 #import <Foundation/Foundation.h>
 #import <CoreData/CoreData.h>
 #include <stdio.h>
+#include <string.h>
 
 static int failures;
 #define CHECK(...) do { if (!(__VA_ARGS__)) { printf("FAIL line %d: %s\n", __LINE__, #__VA_ARGS__); failures++; } } while (0)
-
-static int markerRuns;
-
-@interface Marker : NSObject
-- (void)run:(id)ignored;
-@end
-
-@implementation Marker
-- (void)run:(id)ignored { markerRuns++; }
-@end
 
 static NSManagedObjectModel *makeModel(void) {
     NSEntityDescription *note = [[NSEntityDescription alloc] init];
@@ -48,7 +41,7 @@ static NSManagedObjectModel *makeModel(void) {
     return model;
 }
 
-int main(void) {
+int main(int argc, char **argv) {
     @autoreleasepool {
         NSPersistentStoreCoordinator *psc =
             [[NSPersistentStoreCoordinator alloc] initWithManagedObjectModel:makeModel()];
@@ -56,9 +49,16 @@ int main(void) {
         NSManagedObjectContext *context = [[NSManagedObjectContext alloc] init];
         context.persistentStoreCoordinator = psc;
 
-        /* the default is no undo manager, and undo without one does nothing */
+        if (argc > 1 && strcmp(argv[1], "default-manager") == 0) {
+            CHECK([context undoManager] != nil);
+            CHECK([[context undoManager] groupsByEvent]);
+        }
+
+        /* undo and redo without an undo manager do nothing */
+        context.undoManager = nil;
         CHECK([context undoManager] == nil);
         [context undo];
+        [context redo];
 
         NSManagedObject *note = [NSEntityDescription insertNewObjectForEntityForName:@"Note" inManagedObjectContext:context];
         [note setValue:@"a" forKey:@"text"];
@@ -70,23 +70,32 @@ int main(void) {
         CHECK(context.undoManager == undoManager);
         CHECK(![undoManager canUndo]);
 
-        /* two changes in one group are undone together */
+        /* two changes in one group are undone together; the object is then no longer updated */
         [undoManager beginUndoGrouping];
         [note setValue:@"b" forKey:@"text"];
         [note setValue:@"c" forKey:@"text"];
         [undoManager endUndoGrouping];
         CHECK([undoManager canUndo]);
+        CHECK([[context updatedObjects] containsObject:note] && [context hasChanges]);
         [context undo];
         CHECK([[note valueForKey:@"text"] isEqual:@"a"]);
-        CHECK(![undoManager canUndo]);
-        /* GUESS: the object stays updated although it is back to its committed value */
+        CHECK(![undoManager canUndo] && [undoManager canRedo]);
+        CHECK(![[context updatedObjects] containsObject:note]);
+        CHECK(![context hasChanges]);
+        /* redo applies the changes again */
+        [context redo];
+        CHECK([[note valueForKey:@"text"] isEqual:@"c"]);
         CHECK([[context updatedObjects] containsObject:note]);
+        [context undo];
+        CHECK([[note valueForKey:@"text"] isEqual:@"a"]);
+        [undoManager removeAllActions];
 
         /* a value that was nil comes back as nil, and a set to nil is undone */
         [undoManager beginUndoGrouping];
         [note setValue:nil forKey:@"text"];
         [undoManager endUndoGrouping];
         CHECK([context save:NULL]);
+        [undoManager removeAllActions];
         [undoManager beginUndoGrouping];
         [note setValue:@"d" forKey:@"text"];
         [undoManager endUndoGrouping];
@@ -105,31 +114,24 @@ int main(void) {
         [undoManager endUndoGrouping];
         [context undo];
         CHECK([note valueForKey:@"scratch"] == nil);
+        [undoManager removeAllActions];
 
-        /* GUESS: inserting an object records nothing */
-        [context rollback];
-        [undoManager beginUndoGrouping];
-        NSManagedObject *fresh = [NSEntityDescription insertNewObjectForEntityForName:@"Note" inManagedObjectContext:context];
-        [undoManager endUndoGrouping];
-        (void)fresh;
-        CHECK(![undoManager canUndo]);
-        [context rollback];
-
-        /* GUESS: a save ends the context's history and leaves the actions of other targets */
-        Marker *marker = [[Marker alloc] init];
+        /* a save does not end the history: the change that was saved is undone, and the object is updated again */
         [undoManager beginUndoGrouping];
         [note setValue:@"f" forKey:@"text"];
-        [undoManager registerUndoWithTarget:marker selector:@selector(run:) object:nil];
         [undoManager endUndoGrouping];
         CHECK([context save:NULL]);
         CHECK([undoManager canUndo]);
-        [undoManager undo];
-        CHECK(markerRuns == 1);
+        CHECK(![[context updatedObjects] containsObject:note]);
+        [context undo];
+        CHECK([note valueForKey:@"text"] == nil);
+        CHECK([[context updatedObjects] containsObject:note]);
+        [context redo];
         CHECK([[note valueForKey:@"text"] isEqual:@"f"]);
+        CHECK([context save:NULL]);
+        [undoManager removeAllActions];
 
-        /* several groups at a save: none of the context's actions may stay behind (this needs the
-           NSUndoManager removeAllActionsWithTarget: fix of darling-foundation, which skipped every
-           second group) */
+        /* several groups are undone one at a time, the last change first */
         [undoManager beginUndoGrouping];
         [note setValue:@"x" forKey:@"text"];
         [undoManager endUndoGrouping];
@@ -139,10 +141,53 @@ int main(void) {
         [undoManager beginUndoGrouping];
         [note setValue:@"z" forKey:@"text"];
         [undoManager endUndoGrouping];
-        CHECK([context save:NULL]);
-        CHECK(![undoManager canUndo]);
         [context undo];
-        CHECK([[note valueForKey:@"text"] isEqual:@"z"]);
+        CHECK([[note valueForKey:@"text"] isEqual:@"y"] && [[context updatedObjects] containsObject:note]);
+        [context undo];
+        CHECK([[note valueForKey:@"text"] isEqual:@"x"] && [[context updatedObjects] containsObject:note]);
+        [context undo];
+        CHECK([[note valueForKey:@"text"] isEqual:@"f"]);
+        CHECK(![[context updatedObjects] containsObject:note] && ![context hasChanges]);
+        CHECK(![undoManager canUndo]);
+        [undoManager removeAllActions];
+
+        /* a rollback ends the history */
+        [undoManager beginUndoGrouping];
+        [note setValue:@"g" forKey:@"text"];
+        [undoManager endUndoGrouping];
+        CHECK([undoManager canUndo]);
+        [context rollback];
+        CHECK([[note valueForKey:@"text"] isEqual:@"f"]);
+        CHECK(![undoManager canUndo]);
+
+        /* an insertion is recorded and undone: the object is no longer inserted; redo inserts it again */
+        [undoManager beginUndoGrouping];
+        NSManagedObject *fresh = [NSEntityDescription insertNewObjectForEntityForName:@"Note" inManagedObjectContext:context];
+        [fresh setValue:@"fresh" forKey:@"text"];
+        [undoManager endUndoGrouping];
+        CHECK([undoManager canUndo]);
+        CHECK([[context insertedObjects] containsObject:fresh]);
+        [context undo];
+        CHECK(![[context insertedObjects] containsObject:fresh]);
+        CHECK(![context hasChanges]);
+        [context redo];
+        CHECK([[context insertedObjects] containsObject:fresh]);
+        [context rollback];
+        [undoManager removeAllActions];
+
+        /* a deletion is recorded and undone; redo deletes the object again */
+        [undoManager beginUndoGrouping];
+        [context deleteObject:note];
+        [undoManager endUndoGrouping];
+        CHECK([undoManager canUndo]);
+        CHECK([[context deletedObjects] containsObject:note]);
+        [context undo];
+        CHECK(![[context deletedObjects] containsObject:note] && ![note isDeleted]);
+        CHECK(![context hasChanges]);
+        [context redo];
+        CHECK([[context deletedObjects] containsObject:note]);
+        [context rollback];
+        [undoManager removeAllActions];
 
         /* setting the undo manager that is already set keeps the history */
         [undoManager beginUndoGrouping];
@@ -151,21 +196,26 @@ int main(void) {
         context.undoManager = undoManager;
         CHECK([undoManager canUndo]);
         [context undo];
-        CHECK([[note valueForKey:@"text"] isEqual:@"z"]);
+        CHECK([[note valueForKey:@"text"] isEqual:@"f"]);
+        [undoManager removeAllActions];
 
-        /* GUESS: a rollback ends it too */
-        [undoManager beginUndoGrouping];
-        [note setValue:@"g" forKey:@"text"];
-        [undoManager endUndoGrouping];
-        [context rollback];
-        CHECK(![undoManager canUndo]);
-
-        /* a new undo manager gets no actions of the old one */
+        /* a new undo manager gets no actions of the old one, which loses the context's actions */
         [undoManager beginUndoGrouping];
         [note setValue:@"h" forKey:@"text"];
         [undoManager endUndoGrouping];
-        context.undoManager = nil;
+        NSUndoManager *other = [[NSUndoManager alloc] init];
+        [other setGroupsByEvent:NO];
+        context.undoManager = other;
         CHECK(![undoManager canUndo]);
+        CHECK(![other canUndo]);
+        CHECK(context.undoManager == other);
+        [other beginUndoGrouping];
+        [note setValue:@"i" forKey:@"text"];
+        [other endUndoGrouping];
+        CHECK([other canUndo]);
+        [context undo];
+        CHECK([[note valueForKey:@"text"] isEqual:@"h"]);
+        context.undoManager = nil;
         CHECK(context.undoManager == nil);
     }
     if (failures == 0)

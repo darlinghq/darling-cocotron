@@ -178,19 +178,38 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
 // retains its targets (the tree's Foundation does today) would own a context that owns the
 // manager, and one that keeps an unowned reference (the documented contract) would need the
 // context to outlive its actions. This object carries no reference to the context, is owned by it,
-// and is what the context removes its actions by, so no action can outlive it.
+// and is what the context removes its actions by, so no action can outlive it. The objects it
+// acts on lead back to their context.
 @interface DarlingContextUndoTarget : NSObject
 - (void) undoChange: (NSDictionary *) change;
+- (void) undoInsert: (NSManagedObject *) object;
+- (void) redoInsert: (NSManagedObject *) object;
+- (void) undoDelete: (NSManagedObject *) object;
+- (void) redoDelete: (NSManagedObject *) object;
+@end
+
+@interface NSManagedObjectContext (DarlingUndo)
+- (void) _undoInsertOfObject: (NSManagedObject *) object;
+- (void) _redoInsertOfObject: (NSManagedObject *) object;
+- (void) _undoDeleteOfObject: (NSManagedObject *) object;
+- (void) _redoDeleteOfObject: (NSManagedObject *) object;
+- (void) _objectDidChangeThroughUndo: (NSManagedObject *) object;
 @end
 
 @implementation DarlingContextUndoTarget
 
 - (void) undoChange: (NSDictionary *) change {
+    id object = [change objectForKey: @"object"];
     id value = [change objectForKey: @"value"];
 
-    [[change objectForKey: @"object"] setValue: (value == [NSNull null] ? nil : value)
-                                        forKey: [change objectForKey: @"key"]];
+    [object setValue: (value == [NSNull null] ? nil : value) forKey: [change objectForKey: @"key"]];
+    [[object managedObjectContext] _objectDidChangeThroughUndo: object];
 }
+
+- (void) undoInsert: (NSManagedObject *) object { [[object managedObjectContext] _undoInsertOfObject: object]; }
+- (void) redoInsert: (NSManagedObject *) object { [[object managedObjectContext] _redoInsertOfObject: object]; }
+- (void) undoDelete: (NSManagedObject *) object { [[object managedObjectContext] _undoDeleteOfObject: object]; }
+- (void) redoDelete: (NSManagedObject *) object { [[object managedObjectContext] _redoDeleteOfObject: object]; }
 
 @end
 
@@ -225,6 +244,11 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     _pendingRefreshed = [NSMutableSet new];
     _lock = [[NSLock alloc] init];
     _storeCoordinator = nil;
+    // QUIRK: a new context has an undo manager. Evidence: black-box observation on macOS 10.14.4
+    // (tier 2): undoManager is not nil and groups by event; macOS 26.7.3 answers nil. The older
+    // behaviour is kept (widest). Test: tests/coredata-context-undo.m, "default undo manager".
+    _undoManager = [[NSUndoManager alloc] init];
+    _undoTarget = [[DarlingContextUndoTarget alloc] init];
     _registeredObjects = [[NSMutableSet alloc] init];
     _insertedObjects = [[NSMutableSet alloc] init];
     _updatedObjects = [[NSMutableSet alloc] init];
@@ -350,16 +374,15 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
 }
 
 // Documented: objects updated in the other context are refreshed and newly inserted ones are
-// faulted in. The header makes the caller responsible for the thread safety of the receiver, so
-// this runs on the calling thread. The sets of the notification may hold the managed objects of
-// the saving context or, as the automatic path passes them on, just their object IDs.
-// GUESS (a departure from the page and header, which say deleteObject: is invoked on the deleted
-// ones): deleted objects are removed from the context directly, as the merge for
-// automaticallyMergesChangesFromParent already did; deleteObject: raises for any delete rule
-// but nullify on this tree, and the object is already gone from the store.
-// GUESS: the receiver's own changes to an updated object stay on top of the refreshed values; a
-// deleted object that the receiver has itself changed is kept (the receiver's update wins); a
-// notification without user info changes nothing.
+// faulted in; deleted ones are deleted. The header makes the caller responsible for the thread
+// safety of the receiver, so this runs on the calling thread. The notification is posted before the
+// call returns. The sets of the notification hold the managed objects of the saving context; this
+// also takes their object IDs, as the automatic merge passes them on (macOS refuses them).
+// Observed on macOS 10.14.4 and 26.7.3 (probe mrg1.m of batch11b): an object the saving context
+// deleted becomes a pending delete of the receiver (in deletedObjects, still registered, removed
+// by the next save) also when the receiver has changed it; an object the receiver deleted stays
+// deleted and takes the values of an update; the receiver's own changes to an updated object stay
+// on top of the refreshed values; a notification without user info changes nothing.
 - (void) mergeChangesFromContextDidSaveNotification: (NSNotification *) notification {
     NSMutableDictionary *identifiers = [NSMutableDictionary dictionary];
     for (NSString *key in @[NSInsertedObjectsKey, NSUpdatedObjectsKey, NSDeletedObjectsKey]) {
@@ -371,7 +394,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     @try {
         for (NSManagedObjectID *objectID in [identifiers objectForKey:NSUpdatedObjectsKey]) {
             NSManagedObject *object = [self objectRegisteredForID:objectID];
-            if (object && ![_deletedObjects containsObject:object]) {
+            if (object) {
                 [object _mergeCommittedValues];
                 [_pendingRefreshed addObject:object];
             }
@@ -382,14 +405,8 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
         }
         for (NSManagedObjectID *objectID in [identifiers objectForKey:NSDeletedObjectsKey]) {
             NSManagedObject *object = [self objectRegisteredForID:objectID];
-            if (object && ![_updatedObjects containsObject:object]) {
-                [_pendingDeleted addObject:object];
-                [object _setInserted:NO updated:NO deleted:YES];
-                for (NSString *key in [[[object entity] propertiesByName] allKeys])
-                    [object removeObserver:self forKeyPath:key];
-                [_registeredObjects removeObject:object];
-                NSMapRemove(_objectIdToObject, [object objectID]);
-            }
+            if (object && ![_deletedObjects containsObject:object])
+                [self _markDeleted:object];
         }
     } @finally { _mergingChanges = NO; }
     [self processPendingChanges];
@@ -533,8 +550,6 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     [_undoManager removeAllActionsWithTarget: _undoTarget];
     [_undoManager release];
     _undoManager = value;
-    if (_undoManager != nil && _undoTarget == nil)
-        _undoTarget = [[DarlingContextUndoTarget alloc] init];
 }
 
 - (void) setRetainsRegisteredObjects: (BOOL) value {
@@ -609,14 +624,13 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     return [_lock tryLock];
 }
 
-// Documented: sends undo to the context's undo manager. The context records the changes of
-// attribute values there (see observeValueForKeyPath:ofObject:change:context:); an undo then sets
-// the previous value again, which the redo records in turn. GUESS: only attribute value changes
-// are recorded, so inserting and deleting objects and changing relationships cannot be undone
-// yet. GUESS: a successful save, a rollback and a new undo manager end the context's undo
-// history (the page speaks of "uncommitted" changes), without touching actions of other targets
-// in a shared undo manager. GUESS: an object whose changes were all undone stays among the
-// updated objects.
+// Documented: sends undo to the context's undo manager. The context records there the changes of
+// attribute values (see observeValueForKeyPath:ofObject:change:context:), insertions and deletions
+// of objects; an undo sets the previous value again, drops an insertion or restores a deleted
+// object, and records the inverse, which redo applies. Observed on macOS 10.14.4 and 26.7.3 (probe
+// und1.m of batch11b): a save does not end the history, a rollback does; undoing every change of
+// an object leaves it not updated (and the context without changes); the history is the manager's
+// to keep, so a manager shared with other targets keeps their actions.
 - (void) undo {
     if (_contextQueue && ![self _isOnContextQueue]) {
         [self performBlockAndWait: ^{ [self undo]; }];
@@ -626,7 +640,11 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
 }
 
 - (void) redo {
-    NSUnimplementedMethod();
+    if (_contextQueue && ![self _isOnContextQueue]) {
+        [self performBlockAndWait: ^{ [self redo]; }];
+        return;
+    }
+    [_undoManager redo];
 }
 
 // The documentation says every managed object of the context is forgotten and the context
@@ -1052,6 +1070,7 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     _hasChanges = YES;
     [_pendingInserted addObject:object];
     [self _registerObject:object];
+    [_undoManager registerUndoWithTarget: _undoTarget selector: @selector(undoInsert:) object: object];
     [self _requestProcessPendingChanges];
 }
 
@@ -1064,6 +1083,66 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
         [object setValue:([relationship isToMany] ? (id)[NSSet set] : nil) forKey:[relationship name]];
     }
     [self _markDeleted:object];
+    [_undoManager registerUndoWithTarget: _undoTarget selector: @selector(undoDelete:) object: object];
+}
+
+// The undo and redo of insertions and deletions (see -undo). Undoing an insertion forgets the
+// object as a rollback does for it, redoing it inserts the object again; undoing a deletion makes
+// the object a registered object again, redoing it deletes it. Each records the inverse with the
+// undo manager, which files it as the redo or the undo according to the manager's state. An
+// object that the context has meanwhile saved or lost is left alone.
+- (void) _undoInsertOfObject: (NSManagedObject *) object {
+    if (![_insertedObjects containsObject: object])
+        return;
+    for (NSString *key in [[[object entity] propertiesByName] allKeys])
+        [object removeObserver: self forKeyPath: key];
+    [_registeredObjects removeObject: object];
+    NSMapRemove(_objectIdToObject, [object objectID]);
+    [_insertedObjects removeObject: object];
+    [_updatedObjects removeObject: object];
+    [_pendingInserted removeObject: object];
+    [_pendingUpdated removeObject: object];
+    [object _setInserted: NO updated: NO deleted: NO];
+    [self _recomputeHasChanges];
+    [_undoManager registerUndoWithTarget: _undoTarget selector: @selector(redoInsert:) object: object];
+    [self _requestProcessPendingChanges];
+}
+
+- (void) _redoInsertOfObject: (NSManagedObject *) object {
+    if ([_registeredObjects containsObject: object])
+        return;
+    [self insertObject: object];
+}
+
+- (void) _undoDeleteOfObject: (NSManagedObject *) object {
+    if (![_deletedObjects containsObject: object])
+        return;
+    [_deletedObjects removeObject: object];
+    [_pendingDeleted removeObject: object];
+    [object _setInserted: [_insertedObjects containsObject: object] updated: NO deleted: NO];
+    [self _recomputeHasChanges];
+    [_undoManager registerUndoWithTarget: _undoTarget selector: @selector(redoDelete:) object: object];
+    [self _requestProcessPendingChanges];
+}
+
+- (void) _redoDeleteOfObject: (NSManagedObject *) object {
+    if ([_registeredObjects containsObject: object] && ![_deletedObjects containsObject: object])
+        [self deleteObject: object];
+}
+
+// An object whose values were all set back to the committed ones by an undo is not updated any more.
+- (void) _objectDidChangeThroughUndo: (NSManagedObject *) object {
+    [object _dropChangedValuesEqualToCommitted];
+    if ([_insertedObjects containsObject: object] || [_deletedObjects containsObject: object] || [[object changedValues] count] > 0)
+        return;
+    [_updatedObjects removeObject: object];
+    [_pendingUpdated removeObject: object];
+    [object _setInserted: NO updated: NO deleted: NO];
+    [self _recomputeHasChanges];
+}
+
+- (void) _recomputeHasChanges {
+    _hasChanges = [_insertedObjects count] > 0 || [_updatedObjects count] > 0 || [_deletedObjects count] > 0;
 }
 
 - (void) _markDeleted: (NSManagedObject *) object {
@@ -1097,21 +1176,37 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
 // only place such a store keeps its values, so the staleness interval has nothing to decide).
 // With flag NO the object's own changes, including those to transient properties, are discarded;
 // with YES they are kept on top of the reloaded values and transient properties are untouched.
-// GUESS: an object that is not registered with this context, or that is inserted and not yet
-// saved (it has no stored values), is left alone. GUESS: with flag NO a pending delete of the
-// object is dropped too (it is one of the changes). GUESS: only the object's own values are
-// restored; changes the object caused in the inverse of a relationship stay. GUESS: the object is
-// reported in the change notification's refreshed objects in both cases. Not done: the object does
-// not become a fault again (the tree does not track that state reliably).
+// Observed on macOS 10.14.4 and 26.7.3 (probes ref1.m and ref2.m of batch11b): the object is
+// reported as refreshed in the change notification in both cases; NO also drops a pending delete;
+// an object that is inserted and not yet saved is left alone with YES and with NO loses its values
+// and its insertion (it stays registered and is not stored by the next save); hasChanges is not
+// recomputed by a refresh (it stays YES until a save or rollback); an object that is not
+// registered with this context, or nil, is ignored (macOS 26.7.3 raises for another context's
+// object, 10.14.4 does not: the widest behaviour is kept). Not done: the object does not become a
+// fault again (the tree does not track that state reliably).
 - (void) refreshObject: (NSManagedObject *) object mergeChanges: (BOOL) flag {
-    if ([self objectRegisteredForID: [object objectID]] != object || [_insertedObjects containsObject: object])
+    if (object == nil || [self objectRegisteredForID: [object objectID]] != object)
+        return;
+
+    BOOL inserted = [_insertedObjects containsObject: object];
+
+    if (inserted && flag)
         return;
 
     BOOL wasMerging = _mergingChanges;
 
     _mergingChanges = YES;
     @try {
-        [object _reloadCommittedValuesDiscardingChanges: !flag];
+        if (inserted) {
+            // QUIRK: refreshing an unsaved inserted object without merging discards its values and
+            // its insertion. Evidence: macOS 10.14.4 and 26.7.3 (tier 2), probe ref2.m. Test:
+            // tests/coredata-context-refresh-object.m, "inserted object (QUIRK)".
+            [object _discardInsertedValues];
+            [_insertedObjects removeObject: object];
+            [_pendingInserted removeObject: object];
+        } else {
+            [object _reloadCommittedValuesDiscardingChanges: !flag];
+        }
     } @finally {
         _mergingChanges = wasMerging;
     }
@@ -1120,7 +1215,6 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
         [_deletedObjects removeObject: object];
         [_pendingUpdated removeObject: object];
         [_pendingDeleted removeObject: object];
-        _hasChanges = [_insertedObjects count] || [_updatedObjects count] || [_deletedObjects count];
     }
     [_pendingRefreshed addObject: object];
     [self _requestProcessPendingChanges];
@@ -1309,7 +1403,6 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     [_updatedObjects removeAllObjects];
     [_deletedObjects removeAllObjects];
     _hasChanges = NO;
-    [_undoManager removeAllActionsWithTarget: _undoTarget];
     [[NSNotificationCenter defaultCenter] postNotificationName: NSManagedObjectContextDidSaveNotification
                                                         object: self
                                                       userInfo: _DarlingChangeNotificationInfo(inserted, updated, deleted, nil)];
@@ -1368,7 +1461,6 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
             }
             [_insertedObjects removeAllObjects]; [_updatedObjects removeAllObjects]; [_deletedObjects removeAllObjects];
             _hasChanges = NO;
-            [_undoManager removeAllActionsWithTarget: _undoTarget];
         }
     } @finally { [_storeCoordinator unlock]; }
     if (!success) return NO;
