@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     BOOL _isSelected;
     NSString *_label;
     NSMenu *_menu;
+    BOOL _showsMenuIndicator;
     NSString *_toolTip;
     CGFloat _width;
     NSImageScaling _imageScaling;
@@ -40,6 +41,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) isSelected;
 - (NSString *) label;
 - (NSMenu *) menu;
+- (BOOL) showsMenuIndicator;
 - (NSString *) toolTip;
 - (CGFloat) width;
 - (NSImageScaling) imageScaling;
@@ -50,6 +52,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) setSelected: (BOOL) flag;
 - (void) setLabel: (NSString *) label;
 - (void) setMenu: (NSMenu *) menu;
+- (void) setShowsMenuIndicator: (BOOL) flag;
 - (void) setToolTip: (NSString *) toolTip;
 - (void) setWidth: (CGFloat) width;
 - (void) setImageScaling: (NSImageScaling) value;
