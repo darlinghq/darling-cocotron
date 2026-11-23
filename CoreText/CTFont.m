@@ -55,6 +55,17 @@ static CTFontRef fontWithCascade(CTFontRef font, id cascade) {
     return font;
 }
 
+// The vertical-orientation trait a copy was asked for by CTFontCreateCopyWithSymbolicTraits. A face
+// does not carry it (the traits come from the font tables), so it is kept with the font object.
+static char fontVerticalKey;
+
+static CTFontRef fontWithVertical(CTFontRef font, BOOL vertical) {
+    if (font != NULL && vertical)
+        objc_setAssociatedObject(ktFont(font), &fontVerticalKey, (id) kCFBooleanTrue,
+                                 OBJC_ASSOCIATION_RETAIN);
+    return font;
+}
+
 static id cascadeOfAttributes(CTFontDescriptorRef attributes) {
     if (attributes == NULL)
         return nil;
@@ -302,8 +313,8 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
 // family a copy with the italic, bold, expanded, condensed or color-glyph trait set differently from the
 // original's is looked up among the faces and gives NULL when there is none (Helvetica has no expanded,
 // condensed or color-glyph face); setting the monospace, UI-optimized, composite or class-mask bits leaves the
-// font as it is, so they are not compared. Not reproduced: the vertical trait, which the original reports in the
-// copy. Test: coretext-font-copy-with-traits-and-family.
+// font as it is, so they are not compared. The vertical trait is not compared either, but is carried
+// into the copy (see CTFontCreateCopyWithSymbolicTraits). Test: coretext-font-copy-with-traits-and-family.
 static const CTFontSymbolicTraits sameFamilyStyleTraits =
         kCTFontTraitItalic | kCTFontTraitBold | kCTFontTraitExpanded | kCTFontTraitCondensed |
         kCTFontTraitColorGlyphs;
@@ -430,6 +441,16 @@ CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
     CFStringRef family = CTFontCopyFamilyName(font);
     CTFontRef result = copyFontInFamily(font, size, matrix, YES, family, wanted,
                                         sameFamilyStyleTraits, targetWeight);
+    // QUIRK: the vertical-orientation bit is not compared when looking for a face, but a request
+    // that sets it under the mask is carried into the copy's symbolic traits. Not documented.
+    // Evidence: black-box observation of CTFontCreateCopyWithSymbolicTraits on macOS 26.1 (arm64):
+    // Helvetica with value=mask=0x800 gives Helvetica with traits 0x80000800 (probe
+    // 639.C.set-vertical, 5 originals); the other macOS run recorded in the comment above
+    // sameFamilyStyleTraits is read as agreeing. GUESS: a request that clears the bit takes it out of
+    // a copy that has it. The probe only cleared it on faces that never had it (every
+    // 639.C.clear-vertical row reads 80000000 before and after), so removal was not observed.
+    // Test: coretext-font-copy-with-traits-and-family.
+    fontWithVertical(result, (wanted & kCTFontTraitVertical) != 0);
     if (family != NULL)
         CFRelease(family);
     return result;
@@ -668,6 +689,8 @@ static CTFontSymbolicTraits fontTraits(CTFontRef font, CGFloat *weight,
         *slant = -1;
     if (italicAngle != 0)
         traits |= kCTFontTraitItalic;
+    if (objc_getAssociatedObject(ktFont(font), &fontVerticalKey) != nil)
+        traits |= kCTFontTraitVertical;
 
     return traits;
 }

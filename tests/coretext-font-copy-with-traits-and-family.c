@@ -266,6 +266,24 @@ int main(void)
 				"QUIRK: a negative size keeps the original size");
 		release(copy);
 
+		// QUIRK (macOS 26.1, probe 639.C.set-vertical): the vertical bit is not looked for but is
+		// carried into the copy's traits. Clearing it on a face that has it was not probed (every
+		// 639.C.clear-vertical row clears it on a face without it); GUESS: it is removed.
+		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, kCTFontTraitVertical, kCTFontTraitVertical);
+		expect(copy != NULL && sameFamily(plain, copy)
+				&& (CTFontGetSymbolicTraits(copy) & kCTFontTraitVertical),
+				"QUIRK: setting the vertical trait reaches the copy's traits");
+		CTFontRef again = copy != NULL
+				? CTFontCreateCopyWithSymbolicTraits(copy, 0, NULL, 0, kCTFontTraitVertical) : NULL;
+		expect(again != NULL && !(CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"GUESS: clearing the vertical trait removes it from a copy that has it");
+		release(again);
+		release(copy);
+		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, 0, kCTFontTraitVertical);
+		expect(copy != NULL && !(CTFontGetSymbolicTraits(copy) & kCTFontTraitVertical),
+				"observed (639.C.clear-vertical): clearing the vertical trait of a face without it leaves it without");
+		release(copy);
+
 		// GUESS (value and mask are not defined by the documentation): the mask selects the
 		// bits of the value that replace the original's.
 		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, kCTFontTraitBold | kCTFontTraitItalic,
