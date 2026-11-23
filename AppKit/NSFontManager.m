@@ -221,31 +221,25 @@ static Class _fontPanelFactory;
 
 - (NSArray *) availableFontNamesWithTraits: (NSFontTraitMask) traits {
     NSMutableArray *result = [NSMutableArray array];
-    NSFontTraitMask styleMask = NSItalicFontMask | NSBoldFontMask;
-    // documented: 0 means neither italic nor bold, the same as
-    // NSUnitalicFontMask | NSUnboldFontMask, so the unitalic and unbold bits
-    // add nothing to the italic and bold bits
-    NSFontTraitMask style = traits & styleMask;
-    // GUESS: the documentation says "exactly" but also that 0 returns every
-    // font that is neither italic nor bold, which includes narrow or
-    // expanded ones. So italic and bold must match exactly and any other
-    // requested trait must be present, while traits that were not requested
-    // are not checked (rejected alternative: every trait bit must match
-    // exactly, which would leave the narrow and expanded faces out of the
-    // answer for 0). The typeface table records only italic, bold, narrow
-    // and expanded, so a request for any other trait finds nothing.
-    NSFontTraitMask others = traits & ~(styleMask | NSUnitalicFontMask | NSUnboldFontMask);
-    NSArray *families = [NSFontFamily allFontFamilyNames];
 
-    for (NSString *familyName in families) {
+    // QUIRK: the answer is every face whose traits (as -availableMembersOfFontFamily: lists them)
+    // contain all the bits of the mask, so NSItalicFontMask also lists bold italic faces, and a
+    // mask of 0 (or one with NSUnitalicFontMask / NSUnboldFontMask, which no face reports) lists
+    // nothing. The documentation says "exactly" the traits and says 0 means neither italic nor
+    // bold; macOS does not do that. Evidence: black-box observation on macOS 10.14.4 (x86_64,
+    // i386) and 26.7.3 (tier 2): masks 0, unitalic, unbold, unitalic|unbold, bold|unitalic give
+    // an empty array; italic, bold, italic|bold, expanded, condensed and fixed pitch equal the
+    // faces of the member table with those bits set. The order is unspecified (not sorted).
+    // Test: appkit-nsfontmanager-font-names-with-traits (quirk_ lines).
+    if (traits == 0)
+        return result;
+
+    for (NSString *familyName in [NSFontFamily allFontFamilyNames]) {
         NSFontFamily *family = [NSFontFamily fontFamilyWithName: familyName];
 
-        for (NSFontTypeface *typeface in [family typefaces]) {
-            NSFontTraitMask have = [typeface traits];
-
-            if ((have & styleMask) == style && (have & others) == others)
+        for (NSFontTypeface *typeface in [family typefaces])
+            if (([typeface traits] & traits) == traits)
                 [result addObject: [typeface name]];
-        }
     }
 
     return result;
