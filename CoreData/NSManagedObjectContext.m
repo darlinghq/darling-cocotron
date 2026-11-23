@@ -309,41 +309,69 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     if (_parentContext != nil) {
         if (source != _parentContext) return;
     } else if ([source parentContext] != nil || [source persistentStoreCoordinator] != _storeCoordinator) return;
+    if (_contextQueue) {
+        // The object IDs are read here, on the posting thread, as before; the queue gets IDs only.
+        NSMutableDictionary *info = [NSMutableDictionary dictionary];
+
+        for (NSString *key in @[NSInsertedObjectsKey, NSUpdatedObjectsKey, NSDeletedObjectsKey]) {
+            NSMutableSet *ids = [NSMutableSet set];
+
+            for (NSManagedObject *object in [[notification userInfo] objectForKey: key])
+                [ids addObject: [object objectID]];
+            [info setObject: ids forKey: key];
+        }
+
+        NSNotification *snapshot = [NSNotification notificationWithName: [notification name] object: source userInfo: info];
+
+        [self performBlock: ^{ [self mergeChangesFromContextDidSaveNotification: snapshot]; }];
+    } else
+        [self mergeChangesFromContextDidSaveNotification: notification];
+}
+
+// Documented: objects updated in the other context are refreshed and newly inserted ones are
+// faulted in. The header makes the caller responsible for the thread safety of the receiver, so
+// this runs on the calling thread. The sets of the notification may hold the managed objects of
+// the saving context or, as the automatic path passes them on, just their object IDs.
+// GUESS (a departure from the page and header, which say deleteObject: is invoked on the deleted
+// ones): deleted objects are removed from the context directly, as the merge for
+// automaticallyMergesChangesFromParent already did; deleteObject: raises for any delete rule
+// but nullify on this tree, and the object is already gone from the store.
+// GUESS: the receiver's own changes to an updated object stay on top of the refreshed values; a
+// deleted object that the receiver has itself changed is kept (the receiver's update wins); a
+// notification without user info changes nothing.
+- (void) mergeChangesFromContextDidSaveNotification: (NSNotification *) notification {
     NSMutableDictionary *identifiers = [NSMutableDictionary dictionary];
     for (NSString *key in @[NSInsertedObjectsKey, NSUpdatedObjectsKey, NSDeletedObjectsKey]) {
         NSMutableArray *ids = [NSMutableArray array];
-        for (NSManagedObject *object in [[notification userInfo] objectForKey:key]) [ids addObject:[object objectID]];
+        for (id object in [[notification userInfo] objectForKey:key]) [ids addObject:[object isKindOfClass:[NSManagedObjectID class]] ? object : [object objectID]];
         [identifiers setObject:ids forKey:key];
     }
-    void (^merge)(void) = ^{
-        _mergingChanges = YES;
-        @try {
-            for (NSManagedObjectID *objectID in [identifiers objectForKey:NSUpdatedObjectsKey]) {
-                NSManagedObject *object = [self objectRegisteredForID:objectID];
-                if (object && ![_deletedObjects containsObject:object]) {
-                    [object _mergeCommittedValues];
-                    [_pendingRefreshed addObject:object];
-                }
+    _mergingChanges = YES;
+    @try {
+        for (NSManagedObjectID *objectID in [identifiers objectForKey:NSUpdatedObjectsKey]) {
+            NSManagedObject *object = [self objectRegisteredForID:objectID];
+            if (object && ![_deletedObjects containsObject:object]) {
+                [object _mergeCommittedValues];
+                [_pendingRefreshed addObject:object];
             }
-            for (NSManagedObjectID *objectID in [identifiers objectForKey:NSInsertedObjectsKey]) {
-                NSManagedObject *object = [self objectWithID:objectID];
-                [_pendingInserted addObject:object];
+        }
+        for (NSManagedObjectID *objectID in [identifiers objectForKey:NSInsertedObjectsKey]) {
+            NSManagedObject *object = [self objectWithID:objectID];
+            [_pendingInserted addObject:object];
+        }
+        for (NSManagedObjectID *objectID in [identifiers objectForKey:NSDeletedObjectsKey]) {
+            NSManagedObject *object = [self objectRegisteredForID:objectID];
+            if (object && ![_updatedObjects containsObject:object]) {
+                [_pendingDeleted addObject:object];
+                [object _setInserted:NO updated:NO deleted:YES];
+                for (NSString *key in [[[object entity] propertiesByName] allKeys])
+                    [object removeObserver:self forKeyPath:key];
+                [_registeredObjects removeObject:object];
+                NSMapRemove(_objectIdToObject, [object objectID]);
             }
-            for (NSManagedObjectID *objectID in [identifiers objectForKey:NSDeletedObjectsKey]) {
-                NSManagedObject *object = [self objectRegisteredForID:objectID];
-                if (object && ![_updatedObjects containsObject:object]) {
-                    [_pendingDeleted addObject:object];
-                    [object _setInserted:NO updated:NO deleted:YES];
-                    for (NSString *key in [[[object entity] propertiesByName] allKeys])
-                        [object removeObserver:self forKeyPath:key];
-                    [_registeredObjects removeObject:object];
-                    NSMapRemove(_objectIdToObject, [object objectID]);
-                }
-            }
-        } @finally { _mergingChanges = NO; }
-        [self processPendingChanges];
-    };
-    if (_contextQueue) [self performBlock:merge]; else merge();
+        }
+    } @finally { _mergingChanges = NO; }
+    [self processPendingChanges];
 }
 
 // The coordinator the context works on: its own, or the one of the root of its parent chain.
@@ -1239,12 +1267,6 @@ static DarlingPredicateResult _DarlingPredicateMatches(NSPredicate *predicate, N
     if (!success) return NO;
     [[NSNotificationCenter defaultCenter] postNotificationName:NSManagedObjectContextDidSaveNotification object:self userInfo:changes];
     return YES;
-}
-
-- (void) mergeChangesFromContextDidSaveNotification:
-        (NSNotification *) notification
-{
-    NSUnimplementedMethod();
 }
 
 - (BOOL) commitEditing {
