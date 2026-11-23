@@ -601,44 +601,51 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         return nil;
     }
     FcDefaultSubstitute(pattern);
+    // The best match can be a color bitmap font (some emoji fonts cover
+    // symbols such as U+2699), which this renderer cannot draw: take the first
+    // outline font, in fontconfig's order, that has every code point.
     FcResult result;
-    FcPattern *match = FcFontMatch(config, pattern, &result);
+    FcFontSet *candidates = FcFontSort(config, pattern, FcFalse, NULL, &result);
     FcPatternDestroy(pattern);
-    if (match == NULL)
+    if (candidates == NULL)
         return nil;
 
-    FcChar8 *filename = NULL;
-    int faceIndex = 0;
-    FcResult indexResult = FcPatternGetInteger(match, FC_INDEX, 0, &faceIndex);
-    if (FcPatternGetString(match, FC_FILE, 0, &filename) != FcResultMatch ||
-        (indexResult != FcResultMatch && indexResult != FcResultNoMatch) ||
-        faceIndex < 0) {
-        FcPatternDestroy(match);
-        return nil;
-    }
-    // FC_FILE is a host path and FreeType is a host library: no guest-to-host
-    // path mapping applies here (that is for paths guest code supplies).
     FT_Face face = NULL;
-    FT_Error error = FT_New_Face(O2FontSharedFreeTypeLibrary(),
-                                 (const char *)filename, faceIndex, &face);
-    NSString *sourcePath = [[NSString alloc] initWithUTF8String: (const char *)filename];
-    FcPatternDestroy(match);
-    if (error != 0) {
-        [sourcePath release];
-        return nil;
-    }
-    if (FT_Select_Charmap(face, FT_ENCODING_UNICODE) != 0) {
-        FT_Done_Face(face);
-        [sourcePath release];
-        return nil;
-    }
-    for (size_t index = 0; index < count; ++index) {
-        if (FT_Get_Char_Index(face, codePoints[index]) == 0) {
+    NSString *sourcePath = nil;
+    int faceIndex = 0;
+    for (int candidate = 0; candidate < candidates->nfont && face == NULL; ++candidate) {
+        FcPattern *font = candidates->fonts[candidate];
+        FcBool outline = FcTrue, color = FcFalse;
+        FcPatternGetBool(font, FC_OUTLINE, 0, &outline);
+        FcPatternGetBool(font, FC_COLOR, 0, &color);
+        if (!outline || color)
+            continue;
+        FcChar8 *filename = NULL;
+        FcResult indexResult = FcPatternGetInteger(font, FC_INDEX, 0, &faceIndex);
+        if (FcPatternGetString(font, FC_FILE, 0, &filename) != FcResultMatch ||
+            (indexResult != FcResultMatch && indexResult != FcResultNoMatch) ||
+            faceIndex < 0)
+            continue;
+        // FC_FILE is a host path and FreeType is a host library: no guest-to-host
+        // path mapping applies here (that is for paths guest code supplies).
+        if (FT_New_Face(O2FontSharedFreeTypeLibrary(), (const char *)filename,
+                        faceIndex, &face) != 0) {
+            face = NULL;
+            continue;
+        }
+        BOOL covers = FT_Select_Charmap(face, FT_ENCODING_UNICODE) == 0;
+        for (size_t index = 0; covers && index < count; ++index)
+            covers = FT_Get_Char_Index(face, codePoints[index]) != 0;
+        if (covers) {
+            sourcePath = [[NSString alloc] initWithUTF8String: (const char *)filename];
+        } else {
             FT_Done_Face(face);
-            [sourcePath release];
-            return nil;
+            face = NULL;
         }
     }
+    FcFontSetDestroy(candidates);
+    if (face == NULL)
+        return nil;
     O2Font_freetype *font = [[O2Font_freetype alloc] initWithFace: face];
     font->_sourcePath = sourcePath;
     font->_sourceFaceIndex = faceIndex;
