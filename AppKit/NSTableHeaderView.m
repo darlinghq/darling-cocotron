@@ -120,7 +120,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             return i;
     }
 
-    return NSNotFound;
+    return -1;
 }
 
 // The column the table is sorted by: the one whose sort descriptor prototype has the key of the table's first
@@ -211,7 +211,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                  fromView: nil];
     NSInteger clickedColumn = [self columnAtPoint: location];
 
-    if (clickedColumn != NSNotFound &&
+    if (clickedColumn >= 0 &&
         [[_tableView delegate] respondsToSelector: @selector
                                (tableView:mouseDownInHeaderOfTableColumn:)])
         [[_tableView delegate] tableView: _tableView
@@ -288,7 +288,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         }
     }
 
-    if (clickedColumn == NSNotFound)
+    if (clickedColumn < 0)
         return;
 
     // Dragging a header cell moves its column when the table allows reordering
@@ -315,7 +315,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             if (mayMove) {
                 NSInteger column = [self columnAtPoint: point];
 
-                if (column != NSNotFound)
+                if (column >= 0)
                     target = column;
             }
         } while ([theEvent type] != NSLeftMouseUp);

@@ -183,6 +183,10 @@ static void test_header(void)
     CHECK(NSWidth([header headerRectOfColumn:2]) == 83);
     CHECK([header columnAtPoint:NSMakePoint(120, 5)] == 2);
     CHECK([header columnAtPoint:NSMakePoint(10, 5)] == 0);
+    // Documented: -1 when no column header lies under the point
+    // (https://developer.apple.com/documentation/appkit/nstableheaderview/column(at:))
+    CHECK([header columnAtPoint:NSMakePoint(1000, 5)] == -1);
+    CHECK([header columnAtPoint:NSMakePoint(-5, 5)] == -1);
     CHECK([[header tableView] numberOfColumns] == 3);
 }
 
