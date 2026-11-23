@@ -19,6 +19,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAnimation.h>
 #import <AppKit/NSRaise.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSDictionary.h>
+#import <Foundation/NSNotification.h>
 #import <Foundation/NSRunLoop.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSTimer.h>
@@ -26,6 +28,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 NSString *const NSAnimationProgressMarkNotification =
         @"NSAnimationProgressMarkNotification";
+
+// GUESS: the public header declares the key but gives no value; the
+// documentation names it NSAnimationProgressMark, so the string is that name
+NSString *NSAnimationProgressMark = @"NSAnimationProgressMark";
 
 NSString *NSAnimationTriggerOrderIn = @"NSAnimationTriggerOrderIn";
 NSString *NSAnimationTriggerOrderOut = @"NSAnimationTriggerOrderOut";
@@ -112,7 +118,9 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
 }
 
 - (void) setProgressMarks: (NSArray *) marks {
-    NSMutableArray *mcopy = [marks mutableCopy];
+    // nil clears every mark; the array must stay non-nil for -addProgressMark:
+    NSMutableArray *mcopy =
+            marks != nil ? [marks mutableCopy] : [NSMutableArray new];
     [_progressMarks release];
     _progressMarks = mcopy;
 }
@@ -124,11 +132,18 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
         mark = 1;
 
     [_progressMarks addObject: [NSNumber numberWithFloat: mark]];
-    NSUnimplementedMethod();
 }
 
 - (void) removeProgressMark: (NSAnimationProgress) mark {
-    NSUnimplementedMethod();
+    // GUESS: the argument is pinned like -addProgressMark: pins it, so
+    // removing -3 removes the mark that adding -3 stored (at 0.0)
+    mark = MAX(0.0f, MIN(1.0f, mark));
+    // GUESS: the documentation does not say what happens when the same value
+    // was added twice; every entry with that value is removed (rejected
+    // alternative: remove only the first one added)
+    for (NSInteger i = [_progressMarks count] - 1; i >= 0; i--)
+        if ([[_progressMarks objectAtIndex: i] floatValue] == mark)
+            [_progressMarks removeObjectAtIndex: i];
 }
 
 - (NSAnimationProgress) currentProgress {
@@ -148,7 +163,44 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
 }
 
 - (void) setCurrentProgress: (NSAnimationProgress) progress {
-    _currentProgress = progress;
+    NSAnimationProgress previous = _currentProgress;
+
+    // documented: values outside 0.0 ... 1.0 are pinned
+    _currentProgress = MAX(0.0f, MIN(1.0f, progress));
+
+    // GUESS: the documentation does not say when a mark counts as reached. A
+    // running animation reaches a mark when its progress moves forward from
+    // below the mark to the mark or beyond. A mark is not reached when
+    // progress moves backwards or when the animation is not running, and a
+    // mark at 0.0 is never reached (progress starts there; rejected
+    // alternative: fire marks at 0.0 when the animation starts).
+    if (!_isAnimating || _currentProgress <= previous)
+        return;
+    NSAnimationProgress reached = _currentProgress;
+
+    // GUESS: marks reached in one step are reported in ascending order, and a
+    // value that was added more than once is reported once
+    NSArray *ordered = [_progressMarks sortedArrayUsingSelector: @selector(compare:)];
+    float lastReported = -1;
+    for (NSNumber *entry in ordered) {
+        // a delegate callback may have stopped the animation
+        if (!_isAnimating)
+            break;
+
+        float mark = [entry floatValue];
+        if (mark == lastReported || mark <= previous || mark > reached)
+            continue;
+        lastReported = mark;
+
+        if ([_delegate respondsToSelector: @selector(animation:didReachProgressMark:)])
+            [_delegate animation: self didReachProgressMark: mark];
+
+        [[NSNotificationCenter defaultCenter]
+                postNotificationName: NSAnimationProgressMarkNotification
+                              object: self
+                            userInfo: [NSDictionary dictionaryWithObject: entry
+                                                                  forKey: NSAnimationProgressMark]];
+    }
 }
 
 - (void) clearStartAnimation {
@@ -188,6 +240,10 @@ NSString *NSAnimationRunLoopMode = @"NSAnimationRunLoopMode";
         if ([_delegate respondsToSelector: @selector(animationShouldStart:)])
             if (![_delegate animationShouldStart: self])
                 return;
+
+        // documented: an animation that finished starts again at 0.0
+        if (_currentProgress >= 1.0)
+            _currentProgress = 0;
 
         [self retain];
         _isAnimating = YES;

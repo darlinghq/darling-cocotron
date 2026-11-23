@@ -39,6 +39,9 @@ typedef NS_ENUM(NSUInteger, NSAnimationBlockingMode) {
 typedef float NSAnimationProgress;
 
 APPKIT_EXPORT NSString *const NSAnimationProgressMarkNotification;
+// the key of the single entry in the notification's userInfo: an NSNumber
+// holding the mark that was reached
+APPKIT_EXPORT NSString *NSAnimationProgressMark;
 
 APPKIT_EXPORT NSString *NSAnimationTriggerOrderIn;
 APPKIT_EXPORT NSString *NSAnimationTriggerOrderOut;
