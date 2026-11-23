@@ -330,7 +330,9 @@ static BOOL isGeneratedManagedAccessor(IMP implementation) {
 }
 
 - (NSArray *) subentities {
-    return [_subentities allValues];
+    // the order the entities were given in -setSubentities:, as on macOS; a model decoded from a
+    // file has no recorded order
+    return _subentityOrder ? [[_subentityOrder copy] autorelease] : [_subentities allValues];
 }
 
 - (NSDictionary *) userInfo {
@@ -342,12 +344,12 @@ static BOOL isGeneratedManagedAccessor(IMP implementation) {
         [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
 
     NSString *name = [value copy];
-    // GUESS: a name another sub-entity of the same super-entity already has is refused, as for
-    // properties and model entities ("unique"); the pages do not cover this case.
+    // A name another sub-entity of the same super-entity already has is refused with
+    // NSInternalInconsistencyException (observed on macOS 10.14.4 and 26.7.3).
     NSEntityDescription *sibling = _superentity ? [_superentity->_subentities objectForKey:name] : nil;
     if (sibling && sibling != self) {
         [name release];
-        [NSException raise:NSInvalidArgumentException format:@"Sub-entity names must be unique within an entity."];
+        [NSException raise:NSInternalInconsistencyException format:@"Sub-entity names must be unique within an entity."];
     }
     @try {
         [_model _renameEntity:self from:_name to:name];
@@ -405,37 +407,45 @@ static BOOL isGeneratedManagedAccessor(IMP implementation) {
 }
 
 - (void) setSubentities: (NSArray *) value {
+    // Observed on macOS 10.14.4 and 26.7.3 (black-box, tier 2; probe 3 of the cristim batch10b
+    // evidence): once the model is in use, a list holding the receiver itself, an entity
+    // without a name, two entities with the same name or an entity that already has another
+    // superentity raises NSInternalInconsistencyException; an element that is not an entity
+    // raises NSInvalidArgumentException; nil changes nothing; an entity of another model is
+    // accepted; the entities replaced by a new list lose their superentity; -subentities keeps the
+    // order of the list. A list that makes an ancestor a sub-entity (a cycle) is accepted by
+    // macOS; it is refused here (NSInternalInconsistencyException) because the hierarchy is
+    // walked upwards by other code, and no valid model has one.
+    // Test: coredata-entity-description-subentities.
     if (_hasBeenInstantiated)
-        [NSException raise:NSInvalidArgumentException format:@"The managed object model is in use."];
+        [NSException raise:NSInternalInconsistencyException format:@"The managed object model is in use."];
+    if (value == nil)
+        return;
 
-    // The hierarchy is built top-down: an entity's superentity can only be set by listing the
-    // entity among its superentity's subentities. GUESS: the documentation does not say which
-    // lists are invalid. Rejected here, before anything changes: a non-entity, an entity without a
-    // name, two entities with one name, the receiver or one of its ancestors (a cycle), an
-    // entity that already belongs to a different superentity (silently moving it was rejected
-    // because the old superentity would still list it), an entity whose model is in use (its
-    // hierarchy is frozen) and an entity of another model (as setEntities: refuses).
     NSMutableDictionary *subentities = [NSMutableDictionary dictionary];
+    NSMutableArray *order = [NSMutableArray array];
     for (NSEntityDescription *entity in value) {
+        if (![entity isKindOfClass:[NSEntityDescription class]])
+            [NSException raise:NSInvalidArgumentException format:@"Sub-entities must be entity descriptions."];
         BOOL isAncestor = NO;
         for (NSEntityDescription *ancestor = self; ancestor; ancestor = ancestor->_superentity)
             if (ancestor == entity)
                 isAncestor = YES;
-        if (![entity isKindOfClass:[NSEntityDescription class]] || ![[entity name] length] ||
-            isAncestor || (entity->_superentity && entity->_superentity != self) ||
-            entity->_hasBeenInstantiated ||
-            (entity->_model && _model && entity->_model != _model) ||
+        if (![[entity name] length] || isAncestor || (entity->_superentity && entity->_superentity != self) ||
             [subentities objectForKey:[entity name]])
-            [NSException raise:NSInvalidArgumentException format:@"Invalid or duplicate sub-entity."];
+            [NSException raise:NSInternalInconsistencyException format:@"Invalid or duplicate sub-entity."];
         [subentities setObject:entity forKey:[entity name]];
+        [order addObject:entity];
     }
     for (NSEntityDescription *entity in [_subentities allValues])
         if ([subentities objectForKey:[entity name]] != entity)
             entity->_superentity = nil;
-    for (NSEntityDescription *entity in [subentities allValues])
+    for (NSEntityDescription *entity in order)
         entity->_superentity = self;
     [_subentities release];
     _subentities = [subentities retain];
+    [_subentityOrder release];
+    _subentityOrder = [order retain];
 }
 
 - (void) setUserInfo: (NSDictionary *) value {
