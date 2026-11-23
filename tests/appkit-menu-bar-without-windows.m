@@ -45,10 +45,21 @@ static BOOL barShown(void) {
     return bar != nil && [bar isVisible];
 }
 
+// The program's own arguments (a mode, a number) are not documents. As on macOS, a word in the process arguments is
+// offered to the application's delegate, and one that nobody takes is reported to the user by the document
+// controller with an alert that would stop the program; a delegate that takes -application:openFiles: ends it.
+@interface ArgumentSink : NSObject <NSApplicationDelegate>
+@end
+@implementation ArgumentSink
+- (void) application: (NSApplication *) application openFiles: (NSArray *) files {
+}
+@end
+
 int main(int argc, char **argv) {
     setvbuf(stdout, NULL, _IONBF, 0);
     @autoreleasepool {
         [NSApplication sharedApplication];
+        [NSApp setDelegate: [[ArgumentSink alloc] init]];
 
         NSString *backend = NSStringFromClass([[NSClassFromString(@"NSDisplay") currentDisplay] class]);
         const char *expected = argc > 1 ? argv[1] : "x11";
