@@ -23,6 +23,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSDatePicker
 
++ (Class) cellClass {
+    return [NSDatePickerCell class];
+}
+
+// A new picker has a bezel and no border (the cell on its own has neither): macOS 26.7.3 and 10.14.4, probe p768b.m
+// and p768c.m of batch 12a in mac-probes/cristim.
+- (instancetype) initWithFrame: (NSRect) frame {
+    if ((self = [super initWithFrame: frame]) != nil)
+        [[self cell] setBezeled: YES];
+    return self;
+}
+
+// The archive carries the flag under the key "presentsCalendarOverlay" (observed on macOS 26.7.3, probe p768.m of
+// batch 12a in mac-probes/cristim); a picker archived by a program that does not know it has no such key.
+- (instancetype) initWithCoder: (NSCoder *) coder {
+    if ((self = [super initWithCoder: coder]) != nil && [coder allowsKeyedCoding] &&
+        [coder containsValueForKey: @"presentsCalendarOverlay"])
+        NS_EXTRA(NSDatePicker, self)->_presentsCalendarOverlay = [coder decodeBoolForKey: @"presentsCalendarOverlay"];
+    return self;
+}
+
 - (BOOL) acceptsFirstResponder {
     return YES;
 }

@@ -10,7 +10,7 @@ checks, on a plain picker and on an application subclass whose setter wraps the 
 round trips, the value and the picker's style, elements, mode and bezel not overwriting one
 another, two pickers not sharing it, and `respondsToSelector:` for both accessors.
 
-Marked GUESS in the test: the value is independent of the picker's style. On master the
+Observed on macOS 26.7.3 (probe `p768.m` of batch 12a): the value is independent of the picker's style, mode, elements and bezel, and an archive carries it under the key `presentsCalendarOverlay`, which the test decodes. On master the
 selectors do not exist: with ARC the test does not compile against master's header, without ARC
 the first call raises an unrecognized-selector exception. The value is only stored: no overlay
 is presented, so nothing about it appearing is tested.
