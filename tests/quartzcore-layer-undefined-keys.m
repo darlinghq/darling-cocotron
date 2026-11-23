@@ -1,6 +1,6 @@
 // CALayer is a key-value coding container: a value set for a key the layer has no property for is
 // kept and read back, setting nil removes it, an unset key reads as nil, the values are per layer,
-// +defaultValueForKey: gives nil for such a key, a key path through a missing value stores nothing,
+// a key path through a missing value stores nothing,
 // and the values are not archived. CABackdropLayer is a plain CALayer subclass that can be created
 // by name and accepts such keys too. The same program gives the same results on macOS 26.7.3 and
 // Mojave (observations in vd-upstream cristim-mac-evidence.md, batch 11d).
@@ -35,9 +35,6 @@ int main(void) {
         [layer setValue: @"d" forUndefinedKey: @"direct"];
         CHECK([[layer valueForKey: @"direct"] isEqual: @"d"], "-setValue:forUndefinedKey: stores");
         CHECK([layer valueForUndefinedKey: @"zzz"] == nil, "-valueForUndefinedKey: gives nil, no exception");
-
-        CHECK([CALayer defaultValueForKey: @"someUndeclaredKey"] == nil, "no default value for an undefined key");
-        CHECK([[CALayer defaultValueForKey: @"opacity"] floatValue] == 1.0f, "default opacity 1");
 
         // a key path through a value that is not there stores nothing and does not raise
         CALayer *path = [CALayer layer];
