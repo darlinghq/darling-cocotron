@@ -224,17 +224,20 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 - (NSComparisonResult) compareKeyViewPosition: (_NSKeyViewPosition *) other {
-
-    // Sort by larger Y (cartesian coordinates)
-    if (NSMaxY(_rect) < NSMaxY(other->_rect))
-        return NSOrderedDescending;
-    else {
-        // Then sort by smaller X
-        if (NSMinX(_rect) < NSMinX(other->_rect))
+    // Higher views first (cartesian coordinates), then the leftmost ones.
+    if (NSMaxY(_rect) != NSMaxY(other->_rect))
+        return NSMaxY(_rect) > NSMaxY(other->_rect) ? NSOrderedAscending : NSOrderedDescending;
+    if (NSMinX(_rect) != NSMinX(other->_rect))
+        return NSMinX(_rect) < NSMinX(other->_rect) ? NSOrderedAscending : NSOrderedDescending;
+    // The same corner (a child flush with the top left of its parent): the
+    // ancestor goes first, so the loop does not skip the child.
+    if (_view != other->_view) {
+        if ([other->_view isDescendantOf: _view])
             return NSOrderedAscending;
-        else
+        if ([_view isDescendantOf: other->_view])
             return NSOrderedDescending;
     }
+    return NSOrderedSame;
 }
 
 @end
