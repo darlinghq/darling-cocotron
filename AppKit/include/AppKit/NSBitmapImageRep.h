@@ -102,7 +102,7 @@ typedef NS_ENUM(NSInteger, NSImageRepLoadStatus) {
 // Legacy ObjC ABI (i386): instance size must stay 0x34, Apple's; the ivars
 // before the extras keep their position in the original order. Add new state
 // to the extra struct, never as an ivar.
-@interface NSBitmapImageRep : NSImageRep {
+@interface NSBitmapImageRep : NSImageRep <NSSecureCoding> {
     int _samplesPerPixel;
     int _bitsPerPixel;
     int _bytesPerRow;

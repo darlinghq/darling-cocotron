@@ -26,6 +26,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSCachedImageRep
 
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
 - (instancetype) initWithWindow: (NSWindow *) window rect: (NSRect) rect {
     _size = rect.size;
     _window = [window retain];

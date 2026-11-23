@@ -76,7 +76,7 @@ enum {
     NSEvenOddWindingRule = NSWindingRuleEvenOdd,
 };
 
-@interface NSBezierPath : NSObject <NSCopying> {
+@interface NSBezierPath : NSObject <NSCopying, NSSecureCoding> {
     NSUInteger _capacityOfElements;
     NSUInteger _numberOfElements;
     NSUInteger _capacityOfPoints;
