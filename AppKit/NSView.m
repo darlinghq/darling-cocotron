@@ -2205,7 +2205,12 @@ static int setWindowDepth;
             NSTrackingArea *area = [NS_EXTRA(NSView, self)->_trackingAreas objectAtIndex: i];
             NSRect rectOfInterest;
 
-            rectOfInterest = NSIntersectionRect([area rect], [self bounds]);
+            // With this option the area covers whatever part of the view is
+            // visible now, and the rect it was created with plays no part.
+            if ([area options] & NSTrackingInVisibleRect)
+                rectOfInterest = [self visibleRect];
+            else
+                rectOfInterest = NSIntersectionRect([area rect], [self bounds]);
 
             if (rectOfInterest.size.width > 0. &&
                 rectOfInterest.size.height > 0.) {

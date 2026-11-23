@@ -607,6 +607,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (void) _alertButton: sender {
+    // Ending the sheet runs the caller's end handler and -sheetDidEnd:'s
+    // balancing release, which can drop the last reference to the alert.
+    // Hold it until this method is done with its window.
+    [[self retain] autorelease];
+
     if ([_window isSheet])
         [NSApp endSheet: _window returnCode: [sender tag]];
     else
