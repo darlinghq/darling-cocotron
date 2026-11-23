@@ -636,6 +636,16 @@ static NSMutableArray *pendingOpenURLs = nil;
     return window;
 }
 
+// Private. AppKit-hosting frameworks (Mac Catalyst) ask the application which
+// window owns a rendering context id. Cocotron has no per-window context ids:
+// -contextID is the process's one CGS connection id, a counter apart from window
+// numbers, so no id can be mapped to a window honestly. Answering with the window
+// of the same number would return a wrong window for a caller's context id, so
+// no window is ever found.
+- (NSWindow *) _findWindowUsingContextID: (uint32_t) contextID {
+    return nil;
+}
+
 - (NSMenu *) mainMenu {
     return _mainMenu;
 }
