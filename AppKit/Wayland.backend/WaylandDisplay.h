@@ -202,6 +202,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct xkb_keymap *_publishedKeymap; // Not retained; compared only.
     uint32_t _publishedGroup;
     WaylandWindow *_keyboardWindow;
+    // The keyboard focus was in a window of the application that was unmapped; its leave event has not arrived.
+    BOOL _keyboardWindowUnmapped;
     BOOL _syncModifierFlags;
     BOOL _classifyHeldKeys;
     // Raw XKB keycode -> identity at press time; -1 denotes a non-modifier.

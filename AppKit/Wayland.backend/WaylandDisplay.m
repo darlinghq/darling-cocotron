@@ -1910,6 +1910,7 @@ static NSUInteger modifierDeviceMask(int code) {
         break;
 
     case WP_KEYBOARD_EV_ENTER: {
+        _keyboardWindowUnmapped = NO;
         [self resetKeyboardModifiers];
         _keyboardWindow = [self windowForSurface: (struct wl_proxy *) args[1].o];
         if (_heldKeyIdentities == nil)
@@ -1926,12 +1927,23 @@ static NSUInteger modifierDeviceMask(int code) {
         break;
     }
 
-    case WP_KEYBOARD_EV_LEAVE:
+    case WP_KEYBOARD_EV_LEAVE: {
+        // The keyboard focus leaves a window that the application itself unmapped (the last window closed,
+        // a menu popup destroyed): that is not the focus moving to another client. The application stays
+        // active, as on macOS, where an application whose last window closes keeps the activation and
+        // the menu bar; a window that is still shown when its focus goes does resign (below).
+        // An application that only owns the menu bar, with a menu popup that the keyboard followed, is
+        // the same case.
+        BOOL ownUnmapping = _keyboardWindowUnmapped ||
+                ([_keyboardWindow isPopup] && ![_keyboardWindow isTooltip] && ![_keyboardWindow isGenericPopup]);
+        _keyboardWindowUnmapped = NO;
         _keyboardWindow = nil;
         [self stopKeyRepeat];
         [self resetKeyboardModifiers];
-        [self applicationFocusMayHaveLeft];
+        if (!ownUnmapping)
+            [self applicationFocusMayHaveLeft];
         break;
+    }
 
     case WP_KEYBOARD_EV_KEY: {
         if (_xkbState == NULL || _keyboardWindow == nil)
@@ -2628,6 +2640,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         _inputEvent = nil;
     }
     if (_keyboardWindow == window) {
+        _keyboardWindowUnmapped = YES;
         _keyboardWindow = nil;
         [self stopKeyRepeat];
         [self resetKeyboardModifiers];

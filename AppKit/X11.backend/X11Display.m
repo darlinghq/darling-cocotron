@@ -2373,12 +2373,26 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
                  GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
 }
 
+// Holds the keyboard for the application while a menu is open, so that its keys reach the menu
+// whichever client has the input focus (an application that only owns the menu bar has none). The
+// keys still go to the application's own windows while one has the focus (owner_events), and the
+// focus events the grab causes are not taken for the focus moving (see the FocusIn and FocusOut cases).
+- (void) grabKeyboardForMenus {
+    if ([_openMenuWindows count] == 0)
+        return;
+    Window target = [(X11Window *) [_openMenuWindows lastObject] windowHandle];
+    if (target == None)
+        return;
+    XGrabKeyboard(_display, target, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+}
+
 - (void) menuWindowMapped: (X11Window *) window {
     if (_openMenuWindows == nil)
         _openMenuWindows = [NSMutableArray new];
     [_openMenuWindows removeObjectIdenticalTo: window];
     [_openMenuWindows addObject: window];
     [self grabPointerForMenus];
+    [self grabKeyboardForMenus];
 }
 
 - (void) menuWindowUnmapped: (X11Window *) window {
@@ -2388,8 +2402,10 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     _pointerKnown = NO;
     if ([_openMenuWindows count] > 0) {
         [self grabPointerForMenus];
+        [self grabKeyboardForMenus];
         return;
     }
+    XUngrabKeyboard(_display, CurrentTime);
     if (!_relativeMouse.active)
         XUngrabPointer(_display, CurrentTime);
     [self updatePointerConfinement];

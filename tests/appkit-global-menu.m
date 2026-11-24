@@ -43,6 +43,24 @@
 //                                  hidden or shown, logging "STEP <state>" after
 //                                  each change and waiting for the host to look
 //
+//   appkit-global-menu LOG policy  logs "RUNNING policy=P url=U" (NSRunningApplication's activation
+//                                  policy and bundle URL for this process) and "NSAPP policy=P", then
+//                                  exits: what the bundle layout on disk decides
+//   appkit-global-menu LOG bundled [SECONDS]
+//                                  like borderless, but keeps the activation policy the bundle (or its
+//                                  absence) gives, as an application that never sets one
+//   appkit-global-menu LOG parent [SECONDS [DELAYMS]]
+//                                  like borderless; DELAYMS (default 0) after the menu bar is
+//                                  ordered in it starts this program again in the mode "windowless"
+//                                  (LOG.child), a process outside any bundle with no window and no
+//                                  menu that activates itself, logging "STEP child launched"
+//   appkit-global-menu LOG windowless [SECONDS]
+//                                  an AppKit process with no window that activates itself (at start
+//                                  and every half second); logs "POLICY"
+//   appkit-global-menu LOG startup [SECONDS [DELAYMS]]
+//                                  like borderless; DELAYMS after the menu bar is ordered in the
+//                                  window is closed, logging "STEP window closed"
+//
 // Every mode also logs "OWNER owner=O front=F" (O: NSWorkspace's
 // menuBarOwningApplication is this process; F: frontmostApplication is "self",
 // "other" or "none") whenever the pair changes, and "KVO owner" when the
@@ -135,6 +153,13 @@ static void note(const char *format, ...) {
 }
 - (void) setFileMenu: (NSMenu *) menu {
     _fileMenu = menu;
+    [menu setDelegate: self];
+}
+// The File menu reports when it opens and closes and which item is highlighted, for the
+// menu bar tracking tests (run-bar-tracking.py).
+- (void) menu: (NSMenu *) menu willHighlightItem: (NSMenuItem *) item {
+    if (menu == _fileMenu)
+        note("highlight File %s", item == nil ? "(none)" : [[item title] UTF8String]);
 }
 // The application menu is filled again with new items; the quit item is the usual terminate:.
 - (void) refillRebuilt {
@@ -173,10 +198,14 @@ static void note(const char *format, ...) {
     }
     if (menu == _dynamic)
         note("willOpen Dynamic");
+    if (menu == _fileMenu)
+        note("willOpen File");
 }
 - (void) menuDidClose: (NSMenu *) menu {
     if (menu == _dynamic)
         note("didClose Dynamic");
+    if (menu == _fileMenu)
+        note("didClose File");
 }
 - (void) observeValueForKeyPath: (NSString *) path ofObject: (id) object change: (NSDictionary *) change
                         context: (void *) context {
@@ -316,6 +345,22 @@ int main(int argc, char **argv) {
             return 2;
 
         [NSApplication sharedApplication];
+        // A program outside an application bundle is prohibited until it sets a policy, as on macOS:
+        // the programs that are applications on their own are regular ones. The helper modes keep what
+        // their bundle, or they themselves, declare, and the windowless one is the prohibited process.
+        if (!strcmp(argv[2], "policy")) {
+            // What the bundle on disk decides, before anything sets a policy: the policy and the bundle
+            // URL as NSRunningApplication and NSApp report them. Needs no display.
+            NSRunningApplication *me = [NSRunningApplication currentApplication];
+            note("RUNNING policy=%ld url=%s", (long) [me activationPolicy],
+                 [[[me bundleURL] path] UTF8String] ?: "(none)");
+            note("NSAPP policy=%ld", (long) [NSApp activationPolicy]);
+            return 0;
+        }
+        if (strcmp(argv[2], "helper") && strcmp(argv[2], "helper-accessory") && strcmp(argv[2], "windowless") &&
+            strcmp(argv[2], "bundled"))
+            [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
+        note("POLICY %d", (int) [NSApp activationPolicy]);
         Target *target = [Target new];
         buildMenu(target);
 
@@ -403,7 +448,7 @@ int main(int argc, char **argv) {
             [window makeKeyAndOrderFront: nil];
             note("strip window=%d extraFrameHeight=%d", (int) hasMainMenu(window),
                  (int) (frame.size.height - 200));
-        } else if (!strcmp(argv[2], "borderless")) {
+        } else if (!strcmp(argv[2], "borderless") || !strcmp(argv[2], "bundled")) {
             // A window that draws its own chrome: no title bar, so no in-window menu strip.
             NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
                                                            styleMask: NSWindowStyleMaskBorderless
@@ -411,6 +456,40 @@ int main(int argc, char **argv) {
                                                                defer: NO];
             [window makeKeyAndOrderFront: nil];
             note("strip window=%d", (int) hasMainMenu(window));
+        } else if (!strcmp(argv[2], "parent") || !strcmp(argv[2], "startup")) {
+            BOOL parent = !strcmp(argv[2], "parent");
+            int delay = argc > 4 ? atoi(argv[4]) : 0;
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 132)
+                                                           styleMask: NSWindowStyleMaskBorderless
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window makeKeyAndOrderFront: nil];
+            note("strip window=%d", (int) hasMainMenu(window));
+            NSString *childLog = [[NSString stringWithUTF8String: argv[1]] stringByAppendingString: @".child"];
+            NSString *self_ = [NSString stringWithUTF8String: argv[0]];
+            // The moment the menu bar is ordered in, the second step follows after DELAYMS.
+            [NSTimer scheduledTimerWithTimeInterval: 0.01 repeats: YES block: ^(NSTimer *t) {
+                if (!barWindowVisible())
+                    return;
+                [t invalidate];
+                [NSTimer scheduledTimerWithTimeInterval: delay / 1000.0 repeats: NO block: ^(NSTimer *t2) {
+                    if (parent) {
+                        NSTask *task = [[NSTask alloc] init];
+                        [task setLaunchPath: self_];
+                        [task setArguments: @[childLog, @"windowless", @"60"]];
+                        [task launch];
+                        note("STEP child launched");
+                    } else {
+                        [window close];
+                        note("STEP window closed");
+                    }
+                }];
+            }];
+        } else if (!strcmp(argv[2], "windowless")) {
+            [NSApp activateIgnoringOtherApps: YES];
+            [NSTimer scheduledTimerWithTimeInterval: 0.5 repeats: YES block: ^(NSTimer *t) {
+                [NSApp activateIgnoringOtherApps: YES];
+            }];
         } else if (!strcmp(argv[2], "late")) {
             // The window exists before the main menu is set; the menu is replaced afterwards, and a
             // top-level item is added to the replacement.
