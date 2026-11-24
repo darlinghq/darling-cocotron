@@ -282,6 +282,19 @@ void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
 
+// Surfaces of application windows. There is no window server to own the drawable of an
+// NSOpenGLView, so AppKit records it here: a surface on the AppKit window with this window
+// number, backed by `nativeWindow` (the handle a GL surface is made for), with the given size
+// in points. The surface can then be looked up by its ids as for a CGS surface:
+// CGSGetSurfaceBounds() reports its size, and CGLGetSurface() reports the ids of a context
+// that draws to it. Returns the new surface id, never 0.
+CGSSurfaceID _CGSAddWindowSurface(CGSWindowID winId, void* nativeWindow, CGSize size);
+void _CGSSetWindowSurfaceSize(CGSSurfaceID surfaceId, CGSize size);
+void _CGSRemoveWindowSurface(CGSSurfaceID surfaceId);
+// The ids of the application window surface backed by `nativeWindow`. False if there is none.
+bool _CGSWindowSurfaceForNativeWindow(void* nativeWindow, CGSConnectionID* connId,
+                                      CGSWindowID* winId, CGSSurfaceID* surfaceId);
+
 // Creates a window covering `bounds` (global display coordinates), above ordinary
 // windows and shown, so that a GL context can fill a display (CGLSetFullScreen).
 // The window is not one of the application's own: its keyboard and pointer input
