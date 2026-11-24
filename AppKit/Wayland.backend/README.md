@@ -71,13 +71,8 @@ The general pasteboard is the selection of `wl_data_device` (core protocol, `wl_
 version 3 for drag actions). Text maps to `text/plain;charset=utf-8`, `text/plain` and `UTF8_STRING`, PNG and
 TIFF images to `image/png` and `image/tiff`, file lists (`NSFilenamesPboardType`) to `text/uri-list`; other
 types travel under their own names. Other named pasteboards are process-local. Publishing needs keyboard
-focus and an input serial, so writes made earlier stay local until input arrives. A write made while a key or
-click is handled takes that input's serial and is offered at once, even when the focus left in the meantime (a
-virtual keyboard removed right after its key, say; `tests/clipboard-keyboard-removed.sh`). This is verified on
-sway (wlroots) only: a compositor that also requires keyboard focus for `set_selection` may ignore a copy that
-was handled after the window lost the focus. Transfers are
-limited to 16 MiB and five seconds, a reader that stalls or an oversized transfer yields nil rather than truncated
-data.
+focus and an input serial, so writes made earlier stay local until input arrives. Transfers are limited to
+16 MiB and five seconds, a reader that stalls or an oversized transfer yields nil rather than truncated data.
 
 Incoming drops use AppKit's drag hit testing and the same enter, update, exit and perform sequence as the
 other backends; copy and move are negotiated, the drag pasteboard is separate from the clipboard, and
