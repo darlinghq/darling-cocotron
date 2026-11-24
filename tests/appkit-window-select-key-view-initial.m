@@ -1,18 +1,14 @@
 // CFLAGS: -framework Foundation -framework AppKit
 //
-// -[NSWindow selectNextKeyView:] and -selectPreviousKeyView: search for a
-// candidate in a documented order and make the first one found the first
-// responder: the current first responder's next (previous) valid key view; the
-// initial first responder, if it accepts first responder status; otherwise the
-// initial first responder's next (previous) valid key view. If there is none
-// the first responder stays. So a window that is its own first responder (as
-// after -makeFirstResponder:nil) starts from -initialFirstResponder, and a
-// view at the end of a chain that is not a loop is followed by the initial
-// first responder. While a text field is edited the first responder is its
-// field editor; the search then starts from the field, not from the initial
-// first responder.
+// -[NSWindow selectNextKeyView:] and -selectPreviousKeyView:. With a view as the first responder the next
+// (previous) valid key view of that view takes the focus; with none the first responder stays (no fallback
+// to the initial first responder, a view at the end of a chain stays focused). With the window itself as
+// the first responder (as after -makeFirstResponder:nil) the initial first responder is chosen when it
+// accepts first responder status, otherwise its next (previous) valid key view, and without an initial first
+// responder the first (last) valid key view of the loop through the content view. While a text field is
+// edited the first responder is its field editor, which is outside the loop: the calls change nothing then.
+// Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2, mac-probes p794b and p794d).
 //
-// The program passes unchanged on macOS.
 // Prints PASS or FAIL lines, then ALL PASSED or FAILED n.
 #import <AppKit/AppKit.h>
 #include <stdarg.h>
@@ -100,16 +96,16 @@ int main(void)
     [window selectPreviousKeyView: nil];
     expect([window firstResponder] == a, "previous from a view: its previous valid key view");
 
-    // The chain a -> b -> c is not a loop: nothing follows c.
+    // The chain a -> b -> c is not a loop: nothing follows c, and the focus stays on c.
     [c setNextKeyView: nil];
     [window setInitialFirstResponder: a];
     [window makeFirstResponder: c];
     [window selectNextKeyView: nil];
-    expect([window firstResponder] == a, "next after the end of a chain: the initial first responder");
+    expect([window firstResponder] == c, "next after the end of a chain: the first responder stays (no fallback)");
     [window makeFirstResponder: a];
     [a setNextKeyView: nil];
     [window selectNextKeyView: nil];
-    expect([window firstResponder] == a, "a view with no valid next key view that is the initial first responder keeps focus");
+    expect([window firstResponder] == a, "a view with no valid next key view keeps focus");
 
     // No initial first responder: nothing to start from.
     window = makeWindow();
@@ -144,9 +140,8 @@ int main(void)
     [window selectPreviousKeyView: nil];
     expect([window firstResponder] == b, "previous from the window: the previous valid key view of a refusing initial first responder");
 
-    // Fields f1 -> f2 -> f3 -> f1 with the initial first responder f3. While f2 is
-    // edited the next view is f3 and the previous one f1, neither of them found
-    // by starting from the initial first responder.
+    // Fields f1 -> f2 -> f3 -> f1 with the initial first responder f3. While a field is edited the first
+    // responder is the field editor, which has no next key view: nothing changes.
     window = makeWindow();
     NSTextField *f1 = [[[NSTextField alloc] initWithFrame: NSMakeRect(10, 150, 80, 22)] autorelease];
     NSTextField *f2 = [[[NSTextField alloc] initWithFrame: NSMakeRect(10, 100, 80, 22)] autorelease];
@@ -161,13 +156,10 @@ int main(void)
     [window makeFirstResponder: f1];
     expect([[window firstResponder] isKindOfClass: [NSText class]], "editing f1: the first responder is the field editor");
     [window selectNextKeyView: nil];
-    expect(focusedView(window) == f2, "next while f1 is edited: f2, not the initial first responder");
-    [window makeFirstResponder: f2];
+    expect(focusedView(window) == f1, "next while f1 is edited: unchanged");
     [window selectPreviousKeyView: nil];
-    expect(focusedView(window) == f1, "previous while f2 is edited: f1, not the initial first responder");
-    [window makeFirstResponder: f2];
-    [window selectNextKeyView: nil];
-    expect(focusedView(window) == f3, "next while f2 is edited: f3");
+    expect(focusedView(window) == f1, "previous while f1 is edited: unchanged");
+    expect([[window firstResponder] isKindOfClass: [NSText class]], "the field editor is still the first responder");
 
     if (failures == 0)
         puts("ALL PASSED");

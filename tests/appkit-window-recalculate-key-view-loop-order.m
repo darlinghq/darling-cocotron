@@ -2,12 +2,15 @@
 //
 // The key view loop that -[NSWindow recalculateKeyViewLoop] builds is based on
 // the geometric order of the views in the window: from the top of the window to
-// the bottom, and from left to right within a row. The loop is closed, so the
+// the bottom, and from left to right within a row; views whose vertical extents overlap are in the same row
+// (a left view a little lower than a right one is still first, views that only touch are in different
+// rows), and the subviews of a container are visited right after the container. Observed on macOS 26.7.3 and
+// 10.14.4 (black-box, tier 2, mac-probes p794c). The loop is closed, so the
 // last view is followed by the first. The loop is recalculated at once, when
 // -recalculateKeyViewLoop is called. A view flush with the top left corner of
 // the content view is first in the loop, not skipped.
 //
-// The program passes unchanged on macOS.
+// The row and container cases below were observed on both Macs.
 // Prints PASS or FAIL lines, then ALL PASSED or FAILED n.
 #import <AppKit/AppKit.h>
 #include <stdarg.h>
@@ -75,6 +78,41 @@ int main(void)
     expect([[window contentView] nextValidKeyView] == corner, "corner: the loop starts with the field at the content view's top left");
     expect([corner nextValidKeyView] == lower, "corner: the corner field is followed by the lower one");
     expect([lower nextValidKeyView] == corner, "corner: the lower field is followed by the corner field");
+
+    // Overlapping extents make a row: the left field, 20 points lower than the right one (22 points tall), is
+    // first; with extents that only touch it is second.
+    window = makeWindow();
+    NSTextField *rightHigh = addField(window, 150, 200), *leftOverlap = addField(window, 10, 180), *below = addField(window, 10, 100);
+    [window recalculateKeyViewLoop];
+    expect([leftOverlap nextValidKeyView] == rightHigh && [rightHigh nextValidKeyView] == below,
+           "row: a left field overlapping the right one's extent comes first");
+    window = makeWindow();
+    rightHigh = addField(window, 150, 200);
+    NSTextField *leftTouching = addField(window, 10, 178);
+    below = addField(window, 10, 100);
+    [window recalculateKeyViewLoop];
+    expect([rightHigh nextValidKeyView] == leftTouching && [leftTouching nextValidKeyView] == below,
+           "row: a left field whose extent only touches the right one's comes after it");
+
+    // A row is made of the views overlapping the highest one: C overlaps only B, so it is a row of its own.
+    window = makeWindow();
+    NSTextField *chainA = addField(window, 210, 200), *chainB = addField(window, 110, 180), *chainC = addField(window, 10, 160);
+    [window recalculateKeyViewLoop];
+    expect([chainB nextValidKeyView] == chainA && [chainA nextValidKeyView] == chainC,
+           "chain: the row of A and B (B first), then C");
+
+    // A container is followed by its own subviews before the views after it in reading order.
+    window = makeWindow();
+    NSView *container = [[[NSView alloc] initWithFrame: NSMakeRect(10, 100, 120, 180)] autorelease];
+    [[window contentView] addSubview: container];
+    NSTextField *innerHigh = [[[NSTextField alloc] initWithFrame: NSMakeRect(5, 120, 80, 22)] autorelease];
+    NSTextField *innerLow = [[[NSTextField alloc] initWithFrame: NSMakeRect(5, 20, 80, 22)] autorelease];
+    [container addSubview: innerHigh];
+    [container addSubview: innerLow];
+    NSTextField *outer = addField(window, 200, 170);
+    [window recalculateKeyViewLoop];
+    expect([innerHigh nextValidKeyView] == innerLow && [innerLow nextValidKeyView] == outer && [outer nextValidKeyView] == innerHigh,
+           "container: its subviews come before the field to its right, whatever their height");
 
     if (failures == 0)
         puts("ALL PASSED");

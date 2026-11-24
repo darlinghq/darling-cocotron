@@ -188,27 +188,63 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSView *) view;
 
-- (NSComparisonResult) compareKeyViewPosition: (_NSKeyViewPosition *) other;
-
 @end
 
 @implementation _NSKeyViewPosition
 
+// The loop a window builds for itself visits a view, then its subviews, each level in reading order: rows from
+// the top down, left to right inside a row; a view belongs to the row of the highest one remaining when
+// their vertical extents overlap (views that only touch are in different rows). Black-box observation on
+// macOS 26.7.3 and 10.14.4 (tier 2, mac-probes p794c): a left view whose top is up to 23 points below the top
+// of a right view 24 points tall comes first, from 24 points on (the extents only touch) it comes second; a
+// view of a third row whose extent overlaps only the second member of a row is not part of that row; the
+// subviews of a container are visited before the views that come after the container.
+// Test: appkit-window-recalculate-key-view-loop-order.m
 + (void) addKeyViewPositionsWithView: (NSView *) view
                              toArray: (NSMutableArray *) array
 {
+    NSMutableArray *remaining = [NSMutableArray array];
+
     [array addObject: [[[_NSKeyViewPosition alloc] initWithView: view]
                               autorelease]];
 
     for (NSView *child in [view subviews])
-        [self addKeyViewPositionsWithView: child toArray: array];
+        [remaining addObject: [[[_NSKeyViewPosition alloc] initWithView: child]
+                                      autorelease]];
+
+    // Highest first; the sort is stable for equal tops.
+    [remaining sortWithOptions: NSSortStable
+               usingComparator: ^NSComparisonResult(_NSKeyViewPosition *a, _NSKeyViewPosition *b) {
+                   CGFloat top = NSMaxY(a->_rect), otherTop = NSMaxY(b->_rect);
+
+                   return top > otherTop ? NSOrderedAscending : (top < otherTop ? NSOrderedDescending : NSOrderedSame);
+               }];
+
+    while ([remaining count] > 0) {
+        _NSKeyViewPosition *leader = [remaining objectAtIndex: 0];
+        NSMutableArray *row = [NSMutableArray array];
+
+        for (_NSKeyViewPosition *candidate in remaining)
+            if (candidate == leader ||
+                (NSMinY(candidate->_rect) < NSMaxY(leader->_rect) &&
+                 NSMaxY(candidate->_rect) > NSMinY(leader->_rect)))
+                [row addObject: candidate];
+        [remaining removeObjectsInArray: row];
+        [row sortWithOptions: NSSortStable
+             usingComparator: ^NSComparisonResult(_NSKeyViewPosition *a, _NSKeyViewPosition *b) {
+                 CGFloat left = NSMinX(a->_rect), otherLeft = NSMinX(b->_rect);
+
+                 return left < otherLeft ? NSOrderedAscending : (left > otherLeft ? NSOrderedDescending : NSOrderedSame);
+             }];
+        for (_NSKeyViewPosition *position in row)
+            [self addKeyViewPositionsWithView: position->_view toArray: array];
+    }
 }
 
 + (NSArray *) sortedKeyViewPositionsWithView: (NSView *) view {
     NSMutableArray *result = [NSMutableArray array];
 
     [self addKeyViewPositionsWithView: view toArray: result];
-    [result sortUsingSelector: @selector(compareKeyViewPosition:)];
 
     return result;
 }
@@ -221,23 +257,6 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSView *) view {
     return _view;
-}
-
-- (NSComparisonResult) compareKeyViewPosition: (_NSKeyViewPosition *) other {
-    // Higher views first (cartesian coordinates), then the leftmost ones.
-    if (NSMaxY(_rect) != NSMaxY(other->_rect))
-        return NSMaxY(_rect) > NSMaxY(other->_rect) ? NSOrderedAscending : NSOrderedDescending;
-    if (NSMinX(_rect) != NSMinX(other->_rect))
-        return NSMinX(_rect) < NSMinX(other->_rect) ? NSOrderedAscending : NSOrderedDescending;
-    // The same corner (a child flush with the top left of its parent): the
-    // ancestor goes first, so the loop does not skip the child.
-    if (_view != other->_view) {
-        if ([other->_view isDescendantOf: _view])
-            return NSOrderedAscending;
-        if ([_view isDescendantOf: other->_view])
-            return NSOrderedDescending;
-    }
-    return NSOrderedSame;
 }
 
 @end
@@ -2750,48 +2769,46 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return 0.20;
 }
 
-// The key view that holds the focus: the first responder, or the control that
-// a field editor being the first responder is editing (the field editor itself
-// is not part of the key view loop).
-- (NSView *) _keyViewOfFirstResponder {
-    if ([_firstResponder isKindOfClass: [NSText class]] && [(NSText *) _firstResponder isFieldEditor]) {
-        id delegate = [(NSText *) _firstResponder delegate];
-
-        if ([delegate isKindOfClass: [NSView class]])
-            return delegate;
-    }
-    return [_firstResponder isKindOfClass: [NSView class]] ? (NSView *) _firstResponder : nil;
-}
-
-// The candidates, in the documented order: the next (previous) valid key view
-// of the current first responder, the initial first responder when it accepts
-// first responder status, and otherwise the next (previous) valid key view of
-// the initial first responder. With none of them nothing changes.
+// With a view as the first responder, the next (previous) valid key view of that view takes the focus, and
+// nothing changes when there is none; a text field's field editor is a view outside the loop, so while it is
+// edited the call changes nothing (the editor's own handling of Tab moves on). With the window itself as the
+// first responder the initial first responder is chosen when it accepts first responder status, and
+// otherwise its next (previous) valid key view; without an initial first responder the first (last) valid
+// key view of the loop is. Black-box observation on macOS 26.7.3 and 10.14.4 (tier 2, mac-probes p794b,
+// p794d): selectNextKeyView: and selectPreviousKeyView: leave a field editor, and a custom view without
+// next key view, as the first responder (also with an initial first responder set); with the window as
+// first responder, Next gives the first valid key view of a loop that skips a button, Previous the last one,
+// and a set initial first responder wins in both directions.
+// Test: appkit-window-select-key-view-initial.m
 - (void) selectNextKeyView: sender {
-    NSView *view = [self _keyViewOfFirstResponder];
+    if ([_firstResponder isKindOfClass: [NSView class]]) {
+        NSView *view = (NSView *) _firstResponder;
 
-    if ([view nextValidKeyView] != nil) {
-        [self selectKeyViewFollowingView: view];
+        if ([view nextValidKeyView] != nil)
+            [self selectKeyViewFollowingView: view];
         return;
     }
 
     NSView *initial = [self initialFirstResponder];
-    NSView *candidate = [initial acceptsFirstResponder] ? initial : [initial nextValidKeyView];
+    NSView *candidate = initial == nil ? [_contentView nextValidKeyView]
+                                       : ([initial acceptsFirstResponder] ? initial : [initial nextValidKeyView]);
 
     if (candidate != nil)
         [self _makeFirstResponder: candidate selecting: NSSelectingNext];
 }
 
 - (void) selectPreviousKeyView: sender {
-    NSView *view = [self _keyViewOfFirstResponder];
+    if ([_firstResponder isKindOfClass: [NSView class]]) {
+        NSView *view = (NSView *) _firstResponder;
 
-    if ([view previousValidKeyView] != nil) {
-        [self selectKeyViewPrecedingView: view];
+        if ([view previousValidKeyView] != nil)
+            [self selectKeyViewPrecedingView: view];
         return;
     }
 
     NSView *initial = [self initialFirstResponder];
-    NSView *candidate = [initial acceptsFirstResponder] ? initial : [initial previousValidKeyView];
+    NSView *candidate = initial == nil ? [_contentView previousValidKeyView]
+                                       : ([initial acceptsFirstResponder] ? initial : [initial previousValidKeyView]);
 
     if (candidate != nil)
         [self _makeFirstResponder: candidate selecting: NSSelectingPrevious];
