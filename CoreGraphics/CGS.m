@@ -341,50 +341,49 @@ static int frontProcessToken(void)
 	return token;
 }
 
-// Whether each process has the input focus is kept by the process itself, under a libnotify name
-// of its own pid (state: its start time while it has the focus, 0 once it resigned), so that no
-// two processes ever write the same state; the front process name only says who reported last.
-static BOOL focusName(pid_t pid, char* name, size_t size)
+// Per-process flags (the input focus, the menu bar ownership) are kept by the process itself, under
+// a libnotify name of its own pid (state: its start time while the flag is set, 0 once cleared), so
+// that no two processes ever write the same state.
+static BOOL processFlagName(const char* prefix, pid_t pid, char* name, size_t size)
 {
-	return snprintf(name, size, "org.darlinghq.process-focus.%d", (int) pid) < (int) size;
+	return snprintf(name, size, "%s%d", prefix, (int) pid) < (int) size;
 }
 
-static CGError setProcessFocus(pid_t pid, BOOL focused)
+static CGError setProcessFlag(const char* prefix, int* token, pid_t* token_pid, pid_t pid, BOOL value)
 {
-	static pid_t token_pid;
-	static int token = -1;
 	char name[64];
 
 	@synchronized([CGSConnection class])
 	{
-		if (token < 0 || token_pid != pid)
+		if (*token < 0 || *token_pid != pid)
 		{
 			// The names of other processes' pids are only set on their behalf; the token of the
 			// previous pid is not needed any more.
-			if (token >= 0)
-				notify_cancel(token);
-			token = -1;
-			if (!focusName(pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+			if (*token >= 0)
+				notify_cancel(*token);
+			*token = -1;
+			if (!processFlagName(prefix, pid, name, sizeof(name)) ||
+				notify_register_check(name, token) != NOTIFY_STATUS_OK)
 			{
-				token = -1;
+				*token = -1;
 				return kCGErrorCannotComplete;
 			}
-			token_pid = pid;
+			*token_pid = pid;
 		}
 		uint64_t start = processStartTime(pid);
-		if (notify_set_state(token, focused ? (start != 0 ? start : 1) : 0) != NOTIFY_STATUS_OK)
+		if (notify_set_state(*token, value ? (start != 0 ? start : 1) : 0) != NOTIFY_STATUS_OK)
 			return kCGErrorCannotComplete;
 	}
 	return kCGErrorSuccess;
 }
 
-static BOOL processHasFocus(pid_t pid)
+static BOOL processFlag(const char* prefix, pid_t pid)
 {
 	char name[64];
 	int token;
 	uint64_t state = 0;
 
-	if (!focusName(pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+	if (!processFlagName(prefix, pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
 		return NO;
 	if (notify_get_state(token, &state) != NOTIFY_STATUS_OK)
 		state = 0;
@@ -393,6 +392,35 @@ static BOOL processHasFocus(pid_t pid)
 		return NO;
 	uint64_t start = processStartTime(pid);
 	return start == 0 ? state == 1 : state == start;
+}
+
+#define kCGSProcessFocusPrefix "org.darlinghq.process-focus."
+#define kCGSProcessMenuBarPrefix "org.darlinghq.process-menubar."
+
+static CGError setProcessFocus(pid_t pid, BOOL focused)
+{
+	static pid_t token_pid;
+	static int token = -1;
+	return setProcessFlag(kCGSProcessFocusPrefix, &token, &token_pid, pid, focused);
+}
+
+static BOOL processHasFocus(pid_t pid)
+{
+	return processFlag(kCGSProcessFocusPrefix, pid);
+}
+
+// The process that reported last that it has the focus, as long as it has not resigned since; this
+// is all the processes themselves know, whichever display server there is.
+static CGError reportedFrontProcess(pid_t* pid)
+{
+	int token = frontProcessToken();
+	uint64_t state = 0;
+	if (token < 0 || notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
+	if (state == 0 || state > INT32_MAX || !processHasFocus((pid_t) state))
+		return kCGErrorNoneAvailable;
+	*pid = (pid_t) state;
+	return kCGErrorSuccess;
 }
 
 CGError _CGSGetFrontProcess(pid_t* pid)
@@ -414,14 +442,7 @@ CGError _CGSGetFrontProcess(pid_t* pid)
 			return err;
 	}
 
-	int token = frontProcessToken();
-	uint64_t state = 0;
-	if (token < 0 || notify_get_state(token, &state) != NOTIFY_STATUS_OK)
-		return kCGErrorCannotComplete;
-	if (state == 0 || state > INT32_MAX || !processHasFocus((pid_t) state))
-		return kCGErrorNoneAvailable;
-	*pid = (pid_t) state;
-	return kCGErrorSuccess;
+	return reportedFrontProcess(pid);
 }
 
 CGError _CGSSetFrontProcess(pid_t pid)
@@ -449,6 +470,60 @@ CGError _CGSResignFrontProcess(pid_t pid)
 	if (err != kCGErrorSuccess)
 		return err;
 	notify_post(kCGSFrontProcessNotificationName);
+	return kCGErrorSuccess;
+}
+
+// The process that owns the menu bar: a libnotify name holds its pid, and the process has marked
+// itself (the start time again protects against a reused pid).
+static int menuBarOwnerToken(void)
+{
+	static dispatch_once_t once;
+	static int token = -1;
+	dispatch_once(&once, ^{
+		if (notify_register_check(kCGSMenuBarOwnerNotificationName, &token) != NOTIFY_STATUS_OK)
+			token = -1;
+	});
+	return token;
+}
+
+CGError _CGSSetMenuBarOwnerProcess(pid_t pid)
+{
+	static pid_t token_pid;
+	static int token = -1;
+
+	if (pid <= 0)
+		return kCGErrorIllegalArgument;
+
+	int owner = menuBarOwnerToken();
+	CGError err = setProcessFlag(kCGSProcessMenuBarPrefix, &token, &token_pid, pid, YES);
+	if (err != kCGErrorSuccess)
+		return err;
+	if (owner < 0 || notify_set_state(owner, (uint64_t) pid) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
+	// The processes that follow the front process follow the menu bar owner too.
+	notify_post(kCGSFrontProcessNotificationName);
+	return kCGErrorSuccess;
+}
+
+CGError _CGSGetMenuBarOwnerProcess(pid_t* pid)
+{
+	if (pid == NULL)
+		return kCGErrorIllegalArgument;
+
+	int token = menuBarOwnerToken();
+	uint64_t state = 0;
+	if (token < 0 || notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
+	if (state == 0 || state > INT32_MAX || !processFlag(kCGSProcessMenuBarPrefix, (pid_t) state))
+		return kCGErrorNoneAvailable;
+
+	// The processes that have the focus report it (and their resigning). Once the last process that
+	// reported has resigned, another client of the display server has the focus, and no process
+	// owns the menu bar then.
+	pid_t front = 0;
+	if (reportedFrontProcess(&front) != kCGErrorSuccess)
+		return kCGErrorNoneAvailable;
+	*pid = (pid_t) state;
 	return kCGErrorSuccess;
 }
 

@@ -19,7 +19,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from common import Bus, build_registrar, check, finish, read, wait_for  # noqa: E402
+from common import Bus, build_registrar, check, finish, owner_flavors, read, wait_for  # noqa: E402
 
 DARLING = os.environ.get("DARLING", "darling")
 program = os.path.abspath(sys.argv[1])
@@ -84,13 +84,13 @@ def exported_menu_now(bus):
     return False
 
 
-def guest(bus, mode, tag, seconds=100):
+def guest(bus, mode, tag, seconds=100, extra_args=()):
     log = os.path.join(work, tag + ".log")
     open(log, "w").close()
     process = subprocess.Popen(
         ["timeout", "-s", "KILL", "150", DARLING, "shell", "env", "DISPLAY=" + DISPLAY,
          "DBUS_SESSION_BUS_ADDRESS=" + bus.address, "DARLING_APPKIT_BACKEND=x11",
-         "/Volumes/SystemRoot" + program, "/Volumes/SystemRoot" + log, mode, str(seconds)],
+         "/Volumes/SystemRoot" + program, "/Volumes/SystemRoot" + log, mode, str(seconds)] + list(extra_args),
         stdin=subprocess.DEVNULL, stdout=open(os.path.join(work, tag + ".out"), "w"), stderr=subprocess.STDOUT)
     wait_for(log, "READY", 90)
     wait_for(log, "bar frame", 10) or wait_for(log, "bar none", 3)
@@ -112,9 +112,9 @@ def main():
     try:
         registrar_exe = build_registrar(work)
         no_bars = lambda: wait_until(lambda: not bars(), 10) is not None
-        only_focus = len(sys.argv) > 3 and sys.argv[3] == "focus"
+        only = sys.argv[3] if len(sys.argv) > 3 else None
 
-        if not only_focus:
+        if only is None:
             log, process = guest(bus, "window", "window")
             check("strip window=1" in read(log), "a titled window carries the menu strip by default")
             check(no_bars(), "with a strip in a window there is no menu bar window")
@@ -186,6 +186,8 @@ def main():
         # the program, so that the window manager activates its window then. A utility panel is a window
         # the window manager manages, which cannot carry the strip (a borderless window is not managed).
         for mode, tag in (("panel", "focus-panel"), ("window", "focus-window"), ("nowindow", "focus-none")):
+            if only == "owner":
+                break
             log, process = guest(bus, mode, tag)
             ours = windows(False)
             if mode != "nowindow":
@@ -215,6 +217,63 @@ def main():
             other.kill()
             other.wait()
             other = None
+            stop(process)
+
+        # The menu bar owner and a helper that is not a regular application. xmessage is the
+        # native client.
+        for name, helper, helper_mode in owner_flavors(work, program):
+            if only == "focus":
+                break
+            tag = "owner-" + name
+            log, process = guest(bus, "owner", tag, extra_args=[helper, helper_mode])
+            helper_log = log + ".helper"
+
+            def last_owner():
+                lines = [l for l in read(log).splitlines() if l.startswith("OWNER")]
+                return lines[-1] if lines else ""
+
+            def helper_windows():
+                return x("xdotool", "search", "--onlyvisible", "--name", "^Helper$").split()
+
+            check(len(wait_until(bars, 10) or []) == 1, tag + ": before the helper the application's bar is shown")
+            # The front application of X11 is the one the window manager says has the focus, which
+            # an offscreen borderless window (not managed) never has: only the owner is checked.
+            check(wait_for(log, "OWNER owner=1", 10), tag + ": the application owns the menu bar")
+            check(wait_for(helper_log, "HELPER policy=1", 60), tag + ": the helper does not have the regular policy")
+            mine = wait_until(helper_windows, 20)
+            check(bool(mine), tag + ": the helper has a window")
+            if not mine:
+                stop(process)
+                continue
+            subprocess.run(["xdotool", "windowactivate", mine[0]], env=XENV)
+            check(wait_for(log, "RESIGN", 30), tag + ": the application resigns when the helper has the focus")
+            time.sleep(2.5)
+            check(len(bars()) == 1, tag + ": the bar stays while the helper has the focus")
+            check("owner=1 front=other" in last_owner(), tag + ": the application is still the menu bar owner, the helper is in front")
+
+            other = subprocess.Popen(["xmessage", "-display", DISPLAY, "another application"],
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            theirs = wait_until(lambda: x("xdotool", "search", "--onlyvisible", "--class", "[Xx]message").split(), 10)
+            check(bool(theirs), tag + ": the native client has a window")
+            if theirs:
+                subprocess.run(["xdotool", "windowactivate", theirs[0]], env=XENV)
+            check(no_bars(), tag + ": the bar goes away when a native client takes the focus from the helper")
+            check(wait_until(lambda: "owner=0" in last_owner(), 10) is not None, tag + ": nobody owns the menu bar then")
+            subprocess.run(["xdotool", "windowactivate", mine[0]], env=XENV)
+            check(len(wait_until(bars, 10) or []) == 1, tag + ": the bar comes back when the helper has the focus again")
+            check(wait_until(lambda: "owner=1 front=other" in last_owner(), 10) is not None,
+                  tag + ": the application owns the menu bar again")
+            other.kill()
+            other.wait()
+            other = None
+
+            open(helper_log + ".quit", "w").close()
+            check(wait_for(helper_log, "helper quits", 20), tag + ": the helper quits")
+            check(wait_until(lambda: read(log).rfind("ACTIVE") > read(log).rfind("RESIGN"), 20) is not None,
+                  tag + ": the application is active again when the helper is gone")
+            check(wait_until(lambda: "owner=1" in last_owner(), 10) is not None,
+                  tag + ": and owns the menu bar")
+            check(len(wait_until(bars, 10) or []) == 1, tag + ": and shows its bar")
             stop(process)
     finally:
         for p in (registrar, other):

@@ -189,9 +189,10 @@ static BOOL processExists(pid_t pid) {
     return _CGSGetFrontProcess(&front) == kCGErrorSuccess && front == _processIdentifier;
 }
 
-// There is one menu bar per application, so the application that has the focus owns it.
+// The application that owns the menu bar (see -[NSWorkspace menuBarOwningApplication]).
 - (BOOL) ownsMenuBar {
-    return [self isActive];
+    pid_t owner = 0;
+    return _CGSGetMenuBarOwnerProcess(&owner) == kCGErrorSuccess && owner == _processIdentifier;
 }
 
 - (BOOL) activateWithOptions: (NSApplicationActivationOptions) options {

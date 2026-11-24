@@ -24,10 +24,29 @@
 //                                  the 5th second and closed at the 10th,
 //                                  logging "STEP window opened" and
 //                                  "STEP window closed"
+//   appkit-global-menu LOG owner [SECONDS [HELPER [HELPERMODE]]]
+//                                  a regular application with a main menu and
+//                                  no window but an offscreen borderless one;
+//                                  from the 3rd second it starts the program
+//                                  HELPER (a path, possibly the executable of an
+//                                  LSUIElement bundle) with its own log
+//                                  (LOG.helper) and the mode HELPERMODE
+//                                  (default "helper")
+//   appkit-global-menu LOG helper [SECONDS]
+//                                  an application with a titled window that it
+//                                  makes key and active; "helper-accessory"
+//                                  first switches to the accessory activation
+//                                  policy; it exits after SECONDS, or when the
+//                                  file LOG.quit exists
 //   appkit-global-menu LOG hiding  with a titled window as the key window, go
 //                                  through the states in which the menu bar is
 //                                  hidden or shown, logging "STEP <state>" after
 //                                  each change and waiting for the host to look
+//
+// Every mode also logs "OWNER owner=O front=F" (O: NSWorkspace's
+// menuBarOwningApplication is this process; F: frontmostApplication is "self",
+// "other" or "none") whenever the pair changes, and "KVO owner" when the
+// menuBarOwningApplication property is observed to change.
 //
 // Every mode logs "STATE active=A bar=B windows=W" whenever one of the values
 // changes (A: the application is active, B: its menu bar window is ordered in,
@@ -158,6 +177,10 @@ static void note(const char *format, ...) {
 - (void) menuDidClose: (NSMenu *) menu {
     if (menu == _dynamic)
         note("didClose Dynamic");
+}
+- (void) observeValueForKeyPath: (NSString *) path ofObject: (id) object change: (NSDictionary *) change
+                        context: (void *) context {
+    note("KVO owner");
 }
 - (void) applicationDidFinishLaunching: (NSNotification *) n {
     note("READY active=%d", (int) [NSApp isActive]);
@@ -538,6 +561,47 @@ int main(int argc, char **argv) {
                 [window close];
                 note("STEP window closed");
             }];
+        } else if (!strcmp(argv[2], "owner")) {
+            // No window that could carry the strip or be seen: an offscreen borderless one, key.
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(-300, -300, 1, 1)
+                                                           styleMask: NSWindowStyleMaskBorderless
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window makeKeyAndOrderFront: nil];
+            [NSApp activateIgnoringOtherApps: YES];
+            note("strip window=%d", (int) hasMainMenu(window));
+            if (argc > 4) {
+                NSString *helper = [NSString stringWithUTF8String: argv[4]];
+                NSString *mode = [NSString stringWithUTF8String: argc > 5 ? argv[5] : "helper"];
+                NSString *helperLog = [[NSString stringWithUTF8String: argv[1]] stringByAppendingString: @".helper"];
+                [NSTimer scheduledTimerWithTimeInterval: 3.0 repeats: NO block: ^(NSTimer *t) {
+                    NSTask *task = [[NSTask alloc] init];
+                    [task setLaunchPath: helper];
+                    [task setArguments: @[helperLog, mode, @"90"]];
+                    [task launch];
+                    note("STEP helper launched");
+                }];
+            }
+        } else if (!strcmp(argv[2], "helper") || !strcmp(argv[2], "helper-accessory")) {
+            if (!strcmp(argv[2], "helper-accessory"))
+                [NSApp setActivationPolicy: NSApplicationActivationPolicyAccessory];
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(300, 300, 400, 240)
+                                                           styleMask: NSWindowStyleMaskTitled
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window setTitle: @"Helper"];
+            [window makeKeyAndOrderFront: nil];
+            [NSApp activateIgnoringOtherApps: YES];
+            note("HELPER policy=%d key=%d main=%d", (int) [NSApp activationPolicy], (int) [window isKeyWindow],
+                 (int) [window isMainWindow]);
+            // The host ends the helper by creating LOG.quit.
+            NSString *quitPath = [[NSString stringWithUTF8String: argv[1]] stringByAppendingString: @".quit"];
+            [NSTimer scheduledTimerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *t) {
+                if (access([quitPath fileSystemRepresentation], F_OK) == 0) {
+                    note("helper quits");
+                    exit(0);
+                }
+            }];
         } else if (!strcmp(argv[2], "nowindow")) {
             [NSApp activateIgnoringOtherApps: YES];
             note("strip window=0");
@@ -551,6 +615,20 @@ int main(int argc, char **argv) {
         [[NSNotificationCenter defaultCenter] addObserverForName: NSApplicationDidResignActiveNotification
                                                            object: nil queue: nil usingBlock: ^(NSNotification *n) {
             note("RESIGN");
+        }];
+        [[NSWorkspace sharedWorkspace] addObserver: target forKeyPath: @"menuBarOwningApplication"
+                                           options: 0 context: NULL];
+        [NSTimer scheduledTimerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *t) {
+            static int lastOwner = -1, lastFront = -1;
+            NSWorkspace *workspace = [NSWorkspace sharedWorkspace];
+            int owner = (int) ([[workspace menuBarOwningApplication] processIdentifier] == getpid());
+            NSRunningApplication *frontApp = [workspace frontmostApplication];
+            int front = frontApp == nil ? 0 : ([frontApp processIdentifier] == getpid() ? 1 : 2);
+            if (owner != lastOwner || front != lastFront) {
+                lastOwner = owner;
+                lastFront = front;
+                note("OWNER owner=%d front=%s", owner, front == 0 ? "none" : (front == 1 ? "self" : "other"));
+            }
         }];
         [NSTimer scheduledTimerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *t) {
             static int lastActive = -1, lastBar = -1, lastWindows = -1;

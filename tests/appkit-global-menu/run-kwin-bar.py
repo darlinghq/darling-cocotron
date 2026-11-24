@@ -136,7 +136,7 @@ class Session:
         self.pointer.stdout.readline()
         time.sleep(0.3)
 
-    def guest(self, mode, tag, seconds=60, extra_env=()):
+    def guest(self, mode, tag, seconds=60, extra_env=(), extra_args=()):
         log = os.path.join(self.work, tag + ".log")
         open(log, "w").close()
         darling = os.environ.get("DARLING", "darling")
@@ -144,7 +144,7 @@ class Session:
                "WAYLAND_DISPLAY=" + os.path.join(self.runtime, SOCKET), "DARLING_APPKIT_BACKEND=wayland"] + list(extra_env)
         process = subprocess.Popen(["timeout", "-s", "KILL", "120", darling, "shell", "env"] + env +
                                    ["/Volumes/SystemRoot" + os.path.abspath(self.program),
-                                    "/Volumes/SystemRoot" + log, mode, str(seconds)],
+                                    "/Volumes/SystemRoot" + log, mode, str(seconds)] + list(extra_args),
                                    stdin=subprocess.DEVNULL, stdout=open(os.path.join(self.work, tag + ".out"), "w"),
                                    stderr=subprocess.STDOUT)
         wait_for(log, "READY", 90)

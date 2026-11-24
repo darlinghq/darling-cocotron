@@ -349,6 +349,77 @@ static void observeProcessCommands(NSApplication *application) {
     }
 }
 
+// An application that owns the menu bar while an application that is not regular (see
+// -_publishActivation) has the focus is made active again when that application ends with the focus
+// still on it, as macOS gives the activation back to the previous application when the front one quits.
+// Without it the focus would stay on no application of ours, and the menu bar would be gone.
+static pid_t yieldedTo;
+static BOOL yieldedHasFocus;
+static dispatch_source_t yieldedSource;
+
+static void stopWatchingYielded(void) {
+    if (yieldedSource != NULL) {
+        dispatch_source_cancel(yieldedSource);
+        dispatch_release(yieldedSource);
+        yieldedSource = NULL;
+    }
+    yieldedTo = 0;
+    yieldedHasFocus = NO;
+}
+
+static void yieldedProcessExited(void) {
+    BOOL give = yieldedHasFocus && ![NSApp isActive];
+
+    stopWatchingYielded();
+    if (give)
+        [NSApp activateIgnoringOtherApps: YES];
+}
+
+// The front process or the menu bar owner changed.
+static void followMenuBarOwnership(void) {
+    pid_t owner = 0, front = 0;
+    BOOL ownsBar = _CGSGetMenuBarOwnerProcess(&owner) == kCGErrorSuccess && owner == getpid();
+    BOOL frontKnown = _CGSGetFrontProcess(&front) == kCGErrorSuccess;
+
+    if (frontKnown && front == getpid()) {
+        stopWatchingYielded();
+        return;
+    }
+    if (ownsBar && frontKnown) {
+        if (yieldedTo != front) {
+            stopWatchingYielded();
+            yieldedTo = front;
+            yieldedSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_PROC, (uintptr_t) front,
+                                                   DISPATCH_PROC_EXIT, dispatch_get_main_queue());
+            if (yieldedSource == NULL) {
+                yieldedTo = 0;
+                return;
+            }
+            dispatch_source_set_event_handler(yieldedSource, ^{
+                yieldedProcessExited();
+            });
+            dispatch_resume(yieldedSource);
+        }
+        yieldedHasFocus = YES;
+    } else if (frontKnown) {
+        // Another application has the focus and owns the menu bar.
+        stopWatchingYielded();
+    } else {
+        // Nobody known has the focus: it may have gone to another client of the display server.
+        yieldedHasFocus = NO;
+    }
+}
+
+static void observeMenuBarOwnership(void) {
+    int token;
+
+    // The token stays registered for the life of the process.
+    notify_register_dispatch(kCGSFrontProcessNotificationName, &token, dispatch_get_main_queue(),
+                             ^(int ignored) {
+                                 followMenuBarOwnership();
+                             });
+}
+
 - (instancetype) init {
     if (NSApp)
         NSAssert(!NSApp, @"NSApplication is a singleton");
@@ -358,6 +429,7 @@ static void observeProcessCommands(NSApplication *application) {
     // known as an application to other processes.
     (void) CGSMainConnectionID();
     observeProcessCommands(self);
+    observeMenuBarOwnership();
 
     _windows = [NSMutableArray new];
     _mainMenu = nil;
@@ -739,11 +811,33 @@ static NSMutableArray *pendingOpenURLs = nil;
     return NS_EXTRA(NSApplication, self)->_isActive || [self isActiveExcludingWindow: nil];
 }
 
+// Tells the other processes that this application owns the menu bar from now on, if it is a
+// regular application.
+// QUIRK: an application that is not regular (LSUIElement, LSBackgroundOnly or set to the accessory
+// or prohibited policy) that becomes active does not take the menu bar over: the application that
+// had it keeps it, and its menu stays in the menu bar, although it is no longer the active one.
+// Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2): after such a helper's
+// window became key and main (frontmostApplication was the helper, the regular application had
+// resigned), NSWorkspace.menuBarOwningApplication stayed the regular application until the helper
+// quit.
+// Test: tests/appkit-global-menu/run-*-menu-style.py ("owner" cases).
+- (void) _publishActivation {
+    if ([self activationPolicy] == NSApplicationActivationPolicyRegular)
+        _CGSSetMenuBarOwnerProcess(getpid());
+}
+
 // Becomes the active application, posting the notifications, unless it is
 // already active.
 - (void) _becomeActive {
     if ([self isActive])
         return;
+
+    // A regular application that activates owns the menu bar and is the front application,
+    // even if none of its windows can have the focus.
+    if ([self activationPolicy] == NSApplicationActivationPolicyRegular) {
+        _CGSSetFrontProcess(getpid());
+        [self _publishActivation];
+    }
 
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationWillBecomeActiveNotification
@@ -2624,6 +2718,7 @@ static BOOL resignForced;
     // CoreGraphics keeps it for the display servers that cannot be asked who has the focus and
     // tells the other processes (NSWorkspace's frontmostApplication follows it).
     _CGSSetFrontProcess(getpid());
+    [self _publishActivation];
     if (!NS_EXTRA(NSApplication, self)->_isActive) {
         NS_EXTRA(NSApplication, self)->_isActive = YES;
         [[NSNotificationCenter defaultCenter]

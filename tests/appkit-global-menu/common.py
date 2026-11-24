@@ -6,6 +6,7 @@
 # the fake registrar, gdbus calls and a parser for the text gdbus prints.
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -181,3 +182,30 @@ def find_item(items, label, parent=None):
         if props.get("label") == label:
             return ident
     return None
+
+
+def helper_bundle(work, program):
+    """An application bundle with the LSUIElement key that holds a copy of the guest program; returns
+    the path of its executable as the guest sees it."""
+    contents = os.path.join(work, "Helper.app", "Contents")
+    os.makedirs(os.path.join(contents, "MacOS"))
+    with open(os.path.join(contents, "Info.plist"), "w") as f:
+        f.write("""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>helper</string>
+<key>CFBundleIdentifier</key><string>org.darlinghq.test.menu-helper</string>
+<key>CFBundlePackageType</key><string>APPL</string>
+<key>LSUIElement</key><true/>
+</dict></plist>
+""")
+    exe = os.path.join(contents, "MacOS", "helper")
+    shutil.copy(program, exe)
+    return "/Volumes/SystemRoot" + exe
+
+
+def owner_flavors(work, program):
+    """The helpers of the menu bar owner cases: (name, helper executable in the guest, helper mode). The
+    first has LSUIElement in its bundle, the second switches to the accessory policy at run time."""
+    return [("uielement", helper_bundle(work, program), "helper"),
+            ("accessory", "/Volumes/SystemRoot" + os.path.abspath(program), "helper-accessory")]

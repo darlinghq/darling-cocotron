@@ -24,6 +24,10 @@
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSGlobalMenu+Private.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
+#include <notify.h>
+#include <dispatch/dispatch.h>
+#include <unistd.h>
 
 @interface NSWindow (NSMenuBarControllerStrip)
 - (BOOL) hasMainMenu;
@@ -112,6 +116,20 @@ static NSString *applicationName(void) {
         return nil;
 
     _delegate = delegate;
+    _ownerToken = -1;
+
+    // Another process becoming the front application, or the owner of the menu bar, or the focus
+    // leaving the Darling applications is posted under this name.
+    // The block does not retain the controller (a __block variable is not retained by a copied
+    // block under manual reference counting); -dealloc cancels the registration.
+    __block NSMenuBarController *controller = self;
+
+    notify_register_dispatch(kCGSFrontProcessNotificationName, &_ownerToken, dispatch_get_main_queue(),
+                             ^(int unused) {
+                                 [controller refreshOwnership];
+                                 [controller update];
+                             });
+    [self refreshOwnership];
 
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 
@@ -139,6 +157,9 @@ static NSString *applicationName(void) {
 }
 
 - (void) dealloc {
+    if (_ownerToken >= 0)
+        notify_cancel(_ownerToken);
+    _delegate = nil;
     [self cancelHide];
     [self stopRedrawingBar];
     [[NSNotificationCenter defaultCenter] removeObserver: self];
@@ -176,6 +197,7 @@ static NSString *applicationName(void) {
 }
 
 - (void) applicationActivationChanged: (NSNotification *) notification {
+    [self refreshOwnership];
     [self update];
 }
 
@@ -208,11 +230,19 @@ static BOOL visibleWindowCarriesMenuStrip(void) {
     return NO;
 }
 
-// The bar is shown while the application is active, has a main menu and the
-// menu is neither in the desktop's global menu nor in the strip of a window,
-// unless the application hides the menu bar.
+- (void) refreshOwnership {
+    pid_t owner = 0;
+
+    _ownsMenuBar = _CGSGetMenuBarOwnerProcess(&owner) == kCGErrorSuccess && owner == getpid();
+}
+
+// The bar is shown while the application owns the menu bar, has a main menu and
+// the menu is neither in the desktop's global menu nor in the strip of a window,
+// unless the application hides the menu bar. The owner is the application that
+// became active last, unless that one is an agent application (LSUIElement),
+// which leaves the menu bar to the one before it.
 - (BOOL) barWanted {
-    return [self barWantedWhileActive] && NSApp != nil && [NSApp isActive];
+    return [self barWantedWhileActive] && NSApp != nil && _ownsMenuBar;
 }
 
 // How long the bar stays after the application stopped being active.
@@ -233,6 +263,7 @@ static const NSTimeInterval barHideDelay = 0.5;
 // The moment is over: the application did not become active again.
 - (void) hideTimerFired: (NSTimer *) timer {
     _hideTimer = nil;
+    [self refreshOwnership];
     [self updateWaitingForHide: NO];
 }
 
