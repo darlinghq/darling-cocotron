@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "PocketDisplay.h"
+#import "PocketWindow.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSScreen.h>
 #import <CoreFoundation/CFSocket.h>
@@ -72,6 +73,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     self = [super init];
     if (self == nil)
         return nil;
+    _windows = CFArrayCreateMutable(NULL, 0, NULL);
 
     struct sockaddr_un address = {.sun_family = AF_UNIX};
     if (strlen(path) >= sizeof(address.sun_path)) {
@@ -127,6 +129,8 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     }
     if (_socket >= 0)
         close(_socket);
+    if (_windows != NULL)
+        CFRelease(_windows);
     [super dealloc];
 }
 
@@ -225,6 +229,8 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     if (!changed)
         return;
     [self _invalidateScreens];
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(PocketWindow *) CFArrayGetValueAtIndex(_windows, i) screenChanged];
     [self _postScreenParametersChanged];
 }
 
@@ -258,17 +264,75 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 #pragma mark - The rest of AppKit's display interface
 
+#pragma mark - Windows
+
 - (CGWindow *) newWindowWithDelegate: (NSWindow *) delegate {
-    [NSException raise: NSInternalInconsistencyException format: @"The Pocket backend cannot create windows yet"];
-    return nil;
+    return [[PocketWindow alloc] initWithDelegate: delegate];
+}
+
+// The host is told the windows from the bottom up: by level, then in the order they were raised.
+- (void) sendOrder {
+    CFIndex count = CFArrayGetCount(_windows);
+    uint32_t numbers[POCKET_MAX_MESSAGE / sizeof(uint32_t)];
+    CFIndex sent = 0;
+    NSMutableArray *sorted = [NSMutableArray arrayWithCapacity: count];
+    for (CFIndex i = 0; i < count; i++)
+        [sorted addObject: (id) CFArrayGetValueAtIndex(_windows, i)];
+    [sorted sortWithOptions: NSSortStable
+            usingComparator: ^NSComparisonResult(PocketWindow *a, PocketWindow *b) {
+                return [a level] < [b level] ? NSOrderedAscending
+                                             : [a level] > [b level] ? NSOrderedDescending : NSOrderedSame;
+            }];
+    for (PocketWindow *window in sorted)
+        if (sent < (CFIndex) (sizeof(numbers) / sizeof(numbers[0])))
+            numbers[sent++] = [window number];
+    [self send: POCKET_ORDER bytes: numbers length: sent * sizeof(uint32_t)];
+}
+
+- (void) windowCreated: (PocketWindow *) window {
+    CFArrayAppendValue(_windows, window);
+}
+
+- (void) windowDestroyed: (PocketWindow *) window {
+    CFIndex index = CFArrayGetFirstIndexOfValue(_windows, CFRangeMake(0, CFArrayGetCount(_windows)), window);
+    if (index != kCFNotFound)
+        CFArrayRemoveValueAtIndex(_windows, index);
+}
+
+- (void) windowRaised: (PocketWindow *) window {
+    CFIndex count = CFArrayGetCount(_windows);
+    CFIndex index = CFArrayGetFirstIndexOfValue(_windows, CFRangeMake(0, count), window);
+    if (index == count - 1)
+        return;
+    if (index != kCFNotFound)
+        CFArrayRemoveValueAtIndex(_windows, index);
+    CFArrayAppendValue(_windows, window);
+    [self sendOrder];
+}
+
+- (void) windowLowered: (PocketWindow *) window {
+    CFIndex index = CFArrayGetFirstIndexOfValue(_windows, CFRangeMake(0, CFArrayGetCount(_windows)), window);
+    if (index == 0)
+        return;
+    if (index != kCFNotFound)
+        CFArrayRemoveValueAtIndex(_windows, index);
+    CFArrayInsertValueAtIndex(_windows, 0, window);
+    [self sendOrder];
 }
 
 - (NSDraggingManager *) draggingManager {
     return nil;
 }
 
+// Front to back.
 - (NSArray *) orderedWindowNumbers {
-    return [NSArray array];
+    NSMutableArray *numbers = [NSMutableArray array];
+    for (CFIndex i = CFArrayGetCount(_windows) - 1; i >= 0; i--) {
+        PocketWindow *window = (PocketWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window isVisible])
+            [numbers addObject: [NSNumber numberWithInteger: [window windowNumber]]];
+    }
+    return numbers;
 }
 
 // Windows have no frames on a phone.

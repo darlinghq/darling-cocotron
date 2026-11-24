@@ -31,6 +31,8 @@
 #import "../private-include/AppKit/DarlingDisplay.h"
 #import "PocketProtocol.h"
 
+@class PocketWindow;
+
 @interface PocketDisplay : DarlingDisplay {
     int _socket;
     CFSocketRef _pocketSocket;
@@ -40,6 +42,9 @@
 
     struct pocket_screen _screen;
     BOOL _haveScreen;
+
+    // Bottom to top, not retained.
+    CFMutableArrayRef _windows;
 }
 
 // Pixels per point.
@@ -49,5 +54,10 @@
 
 // Messages to the host. A send that fails ends the app: its host is gone.
 - (void) send: (uint32_t) type bytes: (const void *) bytes length: (size_t) length;
+
+- (void) windowCreated: (PocketWindow *) window;
+- (void) windowDestroyed: (PocketWindow *) window;
+- (void) windowRaised: (PocketWindow *) window;
+- (void) windowLowered: (PocketWindow *) window;
 
 @end

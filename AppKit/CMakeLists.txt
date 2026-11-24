@@ -757,6 +757,7 @@ endif ()
 add_backend(Pocket
 	SOURCES
 		Pocket.backend/PocketDisplay.m
+		Pocket.backend/PocketWindow.m
 	INFO_PLIST
 		Pocket.backend/Info.plist
 	DEPENDENCIES
@@ -765,6 +766,8 @@ add_backend(Pocket
 		CoreFoundation
 		Foundation
 		AppKit
+		Onyx2D
+		CoreGraphics
 )
 target_include_directories(Pocket_backend PRIVATE
 	Pocket.backend
