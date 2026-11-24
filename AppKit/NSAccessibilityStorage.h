@@ -32,6 +32,8 @@ __attribute__((visibility("hidden"))) void _NSAccessibilityRemoveStoredValue(id 
 __attribute__((visibility("hidden"))) id _NSAccessibilityStoredObject(id element, NSString *key, id fallback);
 __attribute__((visibility("hidden"))) BOOL _NSAccessibilityStoredBool(id element, NSString *key, BOOL fallback);
 __attribute__((visibility("hidden"))) NSRect _NSAccessibilityStoredRect(id element, NSString *key, NSRect fallback);
+// What -accessibilityDocument answers while nothing has been set: nil, except for a window.
+__attribute__((visibility("hidden"))) NSString *_NSAccessibilityDefaultDocument(id element);
 
 // The legacy attribute methods read and write through the protocol's methods, so that a
 // subclass overriding either kind is seen by both.
@@ -79,6 +81,16 @@ __attribute__((visibility("hidden"))) void _NSAccessibilityLegacySetAttributeVal
     ACCESSIBILITY_STORED_OBJECT(NSString *, accessibilityPlaceholderValue,                          \
                                 setAccessibilityPlaceholderValue:,                                  \
                                 NSAccessibilityPlaceholderValueAttribute)                           \
+    - (NSString *) accessibilityDocument {                                                          \
+        id value;                                                                                   \
+        if (_NSAccessibilityStoredValue(self, NSAccessibilityDocumentAttribute, &value))            \
+            return value;                                                                           \
+        return _NSAccessibilityDefaultDocument(self);                                               \
+    }                                                                                               \
+    - (void) setAccessibilityDocument: (NSString *) value {                                         \
+        _NSAccessibilitySetStoredValue(self, NSAccessibilityDocumentAttribute,                      \
+                                       [[value copy] autorelease]);                                 \
+    }                                                                                               \
     ACCESSIBILITY_STORED_OBJECT(NSArray *, accessibilitySelectedChildren,                           \
                                 setAccessibilitySelectedChildren:,                                  \
                                 NSAccessibilitySelectedChildrenAttribute)                           \

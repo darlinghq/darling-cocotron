@@ -21,23 +21,28 @@
 #import <AppKit/NSMenu.h>
 
 // Keeps the menu and indicator flag it is given; the menu is not yet shown by
-// a click or press-and-hold on the item.
+// a click or press-and-hold on the item. A menu toolbar item is bordered until told otherwise (observed on
+// macOS 26.7.3, probe toolbar.m).
 @implementation NSMenuToolbarItem
 @synthesize menu = _menu;
 @synthesize showsIndicator = _showsIndicator;
 
 - (instancetype) initWithItemIdentifier: (NSToolbarItemIdentifier) identifier {
     self = [super initWithItemIdentifier: identifier];
-    if (self != nil)
+    if (self != nil) {
         _showsIndicator = YES;
+        NS_EXTRA(NSToolbarItem, self)->_bordered = YES;
+    }
     return self;
 }
 
 // An item loaded from a nib takes this path, not the one above; the documented
 // default of showsIndicator applies to it too.
 - (instancetype) initWithCoder: (NSCoder *) coder {
-    if ((self = [super initWithCoder: coder]) != nil)
+    if ((self = [super initWithCoder: coder]) != nil) {
         _showsIndicator = YES;
+        NS_EXTRA(NSToolbarItem, self)->_bordered = YES;
+    }
     return self;
 }
 

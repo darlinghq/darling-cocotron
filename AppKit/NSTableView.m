@@ -646,8 +646,16 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     }
 
     rect.origin.x = 0.;
-    for (i = 0; i < column; i++)
-        rect.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
+    // QUIRK: the rectangle of a hidden column is an empty one at x 0, wherever the column is in the table; the
+    // documentation of isHidden does not say. Observed on macOS 26.7.3 and Mac OS X 10.14.4 (tier 2, the PR's test passes on both) and on 26.1 (arm64), probe 657.1: with 5 columns of
+    // widths 50, 60, 70, 80 and 90 "hidden=1 ... rectOfColumn x+w=[10+65 0+0 75+87 162+97 259+74]" and
+    // "hidden=4 ... [10+65 75+77 152+87 239+94 0+0]"; the probe printed x and width only, so y and height of
+    // that rectangle are unchanged here. The header rect and the cell frame of a hidden column agree
+    // (headerRect in 657.1, frameOfCellAtColumn:row: in probe 657.3).
+    // Test: tests/appkit-table-hidden-columns.m (test_rects_close_the_gap)
+    if (![[_tableColumns objectAtIndex: column] isHidden])
+        for (i = 0; i < column; i++)
+            rect.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
     rect.origin.y = 0.;
 
     rect.size.width = [self _spaceTakenByColumn: [_tableColumns objectAtIndex: column]];
@@ -694,6 +702,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 // The columns that the rect touches, as one range: it starts at the first column that is not hidden and ends
 // beyond the rect's right edge, and so may hold hidden columns between its ends.
+// QUIRK: a rect that reaches past the last shown column gets a range that runs to the last column, hidden
+// columns after the last shown one included; the documentation does not mention hidden columns. Observed on
+// macOS 26.1 (arm64) with 5 columns, column 4 hidden and the rect covering the table: the range was 0..4
+// (probe 657.1 "hidden=4 ... columnsInRect(full)=0..4"; "hidden=0,4 ... =1..4"; "hidden=all but 2 ... =2..4"),
+// while a rect ending inside a shown column stopped at it (probe 657.2 "hidden=4 ... x120+150:1..3").
+// Test: tests/appkit-table-hidden-columns.m (test_ranges_over_whole_rects)
 - (NSRange) columnsInRect: (NSRect) rect {
     NSInteger numberOfColumns = [self numberOfColumns];
     NSInteger i, first = -1, last = -1;
@@ -717,6 +731,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     if (first < 0)
         return NSMakeRange(0, 0); // returns 0,0 if not found, not NSNotFound
+    if (i == numberOfColumns)
+        last = numberOfColumns - 1;
     return NSMakeRange(first, last - first + 1);
 }
 
@@ -751,9 +767,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         row >= [self numberOfRows])
         return NSZeroRect;
 
+    // QUIRK: x 0 for a hidden column, as in -rectOfColumn: (probe 657.3 "hidden=1 ... frameOfCellAtColumn:row:1
+    // -> 16+50 0+0 83+70 170+80 267+60").
     frame.origin.x = 0.;
-    for (i = 0; i < column; i++)
-        frame.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
+    if (![[_tableColumns objectAtIndex: column] isHidden])
+        for (i = 0; i < column; i++)
+            frame.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
 
     frame.origin.y = 0.;
     for (i = 0; i < row; i++)
@@ -1404,8 +1423,17 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [_headerView setNeedsDisplay: YES];
 }
 
+// Hidden columns are left out of the set: https://developer.apple.com/documentation/appkit/nstableview/columnindexes(in:)
+// says columns that are hidden are not included, unlike the range columnsInRect: gives.
 - (NSIndexSet *) columnIndexesInRect: (NSRect) rect {
-    return [NSIndexSet indexSetWithIndexesInRange: [self columnsInRect: rect]];
+    NSRange range = [self columnsInRect: rect];
+    NSMutableIndexSet *result = [NSMutableIndexSet indexSet];
+    NSUInteger i;
+
+    for (i = range.location; i < NSMaxRange(range); i++)
+        if (![[_tableColumns objectAtIndex: i] isHidden])
+            [result addIndex: i];
+    return result;
 }
 
 - (void) deselectRow: (NSInteger) row {

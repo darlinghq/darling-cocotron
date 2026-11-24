@@ -323,6 +323,10 @@ NSImageName const NSImageNameTouchBarVolumeUpTemplate =
 
 @implementation NSImage
 
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
 + (NSArray *) imageFileTypes {
     return [self imageUnfilteredFileTypes];
 }

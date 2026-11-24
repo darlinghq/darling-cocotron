@@ -29,6 +29,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSSegmentedCell (Private)
 - (void) _recomputeSegmentWidths;
+// Behind -[NSSegmentedControl showsMenuIndicatorForSegment:]; the documentation lists them for the control only.
+- (BOOL) _showsMenuIndicatorForSegment: (NSInteger) segment;
+- (void) _setShowsMenuIndicator: (BOOL) flag forSegment: (NSInteger) segment;
 @end
 
 @implementation NSSegmentedCell
@@ -137,6 +140,10 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     return [[_segments objectAtIndex: segment] menu];
 }
 
+- (BOOL) _showsMenuIndicatorForSegment: (NSInteger) segment {
+    return [[_segments objectAtIndex: segment] showsMenuIndicator];
+}
+
 - (NSString *) toolTipForSegment: (NSInteger) segment {
     return [[_segments objectAtIndex: segment] toolTip];
 }
@@ -213,6 +220,10 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
 
 - (void) setMenu: (NSMenu *) menu forSegment: (NSInteger) segment {
     [[_segments objectAtIndex: segment] setMenu: menu];
+}
+
+- (void) _setShowsMenuIndicator: (BOOL) flag forSegment: (NSInteger) segment {
+    [[_segments objectAtIndex: segment] setShowsMenuIndicator: flag];
 }
 
 - (void) setToolTip: (NSString *) string forSegment: (NSInteger) segment {

@@ -11,37 +11,35 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #import <AppKit/NSEvent.h>
 #import <Foundation/NSString.h>
 
-// QUIRK: Command, Option and Control must match exactly, but Shift is not compared for an
-// equivalent that is not an uppercase letter: Command+A and Command+Shift+A both perform an
-// item "a" with the Command mask, and an item whose mask includes Shift also matches events
-// without Shift. An uppercase equivalent implies Shift and needs it on the event. The key
-// code plays no part; only the characters are compared (with the letter case ignored while
-// Shift is held, as backends report either spelling). Not documented. Evidence: black-box
-// observation on macOS 26.7.3 (tier 2), MC26.4 (probes v274-menu-keyeq.m and
-// v274-keybindings.m). Test: appkit-menu-key-equivalents.m
-// (test_quirk_extra_shift_does_not_block_lowercase_equivalent)
+// QUIRK: the key equivalent is compared as a whole string with the event's
+// charactersIgnoringModifiers, and the Shift bit plays no part, in the mask of the item or in the flags of
+// the event: Shift counts only through the character it produces ("Z" for Shift+z, "{" for Shift+[). Command,
+// Option and Control must match exactly. So an item "z" with Command (or with Command and Shift in its mask)
+// takes Command+z and not Shift+Command+z, whose characters ignoring modifiers are "Z", and an item "Z" with
+// Command takes Shift+Command+z and not Command+z; a key code and the event's characters play no part. With
+// Caps Lock in the flags the case of a letter in the characters follows the Shift flag instead. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 (events built by hand and events AppKit made from key
+// codes, through -[NSMenu performKeyEquivalent:], the main menu and -[NSApplication sendEvent:]) and on 10.14.4
+// (x86_64 and i386, the events built by hand) (tier 2), probes p766.m and p766b.m of batch 12a in
+// mac-probes/cristim.
+// Test: appkit-menu-key-equivalent-shifted-characters
+// (test_quirk_key_equivalent_compares_characters_ignoring_modifiers)
 static inline BOOL NSKeyEquivalentMatchesEvent(NSString *key, NSUInteger itemMask, NSEvent *event) {
-    const NSUInteger keyModifiers = NSCommandKeyMask | NSAlternateKeyMask | NSShiftKeyMask | NSControlKeyMask;
-    NSUInteger eventMask = [event modifierFlags] & keyModifiers;
-    NSUInteger wanted = itemMask & keyModifiers;
+    const NSUInteger exactModifiers = NSCommandKeyMask | NSAlternateKeyMask | NSControlKeyMask;
+    NSUInteger flags = [event modifierFlags];
+
+    if ([key length] == 0 || (flags & exactModifiers) != (itemMask & exactModifiers))
+        return NO;
+
     NSString *characters = [event charactersIgnoringModifiers];
 
-    if ([key length] == 0)
-        return NO;
+    if (flags & NSAlphaShiftKeyMask) {
+        NSString *cased = (flags & NSShiftKeyMask) ? [characters uppercaseString] : [characters lowercaseString];
 
-    BOOL uppercase = ![key isEqualToString: [key lowercaseString]];
-    if (uppercase)
-        wanted |= NSShiftKeyMask;
-    else {
-        eventMask &= ~(NSUInteger)NSShiftKeyMask;
-        wanted &= ~(NSUInteger)NSShiftKeyMask;
+        // a letter whose case change changes the length (the German sharp s) is left as it is
+        if ([cased length] == [characters length])
+            characters = cased;
     }
-    if (eventMask != wanted)
-        return NO;
 
-    if ([key isEqualToString: characters])
-        return YES;
-    if ([event modifierFlags] & NSShiftKeyMask)
-        return [[key lowercaseString] isEqualToString: [characters lowercaseString]];
-    return NO;
+    return [key isEqualToString: characters];
 }

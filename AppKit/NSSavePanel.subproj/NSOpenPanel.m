@@ -206,6 +206,14 @@ static NSOpenPanel *_newPanel = nil;
     return _canChooseFiles;
 }
 
+- (BOOL) isAccessoryViewDisclosed {
+    return [[_NSSavePanelNavigation navigationForPanel: self] accessoryViewDisclosed];
+}
+
+- (void) setAccessoryViewDisclosed: (BOOL) disclosed {
+    [[_NSSavePanelNavigation navigationForPanel: self] setAccessoryViewDisclosed: disclosed];
+}
+
 - (BOOL) resolvesAliases {
     return _resolvesAliases;
 }

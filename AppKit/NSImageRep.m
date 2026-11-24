@@ -27,7 +27,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSRaise.h>
 
+// Decodes securely (as on macOS); a secure unarchiver only decodes classes that adopt NSSecureCoding.
+@interface NSImageRep () <NSSecureCoding>
+@end
+
 @implementation NSImageRep
+
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
 
 static NSMutableArray *_registeredClasses = nil;
 

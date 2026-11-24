@@ -61,6 +61,7 @@ typedef NS_ENUM(NSUInteger, NSManagedObjectContextConcurrencyType) {
     dispatch_queue_t _contextQueue;
     NSPersistentStoreCoordinator *_storeCoordinator;
     NSUndoManager *_undoManager;
+    id _undoTarget;
     BOOL _retainsRegisteredObjects;
     BOOL _propagatesDeletesAtEndOfEvent;
     NSTimeInterval _stalenessInterval;

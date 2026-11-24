@@ -602,6 +602,24 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     return [super drawTitle: title withFrame: titleRect inView: controlView];
 }
 
+// The border and background of a pop-up button cell is its bezel (with the arrows of the styles that have them), and
+// the whole cell is that and then the interior, so a subclass overriding the step is called once, before the bezel.
+// Observed on macOS 26.7.3 and 10.14.4 (x86_64 and i386), probe p767.m of batch 12a in mac-probes/cristim: for a
+// bordered pop-up button cell the step draws the pixels of the bezel and calls it once.
+- (void) drawBorderAndBackgroundWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    [self drawBezelWithFrame: cellFrame inView: controlView];
+}
+
+- (void) drawWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    _controlView = controlView;
+
+    if ([self isTransparent])
+        return;
+
+    [self drawBorderAndBackgroundWithFrame: cellFrame inView: controlView];
+    [self drawInteriorWithFrame: cellFrame inView: controlView];
+}
+
 - (void) drawBezelWithFrame: (NSRect) frame inView: (NSView *) controlView {
 
     [super drawBezelWithFrame: frame inView: controlView];

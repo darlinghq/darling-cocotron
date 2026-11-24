@@ -29,6 +29,13 @@
 // there is, and only for a tap. The event stream of the process takes what comes out of the
 // last tap (CGEventStream.m).
 //
+// Events keep their order. While an active tap holds an event, every event posted after it waits
+// behind it, whether or not its type is in that tap's mask, and the waiting events go on one by
+// one, in the order they were posted, once the held event has left the tap (returned, dropped, or
+// given up on after the timeout below). So an event the held tap is not interested in cannot reach
+// the stream or the taps after it before the held one does. With no active tap holding an event
+// nothing waits and an event goes through at once.
+//
 // Events are delivered in this process only: there is no event router between processes, so an
 // event posted to another process is dropped, and the taps of other processes never see an event.
 
@@ -114,6 +121,12 @@ static size_t g_tapCount, g_tapCapacity;
 static uint32_t g_nextTapId = 1;
 // Active taps that hold an event now.
 static NSMutableArray* g_pending;
+// Events that came after an event that is held (or after one of these) and wait to go on, in order.
+static NSMutableArray* g_parked;
+// Objects that are released once g_lock is dropped: the last release of a tap takes g_lock.
+static NSMutableArray* g_garbage;
+// Events held or parked: while this is not zero a new event may not take the short way.
+static size_t g_inFlight;
 static dispatch_source_t g_watchdog;
 
 @implementation CGEventPass
@@ -125,6 +138,29 @@ static dispatch_source_t g_watchdog;
 	[super dealloc];
 }
 @end
+
+// Releases o, but only after the current holder of g_lock has dropped it (see unlockAndRelease).
+static void deferRelease(id o)
+{
+	if (!g_garbage)
+		g_garbage = [[NSMutableArray alloc] init];
+	[g_garbage addObject: o];
+	[o release];
+}
+
+static void updateInFlightLocked(void)
+{
+	__atomic_store_n(&g_inFlight, [g_pending count] + [g_parked count], __ATOMIC_RELAXED);
+}
+
+static void unlockAndRelease(void)
+{
+	NSMutableArray* garbage = g_garbage;
+
+	g_garbage = nil;
+	pthread_mutex_unlock(&g_lock);
+	[garbage release];
+}
 
 static void cgEventTapCallout(CFMachPortRef mp, void* msg, CFIndex size, void* info);
 static void tapInvalidated(CFMachPortRef mp, void* info);
@@ -251,6 +287,9 @@ static void registerTap(CGEventTap* tap)
 	pthread_mutex_unlock(&g_lock);
 }
 
+static void advancePassLocked(CGEventPass* pass);
+static void drainParkedLocked(void);
+
 static void tapInvalidated(CFMachPortRef mp, void* info)
 {
 	CGEventTap* tap = (CGEventTap*) info;
@@ -258,7 +297,35 @@ static void tapInvalidated(CFMachPortRef mp, void* info)
 	pthread_mutex_lock(&g_lock);
 	tap->_removed = YES;
 	removeFromRegistryLocked(tap);
-	pthread_mutex_unlock(&g_lock);
+
+	// The events the tap holds are not coming back from it: they go on.
+	NSMutableArray* released = nil;
+
+	for (NSUInteger i = 0; i < [g_pending count];)
+	{
+		CGEventPass* pass = [g_pending objectAtIndex: i];
+
+		if (pass->waiting == tap)
+		{
+			pass->timedOutSeq = pass->seq;
+			pass->waiting = nil;
+			if (!released)
+				released = [[NSMutableArray alloc] init];
+			[released addObject: pass];
+			[g_pending removeObjectAtIndex: i];
+		}
+		else
+		{
+			i++;
+		}
+	}
+	for (CGEventPass* pass in released)
+		advancePassLocked(pass);
+	drainParkedLocked();
+	updateInFlightLocked();
+	if (released)
+		deferRelease(released);
+	unlockAndRelease();
 
 	notify_post(kCGNotifyEventTapRemoved);
 }
@@ -308,23 +375,24 @@ static BOOL sendToTap(CGEventTap* tap, CGEventPass* pass, BOOL listenOnly, uint3
 	return YES;
 }
 
-static void armWatchdog(void);
-static void continuePass(CGEventPass* pass);
+static void armWatchdogLocked(void);
 
 static void finishPass(CGEventPass* pass)
 {
 	_CGEventStreamEnqueue(pass->event);
 }
 
-static void continuePass(CGEventPass* pass)
+// Takes the event on from where it is: through the taps that come next, to the stream. Ends when an
+// active tap holds the event (it is then in g_pending and comes back by cgEventTapCallout, the
+// watchdog or tapInvalidated) or when the event has been given to the stream. Holds g_lock throughout:
+// nothing in here waits, and the order of events is the order in which they are taken on.
+static void advancePassLocked(CGEventPass* pass)
 {
 	for (;;)
 	{
 		CGEventTap* tap = nil;
-		uint32_t seq = 0;
 		CGEventType type = CGEventGetType(pass->event);
 
-		pthread_mutex_lock(&g_lock);
 		while (pass->index < [pass->taps count])
 		{
 			CGEventTap* candidate = [pass->taps objectAtIndex: pass->index++];
@@ -337,16 +405,6 @@ static void continuePass(CGEventPass* pass)
 			tap = candidate;
 			break;
 		}
-		if (tap && !(tap->_options & kCGEventTapOptionListenOnly))
-		{
-			pass->waiting = tap;
-			pass->sentAt = nowNs();
-			seq = ++pass->seq;
-			if (!g_pending)
-				g_pending = [[NSMutableArray alloc] init];
-			[g_pending addObject: pass];
-		}
-		pthread_mutex_unlock(&g_lock);
 
 		if (!tap)
 		{
@@ -364,22 +422,74 @@ static void continuePass(CGEventPass* pass)
 			{
 				// The tap does not keep up with the events.
 			}
-			[listen release];
+			deferRelease(listen);
 			continue;
 		}
 
+		pass->waiting = tap;
+		pass->sentAt = nowNs();
+		uint32_t seq = ++pass->seq;
+		if (!g_pending)
+			g_pending = [[NSMutableArray alloc] init];
+		[g_pending addObject: pass];
+
 		if (sendToTap(tap, pass, NO, seq))
 		{
-			armWatchdog();
+			armWatchdogLocked();
 			return;
 		}
 
 		// The tap cannot be reached: the event goes on without it.
-		pthread_mutex_lock(&g_lock);
 		pass->waiting = nil;
 		[g_pending removeObjectIdenticalTo: pass];
-		pthread_mutex_unlock(&g_lock);
 	}
+}
+
+// Lets the events that wait go on, one at a time and in order, while no active tap holds an event.
+static void drainParkedLocked(void)
+{
+	while ([g_pending count] == 0 && [g_parked count] > 0)
+	{
+		CGEventPass* pass = [[g_parked objectAtIndex: 0] retain];
+
+		[g_parked removeObjectAtIndex: 0];
+		advancePassLocked(pass);
+		deferRelease(pass);
+	}
+}
+
+// Puts a new event into the pipeline. It waits behind the events that are held or already
+// waiting; with none of those it goes on at once. `via` is the tap that posts the event (an event
+// a tap posts from its callback goes on from that tap, in front of what waits for the event
+// the tap holds).
+static void submitPassLocked(CGEventPass* pass, CGEventTap* via)
+{
+	BOOL viaHolds = NO;
+
+	if (via)
+	{
+		for (CGEventPass* held in g_pending)
+		{
+			if (held->waiting == via)
+			{
+				viaHolds = YES;
+				break;
+			}
+		}
+	}
+
+	if (!viaHolds && ([g_pending count] > 0 || [g_parked count] > 0))
+	{
+		if (!g_parked)
+			g_parked = [[NSMutableArray alloc] init];
+		[g_parked addObject: pass];
+	}
+	else
+	{
+		advancePassLocked(pass);
+		drainParkedLocked();
+	}
+	updateInFlightLocked();
 }
 
 // The watchdog gives up on active taps that hold an event for too long.
@@ -399,6 +509,7 @@ static void watchdogFired(void)
 			// The tap is switched off and the event goes on as it came.
 			pass->timedOutSeq = pass->seq;
 			pass->waiting->_enabled = NO;
+			pass->waiting = nil;
 			if (!expired)
 				expired = [[NSMutableArray alloc] init];
 			[expired addObject: pass];
@@ -409,25 +520,23 @@ static void watchdogFired(void)
 			i++;
 		}
 	}
+	for (CGEventPass* pass in expired)
+		advancePassLocked(pass);
+	drainParkedLocked();
+	updateInFlightLocked();
+	if (expired)
+		deferRelease(expired);
 	if ([g_pending count] == 0 && g_watchdog)
 	{
 		dispatch_source_cancel(g_watchdog);
 		dispatch_release(g_watchdog);
 		g_watchdog = NULL;
 	}
-	pthread_mutex_unlock(&g_lock);
-
-	for (CGEventPass* pass in expired)
-	{
-		// The tap that timed out, kept as the one that has to be told.
-		continuePass(pass);
-	}
-	[expired release];
+	unlockAndRelease();
 }
 
-static void armWatchdog(void)
+static void armWatchdogLocked(void)
 {
-	pthread_mutex_lock(&g_lock);
 	if (!g_watchdog)
 	{
 		g_watchdog = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0));
@@ -436,7 +545,6 @@ static void armWatchdog(void)
 		dispatch_source_set_event_handler(g_watchdog, ^{ watchdogFired(); });
 		dispatch_resume(g_watchdog);
 	}
-	pthread_mutex_unlock(&g_lock);
 }
 
 static void recordLatency(CGEventTap* tap, uint64_t sentAt)
@@ -519,48 +627,51 @@ static void cgEventTapCallout(CFMachPortRef mp, void* msg, CFIndex size, void* i
 	pthread_mutex_lock(&g_lock);
 	// The tap may have taken too long while it ran.
 	abandoned = (pass->timedOutSeq == message->seq);
-	if (!abandoned)
-	{
-		pass->waiting = nil;
-		[g_pending removeObjectIdenticalTo: pass];
-	}
-	pthread_mutex_unlock(&g_lock);
-
 	if (abandoned)
 	{
 		// The pass has gone on without this tap, which is off now. Whatever the callback
-		// returned is of no use; the callback is told why it is not called any more.
+		// returned is of no use.
 		if (returned != NULL && returned != event)
 			CFRelease(returned);
 		CFRelease(event);
-		notifyTimeout(tap);
+		BOOL told = !tap->_removed;
+		unlockAndRelease();
+		// The callback is told why it is not called any more.
+		if (told)
+			notifyTimeout(tap);
 		[pass release];
 		[tap release];
 		return;
 	}
+
+	// The event leaves the tap: it is not held any more, and it goes on (or ends) before any
+	// event that waits behind it.
+	pass->waiting = nil;
+	[g_pending removeObjectIdenticalTo: pass];
 
 	if (returned == NULL)
 	{
 		// The tap deletes the event.
 		CFRelease(event);
-		[pass release];
-		[tap release];
-		return;
 	}
-
-	if (returned != event)
+	else
 	{
-		// The tap made another event: it replaces the original, and the caller of the callback
-		// owns the new event until the system has taken it over.
-		CGEventRef replaced = pass->event;
+		if (returned != event)
+		{
+			// The tap made another event: it replaces the original, and the caller of the callback
+			// owns the new event until the system has taken it over.
+			CGEventRef replaced = pass->event;
 
-		pass->event = (CGEventRef) CFRetain(returned);
-		CFRelease(replaced);
-		CFRelease(returned);
+			pass->event = (CGEventRef) CFRetain(returned);
+			CFRelease(replaced);
+			CFRelease(returned);
+		}
+		CFRelease(event);
+		advancePassLocked(pass);
 	}
-	CFRelease(event);
-
-	continuePass(pass);
+	drainParkedLocked();
+	updateInFlightLocked();
+	unlockAndRelease();
 
 	[pass release];
 	[tap release];
@@ -710,8 +821,9 @@ void _CGEventPostToPipeline(CGEventRef event, CGEventTapLocation location, pid_t
 	_CGEventStateRecordEvent((CGEventRef) e);
 
 	// Without taps (the usual case) the event goes straight on. A tap made at this very moment
-	// may miss the event, which is the same as the tap having been made a moment later.
-	if (__atomic_load_n(&g_tapCount, __ATOMIC_RELAXED) == 0)
+	// may miss the event, which is the same as the tap having been made a moment later. Events
+	// that are held or waiting come first, though.
+	if (__atomic_load_n(&g_tapCount, __ATOMIC_RELAXED) == 0 && __atomic_load_n(&g_inFlight, __ATOMIC_RELAXED) == 0)
 	{
 		_CGEventStreamEnqueue((CGEventRef) e);
 		CFRelease(e);
@@ -723,23 +835,16 @@ void _CGEventPostToPipeline(CGEventRef event, CGEventTapLocation location, pid_t
 	pass->event = (CGEventRef) e;
 
 	pthread_mutex_lock(&g_lock);
-	if (g_tapCount > 0)
-	{
-		NSMutableArray* snapshot = [[NSMutableArray alloc] initWithCapacity: g_tapCount];
-		size_t i = 0;
+	NSMutableArray* snapshot = [[NSMutableArray alloc] initWithCapacity: g_tapCount];
+	size_t i = 0;
 
-		while (i < g_tapCount && [g_taps[i] group] < firstGroup)
-			i++;
-		for (; i < g_tapCount; i++)
-			[snapshot addObject: g_taps[i]];
-		pass->taps = snapshot;
-	}
-	pthread_mutex_unlock(&g_lock);
-
-	if (pass->taps)
-		continuePass(pass);
-	else
-		finishPass(pass);
+	while (i < g_tapCount && [g_taps[i] group] < firstGroup)
+		i++;
+	for (; i < g_tapCount; i++)
+		[snapshot addObject: g_taps[i]];
+	pass->taps = snapshot;
+	submitPassLocked(pass, nil);
+	unlockAndRelease();
 
 	[pass release];
 }
@@ -797,35 +902,30 @@ void CGEventTapPostEvent(CGEventTapProxy proxy, CGEventRef event)
 
 	pass->event = (CGEventRef) e;
 
-	pthread_mutex_lock(&g_lock);
-	if (g_tapCount > 0)
-	{
-		// From the tap after the one of the proxy on. A proxy that is not a tap of the registry
-		// starts at the first tap.
-		size_t i = 0;
-
-		for (size_t j = 0; j < g_tapCount; j++)
-		{
-			if (g_taps[j] == tap)
-			{
-				i = j + 1;
-				break;
-			}
-		}
-
-		NSMutableArray* snapshot = [[NSMutableArray alloc] initWithCapacity: g_tapCount];
-
-		for (; i < g_tapCount; i++)
-			[snapshot addObject: g_taps[i]];
-		pass->taps = snapshot;
-	}
-	pthread_mutex_unlock(&g_lock);
-
 	_CGEventStateRecordEvent((CGEventRef) e);
-	if (pass->taps)
-		continuePass(pass);
-	else
-		finishPass(pass);
+
+	pthread_mutex_lock(&g_lock);
+	// From the tap after the one of the proxy on. A proxy that is not a tap of the registry
+	// starts at the first tap.
+	size_t i = 0;
+
+	for (size_t j = 0; j < g_tapCount; j++)
+	{
+		if (g_taps[j] == tap)
+		{
+			i = j + 1;
+			break;
+		}
+	}
+
+	NSMutableArray* snapshot = [[NSMutableArray alloc] initWithCapacity: g_tapCount];
+
+	for (; i < g_tapCount; i++)
+		[snapshot addObject: g_taps[i]];
+	pass->taps = snapshot;
+
+	submitPassLocked(pass, tap);
+	unlockAndRelease();
 
 	[pass release];
 }

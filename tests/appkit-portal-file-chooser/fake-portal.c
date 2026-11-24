@@ -16,7 +16,9 @@
 //   --impostor       first send a Response with code 0 and file:///impostor
 //                    to the same path from another connection, which the
 //                    client must ignore;
-//   --vanish         leave the bus after the reply, without a Response.
+//   --vanish         leave the bus after the reply, without a Response;
+//   --choice=ID=VALUE  answer the choice ID of the request's "choices" option with VALUE (an option id, or
+//                    true or false for a check box) in the Response's "choices" (a(ss)); repeatable.
 //
 //   cc -o fake-portal fake-portal.c $(pkg-config --cflags --libs dbus-1)
 //   fake-portal [OPTIONS] LOGFILE SECONDS CODE [URI...]
@@ -31,6 +33,9 @@
 #define INTERFACE "org.freedesktop.portal.FileChooser"
 
 static FILE *log_file;
+#define MAX_CHOICES 16
+static char *choice_ids[MAX_CHOICES], *choice_values[MAX_CHOICES];
+static int choice_count;
 
 static void dump(DBusMessageIter *iterator, int depth);
 
@@ -188,6 +193,26 @@ static void send_response(DBusConnection *connection, const char *path, unsigned
 		dbus_message_iter_close_container(&entry, &variant);
 		dbus_message_iter_close_container(&array, &entry);
 	}
+	if (choice_count > 0)
+	{
+		const char *choices_key = "choices";
+		DBusMessageIter pairs, pair;
+
+		dbus_message_iter_open_container(&array, DBUS_TYPE_DICT_ENTRY, NULL, &entry);
+		dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &choices_key);
+		dbus_message_iter_open_container(&entry, DBUS_TYPE_VARIANT, "a(ss)", &variant);
+		dbus_message_iter_open_container(&variant, DBUS_TYPE_ARRAY, "(ss)", &pairs);
+		for (i = 0; i < choice_count; i++)
+		{
+			dbus_message_iter_open_container(&pairs, DBUS_TYPE_STRUCT, NULL, &pair);
+			dbus_message_iter_append_basic(&pair, DBUS_TYPE_STRING, &choice_ids[i]);
+			dbus_message_iter_append_basic(&pair, DBUS_TYPE_STRING, &choice_values[i]);
+			dbus_message_iter_close_container(&pairs, &pair);
+		}
+		dbus_message_iter_close_container(&variant, &pairs);
+		dbus_message_iter_close_container(&entry, &variant);
+		dbus_message_iter_close_container(&array, &entry);
+	}
 	dbus_message_iter_close_container(&iterator, &array);
 	dbus_connection_send(connection, signal, NULL);
 	dbus_connection_flush(connection);
@@ -211,6 +236,16 @@ int main(int argc, char **argv)
 			impostor = 1;
 		else if (strcmp(argv[first_arg], "--vanish") == 0)
 			vanish = 1;
+		else if (strncmp(argv[first_arg], "--choice=", 9) == 0 && choice_count < MAX_CHOICES)
+		{
+			char *id = strdup(argv[first_arg] + 9), *value = strchr(id, '=');
+
+			if (value == NULL)
+				return 2;
+			*value++ = 0;
+			choice_ids[choice_count] = id;
+			choice_values[choice_count++] = value;
+		}
 		else
 			return 2;
 	}
