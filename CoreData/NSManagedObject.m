@@ -99,7 +99,7 @@ static BOOL DarlingReportErrors(NSArray *errors, NSError **error) {
 // (attribute, to-one or to-many relationship) and the count limits of a to-many relationship.
 // Returns nil when the value is acceptable. macOS does not check the class of an attribute value
 // here: a string for a number attribute passes and stays a string (observed on both Macs).
-static NSError *DarlingBasicValidationFailure(NSManagedObject *object, NSPropertyDescription *property, id value) {
+static NSError *DarlingModelConstraintFailure(NSManagedObject *object, NSPropertyDescription *property, id value) {
     NSString *key = [property name];
 
     if ([property isKindOfClass: [NSAttributeDescription class]]) {
@@ -126,6 +126,45 @@ static NSError *DarlingBasicValidationFailure(NSManagedObject *object, NSPropert
             return DarlingValidationError(NSValidationRelationshipLacksMinimumCountError, object, key, value);
         if ([relationship maxCount] > 0 && count > [relationship maxCount])
             return DarlingValidationError(NSValidationRelationshipExceedsMaximumCountError, object, key, value);
+    }
+    return nil;
+}
+
+// The validation predicates of an attribute, each with the warning at the same index as its message.
+//
+// GUESS (a deliberate departure from the documented wording): the setValidationPredicates page and
+// the public NSPropertyDescription.h both describe the predicates as evaluated against the managed
+// objects. Each predicate is evaluated here with the value being validated as its subject (SELF).
+// Reason: the same header line says the predicate list stands in for per-property parameters such
+// as length, min and max values and formats, which constrain one value, and a predicate like
+// "length > 2" or "SELF MATCHES ..." only reads that way. Rejected: the managed object as the
+// subject, which would need every predicate to spell the key path of its own property.
+// GUESS: a nil value skips the predicates (the optional flag decides nil), the first failing
+// predicate is the error, its code is NSManagedObjectValidationError, its text is the warning and
+// it carries the predicate under NSValidationPredicateErrorKey.
+// GUESS: the predicates of a relationship are not applied; the subject of one (the related object,
+// or the set of a to-many relationship) is not something the pages describe.
+static NSError *DarlingBasicValidationFailure(NSManagedObject *object, NSPropertyDescription *property, id value) {
+    NSError *failure = DarlingModelConstraintFailure(object, property, value);
+
+    if (failure != nil || value == nil || value == [NSNull null] || ![property isKindOfClass: [NSAttributeDescription class]])
+        return failure;
+
+    NSArray *predicates = [property validationPredicates];
+    NSArray *warnings = [property validationWarnings];
+
+    for (NSUInteger index = 0; index < [predicates count]; index++) {
+        NSPredicate *predicate = [predicates objectAtIndex: index];
+
+        if (![predicate evaluateWithObject: value]) {
+            NSString *warning = [warnings objectAtIndex: index];
+            NSError *base = DarlingValidationError(NSManagedObjectValidationError, object, [property name], value);
+            NSMutableDictionary *info = [NSMutableDictionary dictionaryWithDictionary: [base userInfo]];
+
+            [info setObject: predicate forKey: NSValidationPredicateErrorKey];
+            [info setObject: warning forKey: NSLocalizedDescriptionKey];
+            return [NSError errorWithDomain: NSCocoaErrorDomain code: NSManagedObjectValidationError userInfo: info];
+        }
     }
     return nil;
 }
