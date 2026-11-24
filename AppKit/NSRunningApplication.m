@@ -94,17 +94,27 @@ static BOOL processExists(pid_t pid) {
     if (proc_pidpath(_processIdentifier, path, sizeof(path)) <= 0)
         return nil;
 
+    // An application bundle is recognised by its contents, not by its name: the executable lies in
+    // Contents/MacOS next to an Info.plist that does not declare another package type. On macOS 26.7.3
+    // an application whose bundle directory has no .app extension, started through its executable,
+    // has the same main bundle, bundle URL and activation policy as the same bundle named .app.
+    // Tests: the policy and noext cases of tests/appkit-global-menu/run-bar-tracking.py.
     NSArray<NSString *> *components = [[NSString stringWithUTF8String: path] pathComponents];
-    for (NSInteger i = (NSInteger) [components count] - 3; i >= 1; i--) {
-        if ([[components objectAtIndex: i] hasSuffix: @".app"] &&
-            [[components objectAtIndex: i + 1] isEqualToString: @"Contents"] &&
-            [[components objectAtIndex: i + 2] isEqualToString: @"MacOS"]) {
-            NSString *bundlePath = [NSString pathWithComponents:
-                    [components subarrayWithRange: NSMakeRange(0, i + 1)]];
-            return [NSBundle bundleWithPath: bundlePath];
-        }
-    }
-    return nil;
+    NSInteger count = (NSInteger) [components count];
+    if (count < 4 || ![[components objectAtIndex: count - 2] isEqualToString: @"MacOS"] ||
+        ![[components objectAtIndex: count - 3] isEqualToString: @"Contents"])
+        return nil;
+
+    NSString *bundlePath = [NSString pathWithComponents:
+            [components subarrayWithRange: NSMakeRange(0, count - 3)]];
+    NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:
+            [bundlePath stringByAppendingPathComponent: @"Contents/Info.plist"]];
+    if (info == nil)
+        return nil;
+    NSString *type = [info objectForKey: @"CFBundlePackageType"];
+    if (type != nil && ![type isEqual: @"APPL"])
+        return nil;
+    return [NSBundle bundleWithPath: bundlePath];
 }
 
 - (NSString *) bundleIdentifier {
@@ -124,15 +134,27 @@ static BOOL processExists(pid_t pid) {
 }
 
 // The policy comes from the bundle's declarations (LSUIElement: accessory, LSBackgroundOnly:
-// prohibited); an application without a bundle is a regular one.
+// prohibited). A program that is not in an application bundle is prohibited until it sets another
+// policy: it cannot become the front application or own the menu bar, however it activates itself.
+// Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2): an AppKit executable outside
+// a bundle, run from Terminal and started by a regular application, has policy 2, and neither
+// activateIgnoringOtherApps: nor the other activation call made it active, the front application
+// or the menu bar owner; the regular application that started it stayed all three.
+// Test: tests/appkit-global-menu/run-bar-tracking.py (the parent case).
 - (NSApplicationActivationPolicy) activationPolicy {
     NSBundle *bundle = [self _applicationBundle];
 
+    if (bundle == nil)
+        return NSApplicationActivationPolicyProhibited;
     if ([[bundle objectForInfoDictionaryKey: @"LSBackgroundOnly"] boolValue])
         return NSApplicationActivationPolicyProhibited;
     if ([[bundle objectForInfoDictionaryKey: @"LSUIElement"] boolValue])
         return NSApplicationActivationPolicyAccessory;
     return NSApplicationActivationPolicyRegular;
+}
+
+- (BOOL) _isOutsideApplicationBundle {
+    return [self _applicationBundle] == nil;
 }
 
 - (BOOL) isHidden {
@@ -189,9 +211,10 @@ static BOOL processExists(pid_t pid) {
     return _CGSGetFrontProcess(&front) == kCGErrorSuccess && front == _processIdentifier;
 }
 
-// There is one menu bar per application, so the application that has the focus owns it.
+// The application that owns the menu bar (see -[NSWorkspace menuBarOwningApplication]).
 - (BOOL) ownsMenuBar {
-    return [self isActive];
+    pid_t owner = 0;
+    return _CGSGetMenuBarOwnerProcess(&owner) == kCGErrorSuccess && owner == _processIdentifier;
 }
 
 - (BOOL) activateWithOptions: (NSApplicationActivationOptions) options {

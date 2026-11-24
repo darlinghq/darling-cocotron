@@ -40,11 +40,12 @@ static NSString *applicationName(void) {
     return name;
 }
 
-- (instancetype) initWithDisplay: (Display *) display {
+- (instancetype) initWithDisplay: (Display *) display exporting: (BOOL) exporting {
     if ((self = [super init]) == nil)
         return nil;
 
     _display = display;
+    _exporting = exporting;
     _windows = [NSMutableSet new];
 
     _bar = [[NSMenuBarController alloc] initWithDelegate: self];
@@ -62,7 +63,7 @@ static NSString *applicationName(void) {
 
 // The session bus is only looked at once the application has a menu to show.
 - (void) connectIfNeeded {
-    if (_connectionTried)
+    if (_connectionTried || !_exporting)
         return;
     _connectionTried = YES;
 
