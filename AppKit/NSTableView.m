@@ -55,6 +55,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 - (void) _sizeColumnToFit: (NSInteger) columnIndex;
 - (void) _moveColumn: (NSInteger) columnIndex toColumn: (NSInteger) newIndex notify: (BOOL) notify;
 - (void) _noteColumnDidMoveFrom: (NSInteger) oldIndex to: (NSInteger) newIndex;
+- (void) _sendActionForClickInHeaderOfColumn: (NSInteger) column clickCount: (NSInteger) clickCount;
 - (void) _recycleView: (NSView *) view;
 - (void) _recycleCellViewsOutsideRows: (NSRange) rows;
 - (NSView *) _cellViewAtColumn: (NSInteger) column row: (NSInteger) row make: (BOOL) make;
@@ -147,6 +148,14 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 static void forgetClickedCell(NSTableView *table) {
     NS_EXTRA(NSTableView, table)->_clickedColumn = -1;
     NS_EXTRA(NSTableView, table)->_clickedRow = -1;
+}
+
+// The first click of a click sequence sends the action, the second the double action.
+static void sendClickAction(NSTableView *table, NSInteger clickCount) {
+    if (clickCount < 2)
+        [table sendAction: [table action] to: [table target]];
+    else if (clickCount == 2)
+        [table sendAction: [table doubleAction] to: [table target]];
 }
 
 - initWithCoder: (NSCoder *) coder {
@@ -2488,10 +2497,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [self selectRowIndexes: [NSIndexSet indexSet] byExtendingSelection: NO];
         [NS_EXTRA(NSTableView, self)->_selectedColumns removeAllObjects];
 
-        if ([event clickCount] < 2)
-            [self sendAction: [self action] to: [self target]];
-        else if ([event clickCount] == 2)
-            [self sendAction: [self doubleAction] to: [self target]];
+        sendClickAction(self, [event clickCount]);
         forgetClickedCell(self);
         return;
     }
@@ -2745,6 +2751,15 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         if (!interpretedAsEdit)
             [self sendAction: [self doubleAction] to: [self target]];
     }
+    forgetClickedCell(self);
+}
+
+// A click on a column header that was not a column drag or a divider grab. The click is in no row, and the
+// action and double action read the column.
+- (void) _sendActionForClickInHeaderOfColumn: (NSInteger) column clickCount: (NSInteger) clickCount {
+    NS_EXTRA(NSTableView, self)->_clickedColumn = column;
+    NS_EXTRA(NSTableView, self)->_clickedRow = -1;
+    sendClickAction(self, clickCount);
     forgetClickedCell(self);
 }
 
