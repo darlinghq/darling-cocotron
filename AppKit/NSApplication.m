@@ -1285,12 +1285,13 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
 //
 // An application that declares no document types (an executable without a
 // bundle, or a bundle without CFBundleDocumentTypes) has no document
-// controller to fall back to: when its delegate implements neither method,
-// the arguments are left alone instead of being offered to the controller,
-// which would fail on every one and present an error. Words that are not
-// files are common arguments of such programs.
+// controller to fall back to: the document controller is never offered a
+// document of such an application, whatever its delegate implements and
+// answers. Words that are not files are common arguments of such programs,
+// and the controller would fail on each and present an error.
 - (BOOL) _openArgumentDocuments: (NSArray *) documents {
     BOOL opened = NO;
+    BOOL documentTypes = [self _declaresDocumentTypes];
 
     for (NSString *document in documents) {
         NSArray *one = [NSArray arrayWithObject: document];
@@ -1298,9 +1299,22 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
         if ([_delegate respondsToSelector: @selector(application:openFiles:)]) {
             [_delegate application: self openFiles: one];
             opened = YES;
-        } else if ([_delegate respondsToSelector: @selector(application:
-                                                              openFile:)] ||
-                   [self _declaresDocumentTypes]) {
+        } else if ([_delegate respondsToSelector: @selector(application:openFile:)]) {
+            BOOL taken = [_delegate application: self openFile: document];
+
+            // QUIRK: a document named in the process arguments that the delegate's -application:openFile: does
+            // not take (answers NO) is then tried by the document controller, which presents an error when it
+            // cannot open it, but only in an application that declares document types (CFBundleDocumentTypes):
+            // one that declares none never reaches the controller. Not documented. Evidence: black-box
+            // observation on macOS 26.7.3 and 10.14.4 (tier 2), a document-based application started from its
+            // executable with words that are no documents, and an application without document types with a
+            // delegate that answers NO.
+            // Test: appkit-argument-documents (-delegate openFile),
+            // appkit-argument-documents-non-document-apps
+            if (!taken && documentTypes)
+                taken = [[NSDocumentController sharedDocumentController] application: self openFile: document];
+            opened |= taken;
+        } else if (documentTypes) {
             opened |= [self _openFileNames: one];
         }
     }

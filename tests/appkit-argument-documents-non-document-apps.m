@@ -14,7 +14,10 @@
 //     whether the program calls -finishLaunching itself or -run does;
 //   - an application with CFBundleDocumentTypes opens the argument as a document through the
 //     document controller: an existing text file opens as an instance of the document class,
-//     and a word that is not a file reaches the document controller too.
+//     and a word that is not a file reaches the document controller too, also after the delegate's
+//     -application:openFile: answered NO;
+//   - a delegate whose -application:openFile: answers NO changes nothing for the applications
+//     without document types: the document controller is still not used.
 // The test starts itself once per case (and, for the bundled cases, from a copy of itself placed in
 // a temporary application bundle), observes the document controller through the public methods
 // it is asked to open and make documents with, and prints PASS when every child agrees. Needs a
@@ -45,6 +48,18 @@ static int documentsRead;    // ProbeDocument instances that read a file
     return YES;
 }
 - (void) makeWindowControllers {
+}
+@end
+
+@interface RefusingDelegate : NSObject <NSApplicationDelegate>
+@end
+
+@implementation RefusingDelegate
+- (BOOL) application: (NSApplication *) app openFile: (NSString *) path {
+    return NO;
+}
+- (BOOL) applicationShouldOpenUntitledFile: (NSApplication *) app {
+    return NO;
 }
 @end
 
@@ -163,9 +178,11 @@ static int child(void) {
         installHooks();
         NSApplication *app = [NSApplication sharedApplication];
         [app setActivationPolicy: NSApplicationActivationPolicyAccessory];
-        static NoOpenDelegate *delegate;
-        if (getenv("ARGDOC_DELEGATE") != NULL) {
-            delegate = [[NoOpenDelegate alloc] init];
+        static id delegate;
+        const char *kindOfDelegate = getenv("ARGDOC_DELEGATE");
+        if (kindOfDelegate != NULL) {
+            delegate = strcmp(kindOfDelegate, "refuse") == 0 ? [[RefusingDelegate alloc] init]
+                                                             : [[NoOpenDelegate alloc] init];
             [app setDelegate: delegate];
         }
         if (strcmp(getenv("ARGDOC_LAUNCH"), "manual") == 0) {
@@ -192,7 +209,7 @@ static int spawnChild(const char *exe, const char *kind, const char *launch, con
     setenv("ARGDOC_KIND", kind, 1);
     setenv("ARGDOC_LAUNCH", launch, 1);
     if (delegate != NULL)
-        setenv("ARGDOC_DELEGATE", "1", 1);
+        setenv("ARGDOC_DELEGATE", delegate, 1);
     else
         unsetenv("ARGDOC_DELEGATE");
     setenv("ARGDOC_ARG", argName, 1);
@@ -262,12 +279,14 @@ int main(int argc, char **argv) {
         const char *launches[] = {"manual", "run"};
         for (int a = 0; a < 2; a++)
             for (int l = 0; l < 2; l++) {
-                for (int d = 0; d < 2; d++) {
-                    const char *delegate = d ? "noopen" : NULL;
+                for (int d = 0; d < 3; d++) {
+                    const char *delegate = d == 0 ? NULL : d == 1 ? "noopen" : "refuse";
                     failures += spawnChild([bare UTF8String], "bare", launches[l], delegate, args[a].name, args[a].value);
                     failures += spawnChild([plain UTF8String], "plain", launches[l], delegate, args[a].name, args[a].value);
                 }
                 failures += spawnChild([docs UTF8String], "docs", launches[l], NULL, args[a].name, args[a].value);
+                // The documented-type control with a delegate that refuses the argument.
+                failures += spawnChild([docs UTF8String], "docs", launches[l], "refuse", args[a].name, args[a].value);
             }
         failures += spawnChild([bare UTF8String], "bare", "run", NULL, "none", "");
         [[NSFileManager defaultManager] removeItemAtPath: dir error: NULL];

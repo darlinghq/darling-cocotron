@@ -12,6 +12,10 @@
 // -application:openFiles:, or takes the value after a switch.
 // Usage: appkit-argument-documents -delegate none|openFile|openFiles [word ...]; prints PASS or FAIL. The alert is
 // counted by replacing -[NSDocumentController presentError:], so no window is needed. Build without ARC.
+// The program stands for a document-based application, so run it from an application bundle whose Info.plist
+// has a CFBundleDocumentTypes entry (e.g. a public.plain-text type with NSDocumentClass NSDocument): an
+// application without document types never reaches the document controller (see
+// appkit-argument-documents-non-document-apps).
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #include <stdio.h>
@@ -61,6 +65,8 @@ int main(int argc, char **argv) {
             [NSApp setDelegate: [[FilesDelegate alloc] init]];
         class_replaceMethod([NSDocumentController class], @selector(presentError:), (IMP) countPresent, "c@:@");
         [NSApp finishLaunching];
+        // macOS opens the documents asynchronously: let the run loop deliver the errors.
+        [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 1.0]];
 
         int wantPresented = [mode isEqualToString: @"openFiles"] ? 0 : words;
         int wantOpenFile = [mode isEqualToString: @"openFile"] ? words : 0;
