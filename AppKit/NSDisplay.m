@@ -235,6 +235,10 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     return YES;
 }
 
+- (BOOL) _desktopShowsMainMenu {
+    return NO;
+}
+
 // The screens are the displays of CoreGraphics (this framework sits above it): the frame is the
 // display's bounds moved into Cocoa's global space, which has its origin at the main screen's
 // bottom-left corner and y pointing up, and the backing scale, the name and the EDID are the display's.
