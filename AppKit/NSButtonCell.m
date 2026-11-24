@@ -1339,8 +1339,17 @@ static const CGFloat kImageMargin = 2.;
     // Observed on macOS 26.7.3: a button of a bordered style draws exactly what a button without a border does
     // there, and a cell drawn by a view that is not its button, which never hears of the pointer, differs from
     // what it draws without the flag (taken to be the same hiding).
+    // QUIRK: a button of the inline bezel style draws exactly as it does with the property off while the pointer
+    // is outside; the documentation of showsBorderOnlyWhileMouseInside does not mention styles. Observed on
+    // macOS 26.1 (arm64): probe 671.pair "Inline ; F vs B -> identical (200x64 px)" (F = bordered with the property
+    // on and the pointer outside, B = bordered with it off), while Rounded gave "F vs B -> 9508 of 12800 px
+    // differ". For Inline, bordered and borderless differ only inside the title's box (893 px), so the probe cannot
+    // tell "keeps its border" from "has no visible border to hide"; drawing as with the property off is the least
+    // it supports. The probe's title was "Probe"; an empty title was never tried, and the pointer inside was not
+    // observed. Test: appkit-button-border-only-while-mouse-inside (the inline button).
     if (NS_EXTRA(NSButtonCell, self)->_showsBorderOnlyWhileMouseInside &&
-        !NS_EXTRA(NSButtonCell, self)->_mouseInside)
+        !NS_EXTRA(NSButtonCell, self)->_mouseInside &&
+        NS_EXTRA(NSButtonCell, self)->_bezelStyle != NSBezelStyleInline)
         return;
 
     BOOL defaulted = ([[controlView window] defaultButtonCell] == self);

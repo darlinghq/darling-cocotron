@@ -6,7 +6,8 @@
 // watches the pointer with one tracking area owned by its cell, with the button's bounds as the rectangle and
 // the options mouse-entered-and-exited and active-always, and none for a button without a border; the cell
 // reacts to entered and exited, the button itself does not; with the flag set and the pointer outside, a button
-// without a title draws exactly what a button without a border draws; a cell drawn by a view that is not its
+// without a title draws exactly what a button without a border draws (on macOS 26.1 not the inline bezel style,
+// which draws as with the flag off); a cell drawn by a view that is not its
 // button draws differently from what it draws without the flag. Built without ARC.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -148,6 +149,20 @@ int main(void)
             CHECK(![noBorder isEqual: withBorder]);
             CHECK([render(plain) isEqual: noBorder]);
             [plain removeFromSuperview];
+        }
+
+        // QUIRK (macOS 26.1, probe 671.pair Inline): an inline button draws as the bordered button, the property on and
+        // the pointer outside; the property still makes the cell watch the pointer
+        {
+            NSButton *inline_ = [[[NSButton alloc] initWithFrame: NSMakeRect(20, 20, 120, 32)] autorelease];
+            [inline_ setTitle: @"Title"];
+            [inline_ setBezelStyle: NSBezelStyleInline];
+            [[window contentView] addSubview: inline_];
+            NSData *inlineBordered = render(inline_);
+            [inline_ setShowsBorderOnlyWhileMouseInside: YES];
+            CHECK(watchesPointer(inline_));
+            CHECK([render(inline_) isEqual: inlineBordered]);
+            [inline_ removeFromSuperview];
         }
 
         [button setShowsBorderOnlyWhileMouseInside: NO];
