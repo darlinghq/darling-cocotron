@@ -2919,7 +2919,11 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 #pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
 - (uint32_t) clipboardSerial {
-    return _keyboardWindow != nil ? _inputSerial : 0;
+    if (_keyboardWindow != nil)
+        return _inputSerial;
+    // A key or click still being handled entitles its writes to the selection even when the focus
+    // left right after it, as when a virtual keyboard is removed a few milliseconds after its key.
+    return _inputEvent != nil && [NSApp currentEvent] == _inputEvent ? _inputSerial : 0;
 }
 
 - (NSDraggingManager *) draggingManager {
