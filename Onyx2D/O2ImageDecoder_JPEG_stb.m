@@ -13,6 +13,9 @@
 // No failure strings: they live in a thread-local variable.
 #define STBI_NO_FAILURE_STRINGS
 #define STBI_NO_THREAD_LOCALS
+// The input is untrusted: at most 10000x10000 (400 MB of RGBA), the worst case
+// the libjpeg decoder allows too.
+#define STBI_MAX_DIMENSIONS 10000
 #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
