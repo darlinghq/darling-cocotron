@@ -57,7 +57,10 @@ int main(void) {
         CGError warp = CGWarpMouseCursorPosition(CGPointMake(where.x + 10, where.y + 10));
         expect(warp == kCGErrorCannotComplete || warp == kCGErrorSuccess, @"a warp without a surface under the pointer reports its outcome");
         expect(CGAssociateMouseAndMouseCursorPosition(true) == kCGErrorSuccess, @"the mouse can be connected again");
-        expect(CGWarpMouseCursorPosition(CGPointMake(NAN, 0)) == kCGErrorIllegalArgument, @"a warp to NaN is an illegal argument");
+        // A non-finite coordinate is taken as 0 (the quirk pinned by coregraphics-warp-mouse-glue), so the warp is
+        // an ordinary one: not an illegal argument.
+        CGError nanWarp = CGWarpMouseCursorPosition(CGPointMake(NAN, 0));
+        expect(nanWarp == kCGErrorCannotComplete || nanWarp == kCGErrorSuccess, @"a warp to NaN is an ordinary warp, not an illegal argument");
 
         expect(!appKitLoaded(), @"AppKit is not loaded by any of it");
     }
