@@ -15,6 +15,8 @@
 //   Alt_L                      the left Option key
 //   s held for a second        key repeat
 //   d                          the tap turns it into e
+//   Tab, Shift_L + Tab         the characters of the NSEvents are U+0009, and U+0019 (NSBackTabCharacter) with Shift
+//                              (the server's ISO_Left_Tab; the tap sees the layout's U+0009)
 //   Shift_L pressed while another client has the keyboard focus, the focus comes back, Shift_L released
 //                              (the flags are read from the server, with no key responsible)
 //   q                          the end
@@ -264,6 +266,24 @@ int main(void) {
         expect(nsE >= 0 && nsSeen[nsE].unmodified == 'e', @"and its characters ignoring the modifiers follow the changed key code");
         expect(nsCGEventMatches, @"every NSEvent's CGEvent is the one the tap passed on (key code)");
         expect(nsHasWindow, @"the key events are for a window");
+
+        // Tab and Shift + Tab: the layout's tab character reaches the tap in both, AppKit's characters are the back tab
+        // character with Shift
+        int tab = findKey(tapSeen, tapCount, 0, kCGEventKeyDown, kVK_Tab, 0x09);
+        expect(tab >= 0 && !(tapSeen[tab].flags & kCGEventFlagMaskShift), @"Tab: the tap sees U+0009 and no Shift");
+        int backTab = tab >= 0 ? findKey(tapSeen, tapCount, tab + 1, kCGEventKeyDown, kVK_Tab, 0x09) : -1;
+        expect(backTab >= 0 && (tapSeen[backTab].flags & kCGEventFlagMaskShift),
+               @"Shift + Tab (the server's ISO_Left_Tab): the tap sees the layout's U+0009 and the Shift flag");
+        int nsTab = findKey(nsSeen, nsCount, 0, kCGEventKeyDown, kVK_Tab, 0);
+        expect(nsTab >= 0 && hasChar(&nsSeen[nsTab], 0x09) && nsSeen[nsTab].unmodified == 0x09 &&
+                       !(nsSeen[nsTab].flags & NSEventModifierFlagShift),
+               @"Tab: AppKit's characters and charactersIgnoringModifiers are U+0009");
+        int nsBackTab = nsTab >= 0 ? findKey(nsSeen, nsCount, nsTab + 1, kCGEventKeyDown, kVK_Tab, 0) : -1;
+        expect(nsBackTab >= 0 && (nsSeen[nsBackTab].flags & NSEventModifierFlagShift) && hasChar(&nsSeen[nsBackTab], NSBackTabCharacter) &&
+                       nsSeen[nsBackTab].unmodified == NSBackTabCharacter,
+               @"Shift + Tab: AppKit's characters and charactersIgnoringModifiers are U+0019 (NSBackTabCharacter)");
+        int nsBackTabUp = nsBackTab >= 0 ? findKey(nsSeen, nsCount, nsBackTab + 1, kCGEventKeyUp, kVK_Tab, 0) : -1;
+        expect(nsBackTabUp >= 0 && hasChar(&nsSeen[nsBackTabUp], NSBackTabCharacter), @"and the key up of Shift + Tab");
 
         // Shift held while another client had the focus
         int tapE = findKey(tapSeen, tapCount, 0, kCGEventKeyDown, kVK_ANSI_E, 'e');
