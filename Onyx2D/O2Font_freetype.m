@@ -1154,11 +1154,7 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
             if (_coveredCharSet == nil && _face != NULL) {
                 CFMutableCharacterSetRef set = CFCharacterSetCreateMutable(kCFAllocatorDefault);
                 FT_UInt gindex = 0;
-                // Glyphs are drawn as plain outlines: a color font (bitmap
-                // emoji, or COLR layers whose base glyphs are empty) covers
-                // nothing, so font substitution passes it by.
-                FT_ULong charcode = FT_IS_SCALABLE(_face) && !FT_HAS_COLOR(_face)
-                        ? FT_Get_First_Char(_face, &gindex) : 0;
+                FT_ULong charcode = FT_Get_First_Char(_face, &gindex);
                 FT_ULong rangeStart = 0;
                 FT_ULong rangeLength = 0;
 
