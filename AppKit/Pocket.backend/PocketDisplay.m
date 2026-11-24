@@ -25,10 +25,13 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSScreen.h>
+#import <AppKit/NSText.h>
 #import <AppKit/NSTouch.h>
 #import <AppKit/NSWindow.h>
 #import <CoreFoundation/CFSocket.h>
 #import <HIToolbox/Events.h>
+#import <objc/message.h>
+#import <objc/runtime.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -55,6 +58,7 @@
 @end
 
 @interface PocketDisplay ()
+- (void) keyboardFrameChanged: (struct pocket_keyboard_frame) frame;
 - (PocketWindow *) windowWithNumber: (uint32_t) number;
 - (void) touch: (struct pocket_touch) touch;
 - (void) key: (struct pocket_key) key characters: (NSString *) characters;
@@ -243,6 +247,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     case POCKET_TEXT:
         [self commitText: stringFromBytes(bytes, length)];
         break;
+    case POCKET_KEYBOARD_FRAME:
+        if (length >= sizeof(struct pocket_keyboard_frame)) {
+            struct pocket_keyboard_frame frame;
+            memcpy(&frame, bytes, sizeof(frame));
+            [self keyboardFrameChanged: frame];
+        }
+        break;
     case POCKET_SCREEN:
         if (length >= sizeof(struct pocket_screen)) {
             struct pocket_screen screen;
@@ -387,6 +398,71 @@ static NSString *charactersForSpecialKey(uint32_t keycode) {
     [self postKey: NO keyCode: 0 modifiers: 0 characters: text];
 }
 
+#pragma mark - The soft keyboard
+
+// Whether a responder takes typing: AppKit's text editors, and UIKit views that adopt UIKeyInput
+// (a terminal, say). UIKit sits above AppKit, so its protocol is looked up by name; it exists once
+// UIKit is loaded.
+static BOOL respondsToTyping(NSResponder *responder) {
+    if ([responder isKindOfClass: [NSText class]])
+        return YES;
+    Protocol *keyInput = objc_getProtocol("UIKeyInput");
+    return keyInput != NULL && [responder conformsToProtocol: keyInput];
+}
+
+// What the text being edited asks of the keyboard: UITextInputTraits, which the UIKit view around an
+// AppKit text editor holds (a UITextField around its field editor, a UITextView around its
+// NSTextView), or the responder itself when it adopts UIKeyInput.
+static uint32_t traitValue(id traits, const char *name) {
+    SEL selector = sel_getUid(name);
+    if (traits == nil || ![traits respondsToSelector: selector])
+        return 0;
+    return (uint32_t) ((NSInteger (*)(id, SEL)) objc_msgSend)(traits, selector);
+}
+
+static struct pocket_keyboard keyboardFor(NSResponder *responder) {
+    struct pocket_keyboard keyboard = {1};
+    id traits = nil;
+    for (id view = responder; view != nil && traits == nil;
+         view = [view isKindOfClass: [NSView class]] ? [(NSView *) view superview] : nil)
+        if ([view respondsToSelector: @selector(keyboardType)])
+            traits = view;
+    keyboard.keyboard_type = traitValue(traits, "keyboardType");
+    keyboard.return_key = traitValue(traits, "returnKeyType");
+    keyboard.autocapitalization = traitValue(traits, "autocapitalizationType");
+    keyboard.autocorrection = traitValue(traits, "autocorrectionType");
+    SEL secure = sel_getUid("isSecureTextEntry");
+    if ([traits respondsToSelector: secure] && ((BOOL (*)(id, SEL)) objc_msgSend)(traits, secure))
+        keyboard.flags |= POCKET_KEYBOARD_SECURE;
+    if ([responder isKindOfClass: [NSText class]] && ![(NSText *) responder isFieldEditor])
+        keyboard.flags |= POCKET_KEYBOARD_MULTILINE;
+    return keyboard;
+}
+
+- (void) updateKeyboard {
+    NSWindow *window = [self keyWindow];
+    NSResponder *responder = [window firstResponder];
+    struct pocket_keyboard keyboard = {0};
+    if ([window isVisible] && respondsToTyping(responder))
+        keyboard = keyboardFor(responder);
+    if (memcmp(&keyboard, &_keyboard, sizeof(keyboard)) == 0)
+        return;
+    _keyboard = keyboard;
+    [self send: POCKET_KEYBOARD bytes: &keyboard length: sizeof(keyboard)];
+}
+
+NSString *const PocketKeyboardHeightDidChangeNotification = @"PocketKeyboardHeightDidChangeNotification";
+
+- (void) keyboardFrameChanged: (struct pocket_keyboard_frame) frame {
+    CGFloat height = frame.height / [self scale];
+    if (height == _keyboardHeight)
+        return;
+    _keyboardHeight = height;
+    [[NSNotificationCenter defaultCenter] postNotificationName: PocketKeyboardHeightDidChangeNotification
+                                                        object: NSApp
+                                                      userInfo: @{@"height": @(height)}];
+}
+
 #pragma mark - Screen changes
 
 - (void) screenChanged: (struct pocket_screen) screen {
@@ -468,6 +544,7 @@ static NSString *charactersForSpecialKey(uint32_t keycode) {
     CFIndex index = CFArrayGetFirstIndexOfValue(_windows, CFRangeMake(0, CFArrayGetCount(_windows)), window);
     if (index != kCFNotFound)
         CFArrayRemoveValueAtIndex(_windows, index);
+    [self updateKeyboard];
 }
 
 - (void) windowRaised: (PocketWindow *) window {

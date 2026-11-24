@@ -33,6 +33,11 @@
 
 @class PocketWindow;
 
+// Posted (object: NSApp) when the host's soft keyboard came, went or resized. userInfo @"height" is the
+// height in points that the keyboard covers at the bottom of the screen, 0 once it is gone. UIKit,
+// which sits above AppKit, turns this into its keyboard notifications.
+extern NSString *const PocketKeyboardHeightDidChangeNotification;
+
 @interface PocketDisplay : DarlingDisplay {
     int _socket;
     CFSocketRef _pocketSocket;
@@ -49,6 +54,9 @@
     NSPoint _lastTouch;                 // where a finger last was, in AppKit's global space
     NSUInteger _modifierFlags;          // the modifiers of the last key
     NSMutableDictionary *_windowsByFinger; // finger -> number of the window it began in
+
+    struct pocket_keyboard _keyboard; // what the host was last asked for
+    CGFloat _keyboardHeight;          // points, as the host last said
 }
 
 // Pixels per point.
@@ -65,5 +73,8 @@
 - (void) windowDestroyed: (PocketWindow *) window;
 - (void) windowRaised: (PocketWindow *) window;
 - (void) windowLowered: (PocketWindow *) window;
+// Asks the host to show the soft keyboard while text is being edited, with the traits of the text.
+// A window calls it when it changes what is on the screen.
+- (void) updateKeyboard;
 
 @end

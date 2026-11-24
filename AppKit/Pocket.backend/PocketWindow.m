@@ -171,6 +171,7 @@ static int createSharedMemory(size_t size) {
         return;
     _visible = NO;
     [self sendState];
+    [_display updateKeyboard];
 }
 
 - (void) showWindowWithoutActivation { [self show]; }
@@ -351,6 +352,7 @@ static int createSharedMemory(size_t size) {
     O2ContextFlush(_context);
     _needsPresent = YES;
     [self present];
+    [_display updateKeyboard];
 }
 
 - (void) bufferReleased {
