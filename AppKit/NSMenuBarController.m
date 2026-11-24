@@ -91,9 +91,11 @@
     NSRect screen = [[NSScreen mainScreen] frame];
     CGFloat height = [NSMainMenuView menuHeight];
 
-    [self setFrame: NSMakeRect(NSMinX(screen), NSMaxY(screen) - height,
-                               NSWidth(screen), height)
-           display: NO];
+    NSRect frame = NSMakeRect(NSMinX(screen), NSMaxY(screen) - height,
+                              NSWidth(screen), height);
+
+    if (!NSEqualRects(frame, [self frame]))
+        [self setFrame: frame display: NO];
 }
 
 @end
@@ -309,7 +311,10 @@ static const NSTimeInterval barHideDelay = 0.5;
         _bar = [[NSMenuBarWindow alloc] initWithMenu: _menu
                                      applicationName: applicationName()];
     [_bar placeAtTopOfScreen];
-    [_bar orderFront: nil];
+    // The bar is updated on every pass of the run loop that finds its state
+    // changed; a bar that is already shown stays where it is.
+    if (![_bar isVisible])
+        [_bar orderFront: nil];
     _barShown = YES;
     [_delegate menuBarControllerDidUpdateBar: self];
 }
