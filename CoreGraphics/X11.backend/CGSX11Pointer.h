@@ -29,9 +29,16 @@
 // anyway (a window that has no XInput2 device selection, such as the windows of a process that has only
 // CoreGraphics, gets them without any setup), they carry the window the pointer is in and its position in
 // it, which is what the framework above builds its events from, and every X server has them. XInput2 is
-// needed for the smooth scroll deltas (the scroll wheel stays with the framework above for now).
+// used for the smooth scroll deltas only.
 //
-// The wheel buttons (4 to 7) are not decoded: a wheel notch is not a click.
+// The scroll wheel comes from two sources. The core wheel buttons (4 to 7) are one notch of a wheel each (line
+// units, not continuous), and every X server has them. XInput2 (2.1, smooth scrolling) reports the scroll
+// valuators of the devices that have them: the raw motion events of the root window carry the distance scrolled
+// in units of the axis' increment, which makes continuous scroll events in points for what is not a whole
+// number of notches (a touch pad, a finger scroll, a high resolution wheel), and line events for whole notches.
+// A server that emulates the wheel buttons for such a device sends them with the same time as the raw event,
+// and those are dropped (the motion was posted already). X11 does not say where a scroll gesture begins or ends,
+// or what is momentum: the scroll and momentum phases of the events stay 0.
 
 #ifndef CGSX11POINTER_H
 #define CGSX11POINTER_H
@@ -39,9 +46,18 @@
 #import <Foundation/NSObject.h>
 #include <CoreGraphics/CGGeometry.h>
 #include <X11/Xlib.h>
+#include <X11/extensions/XInput2.h>
 #include <stdint.h>
 
 @class CGSConnectionX11;
+
+// A scroll axis of an input device: the valuator that carries it and the distance of one notch of a wheel.
+typedef struct {
+    int sourceID;     // the (slave) device that has the axis
+    int valuator;     // the valuator number of the axis
+    int horizontal;   // 0 for the vertical axis, 1 for the horizontal one
+    double increment; // the valuator distance of one wheel notch
+} CGSX11ScrollAxis;
 
 @interface CGSX11Pointer : NSObject {
     // Declared here: the i386 slice has the legacy Objective-C ABI, which has no ivars in the @implementation.
@@ -60,14 +76,38 @@
     BOOL _located;
     CGPoint _lastRoot;
     double _remainderX, _remainderY;
+    // XInput2 smooth scrolling: the extension's major opcode (0 when it is not usable), the scroll axes of the
+    // devices, whether the raw motion events of the root window are selected (only while the pointer is in
+    // one of the process' windows), the part of a continuous scroll in points that the whole numbers did not
+    // carry, and the server times of the raw events that scrolled (the wheel buttons the server emulated for
+    // them carry the same time).
+    int _xiOpcode;
+    CGSX11ScrollAxis *_scrollAxes;
+    int _scrollAxisCount;
+    BOOL _rawSelected;
+    BOOL _pointerInside; // the pointer is over one of the process' windows, as far as the crossing events say
+    double _scrollRemainderX, _scrollRemainderY;
+    Time _scrolledTimes[16];
+    int _scrolledNext;
 }
 
 - (instancetype) initWithConnection: (CGSConnectionX11 *) connection;
 
-// A ButtonPress, ButtonRelease or MotionNotify of a window of the process. The wheel buttons are ignored.
+// A ButtonPress, ButtonRelease or MotionNotify of a window of the process. A press of a wheel button scrolls
+// (its release is ignored).
 - (void) pointerEvent: (XEvent *) event;
 // A crossing event: only where the pointer is (a motion's delta starts from there).
 - (void) crossingEvent: (XEvent *) event;
+// A generic event of the XInput2 extension (the cookie's data already fetched). Returns whether the event
+// was one of the extension's, which the pointer has handled.
+- (BOOL) inputExtensionEvent: (XEvent *) event;
+
+// The scroll axes of the input devices, replacing what the server reported, and a raw motion event as the
+// server sends it. The connection feeds these from XInput2; they are also the entry points a test of the
+// decoding uses with an event it made itself, as an X server that has a smooth scrolling device cannot be
+// started everywhere.
+- (void) setScrollAxes: (const CGSX11ScrollAxis *) axes count: (int) count;
+- (void) rawMotionEvent: (const XIRawEvent *) event;
 
 @end
 
