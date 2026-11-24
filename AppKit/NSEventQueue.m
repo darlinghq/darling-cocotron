@@ -403,10 +403,12 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
     case kCGEventFlagsChanged: {
         UniChar buffer[256];
         UniCharCount length = 0;
-        NSString *characters = @"";
+        NSString *characters = @"", *charactersIgnoringModifiers = @"";
         if (type != kCGEventFlagsChanged) {
-            CGEventKeyboardGetUnicodeString(cgEvent, 256, &length, buffer);
-            characters = [NSString stringWithCharacters: buffer length: MIN(length, (UniCharCount) 256)];
+            length = _CGEventGetKeyCharacters(cgEvent, false, buffer, 256);
+            characters = [NSString stringWithCharacters: buffer length: length];
+            length = _CGEventGetKeyCharacters(cgEvent, true, buffer, 256);
+            charactersIgnoringModifiers = [NSString stringWithCharacters: buffer length: length];
         }
         // Keyboard events are for the key window
         NSWindow *keyWindow = [NSApp keyWindow];
@@ -415,7 +417,7 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
                                           modifierFlags: flags
                                                  window: keyWindow
                                              characters: characters
-                            charactersIgnoringModifiers: characters
+                            charactersIgnoringModifiers: charactersIgnoringModifiers
                                               isARepeat: CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventAutorepeat) != 0
                                                 keyCode: (unsigned short) CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)];
         break;

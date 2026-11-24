@@ -375,6 +375,23 @@ extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
 // Sources API returns it. NULL or a zero length removes it.
 extern void _CGSSetProvidedKeyboardLayout(const void* uchr, uint32_t length, CFStringRef name, CFStringRef fullName);
 
+// What a key code types, from the current keyboard layout and the keys that give the same on every layout.
+// kCGKeyCharactersDefault is the Unicode string CGEventCreateKeyboardEvent() gives an event (no modifiers),
+// kCGKeyCharactersWithModifiers NSEvent's characters with the flags applied, kCGKeyCharactersIgnoringModifiers
+// NSEvent's charactersIgnoringModifiers (Shift still counts). Returns the number of UTF-16 units written
+// to out (at most max), 0 for a key without characters.
+typedef enum {
+	kCGKeyCharactersDefault,
+	kCGKeyCharactersWithModifiers,
+	kCGKeyCharactersIgnoringModifiers,
+} CGKeyCharactersKind;
+extern size_t _CGKeyCharacters(CGKeyCode key, CGEventFlags flags, CGKeyCharactersKind kind, UniChar* out, size_t max);
+
+// The characters of a keyboard event as NSEvent reports them (see _CGKeyCharacters). A string set with
+// CGEventKeyboardSetUnicodeString() is returned as it is for both; otherwise the characters follow the
+// event's key code and flags. Returns the number of UTF-16 units written to out (at most max).
+extern size_t _CGEventGetKeyCharacters(CGEventRef event, bool ignoringModifiers, UniChar* out, size_t max);
+
 #ifdef __OBJC__
 @class CGSConnection;
 CGSConnection* _CGSConnectionForID(CGSConnectionID connId);
