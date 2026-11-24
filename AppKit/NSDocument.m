@@ -48,6 +48,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 static int untitled_document_number = 0;
 
+// An undo manager does not own the targets of its actions, and a window can keep the document's
+// undo manager longer than the document uses it (NSWindow retains it): the actions of the
+// document and of its window controllers must not stay in a manager the document lets go of.
+static void DocumentRemoveUndoActions(NSDocument *document, NSUndoManager *undoManager) {
+    [undoManager removeAllActionsWithTarget: document];
+    for (NSWindowController *controller in [document windowControllers])
+        [undoManager removeAllActionsWithTarget: controller];
+}
+
 + (NSArray *) readableTypes {
     NSArray *knownDocTypes =
             [[NSBundle mainBundle] infoDictionary][@"CFBundleDocumentTypes"];
@@ -176,6 +185,8 @@ static int untitled_document_number = 0;
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
 
+    DocumentRemoveUndoActions(self, NS_EXTRA(NSDocument, self)->_undoManager);
+
     [NS_EXTRA(NSDocument, self)->_windowControllers release];
     [NS_EXTRA(NSDocument, self)->_fileURL release];
     [NS_EXTRA(NSDocument, self)->_fileType release];
@@ -284,7 +295,10 @@ static int untitled_document_number = 0;
 }
 
 - (void) setUndoManager: (NSUndoManager *) undoManager {
+    if (undoManager == NS_EXTRA(NSDocument, self)->_undoManager)
+        return;
     if (NS_EXTRA(NSDocument, self)->_undoManager != nil) {
+        DocumentRemoveUndoActions(self, NS_EXTRA(NSDocument, self)->_undoManager);
         [[NSNotificationCenter defaultCenter]
                 removeObserver: self
                           name: NSUndoManagerDidUndoChangeNotification
@@ -388,6 +402,10 @@ static int untitled_document_number = 0;
 }
 
 - (void) removeWindowController: (NSWindowController *) controller {
+    // GUESS: the actions of a window controller leave with it, also when the controller lives on
+    // (moves to another document); no page says so. Rejected: leaving them, which keeps actions
+    // for a target that no longer belongs to this document's history.
+    [NS_EXTRA(NSDocument, self)->_undoManager removeAllActionsWithTarget: controller];
     [controller setDocument: nil];
     [NS_EXTRA(NSDocument, self)->_windowControllers removeObjectIdenticalTo: controller];
 }
