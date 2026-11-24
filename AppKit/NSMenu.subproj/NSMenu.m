@@ -372,6 +372,8 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
 - copyWithZone: (NSZone *) zone {
     NSMenu *copy = NSCopyObject(self, 0, zone);
     NS_EXTRA_COPY(NSMenu, copy, self);
+    // A copy made while the menu is inside its delegate's update is not itself inside one.
+    NS_EXTRA(NSMenu, copy)->_askingDelegateToUpdate = NO;
     NS_EXTRA(NSMenu, copy)->_identifier =
         [NS_EXTRA(NSMenu, self)->_identifier copyWithZone: zone];
     // Observed on macOS 26.7.3: a copy keeps the appearance, as it keeps the identifier.
@@ -645,12 +647,30 @@ BOOL itemIsEnabled(NSMenuItem *item) {
         [[item submenu] update];
 }
 
-// The delegate's -menuNeedsUpdate:, which may add, remove or change items.
+// The delegate's -menuNeedsUpdate:, which may add, remove or change items; an application's delegate
+// may call -update on its own menu. The reference states nothing about that case. GUESS: while a menu
+// is inside its delegate's -menuNeedsUpdate:, a nested update of the same menu does not ask the
+// delegate again (it would never end); the rest of the nested update, the validation of the items and
+// the update of the submenus, still happens. The flag is cleared however the delegate leaves, an
+// exception included. Other menus are not affected, so two menus whose delegates update each other
+// still both run. Only the recursion through the delegate is bounded here; one through validation
+// (a target's -validateMenuItem: that updates the menu) is not.
+// Test: appkit-menu-update-reentrancy
+// https://developer.apple.com/documentation/appkit/nsmenu/update()
+// https://developer.apple.com/documentation/appkit/nsmenudelegate/menuneedsupdate(_:)
 static void askDelegateToUpdate(NSMenu *menu) {
     id delegate = NS_EXTRA(NSMenu, menu)->_delegate;
 
-    if ([delegate respondsToSelector: @selector(menuNeedsUpdate:)])
+    if (NS_EXTRA(NSMenu, menu)->_askingDelegateToUpdate ||
+        ![delegate respondsToSelector: @selector(menuNeedsUpdate:)])
+        return;
+
+    NS_EXTRA(NSMenu, menu)->_askingDelegateToUpdate = YES;
+    @try {
         [delegate menuNeedsUpdate: menu];
+    } @finally {
+        NS_EXTRA(NSMenu, menu)->_askingDelegateToUpdate = NO;
+    }
 }
 
 // Brings the enabled state of one item in line with its validation, when the menu enables its items itself,
