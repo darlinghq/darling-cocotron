@@ -67,7 +67,6 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
         BOOL _showsStateColumn;
         NSUserInterfaceItemIdentifier _identifier;
         NSAppearance *_appearance;
-        BOOL _askingDelegateToUpdate;
     NS_EXTRA_IVARS_END(NSMenu)
 }
 

@@ -126,9 +126,23 @@ static void test_missing_and_null_values(void)
 - (BOOL)boolValue { return YES; }
 @end
 
-// QUIRK: the string "YES" counts as true (macOS 26.1 arm64, probe 661.1); the three controller markers do not
+// QUIRK (see bindingValueIsTrue in NSCell.m): strings read as -boolValue reads them, except those starting
+// with "t" or "T"; observed on macOS 26.7.3 and 10.14.4 (probe p792). The controller markers give neither trait.
 static void test_string_values(void)
 {
+    static const struct { const char *string; BOOL asksForTrait; } table[] = {
+        { "YES", YES }, { "yes", YES }, { "1", YES }, { "2", YES }, { "-1", YES },
+        { "NO", NO }, { "0", NO }, { "true", NO }, { "T", NO }, { "hello", NO }, { "", NO },
+    };
+    for (size_t i = 0; i < sizeof table / sizeof table[0]; i++) {
+        NSTextFieldCell *row = plainCell();
+        NSString *value = [NSString stringWithUTF8String:table[i].string];
+        [row setValue:value forKey:NSFontBoldBinding];
+        CHECK(((traits(row) & NSBoldFontMask) != 0) == table[i].asksForTrait);
+        row = plainCell();
+        [row setValue:value forKey:NSFontItalicBinding];
+        CHECK(((traits(row) & NSItalicFontMask) != 0) == table[i].asksForTrait);
+    }
     NSTextFieldCell *cell = plainCell();
     [cell setValue:@"YES" forKey:NSFontBoldBinding];
     CHECK((traits(cell) & NSBoldFontMask) != 0);
