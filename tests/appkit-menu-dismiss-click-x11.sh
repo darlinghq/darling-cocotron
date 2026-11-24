@@ -5,7 +5,8 @@
 # Drives tests/appkit-menu-dismiss-click.m with XTest (xdotool) on $DISPLAY. Usage:
 #   appkit-menu-dismiss-click-x11.sh <command that runs "appkit-menu-dismiss-click <seconds>">
 # Needs xdotool. A main-menu-bar menu opened with a click and closed with Escape (or with a second
-# click on its title) leaves the window key, and the next click in the window reaches its view.
+# click on its title) leaves the window key, the next key press reaches its first responder and the
+# next click in the window reaches its view.
 set -u
 out=$(mktemp)
 "$@" > "$out" 2>&1 < /dev/null &
@@ -46,12 +47,19 @@ set -- $(title 1); file_x=$1 file_y=$2
 click $view
 wait_downs 1; expect "a click in the key window reaches the view" $?
 sleep 0.6
+xdotool key p
+for _ in $(seq 30); do grep -q '^TYPED p' "$out" && break; sleep 0.1; done
+grep -q '^TYPED p' "$out"; expect "a key press reaches the first responder" $?
 
 click $file_x $file_y
 wait_menus 1; expect "a click on File opens its menu" $?
 sleep 0.6
 xdotool key Escape
 wait_menus 0; expect "Escape closes the menu" $?
+sleep 0.6
+xdotool key q
+for _ in $(seq 30); do grep -q '^TYPED q' "$out" && break; sleep 0.1; done
+grep -q '^TYPED q' "$out"; expect "the first key press after Escape reaches the first responder" $?
 sleep 0.6
 click $view
 wait_downs 2; expect "the first click after Escape reaches the view" $?

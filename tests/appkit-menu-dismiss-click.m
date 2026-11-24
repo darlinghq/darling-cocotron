@@ -4,8 +4,9 @@
  Licensed under the MIT license, the same as the rest of this project.
 */
 // After a menu opened from the menu bar is closed with Escape, or with a second click on its title,
-// the menu tracking has ended: the next click in the key window reaches the view under the pointer
-// instead of being taken by a tracking loop that is still running for the bar.
+// the menu tracking has ended: the next key press goes to the key window's first responder and the
+// next click to the view under the pointer, instead of both being taken by a tracking loop that is
+// still running for the bar.
 //
 //   appkit-menu-dismiss-click SECONDS
 //
@@ -20,6 +21,7 @@
 //   VIEW <x> <y>          centre of the view, in screen pixels from the top left
 //   MENUS <n>             the number of menus open
 //   DOWN <n> <key>        the view got its n-th mouse down; key is 1 when the window was key
+//   TYPED <characters>    the view, the first responder, got a key down
 //   KEY <0|1>             the window became or resigned the key window
 // The program exits after SECONDS.
 #import <AppKit/AppKit.h>
@@ -42,6 +44,10 @@ static int downs;
 @implementation ClickView
 - (BOOL) acceptsFirstResponder {
     return YES;
+}
+- (void) keyDown: (NSEvent *) event {
+    printf("TYPED %s\n", [[event characters] UTF8String]);
+    fflush(stdout);
 }
 - (void) mouseDown: (NSEvent *) event {
     printf("DOWN %d %d\n", ++downs, [[self window] isKeyWindow] ? 1 : 0);
