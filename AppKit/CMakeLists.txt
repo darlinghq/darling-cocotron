@@ -750,3 +750,22 @@ else ()
 	message(STATUS "AppKit: not building the Wayland backend (needs wayland-client >= 1.20, "
 		"wayland-cursor, xkbcommon and wayland-protocols headers and wayland-scanner)")
 endif ()
+
+# Pocket backend: the display of a phone host (Pocket.backend/PocketProtocol.h). It talks to the host
+# through a Unix socket and needs no window system library, and it starts only when
+# DARLING_POCKET_DISPLAY names the host's socket, so it is always built.
+add_backend(Pocket
+	SOURCES
+		Pocket.backend/PocketDisplay.m
+	INFO_PLIST
+		Pocket.backend/Info.plist
+	DEPENDENCIES
+		objc
+		system
+		CoreFoundation
+		Foundation
+		AppKit
+)
+target_include_directories(Pocket_backend PRIVATE
+	Pocket.backend
+)
