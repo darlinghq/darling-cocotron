@@ -21,7 +21,6 @@ struct Array { size_t size, alloc; void *data; };
 - (id)platformWindow;
 - (void *)surface;
 - (void)keyboardEvent:(uint32_t)opcode arguments:(union Argument *)args;
-- (void)pointerEvent:(uint32_t)opcode arguments:(union Argument *)args;
 - (void)processPendingEvents;
 - (void)windowUnmapped:(id)window;
 - (void)seatCapabilities:(uint32_t)capabilities;
@@ -80,6 +79,12 @@ static id keyboardDecoder(void) {
     Ivar ivar = class_getInstanceVariable(object_getClass(connection), "_keyboardDecoder");
     return ivar ? object_getIvar(connection, ivar) : nil;
 }
+// The pointer decoder is CoreGraphics' too
+static id pointerDecoder(void) {
+    id connection = _CGSConnectionForID(CGSMainConnectionID());
+    Ivar ivar = class_getInstanceVariable(object_getClass(connection), "_pointerDecoder");
+    return ivar ? object_getIvar(connection, ivar) : nil;
+}
 static NSMutableArray *events;
 static id display, decoder, connection;
 static NSWindow *window;
@@ -133,7 +138,7 @@ static void idle(void) {
     modifierCheck(eventAt(0,NSFlagsChanged,56,NSShiftKeyMask|4) && eventAt(1,NSKeyDown,0,NSShiftKeyMask|4),"pending release precedes ordinary key");
     key(30,NO);key(42,YES);drain(events),[events removeAllObjects];
     // Pointer leave produces no mouse event itself but must flush pending key.
-    union Argument p[2]={{.u=1},{.o=NULL}};[display pointerEvent:1 arguments:p];
+    union Argument p[2]={{.u=1},{.o=NULL}};[pointerDecoder() pointerEvent:1 arguments:p];
     modifierCheck((drain(events),[events count])==1 && eventAt(0,NSFlagsChanged,56,NSShiftKeyMask|6),"pointer dispatch flushes pending modifier first");
     drain(events),[events removeAllObjects];key(42,NO);leave();idle();
     modifierCheck((drain(events),[events count])==0,"leave cancels pending callback without stale event");
