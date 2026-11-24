@@ -2041,21 +2041,42 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
-// Spreads delta over the columns in equal whole points, the points left over
-// going one each to the first columns.
+// Spreads delta over the columns in equal whole points, the points left over going one each to the first columns.
+// QUIRK: a column that reaches its minimum or maximum width takes no more of delta, and the part it could not
+// take is spread over the columns that still can, until delta is used up, so the widths change by exactly delta
+// as long as some column has room. The documentation of NSTableViewUniformColumnAutoresizingStyle gives the
+// equal distribution of the space among all columns and nothing about limits. Observed on macOS 26.1 (arm64), 5 columns of 50, 60,
+// 70, 80 and 240 points, minimum width 20, the clip view 200 points narrower: probe 657.6 "hidden=none
+// (control), style Uniform ... size 600 -> 400 ... after=[20,20,26.5,36.5,197]" (a total shrink of 200),
+// "hidden=first ... after=[50h,20,20,25,252]". Only this structure is taken from it: the widths of that
+// probe are in half points, which depend on the display's scale and the table style's spacing.
+// GUESS: with whole points, the points left over after the equal share go to the first columns in the
+// direction of delta, so the earlier columns shrink more than the later ones, as the half points of the
+// observation show (43.5, 43.5 and 43 points taken from the last three); growing by delta is treated the
+// same way, with the maximum widths as the limits, and was not observed. Rejected: floor(delta / count) with
+// the leftover points added, which shrinks the later columns more.
+// Test: tests/appkit-table-column-autoresizing.m
 - (void) _resizeColumnsUniformlyBy: (CGFloat) delta {
-    NSArray *columns = [self _shownTableColumns];
-    NSInteger i, count = [columns count];
+    NSMutableArray *columns = [[[self _shownTableColumns] mutableCopy] autorelease];
 
-    if (count == 0)
-        return;
+    while ([columns count] > 0 && fabs(delta) >= 1) {
+        NSInteger count = [columns count], i;
+        CGFloat share = delta > 0 ? floor(delta / count) : ceil(delta / count);
+        NSInteger extra = (NSInteger) (delta - share * count);
+        CGFloat point = delta > 0 ? 1 : -1;
+        NSMutableArray *remaining = [NSMutableArray arrayWithCapacity: count];
 
-    CGFloat share = floor(delta / count);
-    NSInteger extra = (NSInteger) (delta - share * count);
+        for (i = 0; i < count; ++i) {
+            NSTableColumn *column = [columns objectAtIndex: i];
+            CGFloat before = [column width];
+            CGFloat wanted = before + share + (i < labs(extra) ? point : 0);
 
-    for (i = 0; i < count; ++i) {
-        NSTableColumn *column = [columns objectAtIndex: i];
-        [column setWidth: [column width] + share + (i < extra ? 1 : 0)];
+            [column setWidth: wanted];
+            delta -= [column width] - before;
+            if ([column width] == wanted)
+                [remaining addObject: column];
+        }
+        columns = remaining;
     }
 }
 
