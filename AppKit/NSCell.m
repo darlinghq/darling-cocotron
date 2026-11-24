@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSClipView.h>
+#import <AppKit/NSController.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSMatrix.h>
@@ -921,15 +922,35 @@ static void initImageCellState(NSCell *self, NSImage *image) {
         [self setFont: converted];
 }
 
-// An NSNumber that is true asks for the trait; a row without the key (nil) asks for none. Taking an id keeps
-// key-value coding from raising for nil, which a BOOL parameter would. NSNull raises, as the BOOL setter of
-// key-value coding does on macOS 26.7.3 (black-box observation: NSInternalInconsistencyException, "Cannot
-// create BOOL from object null of class NSNull"; it is not known whether 10.14.4 differs).
-// Test: appkit-cell-font-bold-italic.m, test_missing_and_null_values
+// An NSNumber that is true asks for the trait, and so does a string that reads as true (see below); a row
+// without the key (nil) and the controller markers ask for none. Taking an id keeps key-value coding from
+// raising for nil, which a BOOL parameter would. NSNull raises, as the BOOL setter of key-value coding
+// does on macOS 26.7.3 (black-box observation: NSInternalInconsistencyException, "Cannot create BOOL
+// from object null of class NSNull"; it is not known whether 10.14.4 differs).
+// QUIRK: a string asks for the trait the way -boolValue reads it, except that a string starting with "t" or
+// "T" ("true", "T") does not: the bindings are documented as Booleans and say nothing about strings.
+// Evidence: black-box observation of a table column bound to fontBold and fontItalic (tier 2), macOS 26.7.3
+// and 10.14.4 (x86_64 and i386; mac-probes p792): "YES", "yes", "Y", "1", "2" and "-1" give the trait,
+// "NO", "0", "true", "T", "hello" and "" do not, although -boolValue reads "true" and "T" as YES. The
+// controller markers give neither trait; they are checked by identity, not by what they read as, because
+// Darling's markers are strings.
+// Test: appkit-cell-font-bold-italic.m, test_string_values
+static BOOL stringAsksForTrait(NSString *string) {
+    NSString *trimmed = [string stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    if ([trimmed hasPrefix: @"t"] || [trimmed hasPrefix: @"T"])
+        return NO;
+    return [string boolValue];
+}
+
 static BOOL bindingValueIsTrue(id value) {
     if ([value isKindOfClass: [NSNull class]])
         [NSException raise: NSInternalInconsistencyException
                     format: @"Cannot create BOOL from object %@ of class %@", value, [value class]];
+    if (NSIsControllerMarker(value))
+        return NO;
+    if ([value isKindOfClass: [NSString class]])
+        return stringAsksForTrait(value);
     return [value isKindOfClass: [NSNumber class]] && [value boolValue];
 }
 
