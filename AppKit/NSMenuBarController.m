@@ -23,6 +23,15 @@
 #import <AppKit/NSMainMenuView.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSScreen.h>
+#import <AppKit/NSGlobalMenu+Private.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
+#include <notify.h>
+#include <dispatch/dispatch.h>
+#include <unistd.h>
+
+@interface NSWindow (NSMenuBarControllerStrip)
+- (BOOL) hasMainMenu;
+@end
 
 @implementation NSMenuBarWindow
 
@@ -82,9 +91,11 @@
     NSRect screen = [[NSScreen mainScreen] frame];
     CGFloat height = [NSMainMenuView menuHeight];
 
-    [self setFrame: NSMakeRect(NSMinX(screen), NSMaxY(screen) - height,
-                               NSWidth(screen), height)
-           display: NO];
+    NSRect frame = NSMakeRect(NSMinX(screen), NSMaxY(screen) - height,
+                              NSWidth(screen), height);
+
+    if (!NSEqualRects(frame, [self frame]))
+        [self setFrame: frame display: NO];
 }
 
 @end
@@ -107,6 +118,20 @@ static NSString *applicationName(void) {
         return nil;
 
     _delegate = delegate;
+    _ownerToken = -1;
+
+    // Another process becoming the front application, or the owner of the menu bar, or the focus
+    // leaving the Darling applications is posted under this name.
+    // The block does not retain the controller (a __block variable is not retained by a copied
+    // block under manual reference counting); -dealloc cancels the registration.
+    __block NSMenuBarController *controller = self;
+
+    notify_register_dispatch(kCGSFrontProcessNotificationName, &_ownerToken, dispatch_get_main_queue(),
+                             ^(int unused) {
+                                 [controller refreshOwnership];
+                                 [controller update];
+                             });
+    [self refreshOwnership];
 
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
 
@@ -134,6 +159,9 @@ static NSString *applicationName(void) {
 }
 
 - (void) dealloc {
+    if (_ownerToken >= 0)
+        notify_cancel(_ownerToken);
+    _delegate = nil;
     [self cancelHide];
     [self stopRedrawingBar];
     [[NSNotificationCenter defaultCenter] removeObserver: self];
@@ -171,6 +199,7 @@ static NSString *applicationName(void) {
 }
 
 - (void) applicationActivationChanged: (NSNotification *) notification {
+    [self refreshOwnership];
     [self update];
 }
 
@@ -188,12 +217,34 @@ static BOOL menuBarHiddenByApplication(void) {
            ([[NSApp mainWindow] styleMask] & NSWindowStyleMaskFullScreen) != 0;
 }
 
-// The bar is shown while the application is active, has a main menu and the
-// desktop shows no global menu, unless the application hides the menu bar.
+// Whether a visible window of the application carries the menu strip, so the
+// menu has a place inside the application's windows.
+static BOOL visibleWindowCarriesMenuStrip(void) {
+    if (![NSWindow _usesInWindowMenuBar])
+        return NO;
+
+    for (NSWindow *window in [NSApp windows]) {
+        if ([window isKindOfClass: [NSMenuBarWindow class]])
+            continue;
+        if ([window isVisible] && [window hasMainMenu])
+            return YES;
+    }
+    return NO;
+}
+
+- (void) refreshOwnership {
+    pid_t owner = 0;
+
+    _ownsMenuBar = _CGSGetMenuBarOwnerProcess(&owner) == kCGErrorSuccess && owner == getpid();
+}
+
+// The bar is shown while the application owns the menu bar, has a main menu and
+// the menu is neither in the desktop's global menu nor in the strip of a window,
+// unless the application hides the menu bar. The owner is the application that
+// became active last, unless that one is an agent application (LSUIElement),
+// which leaves the menu bar to the one before it.
 - (BOOL) barWanted {
-    return _menu != nil && NSApp != nil && [NSApp isActive] &&
-           ![_delegate menuBarControllerDesktopShowsMenu: self] &&
-           !menuBarHiddenByApplication();
+    return [self barWantedWhileActive] && NSApp != nil && _ownsMenuBar;
 }
 
 // How long the bar stays after the application stopped being active.
@@ -203,7 +254,7 @@ static const NSTimeInterval barHideDelay = 0.5;
 - (BOOL) barWantedWhileActive {
     return _menu != nil && NSApp != nil &&
            ![_delegate menuBarControllerDesktopShowsMenu: self] &&
-           !menuBarHiddenByApplication();
+           !visibleWindowCarriesMenuStrip() && !menuBarHiddenByApplication();
 }
 
 - (void) cancelHide {
@@ -211,12 +262,21 @@ static const NSTimeInterval barHideDelay = 0.5;
     _hideTimer = nil;
 }
 
+// The moment is over: the application did not become active again.
 - (void) hideTimerFired: (NSTimer *) timer {
     _hideTimer = nil;
-    [self update];
+    [self refreshOwnership];
+    [self updateWaitingForHide: NO];
 }
 
 - (void) update {
+    [self updateWaitingForHide: YES];
+}
+
+// With waiting, a bar that is only wanted while the application is active
+// stays for barHideDelay after the application stopped being active, and is
+// hidden then.
+- (void) updateWaitingForHide: (BOOL) waiting {
     // Presentation options and window styles have no notification of their
     // own, so the observer below keeps checking while the application has a
     // main menu.
@@ -226,7 +286,7 @@ static const NSTimeInterval barHideDelay = 0.5;
         [self startRedrawingBar];
 
     if (![self barWanted]) {
-        if (_barShown && [self barWantedWhileActive]) {
+        if (waiting && _barShown && [self barWantedWhileActive]) {
             // Inactive, which may be a moment between two windows: wait before hiding.
             if (_hideTimer == nil) {
                 _hideTimer = [NSTimer timerWithTimeInterval: barHideDelay
@@ -251,7 +311,10 @@ static const NSTimeInterval barHideDelay = 0.5;
         _bar = [[NSMenuBarWindow alloc] initWithMenu: _menu
                                      applicationName: applicationName()];
     [_bar placeAtTopOfScreen];
-    [_bar orderFront: nil];
+    // The bar is updated on every pass of the run loop that finds its state
+    // changed; a bar that is already shown stays where it is.
+    if (![_bar isVisible])
+        [_bar orderFront: nil];
     _barShown = YES;
     [_delegate menuBarControllerDidUpdateBar: self];
 }

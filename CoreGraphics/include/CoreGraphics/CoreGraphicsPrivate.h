@@ -274,9 +274,37 @@ Boolean _CGSProcessIsHidden(pid_t pid);
 // whenever the front process may have changed.
 #define kCGSFrontProcessNotificationName "org.darlinghq.front-process"
 
+// The libnotify name whose state holds the pid of the process that owns the menu bar (see
+// _CGSSetMenuBarOwnerProcess()).
+#define kCGSMenuBarOwnerNotificationName "org.darlinghq.menubar-owner"
+// Reports that the process with this pid owns the menu bar from now on. A regular application
+// calls it with its own pid when it becomes active; an application that is not regular (an
+// agent or background application) never takes the menu bar over when it becomes active, so
+// the owner stays the application that had it. Posts kCGSFrontProcessNotificationName.
+CGError _CGSSetMenuBarOwnerProcess(pid_t pid);
+// The process that owns the menu bar: the last one that reported it, as long as it is alive and a
+// Darling process reports to have the input focus (_CGSSetFrontProcess() without a later
+// _CGSResignFrontProcess() of the same process). Returns kCGErrorNoneAvailable when there is none (nothing
+// was reported, the owner ended, or the focus is in another client of the display server, where
+// no Darling process shows a menu bar), kCGErrorIllegalArgument for a NULL pid.
+CGError _CGSGetMenuBarOwnerProcess(pid_t* pid);
+
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
+
+// Surfaces of application windows. There is no window server to own the drawable of an
+// NSOpenGLView, so AppKit records it here: a surface on the AppKit window with this window
+// number, backed by `nativeWindow` (the handle a GL surface is made for), with the given size
+// in points. The surface can then be looked up by its ids as for a CGS surface:
+// CGSGetSurfaceBounds() reports its size, and CGLGetSurface() reports the ids of a context
+// that draws to it. Returns the new surface id, never 0.
+CGSSurfaceID _CGSAddWindowSurface(CGSWindowID winId, void* nativeWindow, CGSize size);
+void _CGSSetWindowSurfaceSize(CGSSurfaceID surfaceId, CGSize size);
+void _CGSRemoveWindowSurface(CGSSurfaceID surfaceId);
+// The ids of the application window surface backed by `nativeWindow`. False if there is none.
+bool _CGSWindowSurfaceForNativeWindow(void* nativeWindow, CGSConnectionID* connId,
+                                      CGSWindowID* winId, CGSSurfaceID* surfaceId);
 
 // Creates a window covering `bounds` (global display coordinates), above ordinary
 // windows and shown, so that a GL context can fill a display (CGLSetFullScreen).

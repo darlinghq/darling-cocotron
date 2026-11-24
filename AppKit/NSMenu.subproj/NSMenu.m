@@ -638,8 +638,16 @@ BOOL itemIsEnabled(NSMenuItem *item) {
     return enabled;
 }
 
+// QUIRK: -update validates the items of the menu and its submenus but does not send -menuNeedsUpdate: to the
+// delegates; that message comes only when the menu is about to be shown (tracking, pop up). A delegate
+// that calls -update on its menu from -menuNeedsUpdate: therefore does not recurse. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2, x86_64 and i386, mac-probes p799): a
+// menu and its submenu whose delegates count -menuNeedsUpdate: receive none through -update, also not
+// as the main menu, nor through performKeyEquivalent: or a Command key event, while validateMenuItem: is
+// sent by -update, and a delegate calling -update in -menuNeedsUpdate: is never re-entered.
+// Test: appkit-menu-update-reentrancy
 - (void) update {
-    [self _updateWithoutSubmenus];
+    [self _validateItems];
 
     for (NSMenuItem *item in [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray])
         [[item submenu] update];
@@ -674,7 +682,11 @@ static BOOL validateItem(NSMenu *menu, NSMenuItem *item) {
 // items; a submenu is brought up to date when it is shown.
 - (void) _updateWithoutSubmenus {
     askDelegateToUpdate(self);
+    [self _validateItems];
+}
 
+// The validation of this menus own items, without asking the delegate.
+- (void) _validateItems {
     NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; i++)

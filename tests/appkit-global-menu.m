@@ -19,10 +19,57 @@
 //                                  like window, with a borderless window
 //   appkit-global-menu LOG nowindow [SECONDS]
 //                                  like window, with no window at all
+//   appkit-global-menu LOG swap [SECONDS]
+//                                  like nowindow; a titled window is shown from
+//                                  the 5th second and closed at the 10th,
+//                                  logging "STEP window opened" and
+//                                  "STEP window closed"
+//   appkit-global-menu LOG owner [SECONDS [HELPER [HELPERMODE]]]
+//                                  a regular application with a main menu and
+//                                  no window but an offscreen borderless one;
+//                                  from the 3rd second it starts the program
+//                                  HELPER (a path, possibly the executable of an
+//                                  LSUIElement bundle) with its own log
+//                                  (LOG.helper) and the mode HELPERMODE
+//                                  (default "helper")
+//   appkit-global-menu LOG helper [SECONDS]
+//                                  an application with a titled window that it
+//                                  makes key and active; "helper-accessory"
+//                                  first switches to the accessory activation
+//                                  policy; it exits after SECONDS, or when the
+//                                  file LOG.quit exists
 //   appkit-global-menu LOG hiding  with a titled window as the key window, go
 //                                  through the states in which the menu bar is
 //                                  hidden or shown, logging "STEP <state>" after
 //                                  each change and waiting for the host to look
+//
+//   appkit-global-menu LOG policy  logs "RUNNING policy=P url=U" (NSRunningApplication's activation
+//                                  policy and bundle URL for this process) and "NSAPP policy=P", then
+//                                  exits: what the bundle layout on disk decides
+//   appkit-global-menu LOG bundled [SECONDS]
+//                                  like borderless, but keeps the activation policy the bundle (or its
+//                                  absence) gives, as an application that never sets one
+//   appkit-global-menu LOG parent [SECONDS [DELAYMS]]
+//                                  like borderless; DELAYMS (default 0) after the menu bar is
+//                                  ordered in it starts this program again in the mode "windowless"
+//                                  (LOG.child), a process outside any bundle with no window and no
+//                                  menu that activates itself, logging "STEP child launched"
+//   appkit-global-menu LOG windowless [SECONDS]
+//                                  an AppKit process with no window that activates itself (at start
+//                                  and every half second); logs "POLICY"
+//   appkit-global-menu LOG startup [SECONDS [DELAYMS]]
+//                                  like borderless; DELAYMS after the menu bar is ordered in the
+//                                  window is closed, logging "STEP window closed"
+//
+// Every mode also logs "OWNER owner=O front=F" (O: NSWorkspace's
+// menuBarOwningApplication is this process; F: frontmostApplication is "self",
+// "other" or "none") whenever the pair changes, and "KVO owner" when the
+// menuBarOwningApplication property is observed to change.
+//
+// Every mode logs "STATE active=A bar=B windows=W" whenever one of the values
+// changes (A: the application is active, B: its menu bar window is ordered in,
+// W: visible windows that carry the in-window menu strip), and "ACTIVE" and
+// "RESIGN" for the activation notifications.
 //
 // A line "READY" is logged once the application is active and the menu is set.
 #import <AppKit/AppKit.h>
@@ -106,6 +153,13 @@ static void note(const char *format, ...) {
 }
 - (void) setFileMenu: (NSMenu *) menu {
     _fileMenu = menu;
+    [menu setDelegate: self];
+}
+// The File menu reports when it opens and closes and which item is highlighted, for the
+// menu bar tracking tests (run-bar-tracking.py).
+- (void) menu: (NSMenu *) menu willHighlightItem: (NSMenuItem *) item {
+    if (menu == _fileMenu)
+        note("highlight File %s", item == nil ? "(none)" : [[item title] UTF8String]);
 }
 // The application menu is filled again with new items; the quit item is the usual terminate:.
 - (void) refillRebuilt {
@@ -144,10 +198,18 @@ static void note(const char *format, ...) {
     }
     if (menu == _dynamic)
         note("willOpen Dynamic");
+    if (menu == _fileMenu)
+        note("willOpen File");
 }
 - (void) menuDidClose: (NSMenu *) menu {
     if (menu == _dynamic)
         note("didClose Dynamic");
+    if (menu == _fileMenu)
+        note("didClose File");
+}
+- (void) observeValueForKeyPath: (NSString *) path ofObject: (id) object change: (NSDictionary *) change
+                        context: (void *) context {
+    note("KVO owner");
 }
 - (void) applicationDidFinishLaunching: (NSNotification *) n {
     note("READY active=%d", (int) [NSApp isActive]);
@@ -283,6 +345,22 @@ int main(int argc, char **argv) {
             return 2;
 
         [NSApplication sharedApplication];
+        // A program outside an application bundle is prohibited until it sets a policy, as on macOS:
+        // the programs that are applications on their own are regular ones. The helper modes keep what
+        // their bundle, or they themselves, declare, and the windowless one is the prohibited process.
+        if (!strcmp(argv[2], "policy")) {
+            // What the bundle on disk decides, before anything sets a policy: the policy and the bundle
+            // URL as NSRunningApplication and NSApp report them. Needs no display.
+            NSRunningApplication *me = [NSRunningApplication currentApplication];
+            note("RUNNING policy=%ld url=%s", (long) [me activationPolicy],
+                 [[[me bundleURL] path] UTF8String] ?: "(none)");
+            note("NSAPP policy=%ld", (long) [NSApp activationPolicy]);
+            return 0;
+        }
+        if (strcmp(argv[2], "helper") && strcmp(argv[2], "helper-accessory") && strcmp(argv[2], "windowless") &&
+            strcmp(argv[2], "bundled"))
+            [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
+        note("POLICY %d", (int) [NSApp activationPolicy]);
         Target *target = [Target new];
         buildMenu(target);
 
@@ -370,7 +448,7 @@ int main(int argc, char **argv) {
             [window makeKeyAndOrderFront: nil];
             note("strip window=%d extraFrameHeight=%d", (int) hasMainMenu(window),
                  (int) (frame.size.height - 200));
-        } else if (!strcmp(argv[2], "borderless")) {
+        } else if (!strcmp(argv[2], "borderless") || !strcmp(argv[2], "bundled")) {
             // A window that draws its own chrome: no title bar, so no in-window menu strip.
             NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
                                                            styleMask: NSWindowStyleMaskBorderless
@@ -378,6 +456,40 @@ int main(int argc, char **argv) {
                                                                defer: NO];
             [window makeKeyAndOrderFront: nil];
             note("strip window=%d", (int) hasMainMenu(window));
+        } else if (!strcmp(argv[2], "parent") || !strcmp(argv[2], "startup")) {
+            BOOL parent = !strcmp(argv[2], "parent");
+            int delay = argc > 4 ? atoi(argv[4]) : 0;
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 132)
+                                                           styleMask: NSWindowStyleMaskBorderless
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window makeKeyAndOrderFront: nil];
+            note("strip window=%d", (int) hasMainMenu(window));
+            NSString *childLog = [[NSString stringWithUTF8String: argv[1]] stringByAppendingString: @".child"];
+            NSString *self_ = [NSString stringWithUTF8String: argv[0]];
+            // The moment the menu bar is ordered in, the second step follows after DELAYMS.
+            [NSTimer scheduledTimerWithTimeInterval: 0.01 repeats: YES block: ^(NSTimer *t) {
+                if (!barWindowVisible())
+                    return;
+                [t invalidate];
+                [NSTimer scheduledTimerWithTimeInterval: delay / 1000.0 repeats: NO block: ^(NSTimer *t2) {
+                    if (parent) {
+                        NSTask *task = [[NSTask alloc] init];
+                        [task setLaunchPath: self_];
+                        [task setArguments: @[childLog, @"windowless", @"60"]];
+                        [task launch];
+                        note("STEP child launched");
+                    } else {
+                        [window close];
+                        note("STEP window closed");
+                    }
+                }];
+            }];
+        } else if (!strcmp(argv[2], "windowless")) {
+            [NSApp activateIgnoringOtherApps: YES];
+            [NSTimer scheduledTimerWithTimeInterval: 0.5 repeats: YES block: ^(NSTimer *t) {
+                [NSApp activateIgnoringOtherApps: YES];
+            }];
         } else if (!strcmp(argv[2], "late")) {
             // The window exists before the main menu is set; the menu is replaced afterwards, and a
             // top-level item is added to the replacement.
@@ -461,9 +573,12 @@ int main(int argc, char **argv) {
             NSRect rect = NSMakeRect(200, 200, 400, 240);
             NSWindow *first = [[NSWindow alloc] initWithContentRect: rect styleMask: NSWindowStyleMaskBorderless
                                                             backing: NSBackingStoreBuffered defer: NO];
-            NSWindow *second = [[NSWindow alloc] initWithContentRect: NSOffsetRect(rect, 100, 50)
-                                                           styleMask: NSWindowStyleMaskTitled
-                                                             backing: NSBackingStoreBuffered defer: NO];
+            // A utility panel: a titled window would carry the menu strip while it is shown, and the
+            // bar would go away and come back with it (the swap mode covers that).
+            NSWindow *second = [[NSPanel alloc] initWithContentRect: NSOffsetRect(rect, 100, 50)
+                                                          styleMask: NSWindowStyleMaskTitled |
+                                                                     NSWindowStyleMaskUtilityWindow
+                                                            backing: NSBackingStoreBuffered defer: NO];
             [second setReleasedWhenClosed: NO];
             [first makeKeyAndOrderFront: nil];
             note("strip window=%d", (int) hasMainMenu(first));
@@ -508,11 +623,106 @@ int main(int argc, char **argv) {
                     }
                 }];
             }
+        } else if (!strcmp(argv[2], "swap")) {
+            __block NSWindow *window = nil;
+            [NSApp activateIgnoringOtherApps: YES];
+            note("strip window=0");
+            [NSTimer scheduledTimerWithTimeInterval: 5.0 repeats: NO block: ^(NSTimer *t) {
+                window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
+                                                     styleMask: NSWindowStyleMaskTitled
+                                                       backing: NSBackingStoreBuffered
+                                                         defer: NO];
+                [window setReleasedWhenClosed: NO];
+                [window makeKeyAndOrderFront: nil];
+                note("STEP window opened strip=%d", (int) hasMainMenu(window));
+            }];
+            [NSTimer scheduledTimerWithTimeInterval: 10.0 repeats: NO block: ^(NSTimer *t) {
+                [window close];
+                note("STEP window closed");
+            }];
+        } else if (!strcmp(argv[2], "owner")) {
+            // No window that could carry the strip or be seen: an offscreen borderless one, key.
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(-300, -300, 1, 1)
+                                                           styleMask: NSWindowStyleMaskBorderless
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window makeKeyAndOrderFront: nil];
+            [NSApp activateIgnoringOtherApps: YES];
+            note("strip window=%d", (int) hasMainMenu(window));
+            if (argc > 4) {
+                NSString *helper = [NSString stringWithUTF8String: argv[4]];
+                NSString *mode = [NSString stringWithUTF8String: argc > 5 ? argv[5] : "helper"];
+                NSString *helperLog = [[NSString stringWithUTF8String: argv[1]] stringByAppendingString: @".helper"];
+                [NSTimer scheduledTimerWithTimeInterval: 3.0 repeats: NO block: ^(NSTimer *t) {
+                    NSTask *task = [[NSTask alloc] init];
+                    [task setLaunchPath: helper];
+                    [task setArguments: @[helperLog, mode, @"90"]];
+                    [task launch];
+                    note("STEP helper launched");
+                }];
+            }
+        } else if (!strcmp(argv[2], "helper") || !strcmp(argv[2], "helper-accessory")) {
+            if (!strcmp(argv[2], "helper-accessory"))
+                [NSApp setActivationPolicy: NSApplicationActivationPolicyAccessory];
+            NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(300, 300, 400, 240)
+                                                           styleMask: NSWindowStyleMaskTitled
+                                                             backing: NSBackingStoreBuffered
+                                                               defer: NO];
+            [window setTitle: @"Helper"];
+            [window makeKeyAndOrderFront: nil];
+            [NSApp activateIgnoringOtherApps: YES];
+            note("HELPER policy=%d key=%d main=%d", (int) [NSApp activationPolicy], (int) [window isKeyWindow],
+                 (int) [window isMainWindow]);
+            // The host ends the helper by creating LOG.quit.
+            NSString *quitPath = [[NSString stringWithUTF8String: argv[1]] stringByAppendingString: @".quit"];
+            [NSTimer scheduledTimerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *t) {
+                if (access([quitPath fileSystemRepresentation], F_OK) == 0) {
+                    note("helper quits");
+                    exit(0);
+                }
+            }];
         } else if (!strcmp(argv[2], "nowindow")) {
             [NSApp activateIgnoringOtherApps: YES];
             note("strip window=0");
         } else
             showPanel();
+
+        [[NSNotificationCenter defaultCenter] addObserverForName: NSApplicationDidBecomeActiveNotification
+                                                           object: nil queue: nil usingBlock: ^(NSNotification *n) {
+            note("ACTIVE");
+        }];
+        [[NSNotificationCenter defaultCenter] addObserverForName: NSApplicationDidResignActiveNotification
+                                                           object: nil queue: nil usingBlock: ^(NSNotification *n) {
+            note("RESIGN");
+        }];
+        [[NSWorkspace sharedWorkspace] addObserver: target forKeyPath: @"menuBarOwningApplication"
+                                           options: 0 context: NULL];
+        [NSTimer scheduledTimerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *t) {
+            static int lastOwner = -1, lastFront = -1;
+            NSWorkspace *workspace = [NSWorkspace sharedWorkspace];
+            int owner = (int) ([[workspace menuBarOwningApplication] processIdentifier] == getpid());
+            NSRunningApplication *frontApp = [workspace frontmostApplication];
+            int front = frontApp == nil ? 0 : ([frontApp processIdentifier] == getpid() ? 1 : 2);
+            if (owner != lastOwner || front != lastFront) {
+                lastOwner = owner;
+                lastFront = front;
+                note("OWNER owner=%d front=%s", owner, front == 0 ? "none" : (front == 1 ? "self" : "other"));
+            }
+        }];
+        [NSTimer scheduledTimerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *t) {
+            static int lastActive = -1, lastBar = -1, lastWindows = -1;
+            int windows = 0;
+            for (NSWindow *w in [NSApp windows])
+                if ([w isVisible] && hasMainMenu(w))
+                    windows++;
+            int active = (int) [NSApp isActive], bar = (int) barWindowVisible();
+            if (active != lastActive || bar != lastBar || windows != lastWindows) {
+                lastActive = active;
+                lastBar = bar;
+                lastWindows = windows;
+                note("STATE active=%d bar=%d windows=%d", active, bar, windows);
+            }
+        }];
 
         // A bounded run, in case the host script goes away.
         int lifetime = argc > 3 ? atoi(argv[3]) : 120;
