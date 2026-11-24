@@ -19,8 +19,10 @@
 
 #import "CGDisplayGeometry.h"
 #import "CGDisplayReconfiguration.h"
-#import <AppKit/NSDisplay.h>
-#import <AppKit/NSScreen.h>
+#import <CoreGraphics/CGSConnection.h>
+#import <CoreGraphics/CGSPointerController.h>
+#import <CoreGraphics/CGSScreen.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreGraphics/CGDirectDisplay.h>
 #import <CoreGraphics/CGError.h>
 #import <IOKit/graphics/IOGraphicsLib.h>
@@ -39,60 +41,49 @@ unsigned int kCGDisplayPixelWidth = 8200;
 const CFStringRef kCGDisplayProductNameKey = CFSTR("kCGDisplayProductNameKey");
 const CFStringRef kCGDisplayShowDuplicateLowResolutionModes = CFSTR("kCGDisplayShowDuplicateLowResolutionModes");
 
-// Our platform abstraction is in AppKit
-static NSDisplay *currentDisplay(void) {
-    Class cls = NSClassFromString(@"NSDisplay");
-
-    if (!cls) {
-        if (dlopen("/System/Library/Frameworks/AppKit.framework/Versions/C/"
-                   "AppKit",
-                   RTLD_LAZY | RTLD_GLOBAL) != NULL)
-            cls = NSClassFromString(@"NSDisplay");
-    }
-
-    return [cls currentDisplay];
+// The displays are the ones the window system connection of this process reports (see
+// -[CGSConnection createScreens]); CoreGraphics knows nothing of the frameworks above it.
+static CGSConnection *displayConnection(void) {
+    CGSConnectionID connectionID = CGSMainConnectionID();
+    return connectionID != 0 ? _CGSConnectionForID(connectionID) : nil;
 }
 
-// A display's ID belongs to the screen (the backend ties it to the output it
-// drives), and [NSScreen screens] lists the main screen first, so an array
-// position is not an ID.
-static NSScreen *screenForDisplayID(NSArray<NSScreen *> *screens,
-                                    CGDirectDisplayID displayID)
+// The active displays, the main display first, autoreleased. *connected says whether the
+// process has a connection at all: a connection can report no display.
+static NSArray<CGSScreen *> *activeScreens(BOOL *connected) {
+    CGSConnection *connection = displayConnection();
+    if (connected != NULL)
+        *connected = connection != nil;
+    return [[connection createScreens] autorelease];
+}
+
+static CGSScreen *screenForDisplayID(NSArray<CGSScreen *> *screens,
+                                     CGDirectDisplayID displayID)
 {
-    for (NSScreen *screen in screens) {
-        if ([screen cgDirectDisplayID] == displayID)
+    for (CGSScreen *screen in screens) {
+        if ([screen displayID] == displayID)
             return screen;
     }
     return nil;
 }
 
-// NSScreen frames are in Cocoa's global space (origin at the main screen's
-// bottom-left corner, y up, like window frames); CoreGraphics' global space has its
-// origin at the main screen's top-left corner and y down, so a display above the main
-// one has a negative y, as on macOS. [NSScreen screens] lists the main screen first.
-static CGRect globalRectForFrame(NSArray<NSScreen *> *screens, NSRect frame) {
-    if (NSIsEmptyRect(frame) || [screens count] == 0)
-        return frame;
-    CGFloat mainHeight = NSHeight([[screens objectAtIndex: 0] frame]);
-    return CGRectMake(frame.origin.x,
-                      mainHeight - frame.origin.y - frame.size.height,
-                      frame.size.width, frame.size.height);
+// What owns the pointer in this process, when something has registered (see
+// CGSPointerController.h).
+static void *volatile gPointerController;
+
+void _CGSSetPointerController(id<CGSPointerController> controller) {
+    __atomic_store_n(&gPointerController, (void *) controller, __ATOMIC_RELEASE);
+}
+
+static id<CGSPointerController> pointerController(void) {
+    return (id<CGSPointerController>) __atomic_load_n(&gPointerController, __ATOMIC_ACQUIRE);
 }
 
 CGDirectDisplayID CGMainDisplayID(void) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
+    NSArray<CGSScreen *> *screens = activeScreens(NULL);
 
-    NSArray<NSScreen *> *screens = [display screens];
-
-    for (NSScreen *screen in screens) {
-        if (!NSIsEmptyRect([screen frame])) {
-            return [screen cgDirectDisplayID];
-        }
-    }
-
-    return kCGNullDirectDisplay;
+    return [screens count] > 0 ? [[screens objectAtIndex: 0] displayID]
+                               : kCGNullDirectDisplay;
 }
 
 // Hands the display IDs found to the caller as the display list functions
@@ -112,80 +103,45 @@ static void deliverDisplayIDs(const CGDirectDisplayID *ids, uint32_t total,
         *count = written;
 }
 
-CGError CGGetOnlineDisplayList(uint32_t maxDisplays,
-                               CGDirectDisplayID *onlineDisplays,
-                               uint32_t *displayCount)
-{
-    NSDisplay *display = currentDisplay();
-    if (!display)
+// The online displays are the active ones: the backends list only outputs that show something.
+static CGError listDisplays(uint32_t maxDisplays, CGDirectDisplayID *out, uint32_t *count) {
+    BOOL connected;
+    NSArray<CGSScreen *> *screens = activeScreens(&connected);
+    if (!connected)
         return kCGErrorInvalidConnection;
 
-    NSArray<NSScreen *> *screens = [display screens];
-    const CGDirectDisplayID mainDisplay = CGMainDisplayID();
     NSMutableData *storage = [NSMutableData
             dataWithLength: ([screens count] + 1) * sizeof(CGDirectDisplayID)];
     CGDirectDisplayID *ids = [storage mutableBytes];
     uint32_t total = 0;
 
-    // Main display should be the first returned
-    if (mainDisplay != kCGNullDirectDisplay)
-        ids[total++] = mainDisplay;
+    for (CGSScreen *screen in screens)
+        ids[total++] = [screen displayID];
 
-    for (NSScreen *screen in screens) {
-        CGDirectDisplayID displayID = [screen cgDirectDisplayID];
-        if (displayID != mainDisplay)
-            ids[total++] = displayID;
-    }
-
-    deliverDisplayIDs(ids, total, maxDisplays, onlineDisplays, displayCount);
+    deliverDisplayIDs(ids, total, maxDisplays, out, count);
     return kCGErrorSuccess;
 }
 
+CGError CGGetOnlineDisplayList(uint32_t maxDisplays,
+                               CGDirectDisplayID *onlineDisplays,
+                               uint32_t *displayCount)
+{
+    return listDisplays(maxDisplays, onlineDisplays, displayCount);
+}
+
 size_t CGDisplayPixelsHigh(CGDirectDisplayID displayIndex) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
-    NSScreen *screen = screenForDisplayID([display screens], displayIndex);
-    if (!screen)
-        return 0;
-
-    return NSHeight([screen frame]);
+    return (size_t) CGDisplayBounds(displayIndex).size.height;
 }
 
 size_t CGDisplayPixelsWide(CGDirectDisplayID displayIndex) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
-    NSScreen *screen = screenForDisplayID([display screens], displayIndex);
-    if (!screen)
-        return 0;
-
-    return NSWidth([screen frame]);
+    return (size_t) CGDisplayBounds(displayIndex).size.width;
 }
 
 CGError CGGetActiveDisplayList(uint32_t maxDisplays,
                                CGDirectDisplayID *activeDisplays,
                                uint32_t *displayCount)
 {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
-    NSArray<NSScreen *> *screens = [display screens];
-    NSMutableData *storage = [NSMutableData
-            dataWithLength: ([screens count] + 1) * sizeof(CGDirectDisplayID)];
-    CGDirectDisplayID *ids = [storage mutableBytes];
-    uint32_t total = 0;
-
-    for (NSScreen *screen in screens) {
-        if (!NSIsEmptyRect([screen frame]))
-            ids[total++] = [screen cgDirectDisplayID];
-    }
-
-    deliverDisplayIDs(ids, total, maxDisplays, activeDisplays, displayCount);
-    return kCGErrorSuccess;
+    return listDisplays(maxDisplays, activeDisplays, displayCount);
 }
 
 CGError CGGetDisplaysWithOpenGLDisplayMask(CGOpenGLDisplayMask mask,
@@ -230,22 +186,22 @@ static CGError displaysMatching(CGPoint point, CGRect rect, BOOL isPoint,
                                 uint32_t maxDisplays, CGDirectDisplayID *displays,
                                 uint32_t *matchingDisplayCount)
 {
-    NSDisplay *display = currentDisplay();
-    if (!display)
+    BOOL connected;
+    NSArray<CGSScreen *> *screens = activeScreens(&connected);
+    if (!connected)
         return kCGErrorInvalidConnection;
 
-    NSArray<NSScreen *> *screens = [display screens];
     NSMutableData *storage = [NSMutableData
             dataWithLength: ([screens count] + 1) * sizeof(CGDirectDisplayID)];
     CGDirectDisplayID *ids = [storage mutableBytes];
     uint32_t total = 0;
 
-    for (NSScreen *screen in screens) {
-        NSRect screenRect = globalRectForFrame(screens, [screen frame]);
-        BOOL hit = isPoint ? NSPointInRect(point, screenRect)
-                           : NSIntersectsRect(rect, screenRect);
+    for (CGSScreen *screen in screens) {
+        CGRect screenRect = [screen bounds];
+        BOOL hit = isPoint ? CGRectContainsPoint(screenRect, point)
+                           : CGRectIntersectsRect(rect, screenRect);
         if (hit)
-            ids[total++] = [screen cgDirectDisplayID];
+            ids[total++] = [screen displayID];
     }
 
     deliverDisplayIDs(ids, total, maxDisplays, displays, matchingDisplayCount);
@@ -269,33 +225,20 @@ CGError CGGetDisplaysWithRect(CGRect rect, uint32_t maxDisplays,
 }
 
 CGRect CGDisplayBounds(CGDirectDisplayID displayIndex) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return NSZeroRect;
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), displayIndex);
 
-    NSArray<NSScreen *> *screens = [display screens];
-    NSScreen *screen = screenForDisplayID(screens, displayIndex);
-    if (!screen)
-        return CGRectZero;
-
-    return globalRectForFrame(screens, [screen frame]);
+    return screen != nil ? [screen bounds] : CGRectZero;
 }
 
+// The cursor requests go to what owns the pointer (see CGSPointerController.h). A process
+// without one has no cursor of its own to hide.
 CGError CGDisplayHideCursor(CGDirectDisplayID displayIndex) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
-    [display hideCursorCounted];
+    [pointerController() hideCursor];
     return kCGErrorSuccess;
 }
 
 CGError CGDisplayShowCursor(CGDirectDisplayID displayIndex) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
-    [display unhideCursorCounted];
+    [pointerController() unhideCursor];
     return kCGErrorSuccess;
 }
 
@@ -306,7 +249,7 @@ CGError CGDisplayShowCursor(CGDirectDisplayID displayIndex) {
 // from outside; this is the minimal reading of the name.
 // Test: coregraphics-cgs-force-show-cursor.m.
 void CGSForceShowCursor(CGSConnectionID cid) {
-    [currentDisplay() forceShowCursor];
+    [pointerController() forceShowCursor];
 }
 
 // The image of a cursor the window server has registered under a name (for
@@ -347,14 +290,12 @@ CGDirectDisplayID CGDisplayMirrorsDisplay(CGDirectDisplayID display) {
     return kCGNullDirectDisplay;
 }
 
+// NULL for a display that does not exist, as on macOS 10.14.4 and 26.7.3 (observed through the public API;
+// tests/coregraphics-displays-without-appkit.m).
 CGDisplayModeRef CGDisplayCopyDisplayMode(CGDirectDisplayID displayId) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return NULL;
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), displayId);
 
-    NSDictionary *dict = [[display currentModeForScreen: displayId - 1] retain];
-
-    return (CGDisplayModeRef) dict;
+    return (CGDisplayModeRef) [[screen currentModeDictionary] retain];
 }
 
 void CGDisplayModeRelease(CGDisplayModeRef mode) {
@@ -401,18 +342,36 @@ CFStringRef CGDisplayModeCopyPixelEncoding(CGDisplayModeRef mode) {
 CFArrayRef CGDisplayCopyAllDisplayModes(CGDirectDisplayID displayIndex,
                                         CFDictionaryRef options)
 {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return NULL;
-    return (CFArrayRef)[[display modesForScreen: displayIndex - 1] retain];
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), displayIndex);
+
+    return (CFArrayRef) [[screen modes] retain];
+}
+
+double _CGSDisplayBackingScaleFactor(CGDirectDisplayID display) {
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), display);
+    CGFloat scale = [screen backingScale];
+
+    return scale >= 1 ? scale : 1;
+}
+
+CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display) {
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), display);
+
+    return (CFDataRef) [[screen edid] retain];
+}
+
+CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display) {
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), display);
+
+    return (CFStringRef) [[screen name] retain];
+}
+
+void _CGSRefreshDisplayLayout(void) {
+    [displayConnection() refreshDisplayLayout];
 }
 
 static NSData *edidForDisplay(CGDirectDisplayID displayId) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return nil;
-
-    NSScreen *screen = screenForDisplayID([display screens], displayId);
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), displayId);
     if (!screen)
         return nil;
 
@@ -566,12 +525,12 @@ io_service_t CGDisplayIOServicePort(CGDirectDisplayID displayID) {
 }
 
 // The union of the active displays in CoreGraphics' global space.
-static CGDisplayGeometryRect desktopBounds(NSArray<NSScreen *> *screens) {
+static CGDisplayGeometryRect desktopBounds(NSArray<CGSScreen *> *screens) {
     CGDisplayGeometryRect desktop = {0, 0, 0, 0};
-    for (NSScreen *screen in screens) {
-        if (NSIsEmptyRect([screen frame]))
+    for (CGSScreen *screen in screens) {
+        CGRect rect = [screen bounds];
+        if (CGRectIsEmpty(rect))
             continue;
-        CGRect rect = globalRectForFrame(screens, [screen frame]);
         desktop = CGDisplayGeometryUnion(
                 desktop, (CGDisplayGeometryRect){rect.origin.x, rect.origin.y,
                                                  rect.size.width, rect.size.height});
@@ -579,66 +538,64 @@ static CGDisplayGeometryRect desktopBounds(NSArray<NSScreen *> *screens) {
     return desktop;
 }
 
-// The one place CoreGraphics' global point meets the backend's: clip it to the
-// desktop and hand it to -warpMouse:, which takes CoreGraphics' global space (the
-// space CGEventGetLocation() reports). The rules are written down in
-// CGDisplayGeometry.h.
-static CGError warpToGlobalPoint(NSDisplay *display, CGPoint point) {
+// The one place CoreGraphics' global point meets the window system's: clip it to the
+// desktop and hand it on, in the same global space (the space CGEventGetLocation()
+// reports). The rules are written down in CGDisplayGeometry.h.
+static CGError warpToGlobalPoint(CGPoint point) {
     if (!isfinite(point.x) || !isfinite(point.y))
         return kCGErrorIllegalArgument;
 
-    NSArray<NSScreen *> *screens = [display screens];
+    BOOL connected;
+    NSArray<CGSScreen *> *screens = activeScreens(&connected);
+    if (!connected)
+        return kCGErrorInvalidConnection;
+    // No active output: the point has no desktop to land in.
     if ([screens count] == 0)
         return kCGErrorCannotComplete;
 
-    NSScreen *main = [screens objectAtIndex: 0];
-    // No active output: the point has no desktop to land in.
-    if (NSIsEmptyRect([main frame]))
-        return kCGErrorCannotComplete;
-    CGFloat scale = [main backingScaleFactor];
+    CGFloat scale = [[screens objectAtIndex: 0] backingScale];
     if (!(scale >= 1))
         scale = 1;
 
     CGDisplayGeometryPoint clipped = CGDisplayGeometryClamp(
             desktopBounds(screens), scale,
             (CGDisplayGeometryPoint){point.x, point.y});
+    CGPoint target = CGPointMake(clipped.x, clipped.y);
 
-    [display warpMouse: NSMakePoint(clipped.x, clipped.y)];
-    return kCGErrorSuccess;
+    // Until this framework owns the connection that has the windows, what does owns the
+    // pointer state (the relative-mouse grab among it), so it is asked first.
+    id<CGSPointerController> controller = pointerController();
+    if (controller != nil) {
+        [controller warpPointerToPoint: target];
+        return kCGErrorSuccess;
+    }
+    return [displayConnection() warpPointerToPoint: target];
 }
 
 CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-    return warpToGlobalPoint(display, newCursorPosition);
+    return warpToGlobalPoint(newCursorPosition);
 }
 
 CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID displayID, CGPoint newCursorPosition) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
     // The point is relative to the upper-left corner of that display.
-    NSArray<NSScreen *> *screens = [display screens];
-    NSScreen *screen = screenForDisplayID(screens, displayID);
-    if (!screen || NSIsEmptyRect([screen frame]))
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), displayID);
+    if (!screen || CGRectIsEmpty([screen bounds]))
         return kCGErrorIllegalArgument;
 
-    CGRect bounds = globalRectForFrame(screens, [screen frame]);
+    CGRect bounds = [screen bounds];
     CGDisplayGeometryPoint global = CGDisplayGeometryDisplayToGlobal(
             (CGDisplayGeometryRect){bounds.origin.x, bounds.origin.y,
                                     bounds.size.width, bounds.size.height},
             (CGDisplayGeometryPoint){newCursorPosition.x, newCursorPosition.y});
-    return warpToGlobalPoint(display, CGPointMake(global.x, global.y));
+    return warpToGlobalPoint(CGPointMake(global.x, global.y));
 }
 
-// The mouse motion reported since the previous call, in screen pixels.
+// The mouse motion reported since the previous call, in screen pixels. The deltas come
+// from the input the window system delivers to the windows, so without a pointer
+// controller there are none.
 void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY) {
-    NSDisplay *display = currentDisplay();
     int32_t dx = 0, dy = 0;
-    if (display)
-        [display takeMouseDeltaX: &dx y: &dy];
+    [pointerController() takeMouseDeltaX: &dx y: &dy];
     if (deltaX)
         *deltaX = dx;
     if (deltaY)
@@ -646,13 +603,9 @@ void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY) {
 }
 
 CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
-        return kCGErrorInvalidConnection;
-
-    // Disconnecting the mouse from the cursor is what -grabMouse: YES does:
-    // the cursor stays put and the mouse only produces deltas.
-    [display grabMouse: !connected];
+    // Disconnecting the mouse from the cursor: the cursor stays put and the mouse only
+    // produces deltas.
+    [pointerController() setMouseAssociatedWithCursor: connected != 0];
     return kCGErrorSuccess;
 }
 
@@ -693,29 +646,20 @@ static NSDictionary *legacyModeDictionary(NSDictionary *mode, NSUInteger index) 
 // The display's modes, or its current mode alone when the backend lists none.
 // nil for a display that does not exist.
 static NSArray *backendModesForDisplay(CGDirectDisplayID displayID, NSUInteger *currentIndex) {
-    NSDisplay *display = currentDisplay();
-    if (!display || displayID == kCGNullDirectDisplay)
+    if (displayID == kCGNullDirectDisplay)
         return nil;
-    NSScreen *screen = screenForDisplayID([display screens], displayID);
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), displayID);
     if (!screen)
         return nil;
 
-    NSArray *modes = [display modesForScreen: displayID - 1];
-    NSDictionary *current = [display currentModeForScreen: displayID - 1];
+    NSArray *modes = [screen modes];
+    NSDictionary *current = [screen currentModeDictionary];
     if ([modes count] == 0)
         modes = [current count] > 0 ? @[ current ] : nil;
 
     if (currentIndex) {
-        *currentIndex = 0;
-        for (NSUInteger i = 0; i < [modes count]; i++) {
-            NSDictionary *mode = [modes objectAtIndex: i];
-            if ([[mode objectForKey: @"Width"] isEqual: [current objectForKey: @"Width"]] &&
-                [[mode objectForKey: @"Height"] isEqual: [current objectForKey: @"Height"]] &&
-                [[mode objectForKey: @"PixelWidth"] isEqual: [current objectForKey: @"PixelWidth"]]) {
-                *currentIndex = i;
-                break;
-            }
-        }
+        *currentIndex = [screen currentMode] >= 0 && (NSUInteger) [screen currentMode] < [modes count]
+                                ? (NSUInteger) [screen currentMode] : 0;
     }
     return modes;
 }
@@ -942,20 +886,20 @@ static NSMutableDictionary *stateForDisplay(CGDirectDisplayID display) {
 // reconfiguration callbacks. When remember is set, the mode the display had
 // is kept so that a release restores it.
 static CGError changeBackendMode(CGDirectDisplayID displayID, NSDictionary *mode, BOOL remember) {
-    NSDisplay *display = currentDisplay();
-    if (!display)
+    CGSConnection *connection = displayConnection();
+    if (!connection)
         return kCGErrorInvalidConnection;
-    NSDictionary *before = [display currentModeForScreen: displayID - 1];
+    NSDictionary *before = [screenForDisplayID(activeScreens(NULL), displayID) currentModeDictionary];
     if (sameBackendMode(before, mode))
         return kCGErrorSuccess;
 
     initDisplayState();
     CGDisplayPostReconfiguration(displayID, kCGDisplayBeginConfigurationFlag);
-    BOOL changed = [display setMode: mode forScreen: displayID - 1];
+    BOOL changed = [connection changeMode: mode forScreen: displayID - 1];
     CGDisplayChangeSummaryFlags flags = 0;
     if (changed) {
         flags = kCGDisplaySetModeFlag;
-        NSDictionary *after = [display currentModeForScreen: displayID - 1];
+        NSDictionary *after = [screenForDisplayID(activeScreens(NULL), displayID) currentModeDictionary];
         for (NSString *key in @[ @"Width", @"Height", @"PixelWidth", @"PixelHeight" ]) {
             if (![[before objectForKey: key] isEqual: [after objectForKey: key]])
                 flags |= kCGDisplayDesktopShapeChangedFlag;
@@ -1034,10 +978,11 @@ CGError CGDisplaySetDisplayMode(CGDirectDisplayID displayID, CGDisplayModeRef mo
 // nothing). Not documented. Evidence: black-box observation on macOS 10.14.4
 // (tier 2). Test: coregraphics-display-mode-switch, check 12.
 CGError CGDisplayCapture(CGDirectDisplayID display) {
-    NSDisplay *backend = currentDisplay();
-    if (!backend)
+    BOOL connected;
+    NSArray<CGSScreen *> *screens = activeScreens(&connected);
+    if (!connected)
         return kCGErrorInvalidConnection;
-    if (!screenForDisplayID([backend screens], display))
+    if (!screenForDisplayID(screens, display))
         return kCGErrorSuccess;
     initDisplayState();
     @synchronized(gDisplayStateLock) {
@@ -1050,10 +995,11 @@ CGError CGDisplayCapture(CGDirectDisplayID display) {
 // display that is neither captured nor was switched by this process, and one
 // that does not exist, give kCGErrorIllegalArgument (observed on macOS 10.14.4).
 CGError CGDisplayRelease(CGDirectDisplayID display) {
-    NSDisplay *backend = currentDisplay();
-    if (!backend)
+    BOOL connected;
+    NSArray<CGSScreen *> *screens = activeScreens(&connected);
+    if (!connected)
         return kCGErrorInvalidConnection;
-    if (!screenForDisplayID([backend screens], display))
+    if (!screenForDisplayID(screens, display))
         return kCGErrorIllegalArgument;
     initDisplayState();
     BOOL known;
@@ -1069,18 +1015,18 @@ CGError CGDisplayRelease(CGDirectDisplayID display) {
 }
 
 CGError CGCaptureAllDisplays(void) {
-    NSDisplay *backend = currentDisplay();
-    if (!backend)
+    BOOL connected;
+    NSArray<CGSScreen *> *screens = activeScreens(&connected);
+    if (!connected)
         return kCGErrorInvalidConnection;
-    for (NSScreen *screen in [backend screens])
-        CGDisplayCapture([screen cgDirectDisplayID]);
+    for (CGSScreen *screen in screens)
+        CGDisplayCapture([screen displayID]);
     return kCGErrorSuccess;
 }
 
 // kCGErrorFailure when nothing was captured or switched (observed on macOS 10.14.4).
 CGError CGReleaseAllDisplays(void) {
-    NSDisplay *backend = currentDisplay();
-    if (!backend)
+    if (displayConnection() == nil)
         return kCGErrorInvalidConnection;
     initDisplayState();
     NSArray *ids;
@@ -1270,8 +1216,7 @@ CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display) {
 
 CGImageRef CGDisplayCreateImageForRect(CGDirectDisplayID display, CGRect rect) {
     // Only an existing display and a non-empty part of it can be captured.
-    NSDisplay *host = currentDisplay();
-    if (!host || !screenForDisplayID([host screens], display) ||
+    if (!screenForDisplayID(activeScreens(NULL), display) ||
         CGRectIsEmpty(rect) || CGRectIsNull(rect) ||
         !CGRectIntersectsRect(rect, CGDisplayBounds(display)))
         return NULL;
@@ -1306,8 +1251,7 @@ bool CGRequestScreenCaptureAccess(void) {
 }
 
 id CGDirectDisplayCopyCurrentMetalDevice(CGDirectDisplayID displayID) {
-    NSDisplay *display = currentDisplay();
-    if (!display || !screenForDisplayID([display screens], displayID))
+    if (!screenForDisplayID(activeScreens(NULL), displayID))
         return nil;
 
     // Every display is driven by the system default Metal device. CoreGraphics

@@ -546,10 +546,117 @@ void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId)
 	return [[conn windowForId: winId] nativeWindow];
 }
 
+// The surfaces of application windows (see _CGSAddWindowSurface). They are not CGSSurface
+// objects: there is no CGS window behind an application window, only a native drawable, so
+// the registry keeps what the window server calls need: the ids, the drawable and its size.
+typedef struct WindowSurface
+{
+	CGSSurfaceID surfaceId;
+	CGSWindowID windowId;
+	void* nativeWindow;
+	CGSize size;
+	struct WindowSurface* next;
+} WindowSurface;
+
+static WindowSurface* g_windowSurfaces = NULL;
+static pthread_mutex_t g_windowSurfacesMutex = PTHREAD_MUTEX_INITIALIZER;
+// Surface ids of application windows start apart from the ones of CGS windows, which count
+// up from 1 on each window.
+static CGSSurfaceID g_nextWindowSurfaceId = 0x1000;
+
+CGSSurfaceID _CGSAddWindowSurface(CGSWindowID winId, void* nativeWindow, CGSize size)
+{
+	WindowSurface* surface = (WindowSurface*) calloc(1, sizeof(WindowSurface));
+	if (!surface)
+		return 0;
+	surface->windowId = winId;
+	surface->nativeWindow = nativeWindow;
+	surface->size = size;
+
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	surface->surfaceId = g_nextWindowSurfaceId++;
+	surface->next = g_windowSurfaces;
+	g_windowSurfaces = surface;
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+	return surface->surfaceId;
+}
+
+void _CGSSetWindowSurfaceSize(CGSSurfaceID surfaceId, CGSize size)
+{
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	for (WindowSurface* s = g_windowSurfaces; s != NULL; s = s->next)
+	{
+		if (s->surfaceId == surfaceId)
+		{
+			s->size = size;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+}
+
+void _CGSRemoveWindowSurface(CGSSurfaceID surfaceId)
+{
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	for (WindowSurface** link = &g_windowSurfaces; *link != NULL; link = &(*link)->next)
+	{
+		if ((*link)->surfaceId == surfaceId)
+		{
+			WindowSurface* gone = *link;
+			*link = gone->next;
+			free(gone);
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+}
+
+bool _CGSWindowSurfaceForNativeWindow(void* nativeWindow, CGSConnectionID* connId,
+                                      CGSWindowID* winId, CGSSurfaceID* surfaceId)
+{
+	bool found = false;
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	for (WindowSurface* s = g_windowSurfaces; s != NULL; s = s->next)
+	{
+		if (s->nativeWindow == nativeWindow)
+		{
+			*connId = _CGSDefaultConnection();
+			*winId = s->windowId;
+			*surfaceId = s->surfaceId;
+			found = true;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+	return found;
+}
+
+// The registered surface of an application window, copied out.
+static bool windowSurfaceForIDs(CGSWindowID winId, CGSSurfaceID surfaceId, WindowSurface* out)
+{
+	bool found = false;
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	for (WindowSurface* s = g_windowSurfaces; s != NULL; s = s->next)
+	{
+		if (s->windowId == winId && s->surfaceId == surfaceId)
+		{
+			*out = *s;
+			found = true;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+	return found;
+}
+
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId)
 {
 	CGSConnection* conn = _CGSConnectionForID(connId);
-	return [[[conn windowForId: winId] surfaceForId: surfaceId] nativeWindow];
+	void* native = [[[conn windowForId: winId] surfaceForId: surfaceId] nativeWindow];
+	WindowSurface surface;
+	if (native == NULL && conn != nil && windowSurfaceForIDs(winId, surfaceId, &surface))
+		native = surface.nativeWindow;
+	return native;
 }
 
 CGError _CGSCreateDisplayOverlayWindow(CGSConnectionID connId, CGRect bounds,
@@ -899,6 +1006,24 @@ CGError CGSSetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID s
 	return [surface setBounds: rect];
 }
 
+// The bounds of one of the application's own windows, by window number, in global display
+// coordinates (origin at the top left of the main display). An AppKit window is not a CGS
+// window, but its number is a window id like any other, so the window server calls that take
+// one see its frame, including the title bar.
+static bool applicationWindowBounds(CGSWindowID wid, CGRect* outBounds)
+{
+	CGWindow* window = platformWindowForID(wid);
+	if (!window)
+		return false;
+	CGRect frame = [window frame];
+	if (CGRectIsNull(frame))
+		return false;
+	// The frame is in AppKit's global space, with the origin at the bottom left of the main display.
+	frame.origin.y = CGDisplayBounds(CGMainDisplayID()).size.height - CGRectGetMaxY(frame);
+	*outBounds = frame;
+	return true;
+}
+
 // QUIRK: a failed CGSGetWindowBounds() reports kCGErrorFailure for a window
 // that does not exist, and sets the result to CGRectNull. Not documented.
 // Evidence: black-box observation on macOS 26.7.3 (tier 2).
@@ -912,6 +1037,8 @@ CGError CGSGetWindowBounds(CGSConnectionID cid, CGSWindowID wid, CGRect *outBoun
 	CGError err = getWindow(cid, wid, &window);
 
 	if (err == kCGErrorIllegalArgument) {
+		if (applicationWindowBounds(wid, outBounds))
+			return kCGSErrorSuccess;
 		*outBounds = CGRectNull;
 		return kCGErrorFailure;
 	}
@@ -932,6 +1059,16 @@ CGError CGSGetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID s
 	CGSSurface* surface;
 	CGError err = getSurface(cid, wid, sid, &surface);
 
+	if (err == kCGErrorIllegalArgument)
+	{
+		// A drawable of an application window: it covers its own area, from its origin.
+		WindowSurface windowSurface;
+		if (windowSurfaceForIDs(wid, sid, &windowSurface))
+		{
+			*outBounds = CGRectMake(0, 0, windowSurface.size.width, windowSurface.size.height);
+			return kCGSErrorSuccess;
+		}
+	}
 	if (err != kCGSErrorSuccess)
 		return err;
 
@@ -997,8 +1134,8 @@ CGError CGSRemoveNotifyProc(CGSNotifyProcPtr proc, CGSNotificationType notificat
 	return kCGSErrorSuccess;
 }
 
-// Hands a hot key press or release, as a system-defined event, to the procs registered for
-// such events, or to the event stream when there is none. Called by the backends (through -postHotKeyEventForUID:...) on the main run loop.
+// Posts a hot key press or release, as a system-defined event, to the event stream, and tells the
+// procs registered for such events. Called by the backends (through -postHotKeyEventForUID:...) on the main run loop.
 __attribute__((visibility("hidden")))
 void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEventFlags flags, CGPoint location, uint64_t time)
 {
@@ -1027,21 +1164,15 @@ void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL pressed, CGEv
 	}
 	pthread_mutex_unlock(&g_cgsNotifyProcMutex);
 
-	// Without a client that wants the system-defined events itself, the hot key is an event of the
-	// process like any other: it goes through the event taps into the event stream, which the
-	// event loop of HIToolbox reads (a Carbon application has no other way to receive it).
-	// Interim: AppKit still takes the events from the notification procs (NSApplication registers
-	// one) and queues them in its own queue, so while one exists the stream is not used.
-	if ([procs count] == 0)
-	{
-		CGEventRef event = CGEventCreateWithEventRecord(&record, sizeof(record));
+	// The hot key is an event of the process like any other: it goes through the event taps into
+	// the event stream, which HIToolbox reads (and AppKit through it). The procs registered for
+	// system-defined events are told about it as well.
+	CGEventRef event = CGEventCreateWithEventRecord(&record, sizeof(record));
 
-		if (event)
-		{
-			_CGSEventStreamPost(event);
-			CFRelease(event);
-		}
-		return;
+	if (event)
+	{
+		_CGSEventStreamPost(event);
+		CFRelease(event);
 	}
 
 	for (NSData* entry in procs)

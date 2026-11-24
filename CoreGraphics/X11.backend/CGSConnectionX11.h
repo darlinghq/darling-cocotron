@@ -39,10 +39,8 @@
     CFSocketRef _cfSocket;
     CFRunLoopSourceRef _source;
 
-	// One entry per X11 screen, each describing the root window of that screen, so
-	// that its size is in the coordinate space -mouseLocation reports. Dropped when
-	// XRandR reports a reconfiguration.
-	NSArray<CGSScreen*>* _screens;
+	// RandR reported a layout change that -processPendingEvents has not looked at yet.
+	BOOL _layoutChanged;
 
 	CGSKeyboardLayout* _keyboardLayout;
 	int _keyboardLayoutGroup;
@@ -63,6 +61,8 @@
 	// @synchronized(self); the cache is dropped when XRandR reports a
 	// reconfiguration, like _screens.
 	X11Frame _primaryRoot;
+	// Device pixels per point, read together with _primaryRoot.
+	CGFloat _primaryScale;
 	BOOL _primaryRootValid;
 }
 

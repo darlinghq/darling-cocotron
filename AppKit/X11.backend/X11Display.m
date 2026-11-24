@@ -81,20 +81,6 @@ static BOOL appKitPreference(CFStringRef key) {
     return valid && value;
 }
 
-// NSScreen.frame is in points while X reports device pixels, so the screen
-// carries the scale instead of NSScreen assuming one device pixel per point.
-@interface X11Screen : NSScreen {
-@public
-    CGFloat _x11Scale;
-}
-@end
-
-@implementation X11Screen
-- (CGFloat) backingScaleFactor {
-    return _x11Scale;
-}
-@end
-
 @implementation X11Display
 
 static int errorHandler(Display *display, XErrorEvent *errorEvent) {
@@ -309,21 +295,13 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     return _display;
 }
 
-// X11 has no scale protocol; see X11ScaleChoose() for what is read.
+// Device pixels per point. X11 has no scale protocol; CoreGraphics decides the scale of the displays (see
+// X11ScaleChoose()), and the main display's is the one window geometry here uses.
 - (CGFloat) backingScale {
     if (_backingScale > 0)
         return _backingScale;
 
-    double preferred = 0;
-    CFPropertyListRef value = CFPreferencesCopyAppValue(
-            CFSTR("X11BackingScale"), CFSTR("org.darlinghq.AppKit"));
-    if (value != NULL) {
-        if (CFGetTypeID(value) == CFNumberGetTypeID())
-            CFNumberGetValue(value, kCFNumberDoubleType, &preferred);
-        CFRelease(value);
-    }
-    const char *source = NULL;
-    _backingScale = (CGFloat) X11ScaleChoose(preferred, &source);
+    _backingScale = (CGFloat) _CGSDisplayBackingScaleFactor(CGMainDisplayID());
     return _backingScale;
 }
 
@@ -340,41 +318,33 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     XkbSetDetectableAutoRepeat(_display, TRUE, &supported);
 }
 
+// The layout of the monitors changed. The displays are CoreGraphics', which reads RandR on its own connection:
+// it is brought up to date first (this reports the change to the display reconfiguration callbacks, which is
+// what posts NSApplicationDidChangeScreenParametersNotification), then what this connection derives from
+// the layout is dropped.
 - (void) _invalidateRRCache {
     _pointerKnown = NO;
+    [self _refreshDisplays];
     // The root may have shrunk or a monitor gone: the pointer's reachable
     // area, and with it a relative-mode grab's bounds, changed.
     [self resnapshotRelativeMouse];
-    if (_lastScreens) {
-        [_lastScreens release];
-        _lastScreens = nil;
-    }
     _primaryRootFrameValid = NO;
     // Whether the focused window covers a monitor depends on the layout.
     _occlusionCoverValid = NO;
     _occlusionDirty = YES;
     [self reevaluateBackingScale];
-    [self _postScreenParametersChanged];
 }
 
-// RandR reports one change as several events, so the notification is queued
-// and merged per run loop pass, and goes out on the next pass like the
-// notification on macOS (the screens themselves are already up to date).
-- (void) _postScreenParametersChanged {
-    NSNotification *note = [NSNotification
-            notificationWithName: NSApplicationDidChangeScreenParametersNotification
-                          object: NSApp];
-    [[NSNotificationQueue defaultQueue] enqueueNotification: note
-                                               postingStyle: NSPostASAP
-                                               coalesceMask: NSNotificationCoalescingOnName |
-                                                             NSNotificationCoalescingOnSender
-                                                   forModes: nil];
+// Called when the displays changed, from any thread: the main monitor's rectangle is read again.
+- (void) _invalidateScreens {
+    [super _invalidateScreens];
+    _primaryRootFrameValid = NO;
 }
 
 // X11 has no scale event: the scale comes from the user's setting or the
-// session's GDK_SCALE (see -backingScale), so the places where it is looked at
-// again are the moments the display layout changes. When the value differs
-// from the one in use, the screens drop their cached frames and every window
+// session's GDK_SCALE (CoreGraphics reads them with the displays), so the places
+// where it is looked at again are the moments the display layout changes. When
+// the value differs from the one in use, the screens drop their cached frames and every window
 // keeps its size in points at the new scale, and learns of the change (which
 // posts NSWindowDidChangeBackingPropertiesNotification).
 - (void) reevaluateBackingScale {
@@ -386,9 +356,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     if (newScale == oldScale)
         return;
 
-    [_lastScreens release];
-    _lastScreens = nil;
-    _primaryRootFrameValid = NO;
+    [self _invalidateScreens];
     for (id window in [_windowsByID allValues]) {
         if ([window isKindOfClass: [X11Window class]])
             [window displayBackingScaleChangedFrom: oldScale];
@@ -408,10 +376,22 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
 
 // The main monitor's rectangle in root coordinates, device pixels: the origin
 // of the global coordinate space, as on macOS. With one monitor, or without
-// RandR, it is the root window.
+// RandR, it is the root window. It is the monitor CoreGraphics lists first (the
+// choice is X11Monitors.h's).
 - (NSRect) primaryRootFrame {
-    if (!_primaryRootFrameValid)
-        [self screens];
+    if (!_primaryRootFrameValid) {
+        int count = 0, primary = -1;
+        X11Monitor *monitors = X11MonitorsCopy(_display, &count, &primary);
+
+        _primaryRootFrame =
+                monitors != NULL && primary >= 0
+                        ? NSMakeRect(monitors[primary].x, monitors[primary].y,
+                                     monitors[primary].width, monitors[primary].height)
+                        : NSMakeRect(0, 0, DisplayWidth(_display, DefaultScreen(_display)),
+                                     DisplayHeight(_display, DefaultScreen(_display)));
+        free(monitors);
+        _primaryRootFrameValid = YES;
+    }
     return _primaryRootFrame;
 }
 
@@ -430,360 +410,6 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     X11Point point = X11CGPointFromRoot([self primaryFrameInPoints],
                                         (X11Point){root.x / scale, root.y / scale});
     return NSMakePoint(point.x, point.y);
-}
-
-- (NSArray *) rootScreenFallback {
-    int width = DisplayWidth(_display, DefaultScreen(_display));
-    int height = DisplayHeight(_display, DefaultScreen(_display));
-    _primaryRootFrame = NSMakeRect(0, 0, width, height);
-    _primaryRootFrameValid = YES;
-    CGFloat scale = [self backingScale];
-    NSRect frame = NSMakeRect(0, 0, width / scale, height / scale);
-    X11Screen *screen = [[[X11Screen alloc] initWithFrame: frame
-                                             visibleFrame: frame] autorelease];
-    screen->_x11Scale = scale;
-    [screen setCgDirectDisplayID: 1];
-    return [NSArray arrayWithObject: screen];
-}
-
-// [NSScreen screens] starts with the main monitor, as on macOS, and every
-// frame is relative to that monitor's origin. A display's CGDirectDisplayID
-// stays tied to its RandR output (index + 1), whatever its position in the
-// array, because the mode functions address the output by that index.
-- (NSArray *) screens {
-
-    NSArray* last = [_lastScreens retain];
-    if (last) {
-        return [last autorelease];
-    }
-
-    int count = 0, primary = -1;
-    X11Monitor *monitors = X11MonitorsCopy(_display, &count, &primary);
-    // A server that lists no output at all still has a root window; an empty
-    // screen list would make +[NSScreen mainScreen] throw.
-    if (monitors == NULL || count == 0) {
-        free(monitors);
-        return [self rootScreenFallback];
-    }
-
-    // Without any active output the root window stands in, like without RandR.
-    _primaryRootFrame =
-            primary >= 0
-                    ? NSMakeRect(monitors[primary].x, monitors[primary].y,
-                                 monitors[primary].width, monitors[primary].height)
-                    : NSMakeRect(0, 0, DisplayWidth(_display, DefaultScreen(_display)),
-                                 DisplayHeight(_display, DefaultScreen(_display)));
-    _primaryRootFrameValid = YES;
-    int *order = calloc(count > 0 ? (size_t) count : 1, sizeof *order);
-    if (order == NULL) {
-        free(monitors);
-        return [self rootScreenFallback];
-    }
-    X11MonitorsOrder(monitors, count, primary, order);
-
-    NSMutableArray<NSScreen *> *retval =
-            [NSMutableArray arrayWithCapacity: count];
-    Atom edidAtom = XInternAtom(_display, "EDID", FALSE);
-
-    for (int n = 0; n < count; n++) {
-        int i = order[n];
-
-        // An output without a CRTC and mode (a disconnected or switched-off
-        // connector) shows nothing, so it is not a screen.
-        if (!monitors[i].active)
-            continue;
-
-        // The frame is in Cocoa's global space, y up from the main
-        // monitor's bottom-left corner, like window frames.
-        CGFloat scale = [self backingScale];
-        X11Frame global = X11FrameFromRoot(
-                [self primaryFrameInPoints],
-                (X11Frame){monitors[i].x / scale, monitors[i].y / scale,
-                           monitors[i].width / scale,
-                           monitors[i].height / scale});
-        NSRect frame = NSMakeRect(global.x, global.y, global.width,
-                                  global.height);
-
-        X11Screen *nsscreen =
-                [[[X11Screen alloc] initWithFrame: frame
-                                     visibleFrame: frame] autorelease];
-        nsscreen->_x11Scale = scale;
-
-        Atom actualType;
-        unsigned long nitems, bytesAfter;
-        int actualFormat;
-        unsigned char *prop = NULL;
-
-        if (XRRGetOutputProperty(_display, monitors[i].output, edidAtom, 0,
-                                 100, FALSE, FALSE, AnyPropertyType,
-                                 &actualType, &actualFormat, &nitems,
-                                 &bytesAfter, &prop) == Success) {
-            if (prop && actualFormat == 8 && nitems > 0)
-                [nsscreen setEdid: [NSData dataWithBytes: prop
-                                                  length: nitems]];
-        }
-        if (prop)
-            XFree(prop);
-        [nsscreen setCgDirectDisplayID: X11MonitorDisplayID(i)];
-        [retval addObject: nsscreen];
-    }
-
-    free(order);
-    free(monitors);
-
-    if ([retval count] == 0)
-        return [self rootScreenFallback];
-
-    NSArray* array = [NSArray arrayWithArray: retval];
-    _lastScreens = [array retain];
-    return array;
-}
-
-// Width and Height are in points, like CGDisplayModeGetWidth/Height; the
-// PixelWidth/PixelHeight keys carry the mode's size in device pixels (the
-// RandR mode size), which the points are derived from with the backing scale.
-static NSDictionary *modeInfoToDictionary(const XRRModeInfo *mi, int depth,
-                                          CGFloat scale) {
-    double rate = 0;
-
-    if (mi->hTotal && mi->vTotal)
-        rate = (double) mi->dotClock /
-               ((double) mi->hTotal * (double) mi->vTotal);
-
-    return @{
-        @"Width" : @((unsigned) lround(mi->width / scale)),
-        @"Height" : @((unsigned) lround(mi->height / scale)),
-        @"Depth" : @(depth),
-        @"RefreshRate" : @(rate),
-        @"PixelWidth" : @(mi->width),
-        @"PixelHeight" : @(mi->height)
-    };
-}
-
-- (NSArray *) modesForScreen: (int) screenIndex {
-    int eventBase, errorBase;
-    const int defaultDepth =
-            XDefaultDepthOfScreen(XDefaultScreenOfDisplay(_display));
-
-    if (!XRRQueryExtension(_display, &eventBase, &errorBase)) {
-        Screen *defaultScreen = XDefaultScreenOfDisplay(_display);
-        CGFloat scale = [self backingScale];
-        return @[ @{
-            @"Width" : @((unsigned) lround(WidthOfScreen(defaultScreen) / scale)),
-            @"Height" : @((unsigned) lround(HeightOfScreen(defaultScreen) / scale)),
-            @"Depth" : @(defaultDepth),
-            @"PixelWidth" : @(WidthOfScreen(defaultScreen)),
-            @"PixelHeight" : @(HeightOfScreen(defaultScreen))
-        } ];
-    } else {
-        XRRScreenResources *screen = XRRGetScreenResourcesCurrent(
-                _display, DefaultRootWindow(_display));
-        if (screen == NULL)
-            return nil;
-
-        if (screenIndex < 0 || screenIndex >= screen->noutput) {
-            XRRFreeScreenResources(screen);
-            return nil;
-        }
-
-        XRROutputInfo *oinfo = XRRGetOutputInfo(_display, screen,
-                                                screen->outputs[screenIndex]);
-
-        NSMutableArray<NSDictionary *> *retval =
-                [NSMutableArray arrayWithCapacity: oinfo->nmode];
-
-        for (int i = 0; i < oinfo->nmode; i++) {
-            XRRModeInfo *mode = NULL;
-            for (int j = 0; j < screen->nmode; j++) {
-                if (screen->modes[j].id == oinfo->modes[i]) {
-                    mode = &screen->modes[j];
-                    break;
-                }
-            }
-
-            if (mode != NULL) {
-                NSDictionary *dict = modeInfoToDictionary(mode, defaultDepth, [self backingScale]);
-                [retval addObject: dict];
-            }
-        }
-
-        XRRFreeOutputInfo(oinfo);
-        XRRFreeScreenResources(screen);
-        return [NSArray arrayWithArray: retval];
-    }
-}
-
-static Bool isRandRLayoutEvent(Display *display, XEvent *event, XPointer arg) {
-    return X11RandRIsLayoutChange(event, *(int *) arg);
-}
-
-// Bounding box of the active CRTCs, in root coordinates, with the CRTC being
-// changed taken at its new size.
-static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRCrtc changed,
-                            int newWidth, int newHeight, int newX, int newY, int *width, int *height) {
-    int maxX = 0, maxY = 0;
-    for (int i = 0; i < resources->ncrtc; i++) {
-        int x, y, w, h;
-        if (resources->crtcs[i] == changed) {
-            x = newX; y = newY; w = newWidth; h = newHeight;
-        } else {
-            XRRCrtcInfo *info = XRRGetCrtcInfo(display, resources, resources->crtcs[i]);
-            if (info == NULL)
-                continue;
-            x = info->x; y = info->y;
-            w = info->width; h = info->height;
-            if (info->mode == None) {
-                XRRFreeCrtcInfo(info);
-                continue;
-            }
-            if (info->rotation & (RR_Rotate_90 | RR_Rotate_270)) {
-                int t = w; w = h; h = t;
-            }
-            XRRFreeCrtcInfo(info);
-        }
-        if (x + w > maxX) maxX = x + w;
-        if (y + h > maxY) maxY = y + h;
-    }
-    *width = maxX;
-    *height = maxY;
-}
-
-// Sets the CRTC that drives the output to the RandR mode of the same size and
-// refresh rate as mode (a dictionary from modesForScreen:), growing the
-// screen first when the new bounding box needs it and shrinking it to the
-// bounding box afterwards, as the desktop follows the mode on macOS.
-- (BOOL) setMode: (NSDictionary *) mode forScreen: (int) screenIndex {
-    int eventBase, errorBase;
-    if (mode == nil || !XRRQueryExtension(_display, &eventBase, &errorBase))
-        return NO;
-
-    Window root = DefaultRootWindow(_display);
-    XRRScreenResources *resources = XRRGetScreenResourcesCurrent(_display, root);
-    if (resources == NULL)
-        return NO;
-    if (screenIndex < 0 || screenIndex >= resources->noutput) {
-        XRRFreeScreenResources(resources);
-        return NO;
-    }
-    RROutput output = resources->outputs[screenIndex];
-    XRROutputInfo *oinfo = XRRGetOutputInfo(_display, resources, output);
-    XRRCrtcInfo *crtc = (oinfo && oinfo->crtc) ? XRRGetCrtcInfo(_display, resources, oinfo->crtc) : NULL;
-    BOOL ok = NO;
-
-    // The wanted RandR mode: one of the output's modes with the wanted size and the nearest rate.
-    RRMode wanted = None;
-    const XRRModeInfo *wantedInfo = NULL;
-    if (crtc != NULL) {
-        NSNumber *pw = [mode objectForKey: @"PixelWidth"], *ph = [mode objectForKey: @"PixelHeight"];
-        double rate = [[mode objectForKey: @"RefreshRate"] doubleValue], best = 0;
-        for (int i = 0; i < oinfo->nmode; i++) {
-            for (int j = 0; j < resources->nmode; j++) {
-                const XRRModeInfo *mi = &resources->modes[j];
-                if (mi->id != oinfo->modes[i])
-                    continue;
-                if (pw == nil || ph == nil || mi->width != [pw unsignedIntValue] || mi->height != [ph unsignedIntValue])
-                    break;
-                double r = (mi->hTotal && mi->vTotal)
-                        ? (double) mi->dotClock / ((double) mi->hTotal * mi->vTotal) : 0;
-                if (wanted == None || fabs(r - rate) < best) {
-                    wanted = mi->id;
-                    wantedInfo = mi;
-                    best = fabs(r - rate);
-                }
-                break;
-            }
-        }
-    }
-
-    if (wanted != None) {
-        BOOL turned = (crtc->rotation & (RR_Rotate_90 | RR_Rotate_270)) != 0;
-        int w = turned ? wantedInfo->height : wantedInfo->width;
-        int h = turned ? wantedInfo->width : wantedInfo->height;
-        int boxW, boxH, minW, minH, maxW, maxH;
-        crtcBoundingBox(_display, resources, oinfo->crtc, w, h, crtc->x, crtc->y, &boxW, &boxH);
-        int oldW = DisplayWidth(_display, DefaultScreen(_display));
-        int oldH = DisplayHeight(_display, DefaultScreen(_display));
-        if (boxW < 1) boxW = 1;
-        if (boxH < 1) boxH = 1;
-        BOOL sizeKnown = XRRGetScreenSizeRange(_display, root, &minW, &minH, &maxW, &maxH);
-        if (sizeKnown && (boxW < minW || boxH < minH || boxW > maxW || boxH > maxH)) {
-            wanted = None;
-        } else {
-            // Millimetres follow the pixel size at the current density.
-            int mmW = (int) lround((double) DisplayWidthMM(_display, DefaultScreen(_display)) * boxW / (oldW ? oldW : 1));
-            int mmH = (int) lround((double) DisplayHeightMM(_display, DefaultScreen(_display)) * boxH / (oldH ? oldH : 1));
-            if (boxW > oldW || boxH > oldH)
-                XRRSetScreenSize(_display, root, MAX(boxW, oldW), MAX(boxH, oldH),
-                                 MAX(mmW, 1), MAX(mmH, 1));
-            Status status = XRRSetCrtcConfig(_display, resources, oinfo->crtc, CurrentTime, crtc->x, crtc->y,
-                                             wanted, crtc->rotation, crtc->outputs, crtc->noutput);
-            ok = (status == RRSetConfigSuccess);
-            if (ok && (boxW < oldW || boxH < oldH))
-                XRRSetScreenSize(_display, root, boxW, boxH, MAX(mmW, 1), MAX(mmH, 1));
-            if (!ok && (boxW > oldW || boxH > oldH))
-                XRRSetScreenSize(_display, root, oldW, oldH,
-                                 DisplayWidthMM(_display, DefaultScreen(_display)),
-                                 DisplayHeightMM(_display, DefaultScreen(_display)));
-        }
-    }
-
-    if (crtc) XRRFreeCrtcInfo(crtc);
-    if (oinfo) XRRFreeOutputInfo(oinfo);
-    XRRFreeScreenResources(resources);
-
-    if (ok) {
-        // The callers read the screens right away, so apply the layout events
-        // now instead of when the event loop gets to them.
-        XSync(_display, False);
-        XEvent event;
-        int base = _rrEventBase;
-        while (XCheckIfEvent(_display, &event, isRandRLayoutEvent, (XPointer) &base))
-            X11RandRHandleLayoutChange(&event, _rrEventBase);
-        [self _invalidateRRCache];
-    }
-    return ok;
-}
-
-- (NSDictionary *) currentModeForScreen: (int) screenIndex {
-    int eventBase, errorBase;
-    NSDictionary *dict = @{};
-
-    if (XRRQueryExtension(_display, &eventBase, &errorBase)) {
-        XRRScreenResources *screen = XRRGetScreenResourcesCurrent(
-                _display, DefaultRootWindow(_display));
-        if (screen == NULL)
-            return dict;
-
-        if (screenIndex < 0 || screenIndex >= screen->noutput) {
-            XRRFreeScreenResources(screen);
-            return dict;
-        }
-
-        XRROutputInfo *oinfo = XRRGetOutputInfo(_display, screen,
-                                                screen->outputs[screenIndex]);
-
-        if (oinfo->crtc) {
-            XRRCrtcInfo *crtc = XRRGetCrtcInfo(_display, screen, oinfo->crtc);
-
-            for (int i = 0; i < screen->nmode; i++) {
-                if (screen->modes[i].id == crtc->mode) {
-                    const int defaultDepth = XDefaultDepthOfScreen(
-                            XDefaultScreenOfDisplay(_display));
-                    dict = modeInfoToDictionary(&screen->modes[i],
-                                                defaultDepth,
-                                                [self backingScale]);
-
-                    break;
-                }
-            }
-
-            XRRFreeCrtcInfo(crtc);
-        }
-
-        XRRFreeOutputInfo(oinfo);
-        XRRFreeScreenResources(screen);
-    }
-    return dict;
 }
 
 - (void) textInputCandidateRectChangedInWindow: (NSWindow *) window {
@@ -1191,27 +817,9 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     return [_windowsByID objectForKey: [NSNumber numberWithUnsignedLong: i]];
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
-                          untilDate: (NSDate *) untilDate
-                             inMode: (NSRunLoopMode) mode
-                            dequeue: (BOOL) dequeue
-{
-#ifndef DARLING
-    [[NSRunLoop currentRunLoop] addInputSource: _inputSource forMode: mode];
-#else
+// Xlib may have read events into its own queue, which leaves the connection's descriptor quiet
+- (void) willWaitForEvents {
     [self processPendingEvents];
-#endif
-
-    NSEvent *result = [super nextEventMatchingMask: mask
-                                         untilDate: untilDate
-                                            inMode: mode
-                                           dequeue: dequeue];
-
-#ifndef DARLING
-    [[NSRunLoop currentRunLoop] removeInputSource: _inputSource forMode: mode];
-#endif
-
-    return result;
 }
 
 // With ControlKeyActsAsCommand set, Control+C, V and X (without Command or
@@ -2170,28 +1778,9 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             if (type == NSMouseMoved && !overlay && ![delegate acceptsMouseMovedEvents])
                 break;
 
-            // Events the queue is about to drop in favour of this one carry
-            // deltas that are all the application gets in relative mode.
-            // Posting any motion discards every queued left drag (below), so
-            // those deltas move to this event whatever its type, and any
-            // moved or dragged event also replaces a directly preceding one
-            // of its type for the same window (-[NSDisplay postEvent:atStart:]).
-            if (_relativeMouse.active) {
-                [_eventQueueLock lock];
-                for (NSEvent *queued in _eventQueue) {
-                    BOOL dropped = [queued type] == NSLeftMouseDragged ||
-                            (queued == [_eventQueue lastObject] &&
-                             [NSEvent isMouseCoalescingEnabled] &&
-                             [queued type] == type &&
-                             [queued window] == delegate);
-                    if (dropped) {
-                        deltaX += [queued deltaX];
-                        deltaY += [queued deltaY];
-                    }
-                }
-                [_eventQueueLock unlock];
-            }
-
+            // Coalescing in the event queue replaces a queued moved or dragged event of
+            // the same type for the same window with this one, and adds its deltas to this
+            // one's (which is all an application gets in relative mode).
             event = [NSEvent
                     mouseEventWithType: type
                               location: pos
@@ -2202,8 +1791,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                                 deltaX: deltaX
                                 deltaY: deltaY];
             [self postEvent: event atStart: NO];
-            [self discardEventsMatchingMask: NSLeftMouseDraggedMask
-                                beforeEvent: event];
 
             [delegate platformWindowSetCursorEvent: window];
             break;
