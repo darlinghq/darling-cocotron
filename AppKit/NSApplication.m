@@ -717,6 +717,57 @@ static NSMutableArray *pendingOpenURLs = nil;
     return image != nil ? image : [self _bundleApplicationIconImage];
 }
 
+// Whether the main bundle declares an application without a Dock presence (LSUIElement or LSBackgroundOnly).
+static BOOL bundleIsFaceless(NSDictionary *info) {
+    for (NSString *key in @[ @"LSUIElement", @"LSBackgroundOnly" ]) {
+        id value = [info objectForKey: key];
+        if ([value respondsToSelector: @selector(boolValue)] && [value boolValue])
+            return YES;
+    }
+    return NO;
+}
+
+// The icon file of an application bundle, from its CFBundleIconFile (the extension may be left out).
+static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
+    NSString *name = [[bundle infoDictionary] objectForKey: @"CFBundleIconFile"];
+    if (![name isKindOfClass: [NSString class]] || [name length] == 0)
+        return nil;
+    if ([[name pathExtension] length] == 0)
+        name = [name stringByAppendingPathExtension: @"icns"];
+    NSString *path = [[bundle resourcePath] stringByAppendingPathComponent: name];
+    return [[[NSImage alloc] initWithContentsOfFile: path] autorelease];
+}
+
+// The image the window system gets for this application's windows (title bars, task managers): the
+// application icon, and for a faceless helper without an icon of its own, the icon of the application
+// bundle it is nested in.
+//
+// This is a presentation mapping of the window-system backends, not a change of what the application
+// can observe: -applicationIconImage, NSRunningApplication and NSWorkspace give such a helper the
+// generic application icon, as macOS does. macOS windows carry no icon of their own; the user meets an
+// application in the Dock and the application switcher, where a faceless helper never shows and the
+// application that contains (and started) it does. Other window systems show a per-window icon, and the
+// helper window would be shown with a default one, so it takes the nearest enclosing application's
+// icon. An image set with -setApplicationIconImage: always wins.
+- (NSImage *) _windowApplicationIconImage {
+    NSImage *image = [self applicationIconImage];
+    if (image != nil)
+        return image;
+    NSBundle *main = [NSBundle mainBundle];
+    if (!bundleIsFaceless([main infoDictionary]))
+        return nil;
+    NSString *directory = [[main bundlePath] stringByDeletingLastPathComponent];
+    while ([directory length] > 1) {
+        if ([[directory pathExtension] caseInsensitiveCompare: @"app"] == NSOrderedSame) {
+            image = iconOfApplicationBundle([NSBundle bundleWithPath: directory]);
+            if (image != nil)
+                return image;
+        }
+        directory = [directory stringByDeletingLastPathComponent];
+    }
+    return nil;
+}
+
 - (BOOL) isActiveExcludingWindow: (NSWindow *) exclude {
     int count = [_windows count];
 

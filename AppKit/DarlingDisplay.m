@@ -22,6 +22,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
+
+@interface NSApplication (DarlingWindowIcon)
+// See NSApplication.m: the image the window-system backends use for window icons.
+- (NSImage *) _windowApplicationIconImage;
+@end
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSFontTypeface.h>
 #import <AppKit/NSPrintInfo.h>
@@ -54,7 +59,7 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
     NSData *cached = [_applicationIconPixels objectForKey: key];
     if (cached != nil)
         return cached;
-    NSImage *image = [NSApp applicationIconImage];
+    NSImage *image = [NSApp _windowApplicationIconImage];
     if (image == nil || [image size].width <= 0 || [image size].height <= 0)
         return nil;
 
