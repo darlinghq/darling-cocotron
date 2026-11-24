@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "PocketDisplay.h"
+#import "PocketSocket.h"
 #import "PocketWindow.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSScreen.h>
@@ -142,24 +143,18 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 }
 
 - (void) send: (uint32_t) type bytes: (const void *) bytes length: (size_t) length {
+    [self send: type bytes: bytes length: length fd: -1];
+}
+
+// With a descriptor, it goes with the first byte of the message.
+- (void) send: (uint32_t) type bytes: (const void *) bytes length: (size_t) length fd: (int) fd {
     if (_socket < 0)
         return;
-    uint8_t message[sizeof(struct pocket_header) + POCKET_MAX_MESSAGE];
-    size_t total = pocket_pack(message, type, bytes, length);
-    if (total == 0) {
-        NSLog(@"Pocket backend: not sending a message of %zu bytes", length);
-        return;
-    }
-    for (size_t sent = 0; sent < total;) {
-        ssize_t written = send(_socket, message + sent, total - sent, 0);
-        if (written < 0 && (errno == EAGAIN || errno == EINTR)) {
-            struct pollfd pfd = {.fd = _socket, .events = POLLOUT};
-            poll(&pfd, 1, 1000);
-            continue;
-        }
-        if (written <= 0)
+    if (pocket_send(_socket, type, bytes, length, fd) != 0) {
+        if (errno == EMSGSIZE)
+            NSLog(@"Pocket backend: not sending a message of %zu bytes", length);
+        else
             [self hostGone];
-        sent += written;
     }
 }
 
@@ -206,6 +201,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 - (void) handleMessage: (uint32_t) type bytes: (const uint8_t *) bytes length: (size_t) length {
     switch (type) {
+    case POCKET_RELEASE:
+        if (length >= sizeof(struct pocket_window_id)) {
+            struct pocket_window_id message;
+            memcpy(&message, bytes, sizeof(message));
+            [[self windowWithNumber: message.window] bufferReleased];
+        }
+        break;
     case POCKET_SCREEN:
         if (length >= sizeof(struct pocket_screen)) {
             struct pocket_screen screen;
@@ -216,6 +218,15 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     default:
         break;
     }
+}
+
+- (PocketWindow *) windowWithNumber: (uint32_t) number {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        PocketWindow *window = (PocketWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window number] == number)
+            return window;
+    }
+    return nil;
 }
 
 - (void) screenChanged: (struct pocket_screen) screen {

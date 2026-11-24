@@ -771,4 +771,5 @@ add_backend(Pocket
 )
 target_include_directories(Pocket_backend PRIVATE
 	Pocket.backend
+	${CMAKE_SOURCE_DIR}/src/startup/mldr/elfcalls
 )

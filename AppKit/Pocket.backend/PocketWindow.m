@@ -24,8 +24,14 @@
 #import <AppKit/NSWindow.h>
 #import <Onyx2D/O2Context_builtin_FT.h>
 #import <Onyx2D/O2Surface.h>
+#include <elfcalls.h>
+#include <errno.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <math.h>
 #include <string.h>
+
+extern struct elf_calls *_elfcalls;
 
 // NSView replaces the user CTM whenever it locks focus, so the scale goes in
 // the device transform, with Onyx2D's bottom-left to top-left flip.
@@ -44,6 +50,41 @@
     return self;
 }
 @end
+
+// Memory the host can map: a memfd where the host's libc has one (Linux, and
+// Android from API 30), else an unlinked POSIX shared memory object.
+static int createSharedMemory(size_t size) {
+    static int (*memfdCreate)(const char *, unsigned int);
+    static BOOL looked;
+    int fd = -1;
+
+    if (!looked) {
+        looked = YES;
+        if (_elfcalls != NULL)
+            memfdCreate = _elfcalls->dlsym(NULL, "memfd_create");
+    }
+    if (memfdCreate != NULL)
+        fd = memfdCreate("darling-pocket", 1 /* MFD_CLOEXEC */);
+
+    if (fd < 0 && _elfcalls != NULL && _elfcalls->shm_open != NULL) {
+        static unsigned counter;
+        char name[64];
+        for (int attempt = 0; fd < 0 && attempt < 16; attempt++) {
+            snprintf(name, sizeof(name), "/darling-pocket-%d-%u", getpid(), counter++);
+            // Native, so the Linux O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC.
+            fd = _elfcalls->shm_open(name, 02 | 0100 | 0200 | 02000000, 0600);
+        }
+        if (fd >= 0)
+            _elfcalls->shm_unlink(name);
+    }
+    if (fd < 0)
+        return -1;
+    if (ftruncate(fd, (off_t) size) != 0) {
+        close(fd);
+        return -1;
+    }
+    return fd;
+}
 
 @implementation PocketWindow
 
@@ -81,6 +122,9 @@
     _delegate = nil;
     struct pocket_window_id message = {[self number]};
     [_display send: POCKET_DESTROY bytes: &message length: sizeof(message)];
+    if (_pixels != NULL)
+        munmap(_pixels, _bufferSize);
+    _pixels = NULL;
     [_display windowDestroyed: self];
 }
 
@@ -242,9 +286,76 @@
     return _context;
 }
 
+// A shared buffer as large as the surface, given to the host.
+- (BOOL) ensureBufferWidth: (uint32_t) width height: (uint32_t) height {
+    if (_pixels != NULL && _bufferWidth == width && _bufferHeight == height)
+        return YES;
+    if (_pixels != NULL)
+        munmap(_pixels, _bufferSize);
+    _pixels = NULL;
+
+    size_t size = (size_t) width * height * 4;
+    int fd = createSharedMemory(size);
+    if (fd < 0) {
+        NSLog(@"Pocket backend: no shared memory for a %ux%u window", width, height);
+        return NO;
+    }
+    void *pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (pixels == MAP_FAILED) {
+        NSLog(@"Pocket backend: cannot map a %ux%u window buffer: %s", width, height, strerror(errno));
+        close(fd);
+        return NO;
+    }
+    struct pocket_buffer message = {
+        .window = [self number],
+        .width = width,
+        .height = height,
+        .stride = width * 4,
+        .format = POCKET_FORMAT_BGRA,
+    };
+    [_display send: POCKET_BUFFER bytes: &message length: sizeof(message) fd: fd];
+    close(fd);
+    _pixels = pixels;
+    _bufferSize = size;
+    _bufferWidth = width;
+    _bufferHeight = height;
+    return YES;
+}
+
+- (void) present {
+    if (!_needsPresent || _busy || !_visible || _context == nil || _invalidated)
+        return;
+    O2Surface *surface = [_context surface];
+    size_t width = O2SurfaceGetWidth(surface);
+    size_t height = O2SurfaceGetHeight(surface);
+    size_t stride = O2SurfaceGetBytesPerRow(surface);
+    const uint8_t *pixels = O2SurfaceGetPixelBytes(surface);
+    if (pixels == NULL || ![self ensureBufferWidth: (uint32_t) width height: (uint32_t) height])
+        return;
+
+    if (stride == width * 4)
+        memcpy(_pixels, pixels, width * height * 4);
+    else
+        for (size_t row = 0; row < height; row++)
+            memcpy((uint8_t *) _pixels + row * width * 4, pixels + row * stride, width * 4);
+
+    struct pocket_present message = {[self number], 0, 0, (int32_t) width, (int32_t) height};
+    [_display send: POCKET_PRESENT bytes: &message length: sizeof(message)];
+    _busy = YES;
+    _needsPresent = NO;
+}
+
 - (void) flushBuffer {
-    if (_context != nil)
-        O2ContextFlush(_context);
+    if (_context == nil)
+        return;
+    O2ContextFlush(_context);
+    _needsPresent = YES;
+    [self present];
+}
+
+- (void) bufferReleased {
+    _busy = NO;
+    [self present];
 }
 
 @end

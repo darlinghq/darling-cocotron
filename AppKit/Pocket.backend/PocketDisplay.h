@@ -54,6 +54,8 @@
 
 // Messages to the host. A send that fails ends the app: its host is gone.
 - (void) send: (uint32_t) type bytes: (const void *) bytes length: (size_t) length;
+// With a file descriptor sent along (SCM_RIGHTS), or -1 for none.
+- (void) send: (uint32_t) type bytes: (const void *) bytes length: (size_t) length fd: (int) fd;
 
 - (void) windowCreated: (PocketWindow *) window;
 - (void) windowDestroyed: (PocketWindow *) window;

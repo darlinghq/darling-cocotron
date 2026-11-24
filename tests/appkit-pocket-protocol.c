@@ -1,13 +1,15 @@
 // SPDX-License-Identifier: MIT
 //
-// The Pocket backend's wire protocol (AppKit/Pocket.backend/PocketProtocol.h): the layout of the
-// messages and their framing, the way a host receives them. The header is plain C, so this
+// The Pocket backend's wire protocol (AppKit/Pocket.backend/PocketProtocol.h and PocketSocket.h): the
+// layout of the messages, their framing and sending, the way a host receives them. The header is plain C, so this
 // builds and runs on any Linux or macOS host, 32-bit or 64-bit, without Darling:
 //   cc -I AppKit/Pocket.backend tests/appkit-pocket-protocol.c -o /tmp/pocket-protocol && /tmp/pocket-protocol
-#include "PocketProtocol.h"
+#include "PocketSocket.h"
 
+#include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
-#include <sys/socket.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 static int failures;
@@ -70,6 +72,7 @@ struct reader {
     size_t have;
     int count;
     int broken;
+    int fd; // for a reader thread
     uint32_t types[4];
 };
 
@@ -145,10 +148,118 @@ static void testStream(void) {
     CHECK(!reader.broken && reader.count == 3 && reader.have == 0, "socket: %d messages", reader.count);
 }
 
+// A host receiving one message and the descriptor that came with it.
+static int receiveWithFd(int sock, struct pocket_header *header, uint8_t *payload, int *fd) {
+    uint8_t message[sizeof(struct pocket_header) + POCKET_MAX_MESSAGE];
+    union {
+        struct cmsghdr header;
+        char space[CMSG_SPACE(sizeof(int))];
+    } control;
+    struct iovec iov = {.iov_base = message, .iov_len = sizeof(message)};
+    struct msghdr msg = {.msg_iov = &iov, .msg_iovlen = 1, .msg_control = control.space,
+                         .msg_controllen = sizeof(control.space)};
+    ssize_t got = recvmsg(sock, &msg, 0);
+    *fd = -1;
+    for (struct cmsghdr *cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL; cmsg = CMSG_NXTHDR(&msg, cmsg))
+        if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SCM_RIGHTS)
+            memcpy(fd, CMSG_DATA(cmsg), sizeof(int));
+    if (got < (ssize_t) sizeof(*header) || pocket_unpack(message, (size_t) got, header) != 1)
+        return -1;
+    memcpy(payload, message + sizeof(*header), header->size);
+    return 0;
+}
+
+// The buffer of a window: shared memory the host maps and reads what the application wrote.
+static void testBufferDescriptor(void) {
+    int sockets[2];
+    FILE *file = tmpfile();
+    if (file == NULL || socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
+        perror("setup");
+        failures++;
+        return;
+    }
+    struct timeval timeout = {5, 0}; // a message that never comes fails the test instead of hanging it
+    setsockopt(sockets[1], SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    int fd = fileno(file);
+    size_t size = 64 * 4 * 16;
+    CHECK(ftruncate(fd, (off_t) size) == 0, "size the buffer");
+    uint8_t *pixels = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    CHECK(pixels != MAP_FAILED, "map the buffer");
+    if (pixels == MAP_FAILED)
+        return;
+    memset(pixels, 0x7f, size);
+
+    struct pocket_buffer buffer = {5, 64, 16, 64 * 4, POCKET_FORMAT_BGRA};
+    CHECK(pocket_send(sockets[0], POCKET_BUFFER, &buffer, sizeof(buffer), fd) == 0, "send with a descriptor");
+    pixels[100] = 0x11; // written after the send: the host maps the same memory
+    CHECK(pocket_send(sockets[0], POCKET_PRESENT, &(struct pocket_present){5, 0, 0, 64, 16},
+                      sizeof(struct pocket_present), -1) == 0, "send without one");
+
+    struct pocket_header header;
+    uint8_t payload[POCKET_MAX_MESSAGE];
+    int received;
+    CHECK(receiveWithFd(sockets[1], &header, payload, &received) == 0, "receive the buffer message");
+    CHECK(header.type == POCKET_BUFFER && header.size == sizeof(buffer), "the buffer message");
+    CHECK(received >= 0 && received != fd, "a new descriptor arrives with it");
+    if (received >= 0) {
+        const uint8_t *mapped = mmap(NULL, size, PROT_READ, MAP_SHARED, received, 0);
+        CHECK(mapped != MAP_FAILED && mapped[0] == 0x7f && mapped[100] == 0x11 && mapped[size - 1] == 0x7f,
+              "the host sees the application's pixels");
+        close(received);
+    }
+    CHECK(receiveWithFd(sockets[1], &header, payload, &received) == 0 && header.type == POCKET_PRESENT &&
+          received == -1, "the next message has no descriptor");
+    close(sockets[0]);
+    close(sockets[1]);
+    fclose(file);
+}
+
+static void *slowReader(void *argument) {
+    struct reader *reader = argument;
+    uint8_t chunk[1000];
+    ssize_t got;
+    while ((got = read(reader->fd, chunk, sizeof(chunk))) > 0) {
+        feed(reader, chunk, (size_t) got);
+        usleep(200);
+    }
+    return NULL;
+}
+
+// A non-blocking socket that fills up: the sender waits for the host and loses nothing.
+static void testFullSocket(void) {
+    int sockets[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) != 0) {
+        failures++;
+        return;
+    }
+    int small = 4096;
+    setsockopt(sockets[0], SOL_SOCKET, SO_SNDBUF, &small, sizeof(small));
+    fcntl(sockets[0], F_SETFL, fcntl(sockets[0], F_GETFL) | O_NONBLOCK);
+    static struct reader reader;
+    reader.fd = sockets[1];
+    pthread_t thread;
+    pthread_create(&thread, NULL, slowReader, &reader);
+    uint8_t text[POCKET_MAX_MESSAGE];
+    memset(text, 'x', sizeof(text));
+    int sent = 0;
+    for (; sent < 40; sent++)
+        if (pocket_send(sockets[0], POCKET_TEXT, text, sizeof(text), -1) != 0)
+            break;
+    CHECK(sent == 40, "all messages were sent (%d)", sent);
+    CHECK(pocket_send(sockets[0], POCKET_TEXT, text, sizeof(text) + 1, -1) == -1 && errno == EMSGSIZE,
+          "a message over the limit is refused");
+    close(sockets[0]);
+    pthread_join(thread, NULL);
+    close(sockets[1]);
+    CHECK(!reader.broken && reader.count == 40, "the host got %d of 40 messages", reader.count);
+}
+
 int main(void) {
     testLayout();
     testPack();
     testStream();
+    testBufferDescriptor();
+    testFullSocket();
     if (failures != 0) {
         fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

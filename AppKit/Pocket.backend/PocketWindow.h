@@ -23,7 +23,8 @@
 
 @class NSWindow, O2Context, PocketDisplay;
 
-// A window the host shows: Onyx2D draws it at the screen's scale.
+// A window the host shows: Onyx2D draws it at the screen's scale, and each
+// flush copies it into the shared buffer the host reads.
 @interface PocketWindow : CGWindow {
     NSWindow *_delegate;
     PocketDisplay *_display;
@@ -36,6 +37,13 @@
     NSString *_title;
     O2Context *_context;
     NSMutableDictionary *_deviceDictionary;
+
+    // The shared buffer.
+    void *_pixels;
+    size_t _bufferSize;
+    uint32_t _bufferWidth, _bufferHeight;
+    BOOL _busy;         // presented, and the host has not released it yet
+    BOOL _needsPresent; // drawn since the last present
 }
 
 - (instancetype) initWithDelegate: (NSWindow *) delegate;
@@ -47,6 +55,7 @@
 - (uint32_t) number;
 
 // From the host.
+- (void) bufferReleased;
 - (void) screenChanged;
 
 @end
