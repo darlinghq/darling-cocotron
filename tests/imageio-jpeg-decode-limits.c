@@ -1,19 +1,23 @@
 // The libjpeg based JPEG decoder of ImageIO (Onyx2D) must handle the sizes of
 // the decoded image safely:
-//  - a 3x7 CMYK JPEG and an RGB JPEG decode to the right size and RGB values.
-//    Both use 1x1 sampling, so libjpeg-turbo reports one row per output
-//    batch: the clamp of the last batch to the rows left is defensive and not
-//    reachable with libjpeg-turbo, and these files pin the CMYK values, not
-//    the overrun;
+//  - a 3x7 CMYK JPEG and an RGB JPEG decode to the right size, and the RGB one
+//    to the right values. Both use 1x1 sampling, so libjpeg-turbo reports one
+//    row per output batch: the clamp of the last batch to the rows left is
+//    defensive and not reachable with libjpeg-turbo, and the CMYK file pins the
+//    size, not the overrun. The CMYK values are not checked: macOS gives the
+//    four CMYK samples as they are in the file (a CMYK image of 32 bits per
+//    pixel) while this decoder converts them to RGB, a difference older than
+//    this test;
 //  - a header declaring 32768x32768 pixels (4 bytes per pixel is exactly 2^32,
 //    which wraps an int row count times row size to zero), one declaring
-//    65500x65500 (the largest JPEG dimension) and one declaring 16384x16385
-//    (one row over the 1 GiB decoded-size cap, like the PNG decoder's) are
-//    rejected with a NULL image instead of overflowing or allocating
+//    65500x65500 (the largest JPEG dimension) and one declaring 10001x10000
+//    (just over the 100 million pixels that macOS decodes, see the QUIRK in
+//    O2ImageDecoder_JPEG_libjpeg.m) are rejected with a NULL image instead of overflowing or allocating
 //    gigabytes, and the process keeps decoding valid images afterwards.
 // The CMYK pixel is the 8-bit CMYK sample (255, 128, 65, 200) (made with
 // ImageMagick, read back with libjpeg); the decoder multiplies each of C, M, Y
-// by K / 255, which gives RGB (200, 100, 50). The RGB file is (200, 100, 50).
+// by K / 255, which gives RGB (200, 100, 50). The RGB file is (200, 100, 50),
+// which macOS 26.7.3 and 10.14.4 also report.
 #include <ImageIO/ImageIO.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -153,7 +157,7 @@ static const unsigned char kOverCap[] = {
     0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
     0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
     0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-    0x01, 0x01, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x40, 0x01, 0x40, 0x00, 0x03,
+    0x01, 0x01, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x27, 0x10, 0x27, 0x11, 0x03,
     0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01, 0xff, 0xc4, 0x00,
     0x14, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0xff, 0xc4, 0x00, 0x14, 0x10,
@@ -176,7 +180,7 @@ static CGImageRef decode(const unsigned char *bytes, size_t length, CFDataRef *k
     return image;
 }
 
-static void checkDecodes(const char *name, const unsigned char *bytes, size_t length) {
+static void checkDecodes(const char *name, const unsigned char *bytes, size_t length, int checkValues) {
     CFDataRef data;
     CGImageRef image = decode(bytes, length, &data);
     CHECK(image != NULL, name);
@@ -195,7 +199,8 @@ static void checkDecodes(const char *name, const unsigned char *bytes, size_t le
                 for (size_t y = 0; y < 7; y++) {
                     for (size_t x = 0; x < 3; x++) {
                         const unsigned char *px = p + y * rowBytes + x * pixelBytes;
-                        CHECK(px[0] == 200 && px[1] == 100 && px[2] == 50, "pixel value");
+                        if (checkValues)
+                            CHECK(px[0] == 200 && px[1] == 100 && px[2] == 50, "pixel value");
                     }
                 }
             }
@@ -220,12 +225,12 @@ static void checkRejected(const char *name, const unsigned char *bytes, size_t l
 }
 
 int main(void) {
-    checkDecodes("CMYK 3x7", kCMYKJPEG, sizeof(kCMYKJPEG));
-    checkDecodes("RGB 3x7", kRGBJPEG, sizeof(kRGBJPEG));
+    checkDecodes("CMYK 3x7", kCMYKJPEG, sizeof(kCMYKJPEG), 0);
+    checkDecodes("RGB 3x7", kRGBJPEG, sizeof(kRGBJPEG), 1);
     checkRejected("declared 32768x32768", kHuge32768, sizeof(kHuge32768));
     checkRejected("declared 65500x65500", kHuge65500, sizeof(kHuge65500));
-    checkRejected("declared 16384x16385", kOverCap, sizeof(kOverCap));
-    checkDecodes("CMYK 3x7 after the rejections", kCMYKJPEG, sizeof(kCMYKJPEG));
+    checkRejected("declared 10001x10000", kOverCap, sizeof(kOverCap));
+    checkDecodes("CMYK 3x7 after the rejections", kCMYKJPEG, sizeof(kCMYKJPEG), 0);
 
     if (failures == 0)
         puts("PASS JPEG decode handles odd heights, CMYK and absurd declared sizes");

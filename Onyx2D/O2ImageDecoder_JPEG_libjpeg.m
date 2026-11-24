@@ -62,10 +62,15 @@ BOOL O2JPEGGetDimensions(CFDataRef data, size_t *width, size_t *height) {
     return YES;
 }
 
-// Upper bound for a decoded RGBA image, the same 1 GiB the PNG decoder allows.
-// A header of a few hundred bytes can declare up to 65500x65500 pixels, and the
-// decoded size must neither overflow nor force a huge allocation.
-#define O2JPEG_MAX_DECODED_BYTES ((size_t) 1 << 30)
+// QUIRK: ImageIO refuses to create an image for a JPEG whose declared size is more than 100 million pixels (10000x10000
+// is the largest square one it decodes; 10001x10000 and 16384x16384 give no image), and the decoded size must neither
+// overflow nor force a huge allocation for a header of a few hundred bytes (up to 65500x65500 pixels).
+// Evidence: black-box observation of CGImageSourceCreateImageAtIndex on macOS 26.7.3 and 10.14.4 (x86_64 and i386,
+// identical), tier 2: header-only JPEGs of 8192x8192, 9000x9000, 9999x10000, 10000x9999 and 10000x10000 give an image,
+// 10001x10000, 10000x10001, 11000x11000, 12000x8334 and 16384x16384 give none. macOS also refuses some narrower
+// images than that (for example 20000x20 and 3x60000); only the area bound is reproduced here.
+// Test: tests/imageio-jpeg-decode-limits.c
+#define O2JPEG_MAX_PIXELS ((size_t) 100000000)
 
 static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
                                                  int len, int *x, int *y)
@@ -99,12 +104,11 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     // Setup the jpeg header and set the decompress options
     jpeg_read_header(&cinfo, TRUE);
 
-    // Reject an image whose decoded size overflows or is absurd before libjpeg
-    // allocates anything for it.
+    // Reject an image with too many pixels before libjpeg allocates anything
+    // for it.
     if (cinfo.image_width == 0 || cinfo.image_height == 0 ||
-        cinfo.image_width > O2JPEG_MAX_DECODED_BYTES / 4 ||
-        cinfo.image_height >
-                O2JPEG_MAX_DECODED_BYTES / ((size_t) cinfo.image_width * 4)) {
+        cinfo.image_width > O2JPEG_MAX_PIXELS ||
+        cinfo.image_height > O2JPEG_MAX_PIXELS / cinfo.image_width) {
         jpeg_destroy_decompress(&cinfo);
         return NULL;
     }
