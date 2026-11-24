@@ -130,43 +130,45 @@ static NSError *DarlingModelConstraintFailure(NSManagedObject *object, NSPropert
     return nil;
 }
 
-// The validation predicates of an attribute, each with the warning at the same index as its message.
-//
-// GUESS (a deliberate departure from the documented wording): the setValidationPredicates page and
-// the public NSPropertyDescription.h both describe the predicates as evaluated against the managed
-// objects. Each predicate is evaluated here with the value being validated as its subject (SELF).
-// Reason: the same header line says the predicate list stands in for per-property parameters such
-// as length, min and max values and formats, which constrain one value, and a predicate like
-// "length > 2" or "SELF MATCHES ..." only reads that way. Rejected: the managed object as the
-// subject, which would need every predicate to spell the key path of its own property.
-// GUESS: a nil value skips the predicates (the optional flag decides nil), the first failing
-// predicate is the error, its code is NSManagedObjectValidationError, its text is the warning and
-// it carries the predicate under NSValidationPredicateErrorKey.
-// GUESS: the predicates of a relationship are not applied; the subject of one (the related object,
-// or the set of a to-many relationship) is not something the pages describe.
-static NSError *DarlingBasicValidationFailure(NSManagedObject *object, NSPropertyDescription *property, id value) {
+// The checks of the property description for a value: the model constraints (a missing mandatory value,
+// the count limits), and otherwise the validation predicates of an attribute or relationship, each with the
+// warning at the same index as its message. The predicates are evaluated with the value being validated as
+// their subject (SELF; the related object of a to-one relationship, the set of a to-many one), which is how
+// a predicate such as "length > 2" or "SELF MATCHES ..." reads; a nil value skips them. Every failing
+// predicate is an error with the code NSManagedObjectValidationError, the warning as its text and the
+// predicate under NSValidationPredicateErrorKey; several failures of one value are collected by the caller
+// under the "multiple errors" code. The public headers and the documentation word the predicates as
+// evaluated against the managed objects; this is what the Macs do. Evidence: black-box observation on macOS
+// 26.7.3 and 10.14.4 (tier 2, x86_64 and i386, mac-probes p797): "SELF.length > 2" and
+// "SELF MATCHES ..." on a string attribute, "SELF > 5" on a number, "SELF.@count >= 2" on a to-many
+// relationship and a FALSEPREDICATE on a to-one relationship are applied to the value, a key-path predicate
+// "k.length > 2" raises for an undefined key, a value failing two predicates gives a multiple-errors error
+// (code 1560) with both, and nil passes. Test: coredata-validation-predicates.
+static NSArray *DarlingBasicValidationFailures(NSManagedObject *object, NSPropertyDescription *property, id value) {
     NSError *failure = DarlingModelConstraintFailure(object, property, value);
 
-    if (failure != nil || value == nil || value == [NSNull null] || ![property isKindOfClass: [NSAttributeDescription class]])
-        return failure;
+    if (failure != nil)
+        return [NSArray arrayWithObject: failure];
+    if (value == nil)
+        return [NSArray array];
 
     NSArray *predicates = [property validationPredicates];
     NSArray *warnings = [property validationWarnings];
+    NSMutableArray *failures = [NSMutableArray array];
 
     for (NSUInteger index = 0; index < [predicates count]; index++) {
         NSPredicate *predicate = [predicates objectAtIndex: index];
 
         if (![predicate evaluateWithObject: value]) {
-            NSString *warning = [warnings objectAtIndex: index];
             NSError *base = DarlingValidationError(NSManagedObjectValidationError, object, [property name], value);
             NSMutableDictionary *info = [NSMutableDictionary dictionaryWithDictionary: [base userInfo]];
 
             [info setObject: predicate forKey: NSValidationPredicateErrorKey];
-            [info setObject: warning forKey: NSLocalizedDescriptionKey];
-            return [NSError errorWithDomain: NSCocoaErrorDomain code: NSManagedObjectValidationError userInfo: info];
+            [info setObject: [warnings objectAtIndex: index] forKey: NSLocalizedDescriptionKey];
+            [failures addObject: [NSError errorWithDomain: NSCocoaErrorDomain code: NSManagedObjectValidationError userInfo: info]];
         }
     }
-    return nil;
+    return failures;
 }
 
 // validateForInsert: and validateForUpdate: validate every property through the object's own
@@ -670,10 +672,7 @@ static BOOL DarlingValidateAllProperties(NSManagedObject *object, NSError **erro
     NSPropertyDescription *property = [[[self entity] propertiesByName] objectForKey: key];
 
     if (property != nil) {
-        NSError *failure = DarlingBasicValidationFailure(self, property, *value);
-
-        if (failure != nil)
-            [errors addObject: failure];
+        [errors addObjectsFromArray: DarlingBasicValidationFailures(self, property, *value)];
     }
     return DarlingReportErrors(errors, error);
 }

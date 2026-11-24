@@ -4,14 +4,14 @@
 // https://developer.apple.com/documentation/coredata/nspropertydescription/setvalidationpredicates(_:withvalidationwarnings:)
 // Documented: the predicates and the warnings at the same index are the validation rules and the
 // error messages of the property. The page and the public NSPropertyDescription.h describe them
-// as evaluated against the managed objects. Lines marked GUESS pin choices the page does not
-// settle (they are not observed on macOS), the first one a deliberate departure from that
-// wording: a predicate is evaluated with the attribute value as its subject, not the managed
-// object. Also: a nil value skips the predicates (so a required attribute without a value gives
-// only the missing-value error), the first failing predicate is reported with
-// NSManagedObjectValidationError, its warning as the localized description and the predicate
-// under NSValidationPredicateErrorKey, a predicate failing together with a validate<Key>:error:
-// method gives several errors, and the predicates of a relationship are not applied.
+// as evaluated against the managed objects; on macOS 26.7.3 and 10.14.4 (black-box observation, probe
+// p797) a predicate is evaluated with the value being validated as its subject (SELF), for attributes and
+// for relationships (the related object, or the set of a to-many one). Also observed: a nil value skips
+// the predicates (so a required attribute without a value gives only the missing-value error), a failing
+// predicate is reported with NSManagedObjectValidationError, its warning as the localized description and
+// the predicate under NSValidationPredicateErrorKey, a value failing several predicates gives a
+// multiple-errors error with one error per failed predicate, and a predicate failing together with a
+// validate<Key>:error: method gives several errors.
 // Prints PASS when everything holds; the exit code is the number of failed checks.
 
 #import <Foundation/Foundation.h>
@@ -81,7 +81,7 @@ int main(void) {
         context.persistentStoreCoordinator = psc;
         NSManagedObject *account = [NSEntityDescription insertNewObjectForEntityForName:@"Account" inManagedObjectContext:context];
 
-        /* GUESS (departs from the page wording): the value is the predicates' subject */
+        /* the value is the predicates' subject (macOS 26.7.3, 10.14.4) */
         id value = @"abc";
         NSError *error = nil;
         CHECK([account validateValue:&value forKey:@"code" error:&error]);
@@ -96,10 +96,14 @@ int main(void) {
         CHECK([[[error userInfo] objectForKey:NSValidationKeyErrorKey] isEqual:@"code"]);
         CHECK([[[error userInfo] objectForKey:NSValidationValueErrorKey] isEqual:@"ab"]);
 
-        /* GUESS: the first failing predicate is the one reported (both fail here) */
+        /* both predicates fail: a multiple-errors error with one error per predicate (macOS 26.7.3, 10.14.4) */
         value = @"A1";
         CHECK(![account validateValue:&value forKey:@"code" error:&error]);
-        CHECK([[[error userInfo] objectForKey:NSValidationPredicateErrorKey] isEqual:longEnough]);
+        CHECK([error code] == NSValidationMultipleErrorsError);
+        NSArray *both = [[error userInfo] objectForKey:NSDetailedErrorsKey];
+        CHECK([both count] == 2);
+        CHECK([[[[both objectAtIndex:0] userInfo] objectForKey:NSValidationPredicateErrorKey] isEqual:longEnough]);
+        CHECK([[[[both objectAtIndex:1] userInfo] objectForKey:NSValidationPredicateErrorKey] isEqual:letters]);
         value = @"ABC";
         CHECK(![account validateValue:&value forKey:@"code" error:&error]);
         CHECK([[error localizedDescription] isEqualToString:@"letters only"]);
@@ -111,18 +115,18 @@ int main(void) {
         value = @100;
         CHECK([account validateValue:&value forKey:@"percent" error:&error]);
 
-        /* GUESS: nil skips the predicates (the property is optional) */
+        /* nil skips the predicates (the property is optional) */
         value = nil;
         CHECK([account validateValue:&value forKey:@"code" error:&error]);
 
-        /* GUESS: nil skips the predicates, so a required attribute without a value gives only the
+        /* nil skips the predicates, so a required attribute without a value gives only the
            missing-value error */
         error = nil;
         CHECK(![account validateValue:&value forKey:@"required" error:&error]);
         CHECK([error code] == NSValidationMissingMandatoryPropertyError);
         CHECK([[[error userInfo] objectForKey:NSDetailedErrorsKey] count] == 0);
 
-        /* GUESS: a failing validate<Key>:error: and a failing predicate are several errors */
+        /* a failing validate<Key>:error: and a failing predicate are several errors */
         value = @"hook-bad";
         error = nil;
         CHECK(![account validateValue:&value forKey:@"tag" error:&error]);
@@ -136,11 +140,13 @@ int main(void) {
         value = @"long-enough-tag";
         CHECK([account validateValue:&value forKey:@"tag" error:&error]);
 
-        /* GUESS: the predicates of a relationship are not applied (this one could never hold) */
+        /* the predicates of a relationship are applied to the related object (this one never holds) */
         value = nil;
         CHECK([account validateValue:&value forKey:@"peer" error:&error]);
         value = account;
-        CHECK([account validateValue:&value forKey:@"peer" error:&error]);
+        error = nil;
+        CHECK(![account validateValue:&value forKey:@"peer" error:&error]);
+        CHECK([error code] == NSManagedObjectValidationError);
 
         /* the predicates take part in validateForUpdate: */
         [account setValue:@"abc" forKey:@"required"];
