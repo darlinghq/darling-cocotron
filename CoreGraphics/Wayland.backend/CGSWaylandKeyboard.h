@@ -43,6 +43,7 @@ struct wl_proxy;
     CGSWaylandKeymap *_keymap;         // not retained either
     struct wl_proxy *_focus;           // the surface with the keyboard focus, compared by value only
     NSMutableDictionary *_heldKeyIdentities;
+    NSMutableDictionary *_heldHotKeys; // keycode -> uids of the hot keys its press selected
     struct wl_proxy *_modifierSync;
     int _modifierKeycode;
     BOOL _hasModifierKeycode, _syncModifierFlags, _classifyHeldKeys;

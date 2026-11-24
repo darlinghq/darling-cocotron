@@ -147,6 +147,23 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     [(CGSConnectionWayland *) info processPendingEvents];
 }
 
+// One registered global hot key
+@interface CGSWaylandHotKeyEntry : NSObject {
+@public
+    int uid;
+    CGKeyCode virtualKey;
+    CGEventFlags flags;
+    BOOL enabled;
+}
+@end
+
+@implementation CGSWaylandHotKeyEntry
+@end
+
+// The modifier flags a hot key is matched on.
+static const CGEventFlags kHotKeyModifierMask =
+    kCGEventFlagMaskShift | kCGEventFlagMaskControl | kCGEventFlagMaskAlternate | kCGEventFlagMaskCommand;
+
 @implementation CGSConnectionWayland
 
 + (BOOL) isAvailable {
@@ -281,6 +298,7 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     [_outputManager release];
     [self releaseKeyboard];
     [_keyboardDecoder release];
+    [_hotKeys release];
     if (_seat != NULL)
         WL.wl_proxy_destroy(_seat);
     [_keymap release];
@@ -775,6 +793,90 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
               @"to report");
     }
     return CGPointMake(CGFLOAT_MAX, CGFLOAT_MAX);
+}
+
+#pragma mark - Hot keys
+
+// Wayland has no request to grab a key for the whole session, so the hot keys of this connection are
+// matched against the keys the compositor sends to the process' own wl_keyboard (CGSWaylandKeyboard asks
+// -activeHotKeyUIDsForKeyCode:flags:), which is while one of the process' surfaces has the keyboard focus.
+// Registration always succeeds, since no other client can hold a key combination here.
+// Limitation: while none of the process' surfaces has the keyboard focus the hot keys do not report. Wayland
+// itself has no global key request; the compositor-specific ways (the xdg-desktop-portal GlobalShortcuts
+// interface, KDE's KGlobalAccel) are not used, since they ask the user to confirm and assign each shortcut.
+- (CGSWaylandHotKeyEntry *) _hotKeyWithUID: (int) uid {
+    for (CGSWaylandHotKeyEntry *entry in _hotKeys) {
+        if (entry->uid == uid)
+            return entry;
+    }
+    return nil;
+}
+
+- (void) setHotKeyWithUID: (int) uid keyCode: (CGKeyCode) keyCode flags: (CGEventFlags) flags exclusion: (int) exclusion {
+    [self removeHotKeyWithUID: uid];
+    CGSWaylandHotKeyEntry *entry = [[CGSWaylandHotKeyEntry alloc] init];
+    entry->uid = uid;
+    entry->virtualKey = keyCode;
+    entry->flags = flags & kHotKeyModifierMask;
+    entry->enabled = YES;
+    @synchronized(self) {
+        if (_hotKeys == nil)
+            _hotKeys = [[NSMutableArray alloc] init];
+        [_hotKeys addObject: entry];
+    }
+    [entry release];
+}
+
+- (BOOL) getHotKeyWithUID: (int) uid keyCode: (CGKeyCode *) outKeyCode flags: (CGEventFlags *) outFlags {
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        if (entry == nil)
+            return NO;
+        if (outKeyCode)
+            *outKeyCode = entry->virtualKey;
+        if (outFlags)
+            *outFlags = entry->flags;
+        return YES;
+    }
+}
+
+- (void) removeHotKeyWithUID: (int) uid {
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        if (entry != nil)
+            [_hotKeys removeObject: entry];
+    }
+}
+
+- (BOOL) isHotKeyEnabledWithUID: (int) uid {
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        return entry != nil && entry->enabled;
+    }
+}
+
+- (void) setHotKeyWithUID: (int) uid enabled: (BOOL) enabled {
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        if (entry != nil)
+            entry->enabled = enabled;
+    }
+}
+
+- (NSArray *) activeHotKeyUIDsForKeyCode: (CGKeyCode) keyCode flags: (uint64_t) flags {
+    NSMutableArray *uids = nil;
+    if (_hotKeyOperatingMode != 0)
+        return nil;
+    @synchronized(self) {
+        for (CGSWaylandHotKeyEntry *entry in _hotKeys) {
+            if (entry->enabled && entry->virtualKey == keyCode && entry->flags == (flags & kHotKeyModifierMask)) {
+                if (uids == nil)
+                    uids = [NSMutableArray array];
+                [uids addObject: @(entry->uid)];
+            }
+        }
+    }
+    return uids;
 }
 
 // The outputs that have reported a mode, in the order the compositor announced them. The first is

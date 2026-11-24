@@ -96,6 +96,8 @@ typedef enum {
     id _keymap;
     // Decodes the keyboard into CGEvents (CGSWaylandKeyboard).
     id _keyboardDecoder;
+    // The registered global hot keys (CGSWaylandHotKeyEntry), guarded by @synchronized(self).
+    NSMutableArray *_hotKeys;
     // Set when the setup roundtrips are over; an output that is described before that is
     // part of the displays the first look finds, not a change.
     BOOL _setupDone;
@@ -107,6 +109,13 @@ typedef enum {
 }
 
 - (void) flush;
+
+// The uids of the active hot keys that a press of the virtual key keyCode, with the given modifier flags
+// in effect, selects: a hot key matches when its key code is the key's and its Shift, Control, Option and
+// Command flags are exactly those of the flags (other bits, such as Caps Lock, do not count). Empty while hot
+// keys are switched off (the global operating mode is not 0). The keyboard calls this for every key that is
+// not a modifier.
+- (NSArray *) activeHotKeyUIDsForKeyCode: (CGKeyCode) keyCode flags: (uint64_t) flags;
 
 // Sends a request that creates an object and installs the dispatcher on it.
 - (struct wl_proxy *) createObject: (struct wl_proxy *) proxy
