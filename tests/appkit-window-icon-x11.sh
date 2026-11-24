@@ -60,7 +60,7 @@ sleep 1
 case "$mode" in
 bundle) check "bundle icon" FF00FF00 ;;
 runtime) check "runtime icon" FFFF0000 ;;
-nested) check "icon of the enclosing application" FF00FF00 ;;
+nested|nested-noext) check "icon of the enclosing application" FF00FF00 ;;
 nested-runtime) check "the helper's own image wins" FFFF0000 ;;
 plain|nested-regular)
     got=$(icon)

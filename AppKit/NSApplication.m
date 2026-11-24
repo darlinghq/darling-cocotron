@@ -727,6 +727,26 @@ static BOOL bundleIsFaceless(NSDictionary *info) {
     return NO;
 }
 
+// Whether a directory is an application bundle, judged by its contents and not by its name: it has
+// Contents/Info.plist that declares package type APPL or, with no package type, an executable that is in
+// Contents/MacOS.
+static NSBundle *applicationBundleAtPath(NSString *path) {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath: [path stringByAppendingPathComponent: @"Contents/Info.plist"]])
+        return nil;
+    NSBundle *bundle = [NSBundle bundleWithPath: path];
+    NSDictionary *info = [bundle infoDictionary];
+    id type = [info objectForKey: @"CFBundlePackageType"];
+    if ([type isKindOfClass: [NSString class]])
+        return [type isEqualToString: @"APPL"] ? bundle : nil;
+    id executable = [info objectForKey: @"CFBundleExecutable"];
+    if ([executable isKindOfClass: [NSString class]] && [executable length] > 0 &&
+        [fm fileExistsAtPath: [[path stringByAppendingPathComponent: @"Contents/MacOS"]
+                                  stringByAppendingPathComponent: executable]])
+        return bundle;
+    return nil;
+}
+
 // The icon file of an application bundle, from its CFBundleIconFile (the extension may be left out).
 static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
     NSString *name = [[bundle infoDictionary] objectForKey: @"CFBundleIconFile"];
@@ -740,7 +760,7 @@ static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
 
 // The image the window system gets for this application's windows (title bars, task managers): the
 // application icon, and for a faceless helper without an icon of its own, the icon of the application
-// bundle it is nested in.
+// bundle it is nested in (an application bundle is recognised by its contents, not by a .app name).
 //
 // This is a presentation mapping of the window-system backends, not a change of what the application
 // can observe: -applicationIconImage, NSRunningApplication and NSWorkspace give such a helper the
@@ -758,8 +778,9 @@ static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
         return nil;
     NSString *directory = [[main bundlePath] stringByDeletingLastPathComponent];
     while ([directory length] > 1) {
-        if ([[directory pathExtension] caseInsensitiveCompare: @"app"] == NSOrderedSame) {
-            image = iconOfApplicationBundle([NSBundle bundleWithPath: directory]);
+        NSBundle *enclosing = applicationBundleAtPath(directory);
+        if (enclosing != nil) {
+            image = iconOfApplicationBundle(enclosing);
             if (image != nil)
                 return image;
         }

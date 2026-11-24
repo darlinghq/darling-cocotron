@@ -16,6 +16,7 @@
 #   plain     a program with no application icon: no icon is sent
 #   nested    a faceless (LSUIElement) helper without an icon, nested in an application with one: the
 #             icon of the enclosing application
+#   nested-noext   as nested, with the enclosing application directory named without .app
 #   nested-regular   the same helper without LSUIElement: no icon is sent
 #   nested-runtime   the faceless helper sets its own image: that one is sent
 # Needs wayland-scanner, wayland-protocols and a C compiler for wayland-server.
@@ -57,7 +58,7 @@ runtime) ;;
 change) ;;
 removed) mode=change; server_args=(remove-manager 2) ;;
 absent) mode=change; server_args=(no-manager) ;;
-plain|nested|nested-regular|nested-runtime) ;;
+plain|nested|nested-noext|nested-regular|nested-runtime) ;;
 *) echo "unknown scenario $scenario" >&2; exit 2 ;;
 esac
 server_out="$work/server.out"; guest_out="$work/guest.out"
@@ -104,7 +105,7 @@ change|removed)
 plain|nested-regular)
     [ -z "$(icons)" ] && echo "PASS: no icon sent for $scenario" || fail "an icon was sent for $scenario"
     ;;
-nested) expect_icon 1 "icon of the enclosing application" '^ICON icon-test 12 16@1 32@1 48@1 64@1 128@1 256@1 16@2 32@2 48@2 64@2 128@2 256@2 FF00FF00$' ;;
+nested|nested-noext) expect_icon 1 "icon of the enclosing application" '^ICON icon-test 12 16@1 32@1 48@1 64@1 128@1 256@1 16@2 32@2 48@2 64@2 128@2 256@2 FF00FF00$' ;;
 nested-runtime) expect_icon 1 "the helper's own image wins" '^ICON icon-test 12 .* FFFF0000$' ;;
 absent)
     wait_for "$guest_out" '^CHANGED' || fail "the image was never changed"

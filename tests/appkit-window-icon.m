@@ -10,6 +10,14 @@
 //            copy of itself and a 128 x 128 green icns file, and runs the copy
 //   runtime  -setApplicationIconImage: gives a red image before the window is shown
 //   change   as runtime, then a blue image replaces it after the window is shown
+//   plain    no application icon at all
+//   nested, nested-regular, nested-runtime, nested-noext
+//            the program makes an application bundle with the green icon and, in its Contents/Frameworks, a
+//            helper bundle with no icon that shows the window: nested (the helper is LSUIElement: the window
+//            takes the icon of the enclosing application), nested-regular (the helper is a regular
+//            application: no icon), nested-runtime (an LSUIElement helper that sets the red image itself:
+//            that one wins), nested-noext (as nested, the enclosing bundle directory has no .app extension
+//            and lies in a directory with another extension)
 // A window is shown for <seconds>; the lines READY (the window is up) and CHANGED (the new image is set)
 // say how far it got. Run with DARLING_APPKIT_BACKEND=x11 or wayland and the matching DISPLAY or
 // WAYLAND_DISPLAY set.
@@ -164,6 +172,12 @@ int main(int argc, char **argv) {
             [[NSFileManager defaultManager] removeItemAtPath: app error: NULL];
             return result;
         }
+        NSString *top = nil; // removed at the end, when the bundle is not directly in the temporary directory
+        if (strcmp(mode, "nested-noext") == 0) {
+            top = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                    [NSString stringWithFormat: @"window-icon-%d.AppBundle", getpid()]];
+            app = [top stringByAppendingPathComponent: @"Outer"];
+        }
         makeBundle(app, @{@"CFBundleIdentifier": @"test.window-icon", @"CFBundleIconFile": @"icon"}, icns128());
         NSMutableDictionary *helper = [NSMutableDictionary dictionaryWithDictionary:
                 @{@"CFBundleIdentifier": @"test.window-icon.helper", @"TestRole": @"helper"}];
@@ -171,7 +185,7 @@ int main(int argc, char **argv) {
             helper[@"LSUIElement"] = @YES;
         copy = makeBundle([app stringByAppendingPathComponent: @"Contents/Frameworks/Helper.app"], helper, nil);
         int result = runAndWait(copy, strcmp(mode, "nested-runtime") == 0 ? "runtime" : "plain", argv[2]);
-        [[NSFileManager defaultManager] removeItemAtPath: app error: NULL];
+        [[NSFileManager defaultManager] removeItemAtPath: top != nil ? top : app error: NULL];
         return result;
     }
 }

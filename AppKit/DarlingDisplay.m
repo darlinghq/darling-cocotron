@@ -22,11 +22,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
-
-@interface NSApplication (DarlingWindowIcon)
-// See NSApplication.m: the image the window-system backends use for window icons.
-- (NSImage *) _windowApplicationIconImage;
-@end
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSFontTypeface.h>
 #import <AppKit/NSPrintInfo.h>
@@ -35,6 +30,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSOpenPanel.h>
 #import <Onyx2D/O2Font_freetype.h>
 #import <fontconfig/fontconfig.h>
+
+@interface NSApplication (DarlingWindowIcon)
+// See NSApplication.m: the image the window-system backends use for window icons.
+- (NSImage *) _windowApplicationIconImage;
+@end
 
 void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, NSColor *color);
 
