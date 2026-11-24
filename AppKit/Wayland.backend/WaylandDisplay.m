@@ -2101,6 +2101,7 @@ static NSUInteger modifierDeviceMask(int code) {
         break;
 
     case WP_KEYBOARD_EV_ENTER: {
+        _keyboardLeavingOwnPopup = NO;
         [self resetKeyboardModifiers];
         _keyboardWindow = [self windowForSurface: (struct wl_proxy *) args[1].o];
         if (_heldKeyIdentities == nil)
@@ -2117,12 +2118,18 @@ static NSUInteger modifierDeviceMask(int code) {
         break;
     }
 
-    case WP_KEYBOARD_EV_LEAVE:
+    case WP_KEYBOARD_EV_LEAVE: {
+        // The keyboard follows the menu a popup grab opened and goes back when its popup is destroyed. That
+        // is not the focus moving to another client: the application was not given it by the user moving it.
+        BOOL ownPopup = _keyboardLeavingOwnPopup || ([_keyboardWindow isPopup] && ![_keyboardWindow isTooltip] && ![_keyboardWindow isGenericPopup]);
+        _keyboardLeavingOwnPopup = NO;
         _keyboardWindow = nil;
         [self stopKeyRepeat];
         [self resetKeyboardModifiers];
-        [self applicationFocusMayHaveLeft];
+        if (!ownPopup)
+            [self applicationFocusMayHaveLeft];
         break;
+    }
 
     case WP_KEYBOARD_EV_KEY: {
         if (_xkbState == NULL || _keyboardWindow == nil)
@@ -2937,6 +2944,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         _inputEvent = nil;
     }
     if (_keyboardWindow == window) {
+        _keyboardLeavingOwnPopup = [window isUnmappingMenuPopup];
         _keyboardWindow = nil;
         [self stopKeyRepeat];
         [self resetKeyboardModifiers];

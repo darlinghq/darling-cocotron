@@ -290,6 +290,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (BOOL) isGenericPopup { return _genericPopup; }
 - (WaylandWindow *) popupParent { return _popupParent; }
 - (uint32_t) popupGrabSerial { return _popupGrabSerial; }
+- (BOOL) isUnmappingMenuPopup { return _unmappingMenuPopup; }
 - (struct wl_proxy *) xdgSurface { return _xdgSurface; }
 - (struct wl_proxy *) layerSurface { return _layerSurface; }
 
@@ -638,6 +639,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         _decoration = NULL;
     }
     if (_popup != NULL) {
+        _unmappingMenuPopup = ![self isTooltip] && !_genericPopup;
         sendRequest(_popup, WP_POPUP_DESTROY, WL_MARSHAL_FLAG_DESTROY);
         _popup = NULL;
         [_popupParent release];
@@ -698,6 +700,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _fullscreenReported = NO;
     _fullscreenSettling = NO;
     [_display windowUnmapped: self];
+    _unmappingMenuPopup = NO;
     [_display flush];
 }
 
