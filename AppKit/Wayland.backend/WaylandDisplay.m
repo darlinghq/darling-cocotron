@@ -308,7 +308,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
-                                      _textInput, _textInputManager, _pinchGesture, _pointerGestures, _pointer,
+                                      _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
@@ -517,12 +517,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                          version: 1
                             kind: 0
                           object: nil];
-    } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
-        // Version 2 adds the release request.
-        _pointerGesturesName = name;
-        _pointerGestures = [self bindGlobal: name interface: &zwp_pointer_gestures_v1_interface
-                                    version: MIN(version, 2) kind: 0 object: nil];
-        [self attachPinchGesture];
     } else if (strcmp(interface, "zwp_text_input_manager_v3") == 0 && _textInputManager == NULL) {
         _textInputManagerName = name;
         _textInputManager = [self bindGlobal: name interface: &zwp_text_input_manager_v3_interface
@@ -582,15 +576,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         [self detachTextInput];
         WaylandMarshal(_textInputManager, WP_TEXT_INPUT_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _textInputManager = NULL; _textInputManagerName = 0;
-        return;
-    }
-    if (_pointerGestures && name == _pointerGesturesName) {
-        [self detachPinchGesture];
-        if (WL.wl_proxy_get_version(_pointerGestures) >= 2)
-            WaylandMarshal(_pointerGestures, WP_GESTURES_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-        else
-            WL.wl_proxy_destroy(_pointerGestures);
-        _pointerGestures = NULL; _pointerGesturesName = 0;
         return;
     }
     if ((_pointerConstraints && name == _pointerConstraintsName) ||
@@ -781,14 +766,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
             [self seatCapabilities: args[0].u];
         break;
 
-    case WaylandObjectPointer:
-        [self pointerEvent: opcode arguments: args];
-        break;
-
-    case WaylandObjectPinchGesture:
-        [self pinchEvent: opcode arguments: args];
-        break;
-
     case WaylandObjectTextInput:
         [self textInputEvent: opcode arguments: args];
         break;
@@ -838,27 +815,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) seatCapabilities: (uint32_t) capabilities {
     union wl_argument args[1] = {{.o = NULL}};
 
-    if ((capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer == NULL) {
-        _pointer = WaylandCreateObject(_seat, WP_SEAT_GET_POINTER,
-                                       &wl_pointer_interface, args,
-                                       WaylandObjectPointer, self);
-        [self attachPinchGesture];
-        [self updatePointerLock];
-    } else if (!(capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer != NULL) {
-        [self detachPinchGesture];
-        [self releasePointerLock];
-        [_draggingManager cancel];
-        [self consumeDragPress];
-        [self cancelFingerScroll];
-        [self releaseInputDevice: &_pointer opcode: WP_POINTER_RELEASE];
-        _pointerWindow = nil;
-        _pointerEnterSerial = 0;
-        _pressedButtons = 0;
-        [self discardPendingScroll];
-        _wlLastClickWindow = nil;
-        [_buttonClickCounts removeAllObjects];
-    }
-
+    // The pointer is CoreGraphics': it binds the process' wl_pointer from its own seat object, decodes it
+    // into CGEvents and tells this display about it (see the pointer methods below).
     if ((capabilities & WP_SEAT_CAPABILITY_TOUCH) && _touch == NULL) {
         args[0].o = NULL;
         _touch = WaylandCreateObject(_seat, WP_SEAT_GET_TOUCH, &wl_touch_interface, args,
@@ -933,93 +891,46 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
 #pragma mark - Pointer
 
-- (void) pointerEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    if (opcode != WP_POINTER_EV_AXIS && opcode != WP_POINTER_EV_FRAME &&
-        opcode != WP_POINTER_EV_AXIS_SOURCE && opcode != WP_POINTER_EV_AXIS_STOP)
-        [self postPendingScroll];
-    // A modifier key the keyboard has not yet seen the effect of comes before the pointer event it modifies.
-    _CGSNativeConnectionFlushPendingKeyboardEvents();
-    switch (opcode) {
-    case WP_POINTER_EV_ENTER:
-        _pointerEnterSerial = args[0].u;
-        _pointerWindow =
-                [self windowForSurface: (struct wl_proxy *) args[1].o];
-        _pointerSurfacePoint = CGPointMake(wl_fixed_to_double(args[2].f),
-                                           wl_fixed_to_double(args[3].f));
-        [_pointerWindow setLastKnownCursorPosition:
-                                [_pointerWindow transformPoint: _pointerSurfacePoint]];
-        [self performAfterDispatch: ^{ [self applyCursor]; }];
-        break;
+// The pointer is CoreGraphics': it reads the process' wl_pointer, decodes it into mouse, scroll and gesture
+// CGEvents (see CGSWaylandPointer) and tells this display what only it can use through the connection observer:
+// where the pointer is (surface, serial, position) for the cursor, the tracking areas and popup grabs, the
+// window decorations, the key state of a window at a press, and the window of each event. The NSEvents are
+// made from the CGEvents when the application takes them (see -windowNumber:location:hasLocation:forPointerEvent:
+// and -pointerEventCreated:fromCGEvent:).
 
-    case WP_POINTER_EV_LEAVE: {
-        WaylandWindow *left = _pointerWindow;
-
-        [self cancelFingerScroll];
-        _pressedButtons = 0;
-        [_buttonClickCounts removeAllObjects];
-        [self consumeDragPress];
-        _lastMouseLocation = [self mouseLocation];
-        if (left != nil && !_pointerLocked)
-            [self performAfterDispatch: ^{ [self pointerLeftWindow: left]; }];
-        _pointerWindow = nil;
-        _pointerEnterSerial = 0;
-        [self discardPendingScroll];
-        break;
+- (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available {
+    if (available) {
+        _pointer = (struct wl_proxy *) _CGSNativeConnectionPointer();
+        [self updatePointerLock];
+        return;
     }
+    [self releasePointerLock];
+    [_draggingManager cancel];
+    [self consumeDragPress];
+    _pointer = NULL;
+    _pointerWindow = nil;
+    _pointerEnterSerial = 0;
+    _pressedButtons = 0;
+}
 
-    case WP_POINTER_EV_MOTION:
-        [self pointerMotionToX: wl_fixed_to_double(args[1].f)
-                             y: wl_fixed_to_double(args[2].f)];
-        break;
+- (void) nativeConnectionPointerEntered: (void *) surface serial: (uint32_t) serial x: (double) x y: (double) y {
+    _pointerEnterSerial = serial;
+    _pointerWindow = [self windowForSurface: (struct wl_proxy *) surface];
+    _pointerSurfacePoint = CGPointMake(x, y);
+    [_pointerWindow setLastKnownCursorPosition: [_pointerWindow transformPoint: _pointerSurfacePoint]];
+    [self performAfterDispatch: ^{ [self applyCursor]; }];
+}
 
-    case WP_POINTER_EV_BUTTON: {
-        BOOL firstPress = _pressedButtons == 0;
-        if (_pressedButtons == 0 && [_pointerWindow decorationButton: args[2].u
-                pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
-                serial: args[0].u atPoint: _pointerSurfacePoint])
-            break;
-        if (args[3].u == WP_POINTER_BUTTON_STATE_PRESSED) {
-            _inputSerial = args[0].u;
-            [_generalPasteboard inputAvailable];
-            [_inputEvent release];
-            _inputEvent = nil;
-            _inputWindow = nil;
-        }
-        [self pointerButton: args[2].u
-                    pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
-                       time: args[1].u];
-        if (firstPress && args[3].u == WP_POINTER_BUTTON_STATE_PRESSED && _inputEvent != nil) {
-            [self consumeDragPress];
-            _dragPressEvent = [_inputEvent retain];
-            _dragPressWindow = _pointerWindow;
-            _dragPressSerial = args[0].u;
-            _dragPressButton = args[2].u;
-        } else if (args[3].u != WP_POINTER_BUTTON_STATE_PRESSED &&
-                   args[2].u == _dragPressButton) {
-            [self consumeDragPress];
-        }
-        break;
+- (void) nativeConnectionPointerLeft {
+    WaylandWindow *left = _pointerWindow;
 
-    }
-    case WP_POINTER_EV_AXIS:
-        [self pointerAxis: args[1].u value: wl_fixed_to_double(args[2].f)];
-        break;
-
-    case WP_POINTER_EV_AXIS_SOURCE:
-        _pendingScrollSourceNamed = YES;
-        _pendingScrollFinger = args[0].u == WP_POINTER_AXIS_SOURCE_FINGER;
-        break;
-
-    case WP_POINTER_EV_AXIS_STOP:
-        [self startPendingScrollFrame];
-        if (args[1].u <= WP_POINTER_AXIS_HORIZONTAL_SCROLL)
-            _pendingScrollStoppedAxes |= 1u << args[1].u;
-        break;
-
-    case WP_POINTER_EV_FRAME:
-        [self postPendingScroll];
-        break;
-    }
+    _pressedButtons = 0;
+    [self consumeDragPress];
+    _lastMouseLocation = [self mouseLocation];
+    if (left != nil && !_pointerLocked)
+        [self performAfterDispatch: ^{ [self pointerLeftWindow: left]; }];
+    _pointerWindow = nil;
+    _pointerEnterSerial = 0;
 }
 
 // The pointer left the window's surface. The compositor does not say where it went, so it is taken to be just
@@ -1047,274 +958,166 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [[window delegate] platformWindowSetCursorEvent: window];
 }
 
-- (void) pointerMotionToX: (CGFloat) x y: (CGFloat) y {
-    // Track the position even when no surface is under the pointer. Opening a
-    // menu maps a new surface under a stationary cursor, so the compositor
-    // sends leave and then motion with no window; dropping that motion left
-    // _pointerSurfacePoint stale and the following button landed wherever the
-    // pointer last was over a known surface.
+- (BOOL) nativeConnectionPointerMovedToX: (double) x y: (double) y {
+    // Track the position even when no surface is under the pointer. Opening a menu maps a new surface under a
+    // stationary cursor, so the compositor sends leave and then motion with no window; dropping that motion left
+    // _pointerSurfacePoint stale and the following button landed wherever the pointer last was over a known surface.
     CGPoint previousPoint = _pointerSurfacePoint;
     _pointerSurfacePoint = CGPointMake(x, y);
 
     WaylandWindow *window = _pointerWindow;
     if (window == nil)
-        return;
+        return NO;
 
-    NSPoint location = [window transformPoint: _pointerSurfacePoint];
-    NSPoint last = [window mouseLocationOutsideOfEventStream];
-    [window setLastKnownCursorPosition: location];
-    [self accumulateMouseDeltaX: location.x - last.x y: last.y - location.y];
+    [window setLastKnownCursorPosition: [window transformPoint: _pointerSurfacePoint]];
 
-    // The pointer moved: a cursor hidden until then comes back, even when the
-    // application does not want the mouse-moved event. A compositor repeats the
-    // position when a surface changes under a still pointer, and a locked pointer
-    // moves nothing on screen: neither is a move. The AppKit work runs outside
-    // libwayland's listener, as for the cursor below.
+    // The pointer moved: a cursor hidden until then comes back, even when the application does not want the
+    // mouse-moved event. A compositor repeats the position when a surface changes under a still pointer, and a
+    // locked pointer moves nothing on screen: neither is a move. The AppKit work runs outside libwayland's
+    // listener, as for the cursor below.
     if (!_pointerLocked && (x != previousPoint.x || y != previousPoint.y))
         [self performAfterDispatch: ^{ [self pointerMoved]; }];
 
     if (_pressedButtons == 0 && [window isDecorationPoint: _pointerSurfacePoint]) {
         [self performAfterDispatch: ^{ [self applyCursor]; }];
-        return;
-    }
-
-    NSWindow *delegate = [window delegate];
-    NSEventType type = NSMouseMoved;
-    // AppKit here has no NSOtherMouseDragged: other buttons move the mouse.
-    if (_pressedButtons & 1)
-        type = NSLeftMouseDragged;
-    else if (_pressedButtons & 2)
-        type = NSRightMouseDragged;
-
-    if (type != NSMouseMoved || [delegate acceptsMouseMovedEvents]) {
-        // deltaY is positive downward, as AppKit and the X11 backend report it;
-        // locations are bottom-left, hence last - location.
-        NSEvent *event = [NSEvent mouseEventWithType: type
-                                            location: location
-                                       modifierFlags: [self currentModifierFlags]
-                                              window: delegate
-                                          clickCount: 1
-                                              deltaX: location.x - last.x
-                                              deltaY: last.y - location.y];
-        // The event queue coalesces queued motion of the same kind for the same
-        // window, adding up the deltas.
-        [self postEvent: event atStart: NO];
+        return YES;
     }
 
     [self performAfterDispatch: ^{
       if ([window delegate] != nil)
           [[window delegate] platformWindowSetCursorEvent: window];
     }];
+    return NO;
 }
 
-- (void) pointerButton: (uint32_t) button pressed: (BOOL) pressed
-                  time: (uint32_t) time {
-    NSUInteger mask;
-    NSInteger number;
-    NSEventType downType, upType;
+// A window decoration (the buttons of a title bar, the edges that resize) takes the first button for itself.
+- (BOOL) nativeConnectionPointerButton: (uint32_t) button pressed: (BOOL) pressed serial: (uint32_t) serial {
+    return _pressedButtons == 0 && [_pointerWindow decorationButton: button
+                                                            pressed: pressed
+                                                             serial: serial
+                                                            atPoint: _pointerSurfacePoint];
+}
 
-    switch (button) {
-    case WP_BTN_LEFT:
-        mask = 1, number = 0, downType = NSLeftMouseDown, upType = NSLeftMouseUp;
-        break;
-    case WP_BTN_RIGHT:
-        mask = 2, number = 1, downType = NSRightMouseDown, upType = NSRightMouseUp;
-        break;
-    case WP_BTN_MIDDLE:
-        mask = 4, number = 2, downType = NSOtherMouseDown, upType = NSOtherMouseUp;
-        break;
+// A Linux button code of the Cocoa button number of a mouse event, and the mask of it in _pressedButtons.
+static uint32_t buttonCodeForNumber(int64_t number) {
+    return number == 0 ? WP_BTN_LEFT : number == 1 ? WP_BTN_RIGHT : number == 2 ? WP_BTN_MIDDLE
+                                                                                 : (uint32_t) (WP_BTN_LEFT + number);
+}
+
+static NSUInteger buttonMaskForNumber(int64_t number) {
+    return number == 0 ? 1 : number == 1 ? 2 : number == 2 ? 4 : 8;
+}
+
+// CoreGraphics has decoded an event of the pointer and is about to post it. What AppKit knows when the event
+// arrives is added: the serial and the window's key state at a press (the compositor may activate the window for
+// this very click before or after the press reaches us, so the press is judged by what we knew when it arrived),
+// the motion for CGGetLastMouseDelta. An event for a surface that is not a window of ours, and a mouse moved event
+// of a window that did not ask for them, go to the event taps only.
+- (BOOL) nativeConnectionWillPostWaylandPointerEvent: (CGEventRef) event {
+    struct wl_proxy *surface =
+            (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(event, kCGSEventNativeWindow);
+    WaylandWindow *window = [self windowForSurface: surface];
+    id delegate = [window delegate];
+    int64_t number = CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
+
+    switch (CGEventGetType(event)) {
+    case kCGEventLeftMouseDown:
+    case kCGEventRightMouseDown:
+    case kCGEventOtherMouseDown: {
+        BOOL firstPress = _pressedButtons == 0;
+        uint32_t serial = (uint32_t) CGEventGetIntegerValueField(event, kCGSEventInputSerial);
+        _pressedButtons |= buttonMaskForNumber(number);
+        _inputSerial = serial;
+        [_generalPasteboard inputAvailable];
+        [_inputEvent release];
+        _inputEvent = nil;
+        _inputWindow = nil;
+        _firstPressSerial = firstPress ? serial : 0;
+        if (delegate != nil)
+            CGEventSetIntegerValueField(event, kCGSMouseEventWindowKeyState, [delegate isKeyWindow] ? 1 : 2);
+        return delegate != nil;
+    }
+    case kCGEventLeftMouseUp:
+    case kCGEventRightMouseUp:
+    case kCGEventOtherMouseUp:
+        _pressedButtons &= ~buttonMaskForNumber(number);
+        if (buttonCodeForNumber(number) == _dragPressButton)
+            [self consumeDragPress];
+        return delegate != nil;
+    case kCGEventMouseMoved:
+    case kCGEventLeftMouseDragged:
+    case kCGEventRightMouseDragged:
+    case kCGEventOtherMouseDragged:
+        [self accumulateMouseDeltaX: (CGFloat) CGEventGetIntegerValueField(event, kCGMouseEventDeltaX)
+                                  y: (CGFloat) CGEventGetIntegerValueField(event, kCGMouseEventDeltaY)];
+        return delegate != nil && (CGEventGetType(event) != kCGEventMouseMoved || [delegate acceptsMouseMovedEvents]);
     default:
-        mask = 8, number = (NSInteger) button - WP_BTN_LEFT;
-        downType = NSOtherMouseDown, upType = NSOtherMouseUp;
-        break;
+        return delegate != nil;
     }
+}
 
-    if (pressed)
-        _pressedButtons |= mask;
-    else
-        _pressedButtons &= ~mask;
+// The NSEvent of a press is what popup grabs and drags are tied to (see -popupGrabSerialForParent: and
+// -dragOriginForEvent:).
+- (void) pointerEventCreated: (NSEvent *) event fromCGEvent: (CGEventRef) cgEvent {
+    CGEventType type = CGEventGetType(cgEvent);
+    uint32_t serial = (uint32_t) CGEventGetIntegerValueField(cgEvent, kCGSEventInputSerial);
 
-    NSInteger eventClickCount = [[_buttonClickCounts objectForKey: @(button)] integerValue];
-    if (!pressed)
-        [_buttonClickCounts removeObjectForKey: @(button)];
-    WaylandWindow *window = _pointerWindow;
+    if ((type != kCGEventLeftMouseDown && type != kCGEventRightMouseDown && type != kCGEventOtherMouseDown) ||
+        serial == 0 || CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) == 0)
+        return;
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
+                                                            cgEvent, kCGSEventNativeWindow)];
+    int64_t number = CGEventGetIntegerValueField(cgEvent, kCGMouseEventButtonNumber);
+
+    // Only the press that is the latest one still counts.
+    if (serial != _inputSerial)
+        return;
+    [_inputEvent release];
+    _inputEvent = [event retain];
+    _inputWindow = window;
+    if (serial == _firstPressSerial && (_pressedButtons & buttonMaskForNumber(number)) != 0) {
+        [self consumeDragPress];
+        _dragPressEvent = [event retain];
+        _dragPressWindow = window;
+        _dragPressSerial = serial;
+        _dragPressButton = buttonCodeForNumber(number);
+        _firstPressSerial = 0;
+    }
+}
+
+// Where a point of one of our windows' surfaces is in global coordinates: the window's origin and the point
+// (Wayland says nothing about where a window is, so the origin is the one the application asked for).
+- (BOOL) nativeConnectionGlobalLocation: (CGPoint *) location ofSurface: (void *) surface point: (CGPoint) point {
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) surface];
     if (window == nil)
-        return;
+        return NO;
+    NSPoint local = [window transformPoint: point];
+    O2Rect frame = [window frame];
+    NSArray *screens = [self screens];
+    double primaryHeight = [screens count] > 0 ? NSHeight([[screens objectAtIndex: 0] frame]) : 0;
+    *location = CGPointMake(frame.origin.x + local.x, primaryHeight - (frame.origin.y + local.y));
+    return YES;
+}
 
-    if (pressed) {
-        // Group clicks only on the same button/window and within four logical
-        // pixels of the preceding press. Unsigned subtraction handles timestamp
-        // wrap without depending on the wall clock or dispatch latency.
-        CGFloat dx = _pointerSurfacePoint.x - _wlLastClickPoint.x;
-        CGFloat dy = _pointerSurfacePoint.y - _wlLastClickPoint.y;
-        if (_wlLastClickWindow == window && _wlLastClickButton == button &&
-            (uint32_t) (time - _wlLastClickTime) < [self doubleClickInterval] * 1000 &&
-            dx * dx + dy * dy <= 16 && _clickCount < NSIntegerMax)
-            _clickCount++;
-        else
-            _clickCount = 1;
-        _wlLastClickTime = time;
-        _wlLastClickButton = button;
-        _wlLastClickWindow = window;
-        _wlLastClickPoint = _pointerSurfacePoint;
-        if (_buttonClickCounts == nil)
-            _buttonClickCounts = [NSMutableDictionary new];
-        [_buttonClickCounts setObject: @(_clickCount) forKey: @(button)];
-        eventClickCount = _clickCount;
+// The window an event of the pointer is for and where the pointer was in it, from the surface and the
+// position CoreGraphics read from the compositor. They apply only while no event tap has moved the event.
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          hasLocation: (BOOL *) hasLocation
+      forPointerEvent: (CGEventRef) event {
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
+                                                            event, kCGSEventNativeWindow)];
+    if ([window delegate] == nil)
+        return NO;
+    *windowNumber = [[window delegate] windowNumber];
+    CGPoint global = CGEventGetLocation(event);
+    if (llround(global.x * 1024) == CGEventGetIntegerValueField(event, kCGSEventPostedLocationX) &&
+        llround(global.y * 1024) == CGEventGetIntegerValueField(event, kCGSEventPostedLocationY)) {
+        *location = [window transformPoint: CGPointMake(CGEventGetIntegerValueField(event, kCGSEventNativeLocationX) / 1024.0,
+                                                        CGEventGetIntegerValueField(event, kCGSEventNativeLocationY) / 1024.0)];
+        *hasLocation = YES;
     }
-
-    NSEvent *event = [NSEvent
-            mouseEventWithType: pressed ? downType : upType
-                      location: [window transformPoint: _pointerSurfacePoint]
-                 modifierFlags: [self currentModifierFlags]
-                        window: [window delegate]
-                    clickCount: eventClickCount
-                        deltaX: 0.0
-                        deltaY: 0.0];
-    [(NSEvent_mouse *) event _setButtonNumber: number];
-    if (pressed) {
-        // The compositor may activate the window for this very click, before
-        // or after the press reaches us; the press is judged by what we knew
-        // when it arrived, not by what the queue shows when it is taken.
-        [(NSEvent_mouse *) event _setWindowWasKeyOnArrival: [[window delegate] isKeyWindow]];
-        _inputEvent = [event retain];
-        _inputWindow = window;
-    }
-    [self postEvent: event atStart: NO];
-}
-
-// wl_pointer.axis values are lengths in surface-local coordinates, the space pointer motion uses
-// (https://gitlab.freedesktop.org/wayland/wayland/-/blob/main/protocol/wayland.xml). One wheel
-// notch is this many of them; precise scrolling reports them as they are.
-static const CGFloat WaylandAxisUnitsPerNotch = 10.0;
-
-- (void) startPendingScrollFrame {
-    if (_pendingScrollActive)
-        return;
-    _pendingScrollWindow = _pointerWindow;
-    _pendingScrollSurfacePoint = _pointerSurfacePoint;
-    _pendingScrollModifiers = [self currentModifierFlags];
-    _pendingScrollActive = YES;
-}
-
-- (void) discardPendingScroll {
-    _pendingScrollX = _pendingScrollY = 0;
-    _pendingScrollWindow = nil;
-    _pendingScrollActive = NO;
-    _pendingScrollFinger = _pendingScrollSourceNamed = NO;
-    _pendingScrollStoppedAxes = 0;
-    _fingerScrollActive = NO;
-    _fingerScrollWindow = nil;
-}
-
-- (void) pointerAxis: (uint32_t) axis value: (CGFloat) value {
-    if (_pointerWindow == nil)
-        return;
-
-    // Scrolling down is positive; the X11 backend reports a notch up as deltaY 1, so the sum keeps
-    // the opposite sign.
-    if (axis != WP_POINTER_AXIS_HORIZONTAL_SCROLL &&
-        axis != WP_POINTER_AXIS_VERTICAL_SCROLL)
-        return;
-    [self startPendingScrollFrame];
-    if (axis == WP_POINTER_AXIS_HORIZONTAL_SCROLL)
-        _pendingScrollX -= value;
-    else if (axis == WP_POINTER_AXIS_VERTICAL_SCROLL)
-        _pendingScrollY -= value;
-
-    // wl_pointer.frame was added in version 5. Older seats deliver each axis
-    // event independently, so preserve their immediate behavior.
-    if (WL.wl_proxy_get_version(_pointer) < 5)
-        [self postPendingScroll];
-}
-
-- (void) postPendingScroll {
-    CGFloat unitsX = _pendingScrollX;
-    CGFloat unitsY = _pendingScrollY;
-    WaylandWindow *window = _pendingScrollWindow;
-    CGPoint surfacePoint = _pendingScrollSurfacePoint;
-    NSUInteger modifiers = _pendingScrollModifiers;
-    BOOL finger = _pendingScrollFinger;
-    BOOL sourceNamed = _pendingScrollSourceNamed;
-    uint32_t stoppedAxes = _pendingScrollStoppedAxes;
-    _pendingScrollX = _pendingScrollY = 0;
-    _pendingScrollWindow = nil;
-    _pendingScrollActive = NO;
-    _pendingScrollFinger = _pendingScrollSourceNamed = NO;
-    _pendingScrollStoppedAxes = 0;
-
-    BOOL moved = unitsX != 0 || unitsY != 0;
-    if (window == nil)
-        return;
-
-    NSEventPhase phase = NSEventPhaseNone;
-    // GUESS: the source is optional in a frame, so a finger sequence in progress also continues in
-    // a frame that names no source, and a frame without motion (an axis_stop alone) can end it
-    // whatever source it names. A frame that moves and names another source is not part of it.
-    if (finger || (_fingerScrollActive && (!sourceNamed || !moved))) {
-        // GUESS: the protocol only says a finger source sends axis_stop when the finger lifts.
-        // The first frame with motion is taken as the began phase and later ones as changed. A
-        // sequence ends in a frame whose axis_stop covers every axis that moved in it (so also in
-        // one with no motion); an axis_stop beside motion on the other axis is a change, since the
-        // protocol says that axis is still moving then.
-        // A first frame that has motion and an axis_stop for it gives began only, since one event cannot
-        // be both began and ended; the sequence then ends at the next axis_stop.
-        uint32_t movedAxes = (unitsX != 0 ? 1u << WP_POINTER_AXIS_HORIZONTAL_SCROLL : 0) |
-                             (unitsY != 0 ? 1u << WP_POINTER_AXIS_VERTICAL_SCROLL : 0);
-        BOOL ends = _fingerScrollActive && stoppedAxes != 0 && (movedAxes & ~stoppedAxes) == 0;
-        if (ends)
-            phase = NSEventPhaseEnded;
-        else if (moved)
-            phase = _fingerScrollActive ? NSEventPhaseChanged : NSEventPhaseBegan;
-        if (phase == NSEventPhaseNone)
-            return;
-        _fingerScrollActive = phase != NSEventPhaseEnded;
-        _fingerScrollWindow = _fingerScrollActive ? window : nil;
-        _fingerScrollSurfacePoint = surfacePoint;
-    } else if (!moved) {
-        return;
-    }
-    BOOL precise = phase != NSEventPhaseNone;
-
-    NSEvent *event = [NSEvent
-            mouseEventWithType: NSScrollWheel
-                      location: [window transformPoint: surfacePoint]
-                 modifierFlags: modifiers
-                        window: [window delegate]
-                    clickCount: 1
-                        deltaX: unitsX / WaylandAxisUnitsPerNotch
-                        deltaY: unitsY / WaylandAxisUnitsPerNotch];
-    if (precise)
-        // GUESS: the line deltas stay set to the wheel-notch equivalent of the axis values, so code
-        // that reads deltaX and deltaY keeps scrolling by a proportional amount.
-        [(NSEvent_mouse *) event _setPreciseScrollingDeltaX: unitsX
-                                                     deltaY: unitsY
-                                                      phase: phase];
-    [self postEvent: event atStart: NO];
-}
-
-// A pointer that leaves, a seat that loses its pointer or a window that goes away in the middle of
-// a finger scroll ends it with the cancelled phase, as a pinch does. GUESS: the documentation of
-// NSEvent.phase lists cancelled as an ending phase of a gesture but not when it is used.
-- (void) cancelFingerScroll {
-    WaylandWindow *window = _fingerScrollWindow;
-    CGPoint surfacePoint = _fingerScrollSurfacePoint;
-    BOOL known = _fingerScrollActive && window != nil && [self windowIsKnown: window];
-    _fingerScrollActive = NO;
-    _fingerScrollWindow = nil;
-    if (!known)
-        return;
-
-    NSEvent *event = [NSEvent
-            mouseEventWithType: NSScrollWheel
-                      location: [window transformPoint: surfacePoint]
-                 modifierFlags: [self currentModifierFlags]
-                        window: [window delegate]
-                    clickCount: 1
-                        deltaX: 0
-                        deltaY: 0];
-    [(NSEvent_mouse *) event _setPreciseScrollingDeltaX: 0 deltaY: 0 phase: NSEventPhaseCancelled];
-    [self postEvent: event atStart: NO];
+    return YES;
 }
 
 #pragma mark - Text input (text-input-v3)
@@ -1515,86 +1318,6 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     }
 }
 
-#pragma mark - Pinch gestures
-
-- (void) attachPinchGesture {
-    if (_pointerGestures == NULL || _pointer == NULL || _pinchGesture != NULL)
-        return;
-    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _pointer}};
-    _pinchGesture = WaylandCreateObject(_pointerGestures, WP_GESTURES_GET_PINCH,
-                                        &zwp_pointer_gesture_pinch_v1_interface, args,
-                                        WaylandObjectPinchGesture, self);
-}
-
-- (void) detachPinchGesture {
-    if (_pinchGesture == NULL)
-        return;
-    [self postPinchPhase: NSEventPhaseCancelled];
-    WaylandMarshal(_pinchGesture, WP_PINCH_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-    _pinchGesture = NULL;
-}
-
-- (void) postGesture: (NSEventType) type
-               phase: (NSEventPhase) phase
-       magnification: (CGFloat) magnification
-            rotation: (float) rotation
-{
-    WaylandWindow *window = _pinchWindow;
-    NSEvent *event = [[[NSEvent_gesture alloc]
-             initWithType: type
-                 location: [window transformPoint: _pointerSurfacePoint]
-            modifierFlags: [self currentModifierFlags]
-                   window: [window delegate]
-                    phase: phase
-            magnification: magnification
-                 rotation: rotation] autorelease];
-    [self postEvent: event atStart: NO];
-}
-
-// Ends an active pinch; a no-op when none is in progress.
-- (void) postPinchPhase: (NSEventPhase) phase {
-    if (_pinchWindow == nil)
-        return;
-    [self postGesture: NSEventTypeMagnify phase: phase magnification: 0 rotation: 0];
-    [self postGesture: NSEventTypeRotate phase: phase magnification: 0 rotation: 0];
-    _pinchWindow = nil;
-}
-
-// A pinch reports its scale relative to where the fingers started and its
-// rotation in degrees clockwise since the last update. AppKit events carry the
-// change in magnification and counterclockwise degrees.
-- (void) pinchEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    [self postPendingScroll];
-    switch (opcode) {
-    case WP_PINCH_EV_BEGIN:
-        _pinchWindow = [self windowForSurface: (struct wl_proxy *) args[2].o];
-        _pinchScale = 1;
-        if (_pinchWindow == nil)
-            break;
-        [self postGesture: NSEventTypeMagnify phase: NSEventPhaseBegan magnification: 0 rotation: 0];
-        [self postGesture: NSEventTypeRotate phase: NSEventPhaseBegan magnification: 0 rotation: 0];
-        break;
-
-    case WP_PINCH_EV_UPDATE: {
-        if (_pinchWindow == nil)
-            break;
-        CGFloat scale = wl_fixed_to_double(args[3].f);
-        float rotation = -wl_fixed_to_double(args[4].f);
-        if (scale != _pinchScale)
-            [self postGesture: NSEventTypeMagnify phase: NSEventPhaseChanged
-                magnification: scale - _pinchScale rotation: 0];
-        if (rotation != 0)
-            [self postGesture: NSEventTypeRotate phase: NSEventPhaseChanged magnification: 0 rotation: rotation];
-        _pinchScale = scale;
-        break;
-    }
-
-    case WP_PINCH_EV_END:
-        [self postPinchPhase: args[2].i ? NSEventPhaseCancelled : NSEventPhaseEnded];
-        break;
-    }
-}
-
 - (NSPoint) mouseLocation {
     WaylandWindow *window = _pointerWindow;
     if (window == nil)
@@ -1624,6 +1347,7 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     WaylandWarp warp = WaylandWarpTarget(screenX, screenY, frame.origin.x, frame.origin.y,
                                          frame.size.width, frame.size.height, offset.x, offset.y);
     _pointerSurfacePoint = CGPointMake(warp.surfaceX, warp.surfaceY);
+    _CGSNativeConnectionSetPointerSurfacePoint(warp.surfaceX, warp.surfaceY);
     // Window coordinates, like every other writer of the last known position.
     [window setLastKnownCursorPosition: NSMakePoint(warp.windowX, warp.windowY)];
 }
@@ -1724,11 +1448,6 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 // The window that has the keyboard focus, from the surface CoreGraphics reports.
 - (WaylandWindow *) keyboardWindow {
     return [self windowForSurface: (struct wl_proxy *) _CGSNativeConnectionKeyboardFocus()];
-}
-
-- (void) nativeConnectionWillPostKeyboardEvent {
-    // A scroll frame that is not complete yet goes out before the key event that follows it.
-    [self postPendingScroll];
 }
 
 - (void) nativeConnectionKeyboardFocusChanged: (void *) surface {
@@ -2087,29 +1806,21 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
         [self releasePointerLock];
         [self performAfterDispatch: ^{ [self updatePointerLock]; }];
     }
-    if (_wlLastClickWindow == window)
-        _wlLastClickWindow = nil;
     if (_textInputWindow == window)
         [self textInputLeft];
-    if (_pinchWindow == window)
-        [self postPinchPhase: NSEventPhaseCancelled];
     [_draggingManager windowUnmapped: window];
     if (_dragPressWindow == window) [self consumeDragPress];
-    if (_fingerScrollWindow == window)
-        [self cancelFingerScroll];
     if (_pointerWindow == window) {
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
         _pressedButtons = 0;
-        [self discardPendingScroll];
-        [_buttonClickCounts removeAllObjects];
     }
     if (_inputWindow == window) {
         _inputWindow = nil;
         [_inputEvent release];
         _inputEvent = nil;
     }
-    // The keyboard focus on the window's surface ends with it.
+    // The keyboard focus, the pointer focus and a pinch on the window's surface end with it.
     _CGSNativeConnectionObjectDestroyed([window surface]);
 }
 

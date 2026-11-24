@@ -40,6 +40,7 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSEvent_mouse.h>
+#import "NSEvent_gesture.h"
 #import <AppKit/NSEvent_keyboard.h>
 #import <AppKit/NSEvent_other.h>
 #import <AppKit/NSScreen.h>
@@ -365,7 +366,7 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
         // the window it belongs to, and where the pointer was in it.
         NSPoint windowLocation = NSZeroPoint;
         BOOL hasWindowLocation = NO;
-        if (type != kCGEventScrollWheel && CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0) {
+        if (CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0) {
             NSInteger nativeNumber = 0;
             if ([[NSDisplay currentDisplay] windowNumber: &nativeNumber
                                                 location: &windowLocation
@@ -411,8 +412,35 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
             int64_t keyState = CGEventGetIntegerValueField(cgEvent, kCGSMouseEventWindowKeyState);
             if (keyState != 0)
                 [mouse _setWindowWasKeyOnArrival: keyState == 1];
+            [[NSDisplay currentDisplay] pointerEventCreated: mouse fromCGEvent: cgEvent];
         }
         result = mouse;
+        break;
+    }
+    case 18: // NSEventTypeRotate
+    case 30: { // NSEventTypeMagnify
+        // A gesture of the window system's pointer (a touchpad pinch): the window and the location in it as
+        // for the mouse events, the phase and the amount from the fields of our own.
+        NSInteger windowNumber = 0;
+        NSPoint windowLocation = NSZeroPoint;
+        BOOL hasWindowLocation = NO;
+        if (CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0)
+            [[NSDisplay currentDisplay] windowNumber: &windowNumber
+                                            location: &windowLocation
+                                         hasLocation: &hasWindowLocation
+                                     forPointerEvent: cgEvent];
+        NSWindow *window = windowNumber != 0 ? [NSApp windowWithWindowNumber: windowNumber] : nil;
+        NSPoint location = screenLocation(cgEvent);
+        if (window != nil)
+            location = hasWindowLocation ? windowLocation : [window convertScreenToBase: location];
+        result = [[NSEvent_gesture alloc]
+                initWithType: (NSEventType) type
+                    location: location
+               modifierFlags: flags
+                      window: window
+                       phase: (NSEventPhase) CGEventGetIntegerValueField(cgEvent, kCGSGesturePhase)
+               magnification: CGEventGetIntegerValueField(cgEvent, kCGSGestureMagnification) / 1000000.0
+                    rotation: (float) (CGEventGetIntegerValueField(cgEvent, kCGSGestureRotation) / 1000000.0)];
         break;
     }
     case kCGEventKeyDown:

@@ -218,6 +218,8 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 
 - (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
     id<CGSNativeConnectionObserver> observer = [self observer];
+    // A scroll frame that is not complete yet goes out before the key event that follows it.
+    [(CGSConnectionWayland *) _connection flushPendingPointerEvents];
     // What the observer queued about the pointer before this event must go out first.
     if ([observer respondsToSelector: @selector(nativeConnectionWillPostKeyboardEvent)])
         [observer nativeConnectionWillPostKeyboardEvent];

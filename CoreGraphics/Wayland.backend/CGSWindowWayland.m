@@ -335,4 +335,8 @@
     return kCGErrorNotImplemented;
 }
 
+- (CGPoint) frameOrigin {
+    return _frame.origin;
+}
+
 @end

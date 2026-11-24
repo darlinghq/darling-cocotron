@@ -16,6 +16,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 		SOURCES
 			CGSConnectionWayland.m
 			CGSWaylandKeyboard.m
+			CGSWaylandPointer.m
 			CGSWaylandKeymap.m
 			CGSWaylandOutputManager.m
 			CGSWindowWayland.m

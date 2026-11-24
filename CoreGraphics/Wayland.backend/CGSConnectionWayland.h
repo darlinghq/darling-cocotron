@@ -67,6 +67,8 @@ typedef enum {
     CGSWaylandObjectSeat,
     CGSWaylandObjectKeyboard,
     CGSWaylandObjectKeyboardSync,
+    CGSWaylandObjectPointer,
+    CGSWaylandObjectPinchGesture,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -96,6 +98,11 @@ typedef enum {
     id _keymap;
     // Decodes the keyboard into CGEvents (CGSWaylandKeyboard).
     id _keyboardDecoder;
+    // The seat's pointer, which decodes the pointer into CGEvents (CGSWaylandPointer), and the pinch
+    // gesture factory it makes the pinch object from.
+    id _pointerDecoder;
+    struct wl_proxy *_pointerGestures;
+    uint32_t _pointerGesturesName;
     // Set when the setup roundtrips are over; an output that is described before that is
     // part of the displays the first look finds, not a change.
     BOOL _setupDone;
@@ -107,6 +114,15 @@ typedef enum {
 }
 
 - (void) flush;
+
+// The pointer gestures global, NULL when the compositor offers none.
+- (struct wl_proxy *) pointerGestures;
+// Posts what the pointer decoder holds back until the compositor ends it (a scroll frame).
+- (void) flushPendingPointerEvents;
+// The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
+- (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
+// Where a point of the surface is in global coordinates, when it is a surface of this connection's windows.
+- (BOOL) globalLocation: (CGPoint *) location ofSurface: (struct wl_proxy *) surface point: (CGPoint) point;
 
 // Sends a request that creates an object and installs the dispatcher on it.
 - (struct wl_proxy *) createObject: (struct wl_proxy *) proxy

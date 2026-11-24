@@ -346,6 +346,15 @@ static void* g_nativeObserver;
 {
 }
 
+-(void*) nativePointer
+{
+	return NULL;
+}
+
+-(void) setPointerSurfacePointX:(double)x y:(double)y
+{
+}
+
 -(int) keyboardLayoutGroup
 {
 	return -1;

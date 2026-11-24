@@ -442,6 +442,9 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     return event;
 }
 
+- (void) pointerEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent {
+}
+
 - (BOOL) windowNumber: (NSInteger *) windowNumber
              location: (NSPoint *) location
           hasLocation: (BOOL *) hasLocation
