@@ -43,6 +43,12 @@
 //                                  hidden or shown, logging "STEP <state>" after
 //                                  each change and waiting for the host to look
 //
+//   appkit-global-menu LOG policy  logs "RUNNING policy=P url=U" (NSRunningApplication's activation
+//                                  policy and bundle URL for this process) and "NSAPP policy=P", then
+//                                  exits: what the bundle layout on disk decides
+//   appkit-global-menu LOG bundled [SECONDS]
+//                                  like borderless, but keeps the activation policy the bundle (or its
+//                                  absence) gives, as an application that never sets one
 //   appkit-global-menu LOG parent [SECONDS [DELAYMS]]
 //                                  like borderless; DELAYMS (default 0) after the menu bar is
 //                                  ordered in it starts this program again in the mode "windowless"
@@ -342,7 +348,17 @@ int main(int argc, char **argv) {
         // A program outside an application bundle is prohibited until it sets a policy, as on macOS:
         // the programs that are applications on their own are regular ones. The helper modes keep what
         // their bundle, or they themselves, declare, and the windowless one is the prohibited process.
-        if (strcmp(argv[2], "helper") && strcmp(argv[2], "helper-accessory") && strcmp(argv[2], "windowless"))
+        if (!strcmp(argv[2], "policy")) {
+            // What the bundle on disk decides, before anything sets a policy: the policy and the bundle
+            // URL as NSRunningApplication and NSApp report them. Needs no display.
+            NSRunningApplication *me = [NSRunningApplication currentApplication];
+            note("RUNNING policy=%ld url=%s", (long) [me activationPolicy],
+                 [[[me bundleURL] path] UTF8String] ?: "(none)");
+            note("NSAPP policy=%ld", (long) [NSApp activationPolicy]);
+            return 0;
+        }
+        if (strcmp(argv[2], "helper") && strcmp(argv[2], "helper-accessory") && strcmp(argv[2], "windowless") &&
+            strcmp(argv[2], "bundled"))
             [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
         note("POLICY %d", (int) [NSApp activationPolicy]);
         Target *target = [Target new];
@@ -432,7 +448,7 @@ int main(int argc, char **argv) {
             [window makeKeyAndOrderFront: nil];
             note("strip window=%d extraFrameHeight=%d", (int) hasMainMenu(window),
                  (int) (frame.size.height - 200));
-        } else if (!strcmp(argv[2], "borderless")) {
+        } else if (!strcmp(argv[2], "borderless") || !strcmp(argv[2], "bundled")) {
             // A window that draws its own chrome: no title bar, so no in-window menu strip.
             NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
                                                            styleMask: NSWindowStyleMaskBorderless

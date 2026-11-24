@@ -6,7 +6,7 @@
 # Tracking of the menus of the application's own menu bar (the screen menu bar,
 # a layer surface on Wayland and a dock window on X11): pointer and keyboard.
 #
-#   run-bar-tracking.py [--cases focused,owner,nowindow,parent,startup] kwin|sway|x11 GUEST_PROGRAM [DISPLAY]
+#   run-bar-tracking.py [--cases focused,owner,nowindow,parent,startup,policy,noext] kwin|sway|x11 GUEST_PROGRAM [DISPLAY]
 #
 # GUEST_PROGRAM is ../appkit-global-menu.m built for the guest. "kwin" runs a
 # private virtual KWin (the pointer and keyboard are a libei device of KWin's),
@@ -14,6 +14,10 @@
 # Xvfb DISPLAY (default :99) with a window manager that places docks, driven
 # with xdotool. DARLING names the darling launcher (default: darling). Needs the
 # tools of run-kwin-bar.py, sway or xdotool for the backend.
+#
+# Cases "policy" and "noext" cover the recognition of an application bundle by its contents rather than
+# a .app extension (NSRunningApplication's policy and bundle URL for six layouts of a program, and an
+# application in a bundle directory without .app that never sets a policy: it owns and shows the bar).
 #
 # Three applications are tested: one that has the keyboard focus (a borderless
 # window and the bar), the menu bar owner that does not (a regular application
@@ -36,7 +40,7 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from common import Bus, check, finish, helper_bundle, read, wait_for  # noqa: E402
+from common import Bus, check, finish, helper_bundle, plain_bundle, read, wait_for  # noqa: E402
 
 DARLING = os.environ.get("DARLING", "darling")
 KEY_CODES = {"Escape": 1, "Return": 28, "Down": 108}
@@ -238,7 +242,7 @@ class X11Backend(Backend):
 
 def main():
     argv = sys.argv[1:]
-    cases = ["focused", "owner", "nowindow", "parent", "startup"]
+    cases = ["focused", "owner", "nowindow", "parent", "startup", "policy", "noext"]
     if argv[:1] == ["--cases"] and len(argv) > 1:
         cases = argv[1].split(",")
         argv = argv[2:]
@@ -255,14 +259,14 @@ def main():
     else:
         be = X11Backend(work, argv[2] if len(argv) > 2 else ":99")
 
-    def guest(mode, tag, extra_args=()):
+    def guest(mode, tag, extra_args=(), exe=None):
         log = os.path.join(work, tag + ".log")
         # Right after "darling shutdown" the launcher can fail with "the container exited, try again".
         for attempt in range(3):
             open(log, "w").close()
             process = subprocess.Popen(
                 ["timeout", "-s", "KILL", "150", DARLING, "shell", "env"] + be.guest_env() +
-                ["/Volumes/SystemRoot" + program, "/Volumes/SystemRoot" + log, mode, "100"] + list(extra_args),
+                [exe or "/Volumes/SystemRoot" + program, "/Volumes/SystemRoot" + log, mode, "100"] + list(extra_args),
                 stdin=subprocess.DEVNULL, stdout=open(os.path.join(work, tag + ".out"), "w"),
                 stderr=subprocess.STDOUT)
             end = time.time() + 90
@@ -285,8 +289,8 @@ def main():
                        stderr=subprocess.DEVNULL, timeout=60)
         time.sleep(4)
 
-    def run_case(tag, mode, extra_args=(), keyboard=True, focused=False):
-        log, process = guest(mode, tag, extra_args)
+    def run_case(tag, mode, extra_args=(), keyboard=True, focused=False, exe=None):
+        log, process = guest(mode, tag, extra_args, exe)
         try:
             case(tag, log, keyboard, focused)
         finally:
@@ -418,7 +422,62 @@ def main():
         finally:
             stop(process)
 
+    def run_policy():
+        """The policy and the bundle URL that NSRunningApplication gives a program, by where it lies: an
+        application bundle is recognised by its contents (the executable in Contents/MacOS next to an
+        Info.plist whose package type is APPL or absent), not by a .app extension."""
+        layouts = [
+            ("app", plain_bundle(work, program, "Policy.app"), 0, True),
+            ("no extension", plain_bundle(work, program, "Policy.AppBundle/Inner"), 0, True),
+            ("no extension, no package type", plain_bundle(work, program, "Policy2.AppBundle/Inner", None), 0, True),
+            ("no extension, LSUIElement", plain_bundle(work, program, "Policy3.AppBundle/Inner", ui_element=True), 1, True),
+            ("another package type", plain_bundle(work, program, "Policy4.AppBundle/Inner", "BNDL"), 2, False),
+            ("no Info.plist", plain_bundle(work, program, "Policy5.AppBundle/Inner", plist=False), 2, False),
+        ]
+        os.makedirs(os.path.join(work, "bare"))
+        bare = os.path.join(work, "bare", os.path.basename(program))
+        subprocess.run(["cp", program, bare], check=True)
+        layouts.append(("bare executable", ("/Volumes/SystemRoot" + bare, None), 2, False))
+        for name, (exe, bundle), policy, has_url in layouts:
+            tag = "policy-" + re.sub(r"\W+", "-", name)
+            log = os.path.join(work, tag + ".log")
+            open(log, "w").close()
+            for attempt in range(3):
+                subprocess.run(["timeout", "-s", "KILL", "100", DARLING, "shell", "env"] + be.guest_env() +
+                               [exe, "/Volumes/SystemRoot" + log, "policy"],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if "NSAPP" in read(log):
+                    break
+                time.sleep(4)
+            text = read(log)
+            check("RUNNING policy=%d " % policy in text, "%s: NSRunningApplication's policy is %d (%s)" %
+                  (name, policy, re.findall(r"RUNNING.*", text)[:1]))
+            check("NSAPP policy=%d" % policy in text, "%s: and NSApplication's too" % name)
+            if has_url:
+                url = re.search(r"url=(\S+)", text)
+                check(bool(url) and url.group(1).rstrip("/").endswith(os.path.relpath(bundle, work)),
+                      "%s: the bundle URL is the bundle directory (%s)" % (name, url and url.group(1)))
+            else:
+                check("url=(none)" in text, "%s: there is no bundle URL" % name)
+        subprocess.run([DARLING, "shutdown"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=60)
+        time.sleep(4)
+
     try:
+        if "policy" in cases:
+            run_policy()
+        if "noext" in cases:
+            # An application that never sets a policy, in a bundle directory with no .app extension: it is a
+            # regular application, owns the menu bar and shows it.
+            exe, _ = plain_bundle(work, program, "Outer.AppBundle/Probe")
+            log, process = guest("bundled", "noext", exe=exe)
+            try:
+                check("POLICY 0" in read(log), "noext: the application's policy is regular (%s)" % last(log, "POLICY"))
+                check("owner=1" in last(log, "OWNER"), "noext: it owns the menu bar (%s)" % last(log, "OWNER"))
+                check("bar=1" in last(log, "STATE"), "noext: its bar is shown (%s)" % last(log, "STATE"))
+                case("noext", log, True, True)
+            finally:
+                stop(process)
         if "parent" in cases:
             for delay in (0, 300):
                 run_parent(delay)
