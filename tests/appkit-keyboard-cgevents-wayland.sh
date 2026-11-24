@@ -32,6 +32,9 @@ wtype -s 300 -P s -s 1200 -p s
 sleep 0.3
 wtype -s 300 d
 sleep 0.3
+# the keysym of Shift+Tab on a PC keyboard: xkbcommon gives no text for it
+wtype -s 300 -M shift -k ISO_Left_Tab -m shift
+sleep 0.3
 wtype -s 300 q
 
 for _ in $(seq 300); do grep -q -E '^(ALL PASSED|FAILED)' "$out" && break; sleep 0.1; done
