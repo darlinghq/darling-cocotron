@@ -217,10 +217,14 @@ static NSPoint locationBesideEdge(NSRect rect, NSSize size, NSRectEdge edge, BOO
 // of 8 edge cases with room on all sides: the picker window touches the named
 // edge (gap 0) and is centred on the middle of that edge (offset 0, at most 0.5
 // point), for two different window heights ("frame={{767,574},{266,288}} ...
-// dx=(-103,0,103) dy=(30,159,288)" for maxY on an anchor {{870,544},{60,30}}).
+// dx(left,mid,right)=(-103,0,103) dy(bottom,mid,top)=(30,159,288)" for maxY on an
+// anchor {{870,544},{60,30}}). The probe had room on all sides: near a screen
+// edge the pop-up moves the menu back onto the visible frame, which overrides this.
 // Only that structure is copied, not the window size. A flipped view is not
 // covered by the probe: GUESS: the edge is read in the view's own coordinates.
 // Test: tests/appkit-sharing-service-picker.m (test_placement)
+// GUESS: a second show before the first has presented replaces it (the probe did
+// not call show twice); the reference is silent.
 // GUESS: the reference does not say what happens with no services: nothing is
 // shown. macOS 26.1 arm64 (tier 2) differs: it still presents a window for an
 // empty list from the delegate, a nil list (treated the same as empty), an empty
@@ -242,6 +246,9 @@ static NSPoint locationBesideEdge(NSRect rect, NSSize size, NSRectEdge edge, BOO
     // the picker is an ordinary window and the application keeps running while it is up.
     CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
         if (generation != NS_EXTRA(NSSharingServicePicker, self)->_showGeneration)
+            return;
+        // The view left its window before the picker could be placed: nowhere to anchor it.
+        if (view != nil && [view window] == nil)
             return;
 
         NSMenu *menu = [[self _menuListing: services] retain];

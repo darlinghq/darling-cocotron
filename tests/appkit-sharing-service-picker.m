@@ -331,7 +331,7 @@ static void test_close_before_presenting(void) {
     __block BOOL appeared = NO;
 
     [picker setDelegate: delegate];
-    poll(^(NSTimer *timer) {
+    NSTimer *watch = poll(^(NSTimer *timer) {
         if (openMenuWindow() == nil)
             return;
         appeared = YES;
@@ -341,6 +341,7 @@ static void test_close_before_presenting(void) {
     [picker showRelativeToRect: NSMakeRect(200, 150, 60, 30) ofView: [host contentView] preferredEdge: NSMinYEdge];
     [picker close];
     spin(0.6, nil);
+    [watch invalidate];
     CHECK(!appeared);
     [host close];
 }
