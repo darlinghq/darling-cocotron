@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl.h>
 #import <OpenGL/CGLInternal.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreFoundation/CFNotificationCenter.h>
 #import <objc/runtime.h>
 
@@ -179,6 +180,8 @@ static inline void _clearCurrentContext() {
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
         CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);
     }
+    if (NS_EXTRA(NSOpenGLContext, self)->_surfaceID != 0)
+        _CGSRemoveWindowSurface(NS_EXTRA(NSOpenGLContext, self)->_surfaceID);
     [NS_EXTRA(NSOpenGLContext, self)->_subwindow release];
     NS_EXTRA(NSOpenGLContext, self)->_view = nil;
 
@@ -289,11 +292,17 @@ static void _swapNotification(CFNotificationCenterRef center, void *observer, CF
     if (NS_EXTRA(NSOpenGLContext, self)->_subwindow == nil) {
         NS_EXTRA(NSOpenGLContext, self)->_subwindow = [[[NS_EXTRA(NSOpenGLContext, self)->_view window] _createSubWindowWithFrame: rect] retain];
         NS_EXTRA(NSOpenGLContext, self)->_cglWindow = CGLGetWindowForContext(_glContext, [NS_EXTRA(NSOpenGLContext, self)->_subwindow nativeWindow]);
+        // Record the drawable as a surface of the view's window, so that CGLGetSurface() and
+        // the window server calls (CGSGetSurfaceBounds()) can find it.
+        NS_EXTRA(NSOpenGLContext, self)->_surfaceID = _CGSAddWindowSurface(
+            (CGSWindowID) [[NS_EXTRA(NSOpenGLContext, self)->_view window] windowNumber],
+            [NS_EXTRA(NSOpenGLContext, self)->_subwindow nativeWindow], rect.size);
         [self _startObservingPresentation];
         if (attach)
             [self _attachDrawable];
     } else {
         [NS_EXTRA(NSOpenGLContext, self)->_subwindow setFrame: rect];
+        _CGSSetWindowSurfaceSize(NS_EXTRA(NSOpenGLContext, self)->_surfaceID, rect.size);
     }
 
     if ([NS_EXTRA(NSOpenGLContext, self)->_view isHidden]) {
@@ -358,6 +367,10 @@ static void _swapNotification(CFNotificationCenterRef center, void *observer, CF
     if (NS_EXTRA(NSOpenGLContext, self)->_cglWindow != NULL) {
         CGLDestroyWindow(NS_EXTRA(NSOpenGLContext, self)->_cglWindow);
         NS_EXTRA(NSOpenGLContext, self)->_cglWindow = NULL;
+    }
+    if (NS_EXTRA(NSOpenGLContext, self)->_surfaceID != 0) {
+        _CGSRemoveWindowSurface(NS_EXTRA(NSOpenGLContext, self)->_surfaceID);
+        NS_EXTRA(NSOpenGLContext, self)->_surfaceID = 0;
     }
     [NS_EXTRA(NSOpenGLContext, self)->_subwindow release];
     NS_EXTRA(NSOpenGLContext, self)->_subwindow = nil;
