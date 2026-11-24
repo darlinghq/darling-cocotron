@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "CGSConnectionWayland.h"
+#import "CGSWaylandKeymap.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
 #import "WaylandLibrary.h"
@@ -26,6 +27,7 @@
 #import <CoreGraphics/CGSNativeConnection.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 
+#import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
@@ -110,6 +112,8 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                                                                      proxy: proxy
                                                                  arguments: args];
                 break;
+            case CGSWaylandObjectSeat:
+            case CGSWaylandObjectKeyboard:
             default:
                 [(CGSConnectionWayland *) object handleEvent: opcode
                                                         kind: objectKind
@@ -127,6 +131,9 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
 
 @interface CGSConnectionWayland ()
 - (void) processPendingEvents;
+- (void) seatCapabilities: (uint32_t) capabilities;
+- (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
+- (void) releaseKeyboard;
 @end
 
 static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
@@ -164,6 +171,9 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         return nil;
 
     _outputs = [NSMutableArray new];
+    // The keyboard layout is described from the system default until the compositor's keymap arrives.
+    _keymap = [[CGSWaylandKeymap alloc] init];
+
     _wlDisplay = WL.wl_display_connect(NULL);
     if (_wlDisplay == NULL) {
         const char *name = getenv("WAYLAND_DISPLAY");
@@ -262,6 +272,10 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     }
 
     [_outputManager release];
+    [self releaseKeyboard];
+    if (_seat != NULL)
+        WL.wl_proxy_destroy(_seat);
+    [_keymap release];
     if (_legacyLogicalOutputManager != NULL)
         WL.wl_proxy_destroy(_legacyLogicalOutputManager);
     if (_logicalOutputManager != NULL)
@@ -398,6 +412,11 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         _wmBase = [self bindGlobal: name interface: &xdg_wm_base_interface
                            version: MIN(version, 2u)
                               kind: CGSWaylandObjectWmBase object: self];
+    } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
+        // Version 4 adds wl_keyboard.repeat_info.
+        _seat = [self bindGlobal: name interface: &wl_seat_interface
+                         version: MIN(version, 5u)
+                            kind: CGSWaylandObjectSeat object: self];
     } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
         _logicalOutputManagerName = name;
         _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
@@ -639,6 +658,15 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         [self outputEvent: opcode output: (CGSWaylandOutput *) object arguments: args];
         break;
 
+    case CGSWaylandObjectSeat:
+        if (opcode == WP_SEAT_EV_CAPABILITIES)
+            [self seatCapabilities: args[0].u];
+        break;
+
+    case CGSWaylandObjectKeyboard:
+        [self keyboardEvent: opcode arguments: args];
+        break;
+
     case CGSWaylandObjectLogicalOutput:
         [self logicalOutputEvent: opcode output: (CGSWaylandOutput *) object arguments: args];
         break;
@@ -646,6 +674,59 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     default:
         break;
     }
+}
+
+#pragma mark - Keyboard
+
+- (void) seatCapabilities: (uint32_t) capabilities {
+    if ((capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard == NULL) {
+        union wl_argument args[1] = {{.o = NULL}};
+        _keyboard = [self createObject: _seat
+                                opcode: WP_SEAT_GET_KEYBOARD
+                             interface: &wl_keyboard_interface
+                             arguments: args
+                                  kind: CGSWaylandObjectKeyboard
+                                object: self];
+    } else if (!(capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard != NULL) {
+        [self releaseKeyboard];
+    }
+}
+
+- (void) releaseKeyboard {
+    if (_keyboard == NULL)
+        return;
+    // wl_keyboard.release exists from version 3.
+    if (WL.wl_proxy_get_version(_keyboard) >= 3) {
+        union wl_argument args[1] = {{.o = NULL}};
+        WaylandMarshal(_keyboard, WP_KEYBOARD_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, args);
+    } else {
+        WL.wl_proxy_destroy(_keyboard);
+    }
+    _keyboard = NULL;
+}
+
+- (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    switch (opcode) {
+    case WP_KEYBOARD_EV_KEYMAP:
+        // The descriptor is the connection's to close, also when there is no keymap object.
+        if (_keymap != nil)
+            [(CGSWaylandKeymap *) _keymap installKeymapWithFormat: args[0].u fd: args[1].h size: args[2].u];
+        else
+            close(args[1].h);
+        break;
+    case WP_KEYBOARD_EV_MODIFIERS:
+        [(CGSWaylandKeymap *) _keymap updateDepressed: args[1].u latched: args[2].u locked: args[3].u
+                                                group: args[4].u];
+        break;
+    default:
+        break;
+    }
+}
+
+// The layout of the keymap in force, which this connection's keyboard received from the compositor.
+// Nil without xkbcommon.
+- (CGSKeyboardLayout *) createKeyboardLayout {
+    return [(CGSWaylandKeymap *) _keymap copyLayout];
 }
 
 #pragma mark - CGSConnection

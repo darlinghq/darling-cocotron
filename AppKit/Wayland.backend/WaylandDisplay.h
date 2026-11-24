@@ -201,8 +201,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct xkb_context *_xkbContext;
     struct xkb_keymap *_xkbKeymap;
     struct xkb_state *_xkbState;
-    struct xkb_keymap *_publishedKeymap; // Not retained; compared only.
-    uint32_t _publishedGroup;
     WaylandWindow *_keyboardWindow;
     BOOL _syncModifierFlags;
     BOOL _classifyHeldKeys;

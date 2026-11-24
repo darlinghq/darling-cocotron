@@ -1,0 +1,64 @@
+/* Copyright (C) 2026 Lubos Dolezel
+
+ Permission is hereby granted, free of charge, to any person obtaining a copy of
+ this software and associated documentation files (the "Software"), to deal in
+ the Software without restriction, including without limitation the rights to
+ use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+ of the Software, and to permit persons to whom the Software is furnished to do
+ so, subject to the following conditions:
+
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE. */
+
+// The keymap the compositor gives the client that owns the keyboard, as the keyboard layout the Text
+// Input Sources API describes. The keyboard layout of the window system belongs to CoreGraphics'
+// connection (the same connection AppKit's windows live on), so the 'uchr' layout is built here from
+// the xkb keymap and the layout group the compositor reports.
+
+#ifndef CGSWAYLANDKEYMAP_H
+#define CGSWAYLANDKEYMAP_H
+
+#import <Foundation/NSObject.h>
+#include <stdint.h>
+
+@class CGSKeyboardLayout;
+struct xkb_context;
+struct xkb_keymap;
+struct xkb_state;
+
+@interface CGSWaylandKeymap : NSObject {
+    // Declared here: the i386 slice has the legacy Objective-C ABI, which has no ivars in the @implementation.
+    struct xkb_context *_context;
+    struct xkb_keymap *_keymap;
+    struct xkb_state *_state;
+    // The layout built from the keymap and group, until either changes.
+    CGSKeyboardLayout *_layout;
+}
+
+// Starts with the system default layout (the evdev rules, honouring XKB_DEFAULT_*), which describes
+// the keyboard until a compositor's keymap arrives (a compositor with no input device never sends
+// one). Returns nil when xkbcommon is unavailable.
+- (instancetype) init;
+
+// The wl_keyboard.keymap event: a format and a file descriptor with size bytes, which is closed
+// here. A keymap that cannot be used (no_keymap, an empty or unreadable map) leaves the one in force.
+- (void) installKeymapWithFormat: (uint32_t) format fd: (int) fd size: (uint32_t) size;
+
+// The wl_keyboard.modifiers event, which carries the layout group.
+- (void) updateDepressed: (uint32_t) depressed latched: (uint32_t) latched locked: (uint32_t) locked
+                   group: (uint32_t) group;
+
+// The layout of the keymap in its current group, or nil. The caller releases it.
+- (CGSKeyboardLayout *) copyLayout;
+
+@end
+
+#endif
