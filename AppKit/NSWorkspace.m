@@ -159,14 +159,15 @@ static BOOL SameApplication(NSRunningApplication *a, NSRunningApplication *b) {
             [self didChangeValueForKey: @"frontmostApplication"];
         refreshingFrontApplication = NO;
 
-        if (frontChanged && old != nil)
-            [_notificationCenter postNotificationName: NSWorkspaceDidDeactivateApplicationNotification
-                                               object: self
-                                             userInfo: @{NSWorkspaceApplicationKey : old}];
+        // The activation comes before the deactivation of the old front application, as on macOS.
         if (frontChanged && now != nil)
             [_notificationCenter postNotificationName: NSWorkspaceDidActivateApplicationNotification
                                                object: self
                                              userInfo: @{NSWorkspaceApplicationKey : now}];
+        if (frontChanged && old != nil)
+            [_notificationCenter postNotificationName: NSWorkspaceDidDeactivateApplicationNotification
+                                               object: self
+                                             userInfo: @{NSWorkspaceApplicationKey : old}];
         [old release];
         [ownerOld release];
     }

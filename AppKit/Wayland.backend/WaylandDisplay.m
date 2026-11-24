@@ -2150,7 +2150,11 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 #pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
 - (uint32_t) clipboardSerial {
-    return _CGSNativeConnectionKeyboardFocus() != NULL ? _inputSerial : 0;
+    if (_CGSNativeConnectionKeyboardFocus() != NULL)
+        return _inputSerial;
+    // A key or click still being handled entitles its writes to the selection even when the focus
+    // left right after it, as when a virtual keyboard is removed a few milliseconds after its key.
+    return _inputEvent != nil && [NSApp currentEvent] == _inputEvent ? _inputSerial : 0;
 }
 
 - (NSDraggingManager *) draggingManager {
