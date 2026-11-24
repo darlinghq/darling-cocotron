@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "private-include/AppKit/DarlingDisplay.h"
 #import <AppKit/NSColor.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
@@ -384,7 +385,7 @@ static int compareFontPatterns(const void *a, const void *b) {
 }
 
 - (CGFloat) doubleClickInterval {
-    return 1.0;
+    return _CGSDoubleClickInterval();
 }
 
 - (int) runModalPageLayoutWithPrintInfo: (NSPrintInfo *) printInfo {
