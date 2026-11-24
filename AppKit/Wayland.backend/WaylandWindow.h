@@ -77,8 +77,6 @@ typedef enum {
     struct wl_proxy *_popup;
     WaylandWindow *_popupParent;
     uint32_t _popupGrabSerial;
-    // Set while a popup that has a menu's grab is being unmapped (see -isUnmappingMenuPopup).
-    BOOL _unmappingMenuPopup;
     uint32_t _repositionToken;
     int32_t _pendingPopupX, _pendingPopupY;
     struct wl_proxy *_decoration;
@@ -184,8 +182,6 @@ typedef enum {
 - (void) updateLevelParent;
 - (void) levelParentUnmapped;
 - (uint32_t) popupGrabSerial;
-// Whether the window is being unmapped and was a popup that is neither a tool tip nor a window of the application.
-- (BOOL) isUnmappingMenuPopup;
 - (struct wl_proxy *) xdgSurface;
 - (void) unmap;
 // Tells the compositor where the application's main menu is (KDE's appmenu
