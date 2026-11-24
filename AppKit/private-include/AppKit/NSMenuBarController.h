@@ -56,7 +56,8 @@
 // Decides whether the application's main menu is shown in an NSMenuBarWindow,
 // and keeps the bar current, for every display backend. The bar is shown for
 // as long as the application is active and has a main menu, unless the desktop
-// shows the menu itself or the application hides the menu bar (presentation
+// shows the menu itself, a visible window carries the menu as a strip of its
+// own, or the application hides the menu bar (presentation
 // options, or a window in full screen mode). When only the application's
 // activity ends, the bar stays for a short while: the focus passes between the
 // windows of an application, and while windows are replaced, through states in
@@ -78,6 +79,7 @@
 - (void) setMainMenu: (NSMenu *) menu;
 // Shows or hides the bar after something it depends on changed.
 - (void) update;
+- (void) updateWaitingForHide: (BOOL) waiting;
 - (BOOL) barShown;
 - (NSMenuBarWindow *) bar;
 

@@ -23,6 +23,11 @@
 #import <AppKit/NSMainMenuView.h>
 #import <AppKit/NSMenu.h>
 #import <AppKit/NSScreen.h>
+#import <AppKit/NSGlobalMenu+Private.h>
+
+@interface NSWindow (NSMenuBarControllerStrip)
+- (BOOL) hasMainMenu;
+@end
 
 @implementation NSMenuBarWindow
 
@@ -188,12 +193,26 @@ static BOOL menuBarHiddenByApplication(void) {
            ([[NSApp mainWindow] styleMask] & NSWindowStyleMaskFullScreen) != 0;
 }
 
+// Whether a visible window of the application carries the menu strip, so the
+// menu has a place inside the application's windows.
+static BOOL visibleWindowCarriesMenuStrip(void) {
+    if (![NSWindow _usesInWindowMenuBar])
+        return NO;
+
+    for (NSWindow *window in [NSApp windows]) {
+        if ([window isKindOfClass: [NSMenuBarWindow class]])
+            continue;
+        if ([window isVisible] && [window hasMainMenu])
+            return YES;
+    }
+    return NO;
+}
+
 // The bar is shown while the application is active, has a main menu and the
-// desktop shows no global menu, unless the application hides the menu bar.
+// menu is neither in the desktop's global menu nor in the strip of a window,
+// unless the application hides the menu bar.
 - (BOOL) barWanted {
-    return _menu != nil && NSApp != nil && [NSApp isActive] &&
-           ![_delegate menuBarControllerDesktopShowsMenu: self] &&
-           !menuBarHiddenByApplication();
+    return [self barWantedWhileActive] && NSApp != nil && [NSApp isActive];
 }
 
 // How long the bar stays after the application stopped being active.
@@ -203,7 +222,7 @@ static const NSTimeInterval barHideDelay = 0.5;
 - (BOOL) barWantedWhileActive {
     return _menu != nil && NSApp != nil &&
            ![_delegate menuBarControllerDesktopShowsMenu: self] &&
-           !menuBarHiddenByApplication();
+           !visibleWindowCarriesMenuStrip() && !menuBarHiddenByApplication();
 }
 
 - (void) cancelHide {
@@ -211,12 +230,20 @@ static const NSTimeInterval barHideDelay = 0.5;
     _hideTimer = nil;
 }
 
+// The moment is over: the application did not become active again.
 - (void) hideTimerFired: (NSTimer *) timer {
     _hideTimer = nil;
-    [self update];
+    [self updateWaitingForHide: NO];
 }
 
 - (void) update {
+    [self updateWaitingForHide: YES];
+}
+
+// With waiting, a bar that is only wanted while the application is active
+// stays for barHideDelay after the application stopped being active, and is
+// hidden then.
+- (void) updateWaitingForHide: (BOOL) waiting {
     // Presentation options and window styles have no notification of their
     // own, so the observer below keeps checking while the application has a
     // main menu.
@@ -226,7 +253,7 @@ static const NSTimeInterval barHideDelay = 0.5;
         [self startRedrawingBar];
 
     if (![self barWanted]) {
-        if (_barShown && [self barWantedWhileActive]) {
+        if (waiting && _barShown && [self barWantedWhileActive]) {
             // Inactive, which may be a moment between two windows: wait before hiding.
             if (_hideTimer == nil) {
                 _hideTimer = [NSTimer timerWithTimeInterval: barHideDelay

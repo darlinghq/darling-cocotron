@@ -564,28 +564,67 @@ static BOOL _allowsAutomaticWindowTabbing;
     return 0;
 }
 
-// Darling setting DarlingInWindowMenuBar (boolean, off by default): draw the
-// main menu as a strip inside each titled window instead of in the desktop's
-// global menu or the application's own menu bar. It is read from the
-// application's preferences, falling back to NSGlobalDomain, and from the
-// org.darlinghq.AppKit domain. The strip is drawn as well when the display
-// backend has nowhere else to show the menu, so that it is never missing. The
-// answer is fixed at first use, because the frame of every window depends on it.
+// Where the main menu is shown is a Darling setting, DarlingMenuBarStyle, a
+// string read from the application's preferences, falling back to
+// NSGlobalDomain, and from the org.darlinghq.AppKit domain:
+//   "window": a strip inside each window that can carry one, always;
+//   "screen": outside the windows, in the desktop's global menu or in a menu
+//             bar along the top of the screen, whenever the display backend
+//             can show it there;
+//   "auto" (the default, also for any other value): the desktop's global menu
+//             when the desktop has one, and the strips otherwise.
+// The older boolean DarlingInWindowMenuBar means "window" when it is YES, if
+// DarlingMenuBarStyle is not set.
+// Whichever the style, the menu bar along the top of the screen is also shown
+// while the application has a main menu and no visible window carries a strip
+// (see NSMenuBarController), when the backend can show one.
+// The answer is fixed at first use, because the frame of every window depends on it.
+static NSString *menuBarStylePreference(void) {
+    CFStringRef key = CFSTR("DarlingMenuBarStyle");
+    CFPropertyListRef value =
+            CFPreferencesCopyAppValue(key, kCFPreferencesCurrentApplication);
+
+    if (value == NULL || CFGetTypeID(value) != CFStringGetTypeID()) {
+        if (value != NULL)
+            CFRelease(value);
+        value = CFPreferencesCopyAppValue(key, CFSTR("org.darlinghq.AppKit"));
+    }
+    if (value != NULL && CFGetTypeID(value) != CFStringGetTypeID()) {
+        CFRelease(value);
+        value = NULL;
+    }
+    return [(NSString *) value autorelease];
+}
+
 + (BOOL) _usesInWindowMenuBar {
     static BOOL value;
     static dispatch_once_t once;
 
     dispatch_once(&once, ^{
-      CFStringRef key = CFSTR("DarlingInWindowMenuBar");
-      Boolean valid = false;
-      Boolean flag = CFPreferencesGetAppBooleanValue(
-              key, kCFPreferencesCurrentApplication, &valid);
+      NSString *style = [menuBarStylePreference() lowercaseString];
+      BOOL forceWindow = [style isEqualToString: @"window"];
+      BOOL forceScreen = [style isEqualToString: @"screen"];
 
-      if (!valid)
-          flag = CFPreferencesGetAppBooleanValue(
-                  key, CFSTR("org.darlinghq.AppKit"), &valid);
-      value = (valid && flag) ||
-              ![[NSDisplay currentDisplay] _showsMainMenuOutsideWindows];
+      if (style == nil) {
+          CFStringRef key = CFSTR("DarlingInWindowMenuBar");
+          Boolean valid = false;
+          Boolean flag = CFPreferencesGetAppBooleanValue(
+                  key, kCFPreferencesCurrentApplication, &valid);
+
+          if (!valid)
+              flag = CFPreferencesGetAppBooleanValue(
+                      key, CFSTR("org.darlinghq.AppKit"), &valid);
+          forceWindow = valid && flag;
+      }
+
+      NSDisplay *display = [NSDisplay currentDisplay];
+
+      if (forceWindow)
+          value = YES;
+      else if (forceScreen)
+          value = ![display _showsMainMenuOutsideWindows];
+      else
+          value = ![display _desktopShowsMainMenu];
     });
     return value;
 }

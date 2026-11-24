@@ -1149,26 +1149,37 @@ static void crtcBoundingBox(Display *display, XRRScreenResources *resources, RRC
     }
 }
 
+// Whether the session has a desktop that shows application menus: a registrar owns its name on the session
+// bus. Asked once, with a throw-away exporter, because the answer decides whether the application exports its
+// menu at all. -appMenu is not used: it asks +[NSWindow _usesInWindowMenuBar], which is being answered.
+- (BOOL) _desktopShowsMainMenu {
+    if (!_desktopMenuProbed) {
+        X11AppMenu *probe = [[X11AppMenu alloc] initWithDisplay: _display exporting: YES];
+
+        _desktopMenuPresent = [probe globalMenuPresent];
+        _desktopMenuProbed = YES;
+        [probe release];
+    }
+    return _desktopMenuPresent;
+}
+
 // The menu bar window is a dock that the window manager has to place at the top of the screen. Under a manager
 // that does not handle docks it would float over the windows of the application (see X11DockSupport.h), so
 // there the menu is outside the windows only when the desktop has a global menu, as on Wayland, and the
-// windows draw it themselves otherwise. -appMenu is not used: it asks +[NSWindow _usesInWindowMenuBar], which
-// is what is being answered.
+// windows draw it themselves otherwise.
 - (BOOL) _showsMainMenuOutsideWindows {
-    if (X11WindowManagerPlacesDocks(_display))
-        return YES;
-    if (_appMenu == nil)
-        _appMenu = [[X11AppMenu alloc] initWithDisplay: _display];
-    if ([_appMenu globalMenuPresent])
-        return YES;
-    [_appMenu release];
-    _appMenu = nil;
-    return NO;
+    return X11WindowManagerPlacesDocks(_display) || [self _desktopShowsMainMenu];
 }
 
+// The menu is exported for the desktop's global menu unless the windows carry it as strips. The menu bar is
+// kept for the time no window carries a strip, where the window manager places it.
 - (X11AppMenu *) appMenu {
-    if (_appMenu == nil && ![NSWindow _usesInWindowMenuBar])
-        _appMenu = [[X11AppMenu alloc] initWithDisplay: _display];
+    if (_appMenu == nil) {
+        BOOL strips = [NSWindow _usesInWindowMenuBar];
+
+        if (!strips || X11WindowManagerPlacesDocks(_display))
+            _appMenu = [[X11AppMenu alloc] initWithDisplay: _display exporting: !strips];
+    }
     return _appMenu;
 }
 

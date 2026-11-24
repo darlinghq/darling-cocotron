@@ -194,13 +194,10 @@ def main():
             log, process = run_guest(args, work, benv, backend + "-none", backend)
             time.sleep(2)
             menus = watcher_menus(read(watch)[seen:])
-            if backend == "wayland":
-                # KWin offers wlr-layer-shell: the menu bar is a layer surface (run-kwin-bar.py), not a
-                # strip in the window. The menu stays exported, for a global menu that appears later.
-                check("strip window=0" in log, "wayland without a global menu: no strip in the window")
-            else:
-                check("strip window=0" in log and "bar frame x=0 y=0 width=1280" in log,
-                      "x11 without a global menu: the application's menu bar along the top of the screen")
+            # The window carries the strip; the menu bar surface or window appears only while no window
+            # does (run-kwin-menu-style.py).
+            check("strip window=1" in log and "bar none" in log,
+                  backend + " without a global menu: the window draws the strip")
             process.wait()
     finally:
         if menu is not None:

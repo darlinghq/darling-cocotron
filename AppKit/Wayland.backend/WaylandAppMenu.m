@@ -22,14 +22,17 @@ static NSString *applicationName(void) {
     return name;
 }
 
-- (instancetype) initWithDisplay: (WaylandDisplay *) display {
+- (instancetype) initWithDisplay: (WaylandDisplay *) display exporting: (BOOL) exporting {
     if ((self = [super init]) == nil)
         return nil;
 
     _display = display;
+    _exporting = exporting;
 
-    _exporter = [[NSDBusMenu alloc] initWithSessionBus];
-    [_exporter setApplicationName: applicationName()];
+    if (exporting) {
+        _exporter = [[NSDBusMenu alloc] initWithSessionBus];
+        [_exporter setApplicationName: applicationName()];
+    }
 
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
     NSString *names[] = {NSMenuDidAddItemNotification, NSMenuDidRemoveItemNotification,

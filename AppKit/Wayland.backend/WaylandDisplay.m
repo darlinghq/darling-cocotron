@@ -2821,24 +2821,34 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 // of the screen with xdg-shell, so the windows draw it themselves.
 - (BOOL) _showsMainMenuOutsideWindows {
     // With a layer shell the menu bar window shows the menu when the desktop does not.
-    if (_layerShell != NULL)
-        return YES;
-    if (_appMenuManager == NULL)
-        return NO;
-    if (_appMenu == nil)
-        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self];
-    if ([_appMenu globalMenuPresent])
-        return YES;
-    [_appMenu release];
-    _appMenu = nil;
-    return NO;
+    return _layerShell != NULL || [self _desktopShowsMainMenu];
 }
 
+// Asked once, with a throw-away exporter, because the answer decides whether the application exports its
+// menu at all.
+- (BOOL) _desktopShowsMainMenu {
+    if (!_desktopMenuProbed) {
+        _desktopMenuProbed = YES;
+        if (_appMenuManager != NULL) {
+            WaylandAppMenu *probe = [[WaylandAppMenu alloc] initWithDisplay: self exporting: YES];
+
+            _desktopMenuPresent = [probe globalMenuPresent];
+            [probe release];
+        }
+    }
+    return _desktopMenuPresent;
+}
+
+// The menu is exported for the desktop's global menu unless the windows carry it as strips. The menu bar
+// window, which a layer shell makes possible, is kept for the time no window carries a strip.
 - (void) _mainMenuDidChange: (NSMenu *) menu {
-    if ([NSWindow _usesInWindowMenuBar])
-        return;
-    if (_appMenu == nil)
-        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self];
+    if (_appMenu == nil) {
+        BOOL strips = [NSWindow _usesInWindowMenuBar];
+
+        if (strips && _layerShell == NULL)
+            return;
+        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self exporting: !strips];
+    }
     [_appMenu setMainMenu: menu];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];

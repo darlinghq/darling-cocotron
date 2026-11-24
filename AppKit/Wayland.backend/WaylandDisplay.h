@@ -132,6 +132,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     WaylandToplevelIcons *_toplevelIcons;
     // The exported main menu; nil while the menu is drawn inside the windows.
     WaylandAppMenu *_appMenu;
+    BOOL _desktopMenuProbed, _desktopMenuPresent;
     BOOL _eglAvailable;
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;

@@ -140,6 +140,10 @@ static NSDisplay *processDisplay = nil;
     return YES;
 }
 
+- (BOOL) _desktopShowsMainMenu {
+    return NO;
+}
+
 - (NSArray<NSScreen *> *) screens {
     NSInvalidAbstractInvocation();
     return nil;

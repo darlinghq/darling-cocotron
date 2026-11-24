@@ -19,7 +19,8 @@
 #     the top of the output that stays mapped (it is not recreated), the
 #     window has no strip, and with the pointer a click on a title opens its
 #     menu right below the bar and a click on an item runs its action;
-#   - no global menu and no window at all, or a titled window: the same bar;
+#   - no global menu and no window at all: the same bar; with a titled window the
+#     window has the strip and there is no bar;
 #   - windows ordered out and in, a key window change and windows closing: the\n#     bar stays the same surface and is shown at the end;\n#   - no session bus reachable: the bar is shown;\n#   - a global menu (fake-registrar.c) from the start: no bar;
 #   - a global menu that appears or goes away while the application runs:
 #     the bar goes away and comes back.
@@ -231,12 +232,17 @@ def main():
                           "a click on an item runs its action on the main thread")
         stop(process)
 
-        # No window at all, and a titled window.
-        for mode in ("nowindow", "window"):
-            log, process = session.guest(mode, mode)
-            check(len(wait_until(session.bars, 10) or []) == 1, mode + ": the bar is shown")
-            check("strip window=0" in read(log), mode + ": no strip in the window")
-            stop(process)
+        # No window at all: the bar. A titled window carries the menu strip instead (run-kwin-menu-style.py
+        # covers when the bar and the strips come and go).
+        log, process = session.guest("nowindow", "nowindow")
+        check(len(wait_until(session.bars, 10) or []) == 1, "nowindow: the bar is shown")
+        check("strip window=0" in read(log), "nowindow: no strip in the window")
+        stop(process)
+        log, process = session.guest("window", "window")
+        time.sleep(3)
+        check("strip window=1" in read(log), "window: the strip in the window")
+        check(session.bars() == [], "window: no bar")
+        stop(process)
 
         # Windows come and go (ordered out and in, the key window changes, one closes, one replaces
         # another): the bar is not hidden and shown again for each, and it is there at the end.

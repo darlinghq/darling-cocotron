@@ -19,10 +19,20 @@
 //                                  like window, with a borderless window
 //   appkit-global-menu LOG nowindow [SECONDS]
 //                                  like window, with no window at all
+//   appkit-global-menu LOG swap [SECONDS]
+//                                  like nowindow; a titled window is shown from
+//                                  the 5th second and closed at the 10th,
+//                                  logging "STEP window opened" and
+//                                  "STEP window closed"
 //   appkit-global-menu LOG hiding  with a titled window as the key window, go
 //                                  through the states in which the menu bar is
 //                                  hidden or shown, logging "STEP <state>" after
 //                                  each change and waiting for the host to look
+//
+// Every mode logs "STATE active=A bar=B windows=W" whenever one of the values
+// changes (A: the application is active, B: its menu bar window is ordered in,
+// W: visible windows that carry the in-window menu strip), and "ACTIVE" and
+// "RESIGN" for the activation notifications.
 //
 // A line "READY" is logged once the application is active and the menu is set.
 #import <AppKit/AppKit.h>
@@ -461,9 +471,12 @@ int main(int argc, char **argv) {
             NSRect rect = NSMakeRect(200, 200, 400, 240);
             NSWindow *first = [[NSWindow alloc] initWithContentRect: rect styleMask: NSWindowStyleMaskBorderless
                                                             backing: NSBackingStoreBuffered defer: NO];
-            NSWindow *second = [[NSWindow alloc] initWithContentRect: NSOffsetRect(rect, 100, 50)
-                                                           styleMask: NSWindowStyleMaskTitled
-                                                             backing: NSBackingStoreBuffered defer: NO];
+            // A utility panel: a titled window would carry the menu strip while it is shown, and the
+            // bar would go away and come back with it (the swap mode covers that).
+            NSWindow *second = [[NSPanel alloc] initWithContentRect: NSOffsetRect(rect, 100, 50)
+                                                          styleMask: NSWindowStyleMaskTitled |
+                                                                     NSWindowStyleMaskUtilityWindow
+                                                            backing: NSBackingStoreBuffered defer: NO];
             [second setReleasedWhenClosed: NO];
             [first makeKeyAndOrderFront: nil];
             note("strip window=%d", (int) hasMainMenu(first));
@@ -508,11 +521,51 @@ int main(int argc, char **argv) {
                     }
                 }];
             }
+        } else if (!strcmp(argv[2], "swap")) {
+            __block NSWindow *window = nil;
+            [NSApp activateIgnoringOtherApps: YES];
+            note("strip window=0");
+            [NSTimer scheduledTimerWithTimeInterval: 5.0 repeats: NO block: ^(NSTimer *t) {
+                window = [[NSWindow alloc] initWithContentRect: NSMakeRect(200, 200, 400, 240)
+                                                     styleMask: NSWindowStyleMaskTitled
+                                                       backing: NSBackingStoreBuffered
+                                                         defer: NO];
+                [window setReleasedWhenClosed: NO];
+                [window makeKeyAndOrderFront: nil];
+                note("STEP window opened strip=%d", (int) hasMainMenu(window));
+            }];
+            [NSTimer scheduledTimerWithTimeInterval: 10.0 repeats: NO block: ^(NSTimer *t) {
+                [window close];
+                note("STEP window closed");
+            }];
         } else if (!strcmp(argv[2], "nowindow")) {
             [NSApp activateIgnoringOtherApps: YES];
             note("strip window=0");
         } else
             showPanel();
+
+        [[NSNotificationCenter defaultCenter] addObserverForName: NSApplicationDidBecomeActiveNotification
+                                                           object: nil queue: nil usingBlock: ^(NSNotification *n) {
+            note("ACTIVE");
+        }];
+        [[NSNotificationCenter defaultCenter] addObserverForName: NSApplicationDidResignActiveNotification
+                                                           object: nil queue: nil usingBlock: ^(NSNotification *n) {
+            note("RESIGN");
+        }];
+        [NSTimer scheduledTimerWithTimeInterval: 0.2 repeats: YES block: ^(NSTimer *t) {
+            static int lastActive = -1, lastBar = -1, lastWindows = -1;
+            int windows = 0;
+            for (NSWindow *w in [NSApp windows])
+                if ([w isVisible] && hasMainMenu(w))
+                    windows++;
+            int active = (int) [NSApp isActive], bar = (int) barWindowVisible();
+            if (active != lastActive || bar != lastBar || windows != lastWindows) {
+                lastActive = active;
+                lastBar = bar;
+                lastWindows = windows;
+                note("STATE active=%d bar=%d windows=%d", active, bar, windows);
+            }
+        }];
 
         // A bounded run, in case the host script goes away.
         int lifetime = argc > 3 ? atoi(argv[3]) : 120;
