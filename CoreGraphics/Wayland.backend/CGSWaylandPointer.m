@@ -110,6 +110,7 @@ static unsigned maskForCode(uint32_t code) {
         id<CGSNativeConnectionObserver> observer = [self observer];
         if ([observer respondsToSelector: @selector(nativeConnectionPointerAvailabilityChanged:)])
             [observer nativeConnectionPointerAvailabilityChanged: YES];
+        [self updatePointerLock];
     } else if (!(capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer != NULL) {
         [self stop];
     }
@@ -143,6 +144,7 @@ static unsigned maskForCode(uint32_t code) {
     if (_pointer == NULL && _focus == NULL)
         return;
     [self destroyPinch];
+    [self releasePointerLockObjects];
     id<CGSNativeConnectionObserver> observer = [self observer];
     BOOL had = _pointer != NULL;
     // Before the observer drops its state: the cancelled scroll still needs the surface.
@@ -173,6 +175,9 @@ static unsigned maskForCode(uint32_t code) {
         return;
     if (_lastClickSurface == surface)
         _lastClickSurface = NULL;
+    // The lock objects of a surface that goes away go with it, with no position hint for it.
+    if (_lockSurface == surface || _warpSurface == surface)
+        [self releasePointerLockObjects];
     if (_pinchSurface == surface)
         [self endPinchWithPhase: CGSGesturePhaseCancelled];
     // A finger scroll on a window that goes away ends as cancelled
@@ -279,8 +284,13 @@ static unsigned maskForCode(uint32_t code) {
         _located = YES;
         _lastPoint = _point;
         _remainderX = _remainderY = 0;
+        // The cursor of a process that hid it stays hidden over its surfaces (the compositor starts a new
+        // surface with no cursor image of ours).
+        if ([_connection cursorHidden])
+            [self sendHiddenCursor];
         if ([observer respondsToSelector: @selector(nativeConnectionPointerEntered:serial:x:y:)])
             [observer nativeConnectionPointerEntered: _focus serial: _enterSerial x: _point.x y: _point.y];
+        [self updatePointerLock];
         break;
 
     case WP_POINTER_EV_LEAVE:
@@ -364,22 +374,36 @@ static unsigned maskForCode(uint32_t code) {
         deltaY = (int64_t) wholeY;
     }
 
-    CGEventType type = kCGEventMouseMoved;
-    int64_t button = 0;
-    // The drag of the other buttons is an other-mouse drag, as the X11 pointer reports it.
-    if (_pressed & 1) {
-        type = kCGEventLeftMouseDragged;
-    } else if (_pressed & 2) {
-        type = kCGEventRightMouseDragged;
-        button = 1;
-    } else if (_pressed & 4) {
-        type = kCGEventOtherMouseDragged;
-        button = 2;
-    } else if (_pressed & 8) {
-        type = kCGEventOtherMouseDragged;
-        button = buttonNumberForCode(_otherButton);
+    // The mouse moved: a cursor hidden until then comes back, and CGGetLastMouseDelta() has the motion.
+    if (wasLocated && (_point.x != previous.x || _point.y != previous.y)) {
+        [_connection accumulateMouseDeltaX: _point.x - previous.x y: _point.y - previous.y];
+        [_connection pointerDidMove];
     }
+
+    int64_t button = 0;
+    CGEventType type = [self motionEventTypeWithButton: &button];
     [self postMouseEventType: type button: button clickState: -1 deltaX: deltaX deltaY: deltaY serial: 0];
+}
+
+// Moved, or the drag of the button that is down. The drag of the other buttons is an other-mouse drag, as the
+// X11 pointer reports it.
+- (CGEventType) motionEventTypeWithButton: (int64_t *) button {
+    *button = 0;
+    if (_pressed & 1)
+        return kCGEventLeftMouseDragged;
+    if (_pressed & 2) {
+        *button = 1;
+        return kCGEventRightMouseDragged;
+    }
+    if (_pressed & 4) {
+        *button = 2;
+        return kCGEventOtherMouseDragged;
+    }
+    if (_pressed & 8) {
+        *button = buttonNumberForCode(_otherButton);
+        return kCGEventOtherMouseDragged;
+    }
+    return kCGEventMouseMoved;
 }
 
 // Cocoa groups clicks only within its double-click interval and four points of the preceding press, and
@@ -439,6 +463,225 @@ static unsigned maskForCode(uint32_t code) {
     default: type = pressed ? kCGEventOtherMouseDown : kCGEventOtherMouseUp; break;
     }
     [self postMouseEventType: type button: button clickState: clickState deltaX: 0 deltaY: 0 serial: pressed ? serial : 0];
+}
+
+#pragma mark - Relative mouse, warp and the hidden cursor
+
+static const double kNothing = 0;
+
+// The surface the lock is to be made on: the one the framework above names (its window to lock), else the
+// surface that has the pointer, else the one with the keyboard focus. The compositor activates the lock
+// when the surface has the pointer focus, which can be later.
+- (struct wl_proxy *) lockTargetSurface {
+    id<CGSNativeConnectionObserver> observer = [self observer];
+    void *surface = NULL;
+
+    if ([observer respondsToSelector: @selector(nativeConnectionSurfaceForPointerLock)])
+        surface = [observer nativeConnectionSurfaceForPointerLock];
+    if (surface == NULL)
+        surface = _focus;
+    if (surface == NULL)
+        surface = [_connection keyboardFocus];
+    return (struct wl_proxy *) surface;
+}
+
+- (void) pointerLockGlobalsChanged {
+    [self updatePointerLock];
+}
+
+- (BOOL) pointerLocked {
+    return _lock != NULL && _lockActive;
+}
+
+// Makes the lock objects match the connection's mouse association: with the mouse disconnected from the
+// cursor the pointer is locked to a surface of the process and the relative pointer delivers the motion.
+- (void) updatePointerLock {
+    BOOL wanted = ![_connection mouseAssociatedWithCursor];
+    struct wl_proxy *constraints = [_connection pointerConstraints];
+    struct wl_proxy *manager = [_connection relativePointerManager];
+    BOOL possible = _pointer != NULL && constraints != NULL && manager != NULL;
+
+    if (wanted && !_loggedLockMissing && (constraints == NULL || manager == NULL)) {
+        _loggedLockMissing = YES;
+        NSLog(@"CoreGraphics Wayland backend: the mouse was disconnected from the cursor, but the compositor offers no "
+              @"%s: the cursor stays free and no deltas are delivered",
+              constraints == NULL ? "zwp_pointer_constraints_v1" : "zwp_relative_pointer_manager_v1");
+    }
+    struct wl_proxy *target = wanted && possible ? [self lockTargetSurface] : NULL;
+    if (target == NULL || (_lockSurface != NULL && _lockSurface != target)) {
+        [self releasePointerLock];
+        if (target == NULL)
+            return;
+    }
+    if (_lock != NULL)
+        return;
+    // A surface can have one lock: the short one of a warp gives way.
+    [self destroyWarpLock];
+    union wl_argument lockArgs[5] = {{.o = NULL}, {.o = (struct wl_object *) target}, {.o = (struct wl_object *) _pointer},
+                                     {.o = NULL}, {.u = WP_POINTER_CONSTRAINTS_LIFETIME_PERSISTENT}};
+    // A lock that lives until it is destroyed: it activates whenever the surface has the pointer focus (a
+    // oneshot one would be spent by the first focus change).
+    _lock = [_connection createObject: constraints
+                               opcode: WP_POINTER_CONSTRAINTS_LOCK_POINTER
+                            interface: &zwp_locked_pointer_v1_interface
+                            arguments: lockArgs
+                                 kind: CGSWaylandObjectLockedPointer
+                               object: self];
+    union wl_argument relativeArgs[2] = {{.o = NULL}, {.o = (struct wl_object *) _pointer}};
+    _relative = [_connection createObject: manager
+                                   opcode: WP_RELATIVE_POINTER_MANAGER_GET_RELATIVE_POINTER
+                                interface: &zwp_relative_pointer_v1_interface
+                                arguments: relativeArgs
+                                     kind: CGSWaylandObjectRelativePointer
+                                   object: self];
+    _lockSurface = target;
+    _lockActive = NO;
+    _relativeRemainderX = _relativeRemainderY = kNothing;
+    [_connection flush];
+}
+
+// Unlocks. The pointer comes back where the application left its cursor: the position hint is double
+// buffered state of the surface, so the commit comes before the destroy.
+- (void) releasePointerLock {
+    if (_lock == NULL)
+        return;
+    union wl_argument hint[2] = {{.f = wl_fixed_from_double(_point.x)}, {.f = wl_fixed_from_double(_point.y)}};
+    WaylandMarshal(_lock, WP_LOCKED_POINTER_SET_CURSOR_POSITION_HINT, NULL, 0, hint);
+    union wl_argument none[1] = {{.o = NULL}};
+    WaylandMarshal(_lockSurface, WP_SURFACE_COMMIT, NULL, 0, none);
+    [self releasePointerLockObjects];
+}
+
+- (void) releasePointerLockObjects {
+    union wl_argument none[1] = {{.o = NULL}};
+
+    [self destroyWarpLock];
+    if (_lock != NULL)
+        WaylandMarshal(_lock, WP_LOCKED_POINTER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
+    if (_relative != NULL)
+        WaylandMarshal(_relative, WP_RELATIVE_POINTER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
+    _lock = _relative = _lockSurface = NULL;
+    _lockActive = NO;
+    [_connection flush];
+}
+
+- (void) destroyWarpLock {
+    if (_warpLock == NULL)
+        return;
+    union wl_argument none[1] = {{.o = NULL}};
+    WaylandMarshal(_warpLock, WP_LOCKED_POINTER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
+    _warpLock = _warpSurface = NULL;
+}
+
+- (void) lockEvent: (uint32_t) opcode kind: (int) kind proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args {
+    switch (kind) {
+    case CGSWaylandObjectLockedPointer:
+        if (proxy == _lock)
+            _lockActive = opcode == WP_LOCKED_POINTER_EV_LOCKED;
+        break;
+    case CGSWaylandObjectRelativePointer:
+        if (proxy == _relative && opcode == WP_RELATIVE_POINTER_EV_RELATIVE_MOTION)
+            [self relativeMotionByX: wl_fixed_to_double(args[2].f) y: wl_fixed_to_double(args[3].f)];
+        break;
+    case CGSWaylandObjectWarpLock:
+        if (proxy == _warpLock && opcode == WP_LOCKED_POINTER_EV_LOCKED) {
+            // The pointer is held still on the surface: the compositor may put it at the hint when the lock
+            // ends. The hint is surface state, so the commit comes before the destroy.
+            union wl_argument hint[2] = {{.f = wl_fixed_from_double(_warpPoint.x)}, {.f = wl_fixed_from_double(_warpPoint.y)}};
+            WaylandMarshal(_warpLock, WP_LOCKED_POINTER_SET_CURSOR_POSITION_HINT, NULL, 0, hint);
+            union wl_argument none[1] = {{.o = NULL}};
+            WaylandMarshal(_warpSurface, WP_SURFACE_COMMIT, NULL, 0, none);
+            [self destroyWarpLock];
+            [_connection flush];
+        } else if (proxy == _warpLock && opcode == WP_LOCKED_POINTER_EV_UNLOCKED) {
+            [self destroyWarpLock];
+            [_connection flush];
+        }
+        break;
+    }
+}
+
+// A locked pointer moves nothing on screen: the event carries the delta at the frozen cursor position, as the
+// events of a mouse disconnected from the cursor do on macOS. The deltas are whole points; the fraction stays
+// for the next event.
+- (void) relativeMotionByX: (double) dx y: (double) dy {
+    if (!_lockActive || _focus == NULL)
+        return;
+    [_connection accumulateMouseDeltaX: dx y: dy];
+    double totalX = dx + _relativeRemainderX, totalY = dy + _relativeRemainderY;
+    double wholeX = totalX < 0 ? ceil(totalX) : floor(totalX);
+    double wholeY = totalY < 0 ? ceil(totalY) : floor(totalY);
+    _relativeRemainderX = totalX - wholeX;
+    _relativeRemainderY = totalY - wholeY;
+    if (wholeX == 0 && wholeY == 0)
+        return;
+    int64_t button = 0;
+    CGEventType type = [self motionEventTypeWithButton: &button];
+    [self postMouseEventType: type button: button clickState: -1 deltaX: (int64_t) wholeX deltaY: (int64_t) wholeY serial: 0];
+}
+
+// Wayland has no request to move the pointer. While it is locked the cursor is the application's own and a
+// warp moves where the application's cursor is: the events carry that position and it is the hint the
+// pointer comes back at when the lock ends. Otherwise the compositor is asked for the position through a
+// short lock of the surface (it may honour the hint when the lock ends); the cursor is where the call says
+// for the events that follow.
+- (CGError) warpToGlobalPoint: (CGPoint) global {
+    struct wl_proxy *surface = _lock != NULL ? _lockSurface : _focus;
+    id<CGSNativeConnectionObserver> observer = [self observer];
+    CGPoint target;
+
+    if (surface == NULL || _pointer == NULL)
+        return kCGErrorCannotComplete;
+    if (!(([observer respondsToSelector: @selector(nativeConnectionPoint:ofSurface:forGlobalLocation:)] &&
+           [observer nativeConnectionPoint: &target ofSurface: surface forGlobalLocation: global]) ||
+          [_connection surfacePoint: &target forGlobalLocation: global ofSurface: surface]))
+        return kCGErrorCannotComplete;
+    struct wl_proxy *constraints = [_connection pointerConstraints];
+    if (_lock == NULL && constraints == NULL)
+        return kCGErrorCannotComplete;
+
+    _point = target;
+    _lastPoint = target;
+    _remainderX = _remainderY = kNothing;
+    if ([observer respondsToSelector: @selector(nativeConnectionPointerWarpedToX:y:)])
+        [observer nativeConnectionPointerWarpedToX: target.x y: target.y];
+    if (_lock != NULL)
+        return kCGErrorSuccess;
+
+    _warpPoint = target;
+    if (_warpLock == NULL) {
+        union wl_argument args[5] = {{.o = NULL}, {.o = (struct wl_object *) surface}, {.o = (struct wl_object *) _pointer},
+                                     {.o = NULL}, {.u = WP_POINTER_CONSTRAINTS_LIFETIME_ONESHOT}};
+        _warpLock = [_connection createObject: constraints
+                                       opcode: WP_POINTER_CONSTRAINTS_LOCK_POINTER
+                                    interface: &zwp_locked_pointer_v1_interface
+                                    arguments: args
+                                         kind: CGSWaylandObjectWarpLock
+                                       object: self];
+        _warpSurface = surface;
+        [_connection flush];
+    }
+    return kCGErrorSuccess;
+}
+
+// The cursor is hidden by a request that gives the pointer no image; showing it again is the framework that
+// has the cursor images' to do (the observer), as only it has the image.
+- (void) sendHiddenCursor {
+    if (_pointer == NULL || _enterSerial == 0)
+        return;
+    union wl_argument args[4] = {{.u = _enterSerial}, {.o = NULL}, {.i = 0}, {.i = 0}};
+    WaylandMarshal(_pointer, WP_POINTER_SET_CURSOR, NULL, 0, args);
+    [_connection flush];
+}
+
+- (void) cursorHiddenChanged {
+    BOOL hidden = [_connection cursorHidden];
+    id<CGSNativeConnectionObserver> observer = [self observer];
+
+    if (hidden)
+        [self sendHiddenCursor];
+    if ([observer respondsToSelector: @selector(nativeConnectionCursorHiddenChanged:)])
+        [observer nativeConnectionCursorHiddenChanged: hidden];
 }
 
 #pragma mark - Scroll

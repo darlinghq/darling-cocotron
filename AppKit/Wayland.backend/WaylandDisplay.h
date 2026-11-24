@@ -141,14 +141,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSString *_textInputPendingPreedit, *_textInputPendingCommit;
     int _textInputPendingCursorBegin, _textInputPendingCursorEnd;
     NSString *_textInputPreedit;     // the composition the client currently shows
-    struct wl_proxy *_pointerConstraints, *_relativePointerManager;
-    uint32_t _pointerConstraintsName, _relativePointerManagerName;
-    // CGAssociateMouseAndMouseCursorPosition(false) was asked for; the lock
-    // objects exist only while a window can take them, and _pointerLocked is the
-    // compositor's word that the lock is active.
-    BOOL _pointerLockRequested, _pointerLocked;
-    struct wl_proxy *_lockedPointer, *_relativePointer;
-    WaylandWindow *_lockWindow; // Nonretained; cleared on unmap.
     struct wl_proxy *_touch;
     // Finger id -> WaylandWindow it went down on (up and motion name no surface).
     NSMutableDictionary *_touchWindows;
@@ -220,9 +212,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) unmapPopupsForParent: (WaylandWindow *) parent;
 - (void) mapPopupsWaitingForParent;
 - (void) cancelPopupMenus;
-- (void) updatePointerLock;
-- (void) releasePointerLock;
-- (void) pointerRelativeMotionByX: (CGFloat) dx y: (CGFloat) dy;
 
 // Runs a block after libwayland has returned from dispatching events. Event
 // handlers queue application-facing calls this way, so application code never

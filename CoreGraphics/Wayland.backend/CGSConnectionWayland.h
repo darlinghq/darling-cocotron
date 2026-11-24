@@ -69,6 +69,9 @@ typedef enum {
     CGSWaylandObjectKeyboardSync,
     CGSWaylandObjectPointer,
     CGSWaylandObjectPinchGesture,
+    CGSWaylandObjectLockedPointer,
+    CGSWaylandObjectRelativePointer,
+    CGSWaylandObjectWarpLock,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -103,6 +106,10 @@ typedef enum {
     id _pointerDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
+    // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers
+    // none.
+    struct wl_proxy *_pointerConstraints, *_relativePointerManager;
+    uint32_t _pointerConstraintsName, _relativePointerManagerName;
     // Set when the setup roundtrips are over; an output that is described before that is
     // part of the displays the first look finds, not a change.
     BOOL _setupDone;
@@ -117,6 +124,12 @@ typedef enum {
 
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;
+// The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
+- (struct wl_proxy *) pointerConstraints;
+- (struct wl_proxy *) relativePointerManager;
+// The point of one of this connection's windows' surfaces at a global location (the inverse of
+// -globalLocation:ofSurface:point:); NO when the surface is not one of its windows.
+- (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface;
 // Posts what the pointer decoder holds back until the compositor ends it (a scroll frame).
 - (void) flushPendingPointerEvents;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.

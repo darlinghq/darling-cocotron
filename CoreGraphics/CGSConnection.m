@@ -321,6 +321,46 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 {
 }
 
+-(BOOL) cancelsHiddenUntilMouseMoves
+{
+	return NO;
+}
+
+-(void) setCursorHiddenUntilMouseMoves:(BOOL)flag
+{
+	@synchronized (self)
+	{
+		if (_pointerHiddenUntilMouseMoves == flag)
+			return;
+		_pointerHiddenUntilMouseMoves = flag;
+	}
+	if (flag)
+		[self hideCursor];
+	else
+		[self unhideCursor];
+}
+
+-(void) pointerDidMove
+{
+	BOOL pending;
+	@synchronized (self)
+	{
+		pending = _pointerHiddenUntilMouseMoves;
+		_pointerHiddenUntilMouseMoves = NO;
+	}
+	if (pending)
+		[self unhideCursor];
+}
+
+-(BOOL) pointerLocked
+{
+	return NO;
+}
+
+-(void) pointerLockTargetMayHaveChanged
+{
+}
+
 static CGSScreen* screenWithID(NSArray<CGSScreen*>* screens, CGDirectDisplayID displayID)
 {
 	for (CGSScreen* screen in screens)

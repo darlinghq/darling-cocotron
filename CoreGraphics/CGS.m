@@ -539,6 +539,33 @@ void _CGSNativeConnectionSetPointerSurfacePoint(double x, double y)
 	[nativeConnection() setPointerSurfacePointX: x y: y];
 }
 
+bool _CGSSetCursorHiddenUntilMouseMoves(bool flag)
+{
+	CGSConnection* connection = nativeConnection();
+
+	if (![connection managesPointer] || ![connection cancelsHiddenUntilMouseMoves])
+		return false;
+	[connection setCursorHiddenUntilMouseMoves: flag];
+	return true;
+}
+
+bool _CGSNativeConnectionCursorHidden(void)
+{
+	CGSConnection* connection = nativeConnection();
+
+	return [connection managesPointer] && ![connection cursorIsVisible];
+}
+
+bool _CGSNativeConnectionPointerLocked(void)
+{
+	return [nativeConnection() pointerLocked];
+}
+
+void _CGSNativeConnectionPointerLockTargetChanged(void)
+{
+	[nativeConnection() pointerLockTargetMayHaveChanged];
+}
+
 int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef* name)
 {
 	CGSConnection* connection = nativeConnection();

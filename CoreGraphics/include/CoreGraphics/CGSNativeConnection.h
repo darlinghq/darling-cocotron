@@ -101,11 +101,24 @@ typedef enum {
 // The global location (top-left origin, points) of a point of one of the observer's surfaces; NO when
 // the observer does not know the surface.
 - (BOOL) nativeConnectionGlobalLocation: (CGPoint *) location ofSurface: (void *) surface point: (CGPoint) point;
+// Wayland: the surface the pointer is locked to while the mouse is disconnected from the cursor (the surface of
+// the window to lock: the one used last); NULL when the observer has none, and CoreGraphics takes the surface
+// with the pointer or the keyboard focus.
+- (void *) nativeConnectionSurfaceForPointerLock;
+// Wayland: the point of a surface of the observer's that is at a global location (the inverse of
+// -nativeConnectionGlobalLocation:ofSurface:point:, clamped to the surface's content); NO when the observer
+// does not know the surface.
+- (BOOL) nativeConnectionPoint: (CGPoint *) point ofSurface: (void *) surface forGlobalLocation: (CGPoint) location;
+// Wayland: CGWarpMouseCursorPosition() moved the application's cursor within its surface to x, y (the
+// compositor is asked to move the pointer there; the next events start from it).
+- (void) nativeConnectionPointerWarpedToX: (double) x y: (double) y;
 // The seat gained or lost its pointer. The compositor objects that need it (cursor, locked pointer)
 // are reached through _CGSNativeConnectionPointer().
 - (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available;
-// X11: the process' cursor became hidden or shown (CGDisplayHideCursor() and the calls that undo it). The
-// windows the observer created show a blank cursor while it is hidden. Main thread.
+// X11 and Wayland: the process' cursor became hidden or shown (CGDisplayHideCursor() and the calls that undo
+// it). The windows the observer created show a blank cursor while it is hidden (Wayland: CoreGraphics has
+// given the pointer no image, and the observer, which has the cursor images, applies its own again when the
+// cursor is shown, and keeps the cursor hidden while _CGSNativeConnectionCursorHidden()). Main thread.
 - (void) nativeConnectionCursorHiddenChanged: (BOOL) hidden;
 // X11: the window (an X window) the pointer is to be grabbed for when the mouse is disassociated from the
 // cursor (CGAssociateMouseAndMouseCursorPosition(false)): the one the observer prefers (a display overlay, the
@@ -153,5 +166,17 @@ extern void *_CGSNativeConnectionPointer(void);
 // Where the pointer is in the surface that has it, when the framework above moved it without the compositor
 // saying so (a warp while the pointer is locked). The next events start from there.
 extern void _CGSNativeConnectionSetPointerSurfacePoint(double x, double y);
+
+
+// The cursor of the process is hidden by the connection (Wayland): the framework that sets the cursor image
+// keeps it hidden. False without a connection or when the backend leaves the state to the framework.
+extern bool _CGSNativeConnectionCursorHidden(void);
+// +[NSCursor setHiddenUntilMouseMoves:] for a connection that keeps the flag; false when it does not, and
+// nothing was done.
+extern bool _CGSSetCursorHiddenUntilMouseMoves(bool flag);
+// The pointer is locked to a surface (Wayland: the lock of the disassociated mouse is active).
+extern bool _CGSNativeConnectionPointerLocked(void);
+// The surface the lock should be made on may be another one (a window was mapped, unmapped or activated).
+extern void _CGSNativeConnectionPointerLockTargetChanged(void);
 
 #endif

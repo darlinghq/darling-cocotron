@@ -46,6 +46,7 @@
 	BOOL _pointerDisassociated;
 	double _pointerDeltaX, _pointerDeltaY;
 	double _pointerSuppressUntil;
+	BOOL _pointerHiddenUntilMouseMoves;
 	// The displays the reconfiguration callbacks were last told about (nil until the displays
 	// have been read once). Guarded by @synchronized(self).
 	NSArray<CGSScreen*>* _reportedScreens;
@@ -173,6 +174,16 @@
 -(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot;
 // The windows the pointer could be confined to changed.
 -(void) pointerWindowsChanged;
+// +[NSCursor setHiddenUntilMouseMoves:]: the flag is idempotent and counts as one hide; the backend that
+// answers YES to -cancelsHiddenUntilMouseMoves calls -pointerDidMove when the mouse moves, which clears it.
+// A backend that does not leaves the flag to the framework above (the default, NO).
+-(BOOL) cancelsHiddenUntilMouseMoves;
+-(void) setCursorHiddenUntilMouseMoves:(BOOL)flag;
+-(void) pointerDidMove;
+// The pointer is locked to a surface (Wayland: the lock of the disassociated mouse is active), and the surface to
+// lock may be another one now. The defaults say no and do nothing.
+-(BOOL) pointerLocked;
+-(void) pointerLockTargetMayHaveChanged;
 
 // Implementations should also emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 // if layout changes.
