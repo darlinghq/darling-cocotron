@@ -24,6 +24,7 @@
 #import <CoreGraphics/CoreGraphicsExport.h>
 
 #include <CoreGraphics/CGError.h>
+#include <CoreFoundation/CFDate.h>
 #include <mach/boolean.h>
 #include <stdint.h>
 
@@ -82,6 +83,8 @@ CGError CGPostKeyboardEvent(CGCharCode keyChar, CGKeyCode virtualKey, boolean_t 
 
 CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
 CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
+// The time local mouse events stay suppressed after CGWarpMouseCursorPosition() (0.25 seconds by default).
+COREGRAPHICS_EXPORT CGError CGSetLocalEventsSuppressionInterval(CFTimeInterval seconds);
 // The mouse motion since the last call, in the global display space's units (pixels, y down).
 void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY);
 
