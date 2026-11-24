@@ -157,7 +157,7 @@ def main():
     with open(session, "w") as f:
         f.write('#!/bin/sh\necho "$DISPLAY" > %s\nexec sleep 600\n' % display_file)
     os.chmod(session, 0o755)
-    kwin = subprocess.Popen(["kwin_wayland", "--virtual", "--xwayland", "--socket", SOCKET, "--width", "1280",
+    kwin = subprocess.Popen(["kwin_wayland", "--virtual", "--no-lockscreen", "--xwayland", "--socket", SOCKET, "--width", "1280",
                              "--height", "800", session],
                             env=env, stdout=open(os.path.join(work, "kwin.out"), "w"), stderr=subprocess.STDOUT)
     watch = os.path.join(work, "watch.txt")

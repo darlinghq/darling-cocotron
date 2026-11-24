@@ -60,7 +60,7 @@ class Session:
                         XDG_DATA_HOME=os.path.join(work, "data"), QT_QPA_PLATFORM="offscreen",
                         WAYLAND_DISPLAY=SOCKET)
         self.env.pop("DISPLAY", None)
-        self.kwin = subprocess.Popen(["kwin_wayland", "--virtual", "--socket", SOCKET, "--width", str(WIDTH),
+        self.kwin = subprocess.Popen(["kwin_wayland", "--virtual", "--no-lockscreen", "--socket", SOCKET, "--width", str(WIDTH),
                                       "--height", str(HEIGHT), "sleep", "1000"],
                                      env=self.env, stdout=open(os.path.join(work, "kwin.out"), "w"),
                                      stderr=subprocess.STDOUT)
