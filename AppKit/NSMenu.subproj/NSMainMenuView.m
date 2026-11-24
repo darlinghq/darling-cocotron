@@ -161,6 +161,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return result;
 }
 
+// The area of the bar that selects an item: the item's border rect (the drawn highlight leaves
+// the bottom of the bar free) extended over the whole height of the bar, so that no row of
+// pixels between the bar and the menu opened under it deselects the item and closes the menu.
+- (NSRect) hitRectFromBorderRect: (NSRect) borderRect {
+    borderRect.origin.y = [self bounds].origin.y;
+    borderRect.size.height = [self bounds].size.height;
+    return borderRect;
+}
+
 - (void) sizeToFit {
 #if 1
     [self setFrameSize: NSMakeSize([self frame].size.width,
@@ -341,7 +350,7 @@ static void drawSunkenBorder(NSRect rect) {
         if (NSMaxX(borderRect) > NSMaxX(bounds))
             overflow = YES;
 
-        if (NSMouseInRect(point, borderRect, [self isFlipped]))
+        if (NSMouseInRect(point, [self hitRectFromBorderRect: borderRect], [self isFlipped]))
             result = i;
 
         previousBorderRect = borderRect;
@@ -372,8 +381,8 @@ static void drawSunkenBorder(NSRect rect) {
         if (NSMaxX(borderRect) > NSMaxX(bounds))
             overflow = YES;
 
-        if (NSMouseInRect(point, borderRect, [self isFlipped])) {
-            *rect = borderRect;
+        if (NSMouseInRect(point, [self hitRectFromBorderRect: borderRect], [self isFlipped])) {
+            *rect = [self hitRectFromBorderRect: borderRect];
             result = i;
         }
 
