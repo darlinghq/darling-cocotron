@@ -96,11 +96,16 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
 
     if (handler == nil)
         return;
+    // The handler or a delegate method may release the service or the delegate.
+    [self retain];
+    [delegate retain];
     if ([delegate respondsToSelector: @selector(sharingService:willShareItems:)])
         [delegate sharingService: self willShareItems: items];
     handler();
     if ([delegate respondsToSelector: @selector(sharingService:didShareItems:)])
         [delegate sharingService: self didShareItems: items];
+    [delegate release];
+    [self release];
 }
 
 @end
