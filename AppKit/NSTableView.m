@@ -645,17 +645,20 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                             (long) column, 0, (unsigned long) [_tableColumns count]];
     }
 
-    rect.origin.x = 0.;
-    // QUIRK: the rectangle of a hidden column is an empty one at x 0, wherever the column is in the table; the
-    // documentation of isHidden does not say. Observed on macOS 26.7.3 and Mac OS X 10.14.4 (tier 2, the PR's test passes on both) and on 26.1 (arm64), probe 657.1: with 5 columns of
-    // widths 50, 60, 70, 80 and 90 "hidden=1 ... rectOfColumn x+w=[10+65 0+0 75+87 162+97 259+74]" and
-    // "hidden=4 ... [10+65 75+77 152+87 239+94 0+0]"; the probe printed x and width only, so y and height of
-    // that rectangle are unchanged here. The header rect and the cell frame of a hidden column agree
-    // (headerRect in 657.1, frameOfCellAtColumn:row: in probe 657.3).
+    // QUIRK: the rectangle of a hidden column is NSZeroRect, wherever the column is in the table: its y and
+    // height are 0 as well, not the height of the shown columns; the documentation of isHidden and of
+    // rectOfColumn: does not say. Observed on macOS 26.1 (arm64), 5 columns of 50 to 90 points: probe 657.R
+    // "hidden=4 ... column 4 -> HIDDEN ; rectOfColumn:={{0,0},{0,0}}" (the same for the hidden columns 0, 2,
+    // and 1 and 3), while a shown column gave "rectOfColumn:={{10,0},{65,172}}". The earlier observations (macOS
+    // 26.7.3, 10.14.4, probe 657.1) printed x and width only. The header rect of a hidden column keeps the
+    // header's height (probe 657.R "headerRectOfColumn:={{0,0},{0,28}}").
     // Test: tests/appkit-table-hidden-columns.m (test_rects_close_the_gap)
-    if (![[_tableColumns objectAtIndex: column] isHidden])
-        for (i = 0; i < column; i++)
-            rect.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
+    if ([[_tableColumns objectAtIndex: column] isHidden])
+        return NSZeroRect;
+
+    rect.origin.x = 0.;
+    for (i = 0; i < column; i++)
+        rect.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
     rect.origin.y = 0.;
 
     rect.size.width = [self _spaceTakenByColumn: [_tableColumns objectAtIndex: column]];
@@ -767,12 +770,16 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         row >= [self numberOfRows])
         return NSZeroRect;
 
-    // QUIRK: x 0 for a hidden column, as in -rectOfColumn: (probe 657.3 "hidden=1 ... frameOfCellAtColumn:row:1
-    // -> 16+50 0+0 83+70 170+80 267+60").
+    // QUIRK: NSZeroRect for a hidden column, as in -rectOfColumn: (not x 0 and width 0 with the row's y and
+    // height). Observed on macOS 26.1 (arm64): probe 657.R "hidden=2 ... column 2 -> HIDDEN ;
+    // frameOfCellAtColumn:row:1={{0,0},{0,0}} ; frameOfCellAtColumn:row:0={{0,0},{0,0}}" while the shown
+    // cells of the same table gave "row:1={{16,29},{50,24}}".
+    if ([[_tableColumns objectAtIndex: column] isHidden])
+        return NSZeroRect;
+
     frame.origin.x = 0.;
-    if (![[_tableColumns objectAtIndex: column] isHidden])
-        for (i = 0; i < column; i++)
-            frame.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
+    for (i = 0; i < column; i++)
+        frame.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
 
     frame.origin.y = 0.;
     for (i = 0; i < row; i++)
@@ -799,7 +806,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NSRect frame = [self _spacedFrameOfCellAtColumn: column row: row];
 
     if (NSIsEmptyRect(frame) || NSWidth(frame) <= 0)
-        return frame; // also the zero-width frame of a hidden column
+        return frame; // also the empty frame of a hidden column
     CGFloat insetX = floor(_intercellSpacing.width / 2), insetY = floor(_intercellSpacing.height / 2);
 
     frame.origin.x += insetX;
@@ -1558,8 +1565,11 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if (numberOfRows > 0) {
         size.width = [self rectOfRow: 0].size.width;
     }
+    // The height of the rows, as -rectOfColumn: gives it for a shown column; not read from the rectangle of
+    // column 0, which is NSZeroRect when that column is hidden.
     if ([_tableColumns count] > 0)
-        size.height = [self rectOfColumn: 0].size.height;
+        size.height = MAX(numberOfRows > 0 ? NSMaxY([self rectOfRow: numberOfRows - 1]) : 0.,
+                          [[self superview] bounds].size.height);
 
     // The table is at least as wide and as tall as its clip view, whatever its columns and rows add up to: observed
     // on macOS 26.7.3, where after -reloadData a table of 4 rows and 296 points of columns in a 400 by 300 point
