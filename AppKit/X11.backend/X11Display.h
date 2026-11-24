@@ -18,21 +18,12 @@
 #import <CoreFoundation/CFSocket.h>
 #endif
 
+#import <CoreGraphics/CGSNativeConnection.h>
+
 @class X11Cursor, X11AppMenu, X11Window;
 
-@interface X11Display : DarlingDisplay {
+@interface X11Display : DarlingDisplay <CGSNativeConnectionObserver> {
     Display *_display;
-    int _fileDescriptor;
-#ifndef DARLING
-    NSSelectInputSource *_inputSource;
-#else
-    // We use CFRunLoop directly, without going through any Foundation wrapper,
-    // because Apple's Cocoa has none. Unlike Apple's Cocoa, we need to watch
-    // over a Unix domain socket, not a Mach port.
-    CFSocketRef _cfSocket;
-    CFRunLoopSourceRef _source;
-    CFRunLoopObserverRef _beforeWaitingObserver;
-#endif
     NSMutableDictionary *_windowsByID;
     // Shows the main menu outside the windows (see X11AppMenu), nil until the
     // application has one or when the menu is drawn inside the windows.
@@ -102,7 +93,6 @@
     // (or both Control keys) drive the same mask, so releasing one of them only
     // clears it if the other is up too.
     unsigned char _heldModifierKeys[32];
-    int _rrEventBase;
     // See -primaryRootFrame. Device pixels, root coordinates.
     NSRect _primaryRootFrame;
     BOOL _primaryRootFrameValid;

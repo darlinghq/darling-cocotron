@@ -228,11 +228,6 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     _mainScreenMaxY = NAN;
 }
 
-- (void) _refreshDisplays {
-    _CGSRefreshDisplayLayout();
-    [self _invalidateScreens];
-}
-
 - (void) _mainMenuDidChange: (NSMenu *) menu {
 }
 

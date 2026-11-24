@@ -38,6 +38,7 @@
     // over a Unix domain socket, not a Mach port.
     CFSocketRef _cfSocket;
     CFRunLoopSourceRef _source;
+    CFRunLoopObserverRef _beforeWaitingObserver;
 
 	// RandR reported a layout change that -processPendingEvents has not looked at yet.
 	BOOL _layoutChanged;

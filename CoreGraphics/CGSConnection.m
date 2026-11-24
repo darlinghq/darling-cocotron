@@ -19,6 +19,7 @@
 #import <CoreGraphics/CGSConnection.h>
 #import <CoreGraphics/CGSWindow.h>
 #import <CoreGraphics/CGSSurface.h>
+#import <CoreGraphics/CGSNativeConnection.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSRaise.h>
@@ -295,11 +296,6 @@ static CGDisplayChangeSummaryFlags changeFlags(CGSScreen* before, CGSScreen* aft
 	}
 }
 
--(void) refreshDisplayLayout
-{
-	[self invalidateScreens];
-}
-
 -(CGSWindow*) newWindow:(CGSRegionRef)region
 {
 	NSInvalidAbstractInvocation();
@@ -308,6 +304,35 @@ static CGDisplayChangeSummaryFlags changeFlags(CGSScreen* before, CGSScreen* aft
 -(void*) nativeDisplay
 {
 	NSInvalidAbstractInvocation();
+}
+
+// The observer is not retained: it is the framework's display, which lives as long as the process.
+static void* g_nativeObserver;
+
++(int) nativeConnectionKind
+{
+	return 0;
+}
+
++(id) nativeObserver
+{
+	return (id) __atomic_load_n(&g_nativeObserver, __ATOMIC_ACQUIRE);
+}
+
++(void) setNativeObserver:(id)observer
+{
+	__atomic_store_n(&g_nativeObserver, (void*) observer, __ATOMIC_RELEASE);
+}
+
+-(void) processPendingEvents
+{
+}
+
+-(void) activationRequested
+{
+	id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
+	if ([observer respondsToSelector: @selector(nativeConnectionActivationRequested)])
+		[observer nativeConnectionActivationRequested];
 }
 
 -(NSArray<NSDictionary*>*) copyWindowDescriptions

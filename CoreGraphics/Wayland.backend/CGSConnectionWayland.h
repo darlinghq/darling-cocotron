@@ -90,6 +90,11 @@ typedef enum {
     // Set when the setup roundtrips are over; an output that is described before that is
     // part of the displays the first look finds, not a change.
     BOOL _setupDone;
+    // The displays changed in this pass over the events; the observer is told when it is over.
+    BOOL _layoutChangedForObserver;
+    // libnotify registration for requests to activate this process' windows.
+    BOOL _activationRegistered;
+    int _activationNotifyToken;
 }
 
 - (void) flush;
