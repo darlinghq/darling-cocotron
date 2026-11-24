@@ -403,15 +403,17 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
     case kCGEventFlagsChanged: {
         UniChar buffer[256];
         UniCharCount length = 0;
-        NSString *characters = @"";
+        NSString *characters = @"", *charactersIgnoringModifiers = @"";
         if (type != kCGEventFlagsChanged) {
-            CGEventKeyboardGetUnicodeString(cgEvent, 256, &length, buffer);
-            characters = [NSString stringWithCharacters: buffer length: MIN(length, (UniCharCount) 256)];
+            length = _CGEventGetKeyCharacters(cgEvent, false, buffer, 256);
+            characters = [NSString stringWithCharacters: buffer length: length];
+            length = _CGEventGetKeyCharacters(cgEvent, true, buffer, 256);
+            charactersIgnoringModifiers = [NSString stringWithCharacters: buffer length: length];
         }
         // The characters without the modifiers other than Shift come with the event when the window system
         // posted it (the window system's keyboard) and no tap gave the event another key code; otherwise
         // they are the characters.
-        NSString *unmodified = characters;
+        NSString *unmodified = charactersIgnoringModifiers;
         int64_t unmodifiedLength = CGEventGetIntegerValueField(cgEvent, kCGSKeyboardEventUnmodifiedLength);
         if (type != kCGEventFlagsChanged && unmodifiedLength > 0 &&
             CGEventGetIntegerValueField(cgEvent, kCGSKeyboardEventUnmodifiedKeyCode) ==

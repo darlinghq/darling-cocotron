@@ -57,6 +57,8 @@ extern CGEventClass _CGEventClassOfType(CGEventType type);
 	// The Unicode string of a keyboard event (up to 65535 UTF-16 units), NULL when none was set.
 	UniChar* _unicodeString;
 	uint16_t _unicodeLength;
+	// YES while the string is the one derived from the key code at creation, NO once a client set one.
+	BOOL _unicodeDerived;
 
 	CGSEventRecordPtr _eventRecord;
 	uint32_t _eventRecordLength;
