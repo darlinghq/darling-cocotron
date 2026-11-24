@@ -1148,8 +1148,6 @@ static unsigned char *stbi_jpeg_load_from_memory(jpeg *j,stbi_uc const *buffer, 
     // JPEG has no alpha: the fourth byte of each pixel is padding
     _bitmapInfo = kO2BitmapByteOrder32Big | kO2ImageAlphaNoneSkipLast;
 
-    _pixelData = CFDataCreateWithBytesNoCopy(NULL, bitmap,
-                                             _bytesPerRow * _height, NULL);
     _pixelData = (CFDataRef)
             [[NSData alloc] initWithBytesNoCopy: bitmap
                                          length: _bytesPerRow * _height
