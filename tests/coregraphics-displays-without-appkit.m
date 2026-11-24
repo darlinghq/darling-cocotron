@@ -144,7 +144,10 @@ static int basicChecks(void) {
     // The pointer and cursor calls that need no windows succeed; the cursor request has nothing to hide
     // here, and the pointer stays within the desktop whatever the point.
     CHECK(23, CGDisplayHideCursor(main) == kCGErrorSuccess && CGDisplayShowCursor(main) == kCGErrorSuccess);
-    CHECK(24, CGWarpMouseCursorPosition(CGPointMake(NAN, 0)) == kCGErrorIllegalArgument);
+    // A coordinate that is not a finite number is taken as 0 and the warp goes on (the QUIRK of
+    // CGWarpMouseCursorPosition, pinned by coregraphics-warp-mouse-glue), not refused as an illegal argument.
+    CGError warpError = CGWarpMouseCursorPosition(CGPointMake(NAN, 0));
+    CHECK(24, warpError == kCGErrorSuccess || warpError == kCGErrorCannotComplete);
     int32_t dx = 7, dy = 7;
     CGGetLastMouseDelta(&dx, &dy);
     CHECK(25, dx == 0 && dy == 0);
