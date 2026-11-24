@@ -10,6 +10,14 @@
 //            copy of itself and a 128 x 128 green icns file, and runs the copy
 //   runtime  -setApplicationIconImage: gives a red image before the window is shown
 //   change   as runtime, then a blue image replaces it after the window is shown
+//   plain    no application icon at all
+//   nested, nested-regular, nested-runtime, nested-noext
+//            the program makes an application bundle with the green icon and, in its Contents/Frameworks, a
+//            helper bundle with no icon that shows the window: nested (the helper is LSUIElement: the window
+//            takes the icon of the enclosing application), nested-regular (the helper is a regular
+//            application: no icon), nested-runtime (an LSUIElement helper that sets the red image itself:
+//            that one wins), nested-noext (as nested, the enclosing bundle directory has no .app extension
+//            and lies in a directory with another extension)
 // A window is shown for <seconds>; the lines READY (the window is up) and CHANGED (the new image is set)
 // say how far it got. Run with DARLING_APPKIT_BACKEND=x11 or wayland and the matching DISPLAY or
 // WAYLAND_DISPLAY set.
@@ -108,43 +116,76 @@ static int showWindow(const char *mode, double seconds) {
     return 0;
 }
 
+// Makes <path>.app around a copy of this program, with Info.plist entries from info; icon (may be nil) becomes
+// Contents/Resources/icon.icns. Returns the copy's path.
+static NSString *makeBundle(NSString *app, NSDictionary *info, NSData *icon) {
+    NSString *macos = [app stringByAppendingPathComponent: @"Contents/MacOS"];
+    NSString *resources = [app stringByAppendingPathComponent: @"Contents/Resources"];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    [fm createDirectoryAtPath: macos withIntermediateDirectories: YES attributes: nil error: NULL];
+    [fm createDirectoryAtPath: resources withIntermediateDirectories: YES attributes: nil error: NULL];
+    NSString *copy = [macos stringByAppendingPathComponent: @"window-icon"];
+    [fm copyItemAtPath: [[NSBundle mainBundle] executablePath] toPath: copy error: NULL];
+    if (icon != nil)
+        [icon writeToFile: [resources stringByAppendingPathComponent: @"icon.icns"] atomically: NO];
+    NSMutableDictionary *plist = [NSMutableDictionary dictionaryWithDictionary:
+            @{@"CFBundleExecutable": @"window-icon", @"CFBundleName": @"window-icon", @"CFBundlePackageType": @"APPL"}];
+    [plist addEntriesFromDictionary: info];
+    [plist writeToFile: [app stringByAppendingPathComponent: @"Contents/Info.plist"] atomically: NO];
+    return copy;
+}
+
+static int runAndWait(NSString *program, const char *mode, const char *seconds) {
+    char *args[] = {(char *) [program fileSystemRepresentation], (char *) mode, (char *) seconds, NULL};
+    pid_t pid;
+    if (posix_spawn(&pid, args[0], NULL, NULL, args, environ) != 0) {
+        fprintf(stderr, "cannot run the bundled copy\n");
+        return 1;
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
 int main(int argc, char **argv) {
     if (argc < 3) {
-        fprintf(stderr, "usage: appkit-window-icon bundle|runtime|change <seconds>\n");
+        fprintf(stderr, "usage: appkit-window-icon bundle|runtime|change|plain|nested|nested-regular|nested-runtime <seconds>\n");
         return 2;
     }
     const char *mode = argv[1];
     double seconds = atof(argv[2]);
     NSBundle *main = [NSBundle mainBundle];
-    if (strcmp(mode, "bundle") != 0 || [main objectForInfoDictionaryKey: @"CFBundleIconFile"] != nil)
-        return showWindow(mode, seconds);
+    BOOL nested = strncmp(mode, "nested", 6) == 0;
+    // "plain" and "runtime" and "change" show the window right here, as does a bundled copy.
+    if (!(strcmp(mode, "bundle") == 0 || nested) || [main objectForInfoDictionaryKey: @"CFBundleIconFile"] != nil ||
+        [main objectForInfoDictionaryKey: @"TestRole"] != nil)
+        return showWindow(strcmp(mode, "plain") == 0 || strcmp(mode, "bundle") == 0 ? "plain" : mode, seconds);
 
     // Not in a bundle yet: make one around a copy of this program and run that.
     @autoreleasepool {
         NSString *app = [NSTemporaryDirectory() stringByAppendingPathComponent:
                 [NSString stringWithFormat: @"window-icon-%d.app", getpid()]];
-        NSString *macos = [app stringByAppendingPathComponent: @"Contents/MacOS"];
-        NSString *resources = [app stringByAppendingPathComponent: @"Contents/Resources"];
-        NSFileManager *fm = [NSFileManager defaultManager];
-        [fm createDirectoryAtPath: macos withIntermediateDirectories: YES attributes: nil error: NULL];
-        [fm createDirectoryAtPath: resources withIntermediateDirectories: YES attributes: nil error: NULL];
-        NSString *copy = [macos stringByAppendingPathComponent: @"window-icon"];
-        [fm copyItemAtPath: [main executablePath] toPath: copy error: NULL];
-        [icns128() writeToFile: [resources stringByAppendingPathComponent: @"icon.icns"] atomically: NO];
-        NSDictionary *info = @{@"CFBundleExecutable": @"window-icon", @"CFBundleIdentifier": @"test.window-icon",
-                               @"CFBundleName": @"window-icon", @"CFBundlePackageType": @"APPL",
-                               @"CFBundleIconFile": @"icon"};
-        [info writeToFile: [app stringByAppendingPathComponent: @"Contents/Info.plist"] atomically: NO];
-
-        char *args[] = {(char *) [copy fileSystemRepresentation], argv[1], argv[2], NULL};
-        pid_t pid;
-        if (posix_spawn(&pid, args[0], NULL, NULL, args, environ) != 0) {
-            fprintf(stderr, "cannot run the bundled copy\n");
-            return 1;
+        NSString *copy;
+        if (!nested) {
+            copy = makeBundle(app, @{@"CFBundleIdentifier": @"test.window-icon", @"CFBundleIconFile": @"icon"}, icns128());
+            int result = runAndWait(copy, mode, argv[2]);
+            [[NSFileManager defaultManager] removeItemAtPath: app error: NULL];
+            return result;
         }
-        int status = 0;
-        waitpid(pid, &status, 0);
-        [fm removeItemAtPath: app error: NULL];
-        return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+        NSString *top = nil; // removed at the end, when the bundle is not directly in the temporary directory
+        if (strcmp(mode, "nested-noext") == 0) {
+            top = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                    [NSString stringWithFormat: @"window-icon-%d.AppBundle", getpid()]];
+            app = [top stringByAppendingPathComponent: @"Outer"];
+        }
+        makeBundle(app, @{@"CFBundleIdentifier": @"test.window-icon", @"CFBundleIconFile": @"icon"}, icns128());
+        NSMutableDictionary *helper = [NSMutableDictionary dictionaryWithDictionary:
+                @{@"CFBundleIdentifier": @"test.window-icon.helper", @"TestRole": @"helper"}];
+        if (strcmp(mode, "nested-regular") != 0)
+            helper[@"LSUIElement"] = @YES;
+        copy = makeBundle([app stringByAppendingPathComponent: @"Contents/Frameworks/Helper.app"], helper, nil);
+        int result = runAndWait(copy, strcmp(mode, "nested-runtime") == 0 ? "runtime" : "plain", argv[2]);
+        [[NSFileManager defaultManager] removeItemAtPath: top != nil ? top : app error: NULL];
+        return result;
     }
 }
