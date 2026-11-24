@@ -6,7 +6,7 @@
 # Tracking of the menus of the application's own menu bar (the screen menu bar,
 # a layer surface on Wayland and a dock window on X11): pointer and keyboard.
 #
-#   run-bar-tracking.py [--cases focused,owner,nowindow] kwin|sway|x11 GUEST_PROGRAM [DISPLAY]
+#   run-bar-tracking.py [--cases focused,owner,nowindow,parent,startup] kwin|sway|x11 GUEST_PROGRAM [DISPLAY]
 #
 # GUEST_PROGRAM is ../appkit-global-menu.m built for the guest. "kwin" runs a
 # private virtual KWin (the pointer and keyboard are a libei device of KWin's),
@@ -238,7 +238,7 @@ class X11Backend(Backend):
 
 def main():
     argv = sys.argv[1:]
-    cases = ["focused", "owner", "nowindow"]
+    cases = ["focused", "owner", "nowindow", "parent", "startup"]
     if argv[:1] == ["--cases"] and len(argv) > 1:
         cases = argv[1].split(",")
         argv = argv[2:]
@@ -380,7 +380,51 @@ def main():
         if not ended:
             close_by_title_click()
 
+    def last(log, prefix):
+        lines = [l for l in read(log).splitlines() if l.startswith(prefix)]
+        return lines[-1] if lines else ""
+
+    def run_parent(delay):
+        """A regular application with a bar and a windowless process outside any bundle that it starts
+        DELAY ms after the bar was ordered in, and that activates itself over and over. The process is
+        prohibited (as on macOS): it neither becomes the front application nor the menu bar owner, so
+        the application keeps its bar, its ownership and its activation."""
+        tag = "parent-%dms" % delay
+        log, process = guest("parent", tag, ["%d" % delay])
+        child = log + ".child"
+        try:
+            check(wait_for(log, "STEP child launched", 30), tag + ": the windowless process is started")
+            check(wait_for(child, "POLICY 2", 60), tag + ": it is prohibited (not in an application bundle)")
+            time.sleep(4)
+            check("owner=0" in last(child, "OWNER"), tag + ": it does not own the menu bar (%s)" % last(child, "OWNER"))
+            check("owner=1" in last(log, "OWNER"), tag + ": the application still owns the menu bar (%s)" % last(log, "OWNER"))
+            check("RESIGN" not in read(log), tag + ": the application did not resign")
+            check("bar=1" in last(log, "STATE"), tag + ": its bar is still shown (%s)" % last(log, "STATE"))
+            case(tag, log, True, True)
+        finally:
+            stop(process)
+
+    def run_startup(delay):
+        """The window the application showed at startup is closed DELAY ms after the bar was ordered
+        in: the application stays active, owns the menu bar and keeps its bar."""
+        tag = "startup-%dms" % delay
+        log, process = guest("startup", tag, ["%d" % delay])
+        try:
+            check(wait_for(log, "STEP window closed", 30), tag + ": the startup window is closed")
+            time.sleep(3)
+            check("RESIGN" not in read(log), tag + ": the application did not resign")
+            check("owner=1" in last(log, "OWNER"), tag + ": it still owns the menu bar (%s)" % last(log, "OWNER"))
+            check("bar=1" in last(log, "STATE"), tag + ": its bar is still shown (%s)" % last(log, "STATE"))
+        finally:
+            stop(process)
+
     try:
+        if "parent" in cases:
+            for delay in (0, 300):
+                run_parent(delay)
+        if "startup" in cases:
+            for delay in (0, 30, 100, 400):
+                run_startup(delay)
         if "focused" in cases:
             run_case("focused", "borderless", focused=True)
         if "owner" in cases:

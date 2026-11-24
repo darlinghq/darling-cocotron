@@ -30,7 +30,7 @@ int main(int argc, char **argv) {
         return 2;
 
     struct ei_device *pointer = NULL, *keyboard = NULL;
-    int sequence = 0, ready = 0;
+    int sequence = 0, ready = 0, announced = 0;
     char line[128];
     struct pollfd fds[2] = {{ei_get_fd(ei), POLLIN, 0}, {0, POLLIN, 0}};
 
@@ -51,14 +51,23 @@ int main(int argc, char **argv) {
                     keyboard = ei_device_ref(ei_event_get_device(event));
                 break;
             case EI_EVENT_DEVICE_RESUMED:
+                // A device the compositor paused and resumes again has to start emulating again.
                 if (ei_event_get_device(event) == keyboard)
                     ei_device_start_emulating(keyboard, ++sequence);
-                if (ei_event_get_device(event) == pointer && !ready) {
+                if (ei_event_get_device(event) == pointer) {
                     ei_device_start_emulating(pointer, ++sequence);
                     ready = 1;
-                    puts("READY");
-                    fflush(stdout);
+                    if (!announced) {
+                        announced = 1;
+                        puts("READY");
+                        fflush(stdout);
+                    }
                 }
+                break;
+            case EI_EVENT_DEVICE_PAUSED:
+                // Commands wait until the compositor resumes the pointer.
+                if (ei_event_get_device(event) == pointer)
+                    ready = 0;
                 break;
             case EI_EVENT_DISCONNECT:
                 return 1;
