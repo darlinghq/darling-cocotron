@@ -513,7 +513,7 @@ static int64_t wholeLines(double lines) {
     return whole;
 }
 
-- (void) postScrollOfX: (double) unitsX y: (double) unitsY stepsX: (double) stepsX stepsY: (double) stepsY
+- (void) postScrollOfX: (double) unitsX y: (double) unitsY stepsX: (double) stepsXValue stepsY: (double) stepsYValue
               hasSteps: (BOOL) hasSteps continuous: (BOOL) continuous phase: (int64_t) phase
                surface: (struct wl_proxy *) surface point: (CGPoint) point flags: (uint64_t) flags {
     CGPoint global = [self globalLocationOfSurface: surface point: point];
@@ -528,18 +528,28 @@ static int64_t wholeLines(double lines) {
         if (event == NULL)
             return;
     } else {
-        int64_t linesX = hasSteps ? wholeLines(stepsX) : wholeLines(unitsX / AxisUnitsPerLine);
-        int64_t linesY = hasSteps ? wholeLines(stepsY) : wholeLines(unitsY / AxisUnitsPerLine);
+        int64_t linesX = hasSteps ? wholeLines(stepsXValue) : wholeLines(unitsX / AxisUnitsPerLine);
+        int64_t linesY = hasSteps ? wholeLines(stepsYValue) : wholeLines(unitsY / AxisUnitsPerLine);
         event = CGEventCreateScrollWheelEvent2((CGEventSourceRef) _source, kCGScrollEventUnitLine, 2,
                                                (int32_t) linesY, (int32_t) linesX, 0);
         if (event == NULL)
             return;
-        CGEventSetIntegerValueField(event, kCGScrollWheelEventPointDeltaAxis1, llround(unitsY));
-        CGEventSetIntegerValueField(event, kCGScrollWheelEventPointDeltaAxis2, llround(unitsX));
     }
-    // The exact amounts of lines the axis values are worth
-    CGEventSetDoubleValueField(event, kCGScrollWheelEventFixedPtDeltaAxis1, unitsY / AxisUnitsPerLine);
-    CGEventSetDoubleValueField(event, kCGScrollWheelEventFixedPtDeltaAxis2, unitsX / AxisUnitsPerLine);
+    // An axis that has wheel steps keeps what CGEventCreateScrollWheelEvent2 made of the lines (the fixed-point
+    // lines are the steps, the points are the source's pixels per line for each of them), so that a notch of
+    // the wheel gives the same event whatever the compositor's units are for it (the same as the X11 wheel).
+    // Any other axis carries its axis values: the lines they are worth and the points they are.
+    BOOL stepsY = hasSteps && stepsYValue != 0, stepsX = hasSteps && stepsXValue != 0;
+    if (continuous || !stepsY) {
+        if (!continuous)
+            CGEventSetIntegerValueField(event, kCGScrollWheelEventPointDeltaAxis1, llround(unitsY));
+        CGEventSetDoubleValueField(event, kCGScrollWheelEventFixedPtDeltaAxis1, unitsY / AxisUnitsPerLine);
+    }
+    if (continuous || !stepsX) {
+        if (!continuous)
+            CGEventSetIntegerValueField(event, kCGScrollWheelEventPointDeltaAxis2, llround(unitsX));
+        CGEventSetDoubleValueField(event, kCGScrollWheelEventFixedPtDeltaAxis2, unitsX / AxisUnitsPerLine);
+    }
     CGEventSetIntegerValueField(event, kCGScrollWheelEventIsContinuous, continuous);
     CGEventSetIntegerValueField(event, kCGScrollWheelEventScrollPhase, phase);
     CGEventSetLocation(event, global);

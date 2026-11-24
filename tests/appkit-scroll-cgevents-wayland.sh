@@ -4,7 +4,8 @@
 #
 # Driver of appkit-scroll-cgevents-wayland: scrolls over the window "scroll-cgevents-wayland" with a virtual
 # pointer (the helper tests/wayland-virtual-pointer.c, in $VIRTUAL_POINTER): a wheel, a finger on a touchpad, a
-# source of continuous scrolling, and a finger scroll cut short by the pointer leaving the window. $WAYLAND_DISPLAY,
+# source of continuous scrolling, a finger scroll cut short by the pointer leaving the window, and a wheel notch and a
+# finger scroll with Shift held. $WAYLAND_DISPLAY,
 # $XDG_RUNTIME_DIR and $SWAYSOCK must name a headless sway whose windows float. Usage:
 #   appkit-scroll-cgevents-wayland.sh <command that runs appkit-scroll-cgevents-wayland>
 # Needs swaymsg, wtype and python3.
@@ -63,6 +64,14 @@ sleep 0.3
 V "axis 0 5 1"
 V "abs 1850 1050"
 sleep 0.5
+# with Shift held (wtype holds it for 1.6 s): a wheel notch down, a finger scroll
+V "abs $PX $PY"
+sleep 0.3
+wtype -M shift -s 1600 -m shift &
+sleep 0.8
+V "wheel 0 1"
+V "axis 0 12 1"; V "stop 0 1"
+sleep 1.2
 wtype -s 300 q
 
 for _ in $(seq 600); do grep -q -E '^(ALL PASSED|FAILED)' "$out" && break; sleep 0.1; done

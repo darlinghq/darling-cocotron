@@ -12,6 +12,9 @@
 //   five finger frames of 0.4 units and a stop (the fractions are carried)
 //   a scroll of the continuous source (a pixel scroll without a finger: no phases)
 //   a finger scroll that is cut short by the pointer leaving the window (the cancelled phase)
+//   with Shift held (a virtual keyboard): a wheel notch down, and a finger scroll of 12 units, then stop
+// The wheel notches give the same line, fixed-point and point deltas, and so the same NSEvents, as the X11 wheel
+// (appkit-scroll-cgevents-x11): the wayland axis value of a notch (15 on the compositors used here) does not show.
 // Usage: appkit-scroll-cgevents-wayland (no arguments)
 // Prints PASS or FAIL lines, then ALL PASSED or FAILED n.
 #import <AppKit/AppKit.h>
@@ -142,10 +145,11 @@ int main(void) {
                    s->dy, s->sdx, s->sdy, s->precise, s->nsPhase, (long long) s->window, s->x, s->y);
         }
 
-        // 1 to 3 the wheel, 4 to 6 the finger, 7 to 12 the fractions and their end, 13 continuous source, 14 and 15 cut short
-        expect(tapCount == nsCount && tapCount >= 15,
-               [NSString stringWithFormat: @"every scroll event reached both the tap and the application (%d, %d of 15 or more)", tapCount, nsCount]);
-        if (tapCount < 15 || nsCount < 15) {
+        // 1 to 3 the wheel, 4 to 6 the finger, 7 to 12 the fractions and their end, 13 continuous source, 14 and 15 cut short,
+        // 16 the wheel notch with Shift, 17 and 18 the finger with Shift
+        expect(tapCount == nsCount && tapCount >= 18,
+               [NSString stringWithFormat: @"every scroll event reached both the tap and the application (%d, %d of 18 or more)", tapCount, nsCount]);
+        if (tapCount < 18 || nsCount < 18) {
             printf("FAILED %d\n", failures);
             return 1;
         }
@@ -154,12 +158,13 @@ int main(void) {
         Seen *w1 = &tapSeen[0], *w2 = &tapSeen[1], *w3 = &tapSeen[2];
         expect(!w1->continuous && w1->lines1 == -1 && w1->lines2 == 0 && w1->phase == 0 && w1->momentum == 0,
                @"a wheel notch down: not continuous, one line down (-1), no phase");
-        expect(fabs(w1->fixed1 + 1.5) < 0.01 && w1->points1 == -15, @"the notch is 15 axis units: 1.5 lines, 15 points");
-        expect(!w2->continuous && w2->lines2 == -1 && w2->lines1 == 0 && fabs(w2->fixed2 + 1.5) < 0.01, @"a notch to the right: horizontal, -1");
-        expect(!w3->continuous && w3->lines1 == 2 && fabs(w3->fixed1 - 3.0) < 0.01, @"two notches up: two lines up (2), 3.0 lines");
+        expect(fabs(w1->fixed1 + 1.0) < 0.01 && w1->points1 == -10 && w1->points2 == 0,
+               @"a notch is one line whatever its axis value (15 here): fixed -1.0 lines, 10 points, as on X11");
+        expect(!w2->continuous && w2->lines2 == -1 && w2->lines1 == 0 && fabs(w2->fixed2 + 1.0) < 0.01, @"a notch to the right: horizontal, -1");
+        expect(!w3->continuous && w3->lines1 == 2 && fabs(w3->fixed1 - 2.0) < 0.01 && w3->points1 == 20, @"two notches up: two lines up (2), 2.0 lines, 20 points");
         Seen *n1 = &nsSeen[0];
-        expect(!n1->precise && fabs(n1->dy + 1.5) < 0.01 && n1->nsPhase == 0 && n1->window && n1->dx == 0,
-               @"AppKit: a wheel event with deltaY -1.5, not precise, no phase, for the window");
+        expect(!n1->precise && fabs(n1->dy + 1.0) < 0.01 && n1->nsPhase == 0 && n1->window && n1->dx == 0,
+               @"AppKit: a wheel event with deltaY -1, not precise, no phase, for the window (the X11 wheel's event)");
 
         // A finger scroll: continuous, phases began, changed, ended; the points are the axis units
         Seen *f1 = &tapSeen[3], *f2 = &tapSeen[4], *f3 = &tapSeen[5];
@@ -195,6 +200,16 @@ int main(void) {
         expect(k1->phase == kCGScrollPhaseBegan && k2->phase == kCGScrollPhaseCancelled && k2->points1 == 0 && k2->continuous,
                @"a finger scroll the pointer leaves the window in: began, then cancelled");
         expect(nsSeen[14].nsPhase == NSEventPhaseCancelled, @"AppKit's event has the cancelled phase");
+        // With Shift held: the same conversion as X11's wheel, made where the NSEvent is made from the CGEvent
+        Seen *s1 = &tapSeen[15], *s2 = &tapSeen[16], *s3 = &tapSeen[17];
+        Seen *m1 = &nsSeen[15], *m2 = &nsSeen[16];
+        expect(!s1->continuous && s1->lines1 == -1 && s1->lines2 == 0 && (s1->flags & kCGEventFlagMaskShift),
+               @"a wheel notch with Shift held: the CGEvent keeps its vertical line and has the Shift flag");
+        expect(!m1->precise && fabs(m1->dx + 1.0) < 0.01 && m1->dy == 0,
+               @"QUIRK (Shift): the NSEvent of a wheel line with Shift held scrolls sideways: deltaX -1, deltaY 0");
+        expect(s2->continuous && s2->phase == kCGScrollPhaseBegan && s2->points1 == -12 && s3->phase == kCGScrollPhaseEnded &&
+                       m2->precise && m2->dx == 0 && fabs(m2->dy + 1.2) < 0.01 && m2->sdy == -12,
+               @"a finger scroll with Shift held is not converted: deltaY -1.2, scrolling delta -12");
         expect(tapSeen[0].x == tapSeen[1].x && tapSeen[0].y == tapSeen[1].y && nsSeen[0].window,
                @"the events carry the pointer's location and name the window");
     }
