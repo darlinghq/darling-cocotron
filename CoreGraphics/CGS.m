@@ -328,6 +328,60 @@ Boolean _CGSProcessIsHidden(pid_t pid)
 	return start == 0 ? state == 1 : state == start;
 }
 
+// The activation policy of the application of a process (NSApplicationActivationPolicy: 0 regular,
+// 1 accessory, 2 prohibited), published by the process under a libnotify name of its own pid, with
+// its start time like the other per-process state, so that other processes know what kind of
+// application they deal with: a regular application takes the menu bar over when it becomes the
+// front process, an accessory one does not, a prohibited one cannot be the front process.
+#define kCGSProcessPolicyNotificationPrefix "org.darlinghq.process-policy."
+
+void _CGSSetProcessActivationPolicy(int policy)
+{
+	static dispatch_once_t once;
+	static int token = -1;
+
+	if (policy < 0 || policy > 2)
+		return;
+	dispatch_once(&once, ^{
+		char name[64];
+
+		snprintf(name, sizeof(name), kCGSProcessPolicyNotificationPrefix "%d", (int) getpid());
+		if (notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+			token = -1;
+	});
+	if (token < 0)
+		return;
+	uint64_t start = processStartTime(getpid());
+	notify_set_state(token, (start != 0 ? start : 1) * 4 + (uint64_t) (policy + 1));
+}
+
+CGError _CGSGetProcessActivationPolicy(pid_t pid, int* policy)
+{
+	if (pid <= 0 || policy == NULL)
+		return kCGErrorIllegalArgument;
+	if (kill(pid, 0) != 0 && errno != EPERM)
+		return kCGErrorNoneAvailable;
+
+	char name[64];
+	int token;
+	uint64_t state = 0;
+
+	snprintf(name, sizeof(name), kCGSProcessPolicyNotificationPrefix "%d", (int) pid);
+	if (notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
+	if (notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		state = 0;
+	notify_cancel(token);
+	if ((state & 3) == 0)
+		return kCGErrorNoneAvailable;
+
+	uint64_t start = processStartTime(pid);
+	if ((start != 0 ? start : 1) != state / 4)
+		return kCGErrorNoneAvailable;
+	*policy = (int) (state & 3) - 1;
+	return kCGErrorSuccess;
+}
+
 // The process that was activated last, for a display server that cannot be asked: the state of a
 // libnotify name, which is shared by all processes.
 static int frontProcessToken(void)
@@ -423,16 +477,26 @@ static CGError reportedFrontProcess(pid_t* pid)
 	return kCGErrorSuccess;
 }
 
+static void syncFrontObservers(void);
+
 CGError _CGSGetFrontProcess(pid_t* pid)
 {
 	if (pid == NULL)
 		return kCGErrorIllegalArgument;
 
+	// The processes report their focus gains and losses (and SetFrontProcess requests, which take
+	// effect at once, as on macOS), so what they reported is the answer. The display server is only
+	// asked when no process has the focus, to find a client that is not a Darling process (X11)
+	// or that is one that does not report.
+	CGError err = reportedFrontProcess(pid);
+	if (err == kCGErrorSuccess)
+		return err;
+
 	_CGSLoadBackendOnce();
 	if (g_backendClass != nil)
 	{
 		pid_t front = 0;
-		CGError err = [g_backendClass copyFrontProcessID: &front];
+		err = [g_backendClass copyFrontProcessID: &front];
 		if (err == kCGErrorSuccess)
 		{
 			*pid = front;
@@ -442,7 +506,7 @@ CGError _CGSGetFrontProcess(pid_t* pid)
 			return err;
 	}
 
-	return reportedFrontProcess(pid);
+	return kCGErrorNoneAvailable;
 }
 
 CGError _CGSSetFrontProcess(pid_t pid)
@@ -458,6 +522,7 @@ CGError _CGSSetFrontProcess(pid_t pid)
 		return kCGErrorCannotComplete;
 	// Every process that follows the front process (see kCGSFrontProcessNotificationName) asks again.
 	notify_post(kCGSFrontProcessNotificationName);
+	syncFrontObservers();
 	return kCGErrorSuccess;
 }
 
@@ -470,6 +535,7 @@ CGError _CGSResignFrontProcess(pid_t pid)
 	if (err != kCGErrorSuccess)
 		return err;
 	notify_post(kCGSFrontProcessNotificationName);
+	syncFrontObservers();
 	return kCGErrorSuccess;
 }
 
@@ -524,6 +590,152 @@ CGError _CGSGetMenuBarOwnerProcess(pid_t* pid)
 	if (reportedFrontProcess(&front) != kCGErrorSuccess)
 		return kCGErrorNoneAvailable;
 	*pid = (pid_t) state;
+	return kCGErrorSuccess;
+}
+
+// Observers of the front process, in this process. The transitions are detected by comparing the
+// front process with the one the observers saw last, whichever process changed it and whether it
+// was by a report, a request or the focus leaving: the change is noticed when libnotify delivers
+// the name of kCGSFrontProcessNotificationName, and at once, in the calling thread, when this
+// process itself reports or requests, so that a caller that goes on to post its own
+// notifications finds the observers have run first.
+typedef struct
+{
+	CGSFrontProcessObserver proc;
+	void* info;
+} FrontObserver;
+
+static pthread_mutex_t g_frontObserverLock = PTHREAD_MUTEX_INITIALIZER;
+static FrontObserver g_frontObservers[8];
+static unsigned g_frontObserverCount;
+static pid_t g_lastFront;
+static BOOL g_syncingFront, g_syncFrontAgain;
+static int g_frontWatchToken = -1;
+
+static pid_t currentFrontOrNone(void)
+{
+	pid_t front = 0;
+	if (_CGSGetFrontProcess(&front) != kCGErrorSuccess || front <= 0)
+		return 0;
+	return front;
+}
+
+static void runFrontObservers(void)
+{
+	for (;;)
+	{
+		FrontObserver observers[8];
+		unsigned count;
+		pid_t previous, now = currentFrontOrNone();
+
+		pthread_mutex_lock(&g_frontObserverLock);
+		if (g_syncingFront)
+		{
+			// Called from an observer; the loop of the outer call looks again.
+			g_syncFrontAgain = YES;
+			pthread_mutex_unlock(&g_frontObserverLock);
+			return;
+		}
+		previous = g_lastFront;
+		if (previous == now || g_frontObserverCount == 0)
+		{
+			g_lastFront = now;
+			pthread_mutex_unlock(&g_frontObserverLock);
+			return;
+		}
+		g_lastFront = now;
+		g_syncingFront = YES;
+		g_syncFrontAgain = NO;
+		count = g_frontObserverCount;
+		memcpy(observers, g_frontObservers, sizeof(observers));
+		pthread_mutex_unlock(&g_frontObserverLock);
+
+		for (unsigned i = 0; i < count; i++)
+			observers[i].proc(previous, now, observers[i].info);
+
+		pthread_mutex_lock(&g_frontObserverLock);
+		g_syncingFront = NO;
+		BOOL again = g_syncFrontAgain;
+		pthread_mutex_unlock(&g_frontObserverLock);
+		if (!again)
+			return;
+	}
+}
+
+static void syncFrontObservers(void)
+{
+	pthread_mutex_lock(&g_frontObserverLock);
+	unsigned count = g_frontObserverCount;
+	pthread_mutex_unlock(&g_frontObserverLock);
+	if (count == 0)
+		return;
+
+	if (pthread_main_np())
+		runFrontObservers();
+	else
+		dispatch_async(dispatch_get_main_queue(), ^{
+			runFrontObservers();
+		});
+}
+
+void _CGSAddFrontProcessObserver(CGSFrontProcessObserver proc, void* info)
+{
+	if (proc == NULL)
+		return;
+
+	pthread_mutex_lock(&g_frontObserverLock);
+	if (g_frontObserverCount == sizeof(g_frontObservers) / sizeof(g_frontObservers[0]))
+	{
+		pthread_mutex_unlock(&g_frontObserverLock);
+		return;
+	}
+	BOOL first = g_frontObserverCount == 0;
+	g_frontObservers[g_frontObserverCount].proc = proc;
+	g_frontObservers[g_frontObserverCount].info = info;
+	g_frontObserverCount++;
+	pthread_mutex_unlock(&g_frontObserverLock);
+
+	pid_t now = currentFrontOrNone();
+	if (first)
+	{
+		pthread_mutex_lock(&g_frontObserverLock);
+		g_lastFront = now;
+		pthread_mutex_unlock(&g_frontObserverLock);
+		notify_register_dispatch(kCGSFrontProcessNotificationName, &g_frontWatchToken, dispatch_get_main_queue(),
+								 ^(int ignored) {
+									 runFrontObservers();
+								 });
+	}
+	// A process that is the front process when it starts to watch has become it just now.
+	if (now == getpid())
+		proc(0, now, info);
+}
+
+CGError _CGSRequestFrontProcess(pid_t pid, uint32_t options)
+{
+	if (pid <= 0)
+		return kCGErrorIllegalArgument;
+
+	// The state changes at once and for every process, as on macOS, where GetFrontProcess() and
+	// NSWorkspace already answer with the requested process when the call returns. The window
+	// system is asked to move the input focus after it; the processes report their focus as
+	// before, which keeps the state right when the window system takes another decision.
+	pid_t front = 0;
+	if (reportedFrontProcess(&front) != kCGErrorSuccess || front != pid)
+	{
+		CGError err = _CGSSetFrontProcess(pid);
+		if (err != kCGErrorSuccess)
+			return err;
+	}
+	if (options & kCGSRequestFrontProcessMenuBarOwner)
+	{
+		CGError err = _CGSSetMenuBarOwnerProcess(pid);
+		if (err != kCGErrorSuccess)
+			return err;
+	}
+
+	// Whether the windows could be asked to activate is not an error of the request.
+	(void) _CGSActivateProcess(pid, (options & kCGSRequestFrontProcessFrontWindowOnly) ? kCGSActivateProcessFrontWindowOnly : 0);
 	return kCGErrorSuccess;
 }
 

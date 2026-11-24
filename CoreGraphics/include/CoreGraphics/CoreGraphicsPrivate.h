@@ -234,10 +234,11 @@ CGError _CGSActivateProcess(pid_t pid, uint32_t options);
 // and system daemons, are not applications of the window system.
 Boolean _CGSProcessHasConnection(pid_t pid);
 #define kCGSProcessConnectionNotificationPrefix "org.darlinghq.process-connection."
-// The Darling process that has the input focus. The display server answers where it can (X11:
-// the owner of _NET_ACTIVE_WINDOW). A Wayland compositor does not tell clients, so the answer
-// is the process that most recently reported (through _CGSSetFrontProcess) that it was
-// activated, shared by all Darling processes. Returns kCGErrorSuccess and sets *pid,
+// The Darling process that has the input focus: the process that most recently reported (through
+// _CGSSetFrontProcess) or was requested (through _CGSRequestFrontProcess) to be the front process,
+// as long as it has not resigned since, shared by all Darling processes. When no process is
+// in that state, the display server is asked where it can answer (X11: the owner of
+// _NET_ACTIVE_WINDOW). Returns kCGErrorSuccess and sets *pid,
 // kCGErrorNoneAvailable when no process is known, kCGErrorIllegalArgument for a NULL pid.
 CGError _CGSGetFrontProcess(pid_t* pid);
 // Reports that the process with this pid got the input focus. A windowing backend calls it
@@ -250,6 +251,33 @@ CGError _CGSSetFrontProcess(pid_t pid);
 // asked, such as a Wayland compositor, has focus on a process that is not a Darling process, or on
 // none). Posts the same name as _CGSSetFrontProcess().
 CGError _CGSResignFrontProcess(pid_t pid);
+// Publishes the activation policy of the calling process' application (NSApplicationActivationPolicy:
+// 0 regular, 1 accessory, 2 prohibited) for the other processes; AppKit calls it when the application
+// object is made and when the policy changes.
+void _CGSSetProcessActivationPolicy(int policy);
+// The policy the process with this pid published. kCGErrorNoneAvailable for a process that is gone
+// or never published one (a program that is not an application of the window system),
+// kCGErrorIllegalArgument for a pid that is not positive or a NULL policy.
+CGError _CGSGetProcessActivationPolicy(pid_t pid, int* policy);
+// Makes the process with this pid the front process: what SetFrontProcess() of the Process Manager
+// asks for. The change is visible to every process when the call returns (_CGSGetFrontProcess(),
+// and what is built on it), and every process that watches the front process is notified; then
+// the window system is asked to give the process' windows the input focus (_CGSActivateProcess()),
+// which it may decline. kCGSRequestFrontProcessFrontWindowOnly is passed on to the activation;
+// kCGSRequestFrontProcessMenuBarOwner makes the process the menu bar owner too (for a
+// regular application; an agent keeps the owner that was). Returns kCGErrorIllegalArgument for a pid
+// that is not positive and kCGErrorSuccess otherwise.
+#define kCGSRequestFrontProcessFrontWindowOnly 1
+#define kCGSRequestFrontProcessMenuBarOwner 2
+CGError _CGSRequestFrontProcess(pid_t pid, uint32_t options);
+// Called in this process when the front process changed (by any process), on the main thread, and
+// at once in the thread that reported or requested the change when it was this process. previous
+// and current are pids, 0 for none known (the focus is in another client of the window system).
+// Not called for a change that is undone before the observers looked. An observer is added once and
+// not removed; the first one makes the process watch the front process, and an observer added while
+// this process is the front process is called with a previous pid of 0.
+typedef void (*CGSFrontProcessObserver)(pid_t previous, pid_t current, void* info);
+void _CGSAddFrontProcessObserver(CGSFrontProcessObserver observer, void* info);
 // The name of the Darwin notification that asks the process with this pid to activate its
 // windows (see above); a windowing backend observes the name of its own process.
 #define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
