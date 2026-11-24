@@ -2991,14 +2991,16 @@ typedef NS_ENUM(NSInteger, NSTextViewKillKind) {
     NS_EXTRA(NSTextView, self)->_backgroundColor = color;
 }
 
+// Whether the view resizes to fit its text is independent of whether its text
+// container tracks the view's size: a view that grows with its text must keep a
+// container that does not follow its height, or the text stops at the view's
+// current height. Test: appkit-textview-grows-with-text.m
 - (void) setHorizontallyResizable: (BOOL) flag {
     NS_EXTRA(NSTextView, self)->_isHorizontallyResizable = flag;
-    [NS_EXTRA(NSTextView, self)->_textContainer setWidthTracksTextView: flag];
 }
 
 - (void) setVerticallyResizable: (BOOL) flag {
     NS_EXTRA(NSTextView, self)->_isVerticallyResizable = flag;
-    [NS_EXTRA(NSTextView, self)->_textContainer setHeightTracksTextView: flag];
 }
 
 - (void) setMaxSize: (NSSize) size {
