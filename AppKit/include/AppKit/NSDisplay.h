@@ -28,13 +28,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSOpenPanel, NSFontTypeface, CGWindow;
 
 @interface NSDisplay : NSObject {
-    NSMutableArray *_eventQueue;
-    NSRecursiveLock *_eventQueueLock;
     BOOL _cursorHiddenUntilMouseMoves;
     NSInteger _cursorHideCount;
     BOOL _cursorIsHidden; // what the backend was last told
+    NSLock *_mouseDeltaLock;
     double _mouseDeltaX, _mouseDeltaY;
-    CFRunLoopSourceRef _eventSource;
+    // The top of the main screen, for the global coordinates of the input's CGEvents; NAN until
+    // known, and again when the screens change
+    CGFloat _mainScreenMaxY;
 }
 
 + (NSDisplay *) currentDisplay;
@@ -72,6 +73,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (id) cursorWithName: (NSString *) name;
 - (void) setCursor: (id) cursor;
 
+// Called on the main thread before each wait for events of -[NSApplication
+// nextEventMatchingMask:...]: a backend handles here what its connection has already read, and
+// sends what it has buffered. Does nothing by default.
+- (void) willWaitForEvents;
+
+// The events are those of HIToolbox's main event queue (NSEventQueue.m). These wait for the next one,
+// as -[NSApplication nextEventMatchingMask:...] does but with an NSAppKitSystem event when there is
+// none, and remove events, as -[NSApplication discardEventsMatchingMask:beforeEvent:] does.
 - (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
@@ -80,7 +89,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event;
 
+// What the backends post: the input of the window system, which goes through the CoreGraphics
+// event taps and stream (where mouse motion is coalesced) into the queue. Any thread. With atStart,
+// the event is not input but a notice the application must see before anything else: it is put in
+// front of the queue as it is.
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart;
+// What the application posts (-[NSApplication postEvent:atStart:])
 - (void) _postEventWithoutCoalescing: (NSEvent *) event atStart: (BOOL) atStart;
 
 - (BOOL) containsAndRemovePeriodicEvents;

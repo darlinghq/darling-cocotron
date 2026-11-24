@@ -42,6 +42,7 @@
 #include "CGEventObjC.h"
 #include <CoreGraphics/CGEventSource.h>
 #include "CGEventTapInternal.h"
+#include <CoreGraphics/CoreGraphicsPrivate.h>
 #include <CoreFoundation/CoreFoundation.h>
 #include <mach/mach.h>
 #include <pthread.h>
@@ -610,8 +611,15 @@ static void cgEventTapCallout(CFMachPortRef mp, void* msg, CFIndex size, void* i
 
 	if (!abandoned && tap->_enabled)
 	{
+		// What the poster attached describes the event as it was posted: it is only kept while
+		// the tap leaves the event as it is (see _CGSEventSetClientData).
+		CGEvent* before = _CGSEventGetClientData(event) ? (CGEvent*) CGEventCreateCopy(event) : nil;
+
 		called = YES;
 		returned = tap->_callback((CGEventTapProxy) tap, CGEventGetType(event), event, tap->_userInfo);
+		if (before != nil && (returned != event || ![(CGEvent*) event hasSameContentAs: before]))
+			_CGSEventSetClientData(event, NULL);
+		[before release];
 	}
 	if (called)
 		recordLatency(tap, sentAt);

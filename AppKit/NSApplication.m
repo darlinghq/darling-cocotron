@@ -55,6 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <HIToolbox/CarbonEvents.h>
 #import <HIToolbox/CarbonEventsCore.h>
 #import <CoreGraphics/CGWindowPrivate.h>
+#import "NSEventQueue.h"
 #import <Foundation/NSAppleEventManager.h>
 #import "private-include/AppKit/NSEventTime.h"
 #import <Foundation/NSAppleEventDescriptor.h>
@@ -157,33 +158,6 @@ NSApplication *NSApp = nil;
 @interface NSDockTile (private)
 - initWithOwner: owner;
 @end
-
-// The window system reports a hot key press or release as a system-defined event record; it is
-// queued for the application like any event, and -[NSApplication sendEvent:] passes it on.
-static void hotKeyEventNotification(CGSNotificationType type, void *data, unsigned long length, void *client) {
-    const CGSEventRecord *record = data;
-
-    if (length < sizeof(*record) || record->type != NX_SYSDEFINED)
-        return;
-
-    int subtype = record->data.compound.subType;
-    if (subtype != kCGSHotKeyPressedSubtype && subtype != kCGSHotKeyReleasedSubtype)
-        return;
-
-    // CG global coordinates have y down from the main display's top; NSEvent's have y up
-    NSRect main = [[[NSScreen screens] firstObject] frame];
-    NSPoint location = NSMakePoint(record->location.x, NSMaxY(main) - record->location.y);
-    NSEvent *event = [NSEvent otherEventWithType: NSSystemDefined
-                                        location: location
-                                   modifierFlags: (NSUInteger) record->flags & NSDeviceIndependentModifierFlagsMask
-                                       timestamp: (NSTimeInterval) record->time / 1e9
-                                    windowNumber: 0
-                                         context: nil
-                                         subtype: subtype
-                                           data1: record->data.compound.misc.L[0]
-                                           data2: 0];
-    [NSApp postEvent: event atStart: NO];
-}
 
 // The documents a process argument list asks to open (arguments[0] is the
 // executable), by the rule the Cocoa application object follows: every
@@ -366,8 +340,6 @@ static void observeProcessCommands(NSApplication *application) {
 
     NS_EXTRA(NSApplication, self)->_dockTile = [[NSDockTile alloc] initWithOwner: self];
     NS_EXTRA(NSApplication, self)->_modalStack = [NSMutableArray new];
-
-    CGSRegisterNotifyProc(hotKeyEventNotification, CGSNotificationSingleEventType(NX_SYSDEFINED), NULL);
 
     NS_EXTRA(NSApplication, self)->_lock = NSZoneMalloc(NULL, sizeof(pthread_mutex_t));
 
@@ -1747,7 +1719,7 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
 
     // QUIRK: a system-defined event of subtype 6 is a hot key press and one of subtype 9 a
     // release; data1 names the hot key. HIToolbox turns it into the Carbon hot key event (AppKit
-    // passes it on with CreateEventWithCGEvent and SendEventToEventTarget), so an
+    // passes the event's Carbon event on with SendEventToEventTarget), so an
     // application that overrides -sendEvent: without calling super gets no Carbon callback, as on
     // macOS. Not documented. Evidence: public write-ups (The Register, 2009,
     // https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/; cocoa-dev 2011-10,
@@ -1758,15 +1730,13 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     // Test: tests/src/carbon_hotkeys_appkit.m
     if ([event type] == NSSystemDefined &&
         ([event subtype] == kCGSHotKeyPressedSubtype || [event subtype] == kCGSHotKeyReleasedSubtype)) {
-        // Through the public Carbon Event Manager: a raw event made from the event's CGEvent goes to
-        // the event dispatcher target, whose standard handler (in HIToolbox) sends the hot key event.
-        CGEventRef cgEvent = [event CGEvent];
-        EventRef carbonEvent = NULL;
+        // Through the public Carbon Event Manager: the raw event (the one taken from HIToolbox's
+        // queue) goes to the event dispatcher target, whose standard handler (in HIToolbox) sends the
+        // hot key event.
+        EventRef carbonEvent = (EventRef) [event eventRef];
 
-        if (cgEvent != NULL && CreateEventWithCGEvent(NULL, cgEvent, kEventAttributeNone, &carbonEvent) == noErr) {
+        if (carbonEvent != NULL)
             SendEventToEventTarget(carbonEvent, GetEventDispatcherTarget());
-            ReleaseEvent(carbonEvent);
-        }
         return;
     }
 
@@ -1817,15 +1787,9 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
         [self _checkForAppActivation];
         [self _displayAllWindowsIfNeeded];
 
-        nextEvent = [[NS_EXTRA(NSApplication, self)->_display nextEventMatchingMask: mask
-                                           untilDate: untilDate
-                                              inMode: mode
-                                             dequeue: dequeue] retain];
-
-        if ([nextEvent type] == NSAppKitSystem) {
-            [nextEvent release];
-            nextEvent = nil;
-        }
+        // One wait in HIToolbox's event queue, which holds AppKit's events
+        [NS_EXTRA(NSApplication, self)->_display willWaitForEvents];
+        nextEvent = [_NSEventQueueNextEvent(mask, untilDate, mode, dequeue) retain];
 
         NS_HANDLER [self reportException: localException];
         NS_ENDHANDLER
@@ -1860,11 +1824,14 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
 - (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event
 {
-    [NS_EXTRA(NSApplication, self)->_display discardEventsMatchingMask: mask beforeEvent: event];
+    _NSEventQueueDiscard(mask, event);
 }
 
+// QUIRK: what an application posts with -[NSApplication postEvent:atStart:] is queued as it is: posted drags are
+// dequeued one by one, never coalesced. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-posted-events-not-coalesced.m
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
-    [NS_EXTRA(NSApplication, self)->_display _postEventWithoutCoalescing: event atStart: atStart];
+    _NSEventQueuePost(event, atStart);
 }
 
 - _searchForAction: (SEL) action responder: target {

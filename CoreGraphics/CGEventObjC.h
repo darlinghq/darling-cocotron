@@ -60,6 +60,9 @@ extern CGEventClass _CGEventClassOfType(CGEventType type);
 
 	CGSEventRecordPtr _eventRecord;
 	uint32_t _eventRecordLength;
+	// What the poster of a window system event attached for the frameworks that read the event
+	// stream (_CGSEventSetClientData); not part of the event, so copies do not get it.
+	id _clientData;
 }
 -(instancetype) initWithSource:(CGEventSourceRef) source;
 -(instancetype) initWithSource:(CGEventSourceRef) source
@@ -90,6 +93,9 @@ extern CGEventClass _CGEventClassOfType(CGEventType type);
 
 // Replaces the Unicode string; stringLength is limited to 65535.
 -(void) setUnicodeString:(const UniChar*) string length:(UniCharCount) stringLength;
+
+// Whether the other event has the same type, time, flags, location, fields and Unicode string.
+-(BOOL) hasSameContentAs:(CGEvent*) other;
 
 @end
 
