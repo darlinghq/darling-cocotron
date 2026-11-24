@@ -98,6 +98,7 @@ static BOOL processExists(pid_t pid) {
     // Contents/MacOS next to an Info.plist that does not declare another package type. On macOS 26.7.3
     // an application whose bundle directory has no .app extension, started through its executable,
     // has the same main bundle, bundle URL and activation policy as the same bundle named .app.
+    // Tests: the policy and noext cases of tests/appkit-global-menu/run-bar-tracking.py.
     NSArray<NSString *> *components = [[NSString stringWithUTF8String: path] pathComponents];
     NSInteger count = (NSInteger) [components count];
     if (count < 4 || ![[components objectAtIndex: count - 2] isEqualToString: @"MacOS"] ||
