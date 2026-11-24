@@ -406,6 +406,7 @@ static void observeMenuBarOwnership(void) {
     // An application connects to the window system as it starts, which is also what makes it
     // known as an application to other processes.
     (void) CGSMainConnectionID();
+    _CGSSetProcessActivationPolicy((int) [self activationPolicy]);
     observeProcessCommands(self);
     observeMenuBarOwnership();
 
@@ -1276,6 +1277,7 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
         return NO;
     NS_EXTRA(NSApplication, self)->_activationPolicy = activationPolicy;
     NS_EXTRA(NSApplication, self)->_activationPolicySet = YES;
+    _CGSSetProcessActivationPolicy((int) activationPolicy);
     // A program that was prohibited and is active takes up the part of the front application now.
     if (activationPolicy != NSApplicationActivationPolicyProhibited &&
         NS_EXTRA(NSApplication, self)->_isActive) {
@@ -2858,11 +2860,13 @@ static BOOL resignForced;
     if (!forced && ![self _hasOnScreenWindow])
         return;
 
+    // The system's front process is no longer this application when the notifications go out, as on
+    // macOS: the front process observers (HIToolbox's application events) run before them.
+    _CGSResignFrontProcess(getpid());
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationWillResignActiveNotification
                           object: self];
     NS_EXTRA(NSApplication, self)->_isActive = NO;
-    _CGSResignFrontProcess(getpid());
 
     // Exposed menus are running tight event tracking loops and would remain
     // visible when the app deactivates (making the UI less than community
