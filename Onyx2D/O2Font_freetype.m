@@ -541,6 +541,20 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set, int *faceIndex) {
     return fallback;
 }
 
+// A color font can have no outline, or an empty one, for its glyphs (bitmap
+// emoji, layered color glyphs); this renderer only draws outlines.
+static BOOL O2FontFaceHasOutlines(FT_Face face, const uint32_t *codePoints,
+                                  size_t count) {
+    for (size_t index = 0; index < count; ++index) {
+        FT_UInt glyph = FT_Get_Char_Index(face, codePoints[index]);
+        if (FT_Load_Glyph(face, glyph, FT_LOAD_NO_SCALE | FT_LOAD_NO_BITMAP) != 0 ||
+            face->glyph->format != FT_GLYPH_FORMAT_OUTLINE ||
+            face->glyph->outline.n_contours == 0)
+            return NO;
+    }
+    return YES;
+}
+
 O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
                                            size_t count, FT_Face baseFace,
                                            const char *language) {
@@ -603,23 +617,34 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
     FcDefaultSubstitute(pattern);
     // The best match can be a color bitmap font (some emoji fonts cover
     // symbols such as U+2699), which this renderer cannot draw: take the first
-    // outline font, in fontconfig's order, that has every code point.
+    // font, in fontconfig's order, that has every code point as outlines.
+    FcCharSet *required = NULL; // owned by the pattern
+    FcPatternGetCharSet(pattern, FC_CHARSET, 0, &required);
     FcResult result;
     FcFontSet *candidates = FcFontSort(config, pattern, FcFalse, NULL, &result);
-    FcPatternDestroy(pattern);
-    if (candidates == NULL)
+    if (candidates == NULL) {
+        FcPatternDestroy(pattern);
         return nil;
+    }
 
     FT_Face face = NULL;
     NSString *sourcePath = nil;
-    int faceIndex = 0;
+    int sourceFaceIndex = 0;
     for (int candidate = 0; candidate < candidates->nfont && face == NULL; ++candidate) {
         FcPattern *font = candidates->fonts[candidate];
         FcBool outline = FcTrue, color = FcFalse;
         FcPatternGetBool(font, FC_OUTLINE, 0, &outline);
         FcPatternGetBool(font, FC_COLOR, 0, &color);
-        if (!outline || color)
+        if (!outline)
             continue;
+        // FcFontSort lists every installed font, and opening a face reads its
+        // file: skip the ones fontconfig knows lack a code point.
+        FcCharSet *coverage = NULL;
+        if (required != NULL &&
+            FcPatternGetCharSet(font, FC_CHARSET, 0, &coverage) == FcResultMatch &&
+            !FcCharSetIsSubset(required, coverage))
+            continue;
+        int faceIndex = 0;
         FcChar8 *filename = NULL;
         FcResult indexResult = FcPatternGetInteger(font, FC_INDEX, 0, &faceIndex);
         if (FcPatternGetString(font, FC_FILE, 0, &filename) != FcResultMatch ||
@@ -636,7 +661,10 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         BOOL covers = FT_Select_Charmap(face, FT_ENCODING_UNICODE) == 0;
         for (size_t index = 0; covers && index < count; ++index)
             covers = FT_Get_Char_Index(face, codePoints[index]) != 0;
+        if (covers && color)
+            covers = O2FontFaceHasOutlines(face, codePoints, count);
         if (covers) {
+            sourceFaceIndex = faceIndex;
             sourcePath = [[NSString alloc] initWithUTF8String: (const char *)filename];
         } else {
             FT_Done_Face(face);
@@ -644,11 +672,12 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         }
     }
     FcFontSetDestroy(candidates);
+    FcPatternDestroy(pattern);
     if (face == NULL)
         return nil;
     O2Font_freetype *font = [[O2Font_freetype alloc] initWithFace: face];
     font->_sourcePath = sourcePath;
-    font->_sourceFaceIndex = faceIndex;
+    font->_sourceFaceIndex = sourceFaceIndex;
     return font;
 }
 
