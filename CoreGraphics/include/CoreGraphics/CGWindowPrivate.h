@@ -64,6 +64,9 @@ typedef enum {
 - (void) setStyleMask: (NSUInteger) mask;
 - (void) setTitle: (NSString *) title;
 - (void) setFrame: (CGRect) frame;
+// The window's frame in AppKit's global space (origin at the bottom left of the main
+// display), or CGRectNull for a window system that does not know it.
+- (CGRect) frame;
 - (void) setOpaque: (BOOL) value;
 - (void) setAlphaValue: (CGFloat) value;
 - (void) setHasShadow: (BOOL) value;

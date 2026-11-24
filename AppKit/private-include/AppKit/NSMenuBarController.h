@@ -55,8 +55,10 @@
 
 // Decides whether the application's main menu is shown in an NSMenuBarWindow,
 // and keeps the bar current, for every display backend. The bar is shown for
-// as long as the application is active and has a main menu, unless the desktop
-// shows the menu itself or the application hides the menu bar (presentation
+// as long as the application owns the menu bar (it is the regular application that became
+// active last; an agent application taking the focus does not take the bar over) and has a main menu, unless the desktop
+// shows the menu itself, a visible window carries the menu as a strip of its
+// own, or the application hides the menu bar (presentation
 // options, or a window in full screen mode). When only the application's
 // activity ends, the bar stays for a short while: the focus passes between the
 // windows of an application, and while windows are replaced, through states in
@@ -67,6 +69,9 @@
     NSMenu *_menu;
     NSMenuBarWindow *_bar;
     BOOL _barShown;
+    // Whether this application owns the menu bar (see -refreshOwnership).
+    BOOL _ownsMenuBar;
+    int _ownerToken;
     // The bar outlives the application being inactive for a moment (see -update).
     NSTimer *_hideTimer;
     // The bar is not among the application's windows, so nothing else redraws it.
@@ -78,6 +83,10 @@
 - (void) setMainMenu: (NSMenu *) menu;
 // Shows or hides the bar after something it depends on changed.
 - (void) update;
+// Asks the window system whether this application owns the menu bar now. The decision is
+// remembered, and taken again when the owner or the front application changes.
+- (void) refreshOwnership;
+- (void) updateWaitingForHide: (BOOL) waiting;
 - (BOOL) barShown;
 - (NSMenuBarWindow *) bar;
 

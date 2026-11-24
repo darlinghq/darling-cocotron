@@ -155,7 +155,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (NSRect) borderRectFromTitleRect: (NSRect) titleRect {
     NSRect result = NSInsetRect(titleRect, -6, 0);
 
-    result.size.height = [self bounds].size.height - 2;
+    // The titles span the whole height of the bar: no strip of the bar is on no
+    // title, and a menu opens at the bar's real bottom edge.
+    result.size.height = [self bounds].size.height;
     result.origin.y = 0;
 
     return result;

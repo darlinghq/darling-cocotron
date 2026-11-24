@@ -35,12 +35,15 @@
     Display *_display;
     NSMenu *_menu;
     NSDBusMenu *_exporter;
+    BOOL _exporting;
     BOOL _connectionTried;
     NSMenuBarController *_bar;
     NSMutableSet *_windows;
 }
 
-- (instancetype) initWithDisplay: (Display *) display;
+// Without exporting the menu is only shown in the menu bar window (the windows
+// carry it as strips); with it the session bus is used as well.
+- (instancetype) initWithDisplay: (Display *) display exporting: (BOOL) exporting;
 
 - (void) setMainMenu: (NSMenu *) menu;
 

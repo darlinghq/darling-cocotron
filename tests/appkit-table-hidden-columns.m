@@ -8,7 +8,9 @@
 // documentation is silent on the rest; these are pinned by black-box observation on macOS 26.7.3: a hidden
 // column takes no width at all, its share of the intercell spacing included; sizeLastColumnToFit resizes the
 // last column that is shown; the autoresizing styles leave hidden columns alone
-// (test_autoresizing_skips_hidden_columns).
+// (test_autoresizing_skips_hidden_columns). That the rectangle and the cell frames of a hidden column are
+// NSZeroRect (test_rects_close_the_gap) and that the table's height is kept (test_table_height_with_hidden_first_column)
+// were seen on macOS 26.1 only (probe 657.R); the earlier observations printed x and width only.
 // Written from the documentation; not yet run in a guest.
 // Build: clang -framework AppKit appkit-table-hidden-columns.m (no ARC)
 #import <AppKit/AppKit.h>
@@ -20,8 +22,10 @@ static int failures;
 @interface Source : NSObject <NSTableViewDataSource>
 @end
 
+static NSInteger rowCount = 3;
+
 @implementation Source
-- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { return 3; }
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { return rowCount; }
 - (id)tableView:(NSTableView *)t objectValueForTableColumn:(NSTableColumn *)c row:(NSInteger)row
 {
     return [NSString stringWithFormat:@"%@ %ld", [c identifier], (long)row];
@@ -35,6 +39,7 @@ static NSScrollView *scroll;
 // Three columns of 100, 50 and 80 points with 3 points of spacing: they span 0-103, 103-156, 156-239
 static void setup(void)
 {
+    rowCount = 3;
     [window close];
     window = [[NSWindow alloc] initWithContentRect:NSMakeRect(100, 100, 500, 250) styleMask:NSBorderlessWindowMask
                                            backing:NSBackingStoreBuffered defer:NO];
@@ -95,11 +100,62 @@ static void test_rects_close_the_gap(void)
     CHECK(NSMinX([table rectOfColumn:1]) == 0);
     CHECK(NSMinX([table frameOfCellAtColumn:1 row:0]) == 0);
     CHECK(NSMinX([table frameOfCellAtColumn:1 row:1]) == 0 && NSWidth([table frameOfCellAtColumn:1 row:1]) == 0);
+    // QUIRK (macOS 26.1, probe 657.R): y and height are 0 as well, for the rectangle and for the cell frames of every row
+    CHECK(NSEqualRects([table rectOfColumn:1], NSZeroRect));
+    CHECK(NSEqualRects([table frameOfCellAtColumn:1 row:0], NSZeroRect));
+    CHECK(NSEqualRects([table frameOfCellAtColumn:1 row:1], NSZeroRect));
     [column(1) setHidden:NO];
     [column(2) setHidden:YES];
     CHECK(NSMinX([table rectOfColumn:2]) == 0 && NSWidth([table rectOfColumn:2]) == 0);
     CHECK(NSMinX([table frameOfCellAtColumn:2 row:0]) == 0);
+    CHECK(NSEqualRects([table rectOfColumn:2], NSZeroRect)); // the last column, hidden
     CHECK(NSMinX([table rectOfColumn:1]) == 103 && NSWidth([table rectOfColumn:1]) == 53);
+}
+
+// The table's height covers its rows whichever column is hidden: -noteNumberOfRowsChanged must not take it from the
+// rectangle of column 0, which is empty while that column is hidden
+static void test_table_height_with_hidden_first_column(void)
+{
+    setup();
+    rowCount = 30; // 30 rows are taller than the 250 point clip view
+    [table noteNumberOfRowsChanged];
+    CGFloat height = NSHeight([table frame]);
+    CHECK(height > 250);
+    CHECK(height == NSMaxY([table rectOfRow:29]));
+    [column(0) setHidden:YES];
+    [table noteNumberOfRowsChanged];
+    CHECK(NSHeight([table frame]) == height);
+    [column(0) setHidden:NO];
+    [column(1) setHidden:YES];
+    [table noteNumberOfRowsChanged];
+    CHECK(NSHeight([table frame]) == height);
+}
+
+// The disclosure triangle of a hidden outline column has no frame: the empty one of its cell, not a 12 point wide
+// rectangle built from it
+@interface OutlineSource : NSObject <NSOutlineViewDataSource>
+@end
+@implementation OutlineSource
+- (NSInteger)outlineView:(NSOutlineView *)o numberOfChildrenOfItem:(id)item { return item == nil ? 1 : 2; }
+- (id)outlineView:(NSOutlineView *)o child:(NSInteger)index ofItem:(id)item { return item == nil ? @"parent" : [NSString stringWithFormat:@"child%ld", (long)index]; }
+- (BOOL)outlineView:(NSOutlineView *)o isItemExpandable:(id)item { return item == nil || [item isEqual:@"parent"]; }
+- (id)outlineView:(NSOutlineView *)o objectValueForTableColumn:(NSTableColumn *)c byItem:(id)item { return item; }
+@end
+
+static void test_outline_cell_of_a_hidden_outline_column(void)
+{
+    NSOutlineView *outline = [[[NSOutlineView alloc] initWithFrame:NSMakeRect(0, 0, 200, 100)] autorelease];
+    NSTableColumn *c = [[[NSTableColumn alloc] initWithIdentifier:@"o"] autorelease];
+    [c setWidth:100];
+    [outline addTableColumn:c];
+    [outline setOutlineTableColumn:c];
+    [outline setIntercellSpacing:NSMakeSize(3, 2)];
+    OutlineSource *source = [[[OutlineSource alloc] init] autorelease];
+    [outline setDataSource:source];
+    [outline reloadData];
+    CHECK(NSWidth([outline frameOfOutlineCellAtRow:0]) == 12);
+    [c setHidden:YES];
+    CHECK(NSEqualRects([outline frameOfOutlineCellAtRow:0], NSZeroRect));
 }
 
 static void test_a_point_is_never_in_a_hidden_column(void)
@@ -218,6 +274,8 @@ static void test_header(void)
     [column(1) setHidden:YES];
     CHECK(NSWidth([header headerRectOfColumn:1]) == 0);
     CHECK(NSMinX([header headerRectOfColumn:1]) == 0); // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 657.1): a hidden column's header rect is at x 0
+    // QUIRK (macOS 26.1, probe 657.R): unlike the table's rectangle for it, the header rect of a hidden column keeps the header's height
+    CHECK(NSHeight([header headerRectOfColumn:1]) == NSHeight([header bounds]) && NSHeight([header bounds]) > 0);
     CHECK(NSMinX([header headerRectOfColumn:2]) == 103);
     CHECK(NSWidth([header headerRectOfColumn:2]) == 83);
     CHECK([header columnAtPoint:NSMakePoint(120, 5)] == 2);
@@ -237,6 +295,8 @@ int main(void)
         test_visible_columns_are_unchanged();
         test_a_hidden_column_stays_in_the_table();
         test_rects_close_the_gap();
+        test_table_height_with_hidden_first_column();
+        test_outline_cell_of_a_hidden_outline_column();
         test_a_point_is_never_in_a_hidden_column();
         test_ranges_over_whole_rects();
         test_column_indexes_leave_out_hidden_columns();
