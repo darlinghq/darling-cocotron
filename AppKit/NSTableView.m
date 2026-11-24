@@ -2730,10 +2730,18 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     } else if ([event clickCount] == 2) {
         // nb this logic was backwards previously
 
-        id binder = [clickedColumnObject _binderForBinding: @"value"
-                                                    create: NO];
         BOOL interpretedAsEdit = NO;
-        if ([clickedColumnObject isEditable]) {
+        // The documentation of doubleAction (https://developer.apple.com/documentation/appkit/nstableview/doubleaction)
+        // says a double click on a cell sends the double action, and that a table without one begins editing the cell.
+        // QUIRK: with one set, a double click on an editable cell starts no edit; the documentation does not say
+        // whether the cell is edited as well. Observed on macOS 26.1 (build 25B78) arm64 with an editable column and a data source
+        // that implements setObjectValue: (probe 659, "editable columns; inside column 0, row 1 (control); click count
+        // 2": `action(clickedRow=1,clickedColumn=0,selectedRow=1)` then
+        // `doubleAction(clickedRow=1,clickedColumn=0,selectedRow=1)`, `editedRow=-1` at 0.1 s and at 0.5 s).
+        // Test: test_double_click_with_a_double_action_starts_no_edit in tests/appkit-table-click-beside-columns.m
+        if ([clickedColumnObject isEditable] && [self doubleAction] == NULL) {
+            id binder = [clickedColumnObject _binderForBinding: @"value"
+                                                        create: NO];
             if ([self dataSourceCanSetObjectValue] ||
                 [binder allowsEditingForRow: NS_EXTRA(NSTableView, self)->_clickedRow]) {
                 if (NS_EXTRA(NSTableView, self)->_clickedColumn != -1 && NS_EXTRA(NSTableView, self)->_clickedRow != -1) {
