@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 // Actual-backend fixture, run only with an isolated native compositor that has no keyboard of its
-// own: drives the wl_keyboard keymap event directly and checks that key events keep being
+// own: drives the wl_keyboard keymap event of CoreGraphics' keyboard directly and checks that key events keep being
 // delivered after keymaps the client cannot use (format no_keymap, an empty xkb_v1 map, a map
 // that does not compile, an unknown format), and that the keymap in force before them stays.
 union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; };
@@ -24,31 +24,85 @@ struct Array { size_t size, alloc; void *data; };
 - (void)keyboardEvent:(uint32_t)opcode arguments:(union Argument *)args;
 - (void)processPendingEvents;
 @end
+// The keyboard decoder is CoreGraphics': the fixture drives its protocol events directly and reads what it
+// posts from the process' event stream (a program with no event tap gets the events there at once).
+extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef source, CFRunLoopRef runLoop);
+extern CGEventRef _CGSEventStreamCopyNextEvent(void);
+@interface FixtureKeyEvent : NSObject {
+@public
+    NSEventType type;
+    NSUInteger flags;
+    unsigned short code;
+    NSString *characters;
+}
+- (NSEventType)type;
+- (NSUInteger)modifierFlags;
+- (unsigned short)keyCode;
+- (NSString *)characters;
+@end
+@implementation FixtureKeyEvent
+- (NSEventType)type { return type; }
+- (NSUInteger)modifierFlags { return flags; }
+- (unsigned short)keyCode { return code; }
+- (NSString *)characters { return characters; }
+@end
+static void ignoreSource(void *info) {}
+static void startReading(void) {
+    CFRunLoopSourceContext context = {0};
+    context.perform = ignoreSource;
+    CFRunLoopSourceRef source = CFRunLoopSourceCreate(NULL, 0, &context);
+    CFRunLoopAddSource(CFRunLoopGetMain(), source, kCFRunLoopCommonModes);
+    _CGSEventStreamSetReadySource(source, CFRunLoopGetMain());
+}
+// Moves what the decoder has posted into `events`
+static void drain(NSMutableArray *events) {
+    CGEventRef cg;
+    while ((cg = _CGSEventStreamCopyNextEvent()) != NULL) {
+        CGEventType t = CGEventGetType(cg);
+        if (t == kCGEventKeyDown || t == kCGEventKeyUp || t == kCGEventFlagsChanged) {
+            FixtureKeyEvent *e = [FixtureKeyEvent new];
+            e->type = (NSEventType)t;
+            e->flags = (NSUInteger)CGEventGetFlags(cg);
+            e->code = (unsigned short)CGEventGetIntegerValueField(cg, kCGKeyboardEventKeycode);
+            UniChar chars[8]; UniCharCount n = 0;
+            if (t != kCGEventFlagsChanged) CGEventKeyboardGetUnicodeString(cg, 8, &n, chars);
+            e->characters = [[NSString stringWithCharacters:chars length:n] retain];
+            [events addObject:e];
+            [e release];
+        }
+        CFRelease(cg);
+    }
+}
+static id keyboardDecoder(void) {
+    id connection = _CGSConnectionForID(CGSMainConnectionID());
+    Ivar ivar = class_getInstanceVariable(object_getClass(connection), "_keyboardDecoder");
+    return ivar ? object_getIvar(connection, ivar) : nil;
+}
 static NSMutableArray *events;
-static id display;
+static id display, decoder;
 static NSWindow *window;
 static int failures, checks;
-static void capture(id self, SEL cmd, NSEvent *event, BOOL atStart) { [events addObject:event]; }
 static void keymapCheck(BOOL ok, const char *what) {
     ++checks; if (!ok) ++failures; printf("%s %s\n", ok ? "PASS" : "FAIL", what); fflush(stdout);
 }
 static void keymap(uint32_t format, int fd, uint32_t size) {
     union Argument a[3] = {{.u = format}, {.h = fd}, {.u = size}};
-    [display keyboardEvent:0 arguments:a];
+    [decoder keyboardEvent:0 arguments:a];
 }
 static void enter(void) {
     struct Array array = {0, 0, NULL};
     union Argument a[3] = {{.u = 1}, {.o = [[window platformWindow] surface]}, {.a = &array}};
-    [display keyboardEvent:1 arguments:a];
+    [decoder keyboardEvent:1 arguments:a];
 }
 // Types the key (an evdev code) and returns the characters of the key-down event, nil if none.
 static NSString *typed(uint32_t code) {
-    [events removeAllObjects];
+    drain(events); [events removeAllObjects];
     union Argument down[4] = {{.u = 1}, {.u = 0}, {.u = code}, {.u = 1}};
     union Argument up[4] = {{.u = 1}, {.u = 0}, {.u = code}, {.u = 0}};
-    [display keyboardEvent:3 arguments:down];
-    [display keyboardEvent:3 arguments:up];
-    for (NSEvent *e in events)
+    [decoder keyboardEvent:3 arguments:down];
+    [decoder keyboardEvent:3 arguments:up];
+    drain(events);
+    for (FixtureKeyEvent *e in events)
         if ([e type] == NSKeyDown) return [e characters];
     return nil;
 }
@@ -72,14 +126,9 @@ static const char *zKeymap =
 @implementation KeymapApplication
 - (void)test:(id)sender {
     display = [NSClassFromString(@"NSDisplay") currentDisplay];
-    Class original = object_getClass(display);
-    Class recorder = objc_allocateClassPair(original, "KeymapRecordingDisplay", 0);
-    Method method = class_getInstanceMethod(original, @selector(postEvent:atStart:));
-    keymapCheck(method != NULL, "backend event method exists");
-    class_addMethod(recorder, @selector(postEvent:atStart:), (IMP)capture,
-                    method_getTypeEncoding(method));
-    objc_registerClassPair(recorder); events = [NSMutableArray new];
-    object_setClass(display, recorder);
+    decoder = keyboardDecoder();
+    keymapCheck(decoder != nil, "the keyboard decoder exists");
+    events = [NSMutableArray new]; startReading();
     enter();
 
     // Protocol behaviour, not a quirk: no_keymap means the client interprets raw key codes.
@@ -96,7 +145,7 @@ static const char *zKeymap =
     keymap(7, tempFile("x"), 1);
     keymapCheck([typed(30) isEqual:@"z"], "unknown keymap format: the keymap in force stays");
 
-    object_setClass(display, original); [events release];
+    [events release];
     printf("RESULT checks=%d failures=%d\n", checks, failures); fflush(stdout);
     exit(failures ? 1 : 0);
 }
