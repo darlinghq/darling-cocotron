@@ -1294,6 +1294,9 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
             else
                 [self collapseItem: NS_EXTRA(NSOutlineView, self)->_clickedItem];
 
+            // The click is over; see the QUIRK note in -[NSTableView mouseDown:]. It sent no action.
+            NS_EXTRA(NSTableView, self)->_clickedColumn = -1;
+            NS_EXTRA(NSTableView, self)->_clickedRow = -1;
             return;
         }
     }
