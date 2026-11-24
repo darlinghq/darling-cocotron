@@ -237,4 +237,30 @@ static inline int pocket_unpack(const uint8_t *in, size_t length, struct pocket_
     return length - sizeof(*header) >= header->size ? 1 : 0;
 }
 
+// Whether the message at the start of `in` is a touch move that a later one makes stale: the
+// bytes received so far hold, after it and before any other kind of message, a move of the same
+// finger. An application that draws more slowly than the touch screen reports would otherwise
+// fall further and further behind the finger. Returns 0 for anything else, also when the bytes
+// end before the answer is known.
+static inline int pocket_touch_move_is_stale(const uint8_t *in, size_t length) {
+    struct pocket_header header;
+    struct pocket_touch touch, later;
+    if (pocket_unpack(in, length, &header) != 1 || header.type != POCKET_TOUCH || header.size < sizeof(touch))
+        return 0;
+    memcpy(&touch, in + sizeof(header), sizeof(touch));
+    if (touch.phase != POCKET_TOUCH_MOVED)
+        return 0;
+    for (size_t offset = sizeof(header) + header.size; offset < length; offset += sizeof(header) + header.size) {
+        if (pocket_unpack(in + offset, length - offset, &header) != 1 || header.type != POCKET_TOUCH ||
+            header.size < sizeof(later))
+            return 0;
+        memcpy(&later, in + offset + sizeof(header), sizeof(later));
+        if (later.phase != POCKET_TOUCH_MOVED)
+            return 0;
+        if (later.finger == touch.finger)
+            return 1;
+    }
+    return 0;
+}
+
 #endif

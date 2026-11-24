@@ -254,12 +254,46 @@ static void testFullSocket(void) {
     CHECK(!reader.broken && reader.count == 40, "the host got %d of 40 messages", reader.count);
 }
 
+static size_t packTouch(uint8_t *out, uint32_t phase, uint32_t finger) {
+    struct pocket_touch touch = {phase, finger, 1.0f, 2.0f, 0.5};
+    return pocket_pack(out, POCKET_TOUCH, &touch, sizeof(touch));
+}
+
+static void testStaleTouchMoves(void) {
+    uint8_t in[400];
+    size_t length;
+    // A move followed by another move of the same finger is stale, even with another finger's in between.
+    length = packTouch(in, POCKET_TOUCH_MOVED, 1);
+    length += packTouch(in + length, POCKET_TOUCH_MOVED, 2);
+    length += packTouch(in + length, POCKET_TOUCH_MOVED, 1);
+    CHECK(pocket_touch_move_is_stale(in, length), "a move superseded by a later move of the finger");
+    // The later move itself, and a move of a finger that does not move again, are not.
+    size_t second = sizeof(struct pocket_header) + sizeof(struct pocket_touch);
+    CHECK(!pocket_touch_move_is_stale(in + second, length - second), "the move of finger 2 has no later one");
+    CHECK(!pocket_touch_move_is_stale(in + 2 * second, length - 2 * second), "the last move is current");
+    // An end or a begin in between keeps the order: nothing is skipped across it.
+    length = packTouch(in, POCKET_TOUCH_MOVED, 1);
+    length += packTouch(in + length, POCKET_TOUCH_ENDED, 1);
+    length += packTouch(in + length, POCKET_TOUCH_MOVED, 1);
+    CHECK(!pocket_touch_move_is_stale(in, length), "a move before an end is not stale");
+    length = packTouch(in, POCKET_TOUCH_MOVED, 1);
+    length += pocket_pack(in + length, POCKET_TEXT, "a", 1);
+    length += packTouch(in + length, POCKET_TOUCH_MOVED, 1);
+    CHECK(!pocket_touch_move_is_stale(in, length), "another kind of message in between keeps the move");
+    // Only whole messages decide; a later move that has not arrived yet does not.
+    length = packTouch(in, POCKET_TOUCH_MOVED, 1);
+    length += packTouch(in + length, POCKET_TOUCH_MOVED, 1);
+    CHECK(!pocket_touch_move_is_stale(in, length - 1), "a partial later message is not seen");
+    CHECK(!pocket_touch_move_is_stale(in, 3), "a partial header is not a message");
+}
+
 int main(void) {
     testLayout();
     testPack();
     testStream();
     testBufferDescriptor();
     testFullSocket();
+    testStaleTouchMoves();
     if (failures != 0) {
         fprintf(stderr, "%d failure(s)\n", failures);
         return 1;

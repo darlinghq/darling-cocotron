@@ -191,9 +191,10 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
         struct pocket_header header;
         int status;
         while ((status = pocket_unpack(_input + offset, _inputLength - offset, &header)) == 1) {
-            [self handleMessage: header.type
-                          bytes: _input + offset + sizeof(header)
-                         length: header.size];
+            if (!pocket_touch_move_is_stale(_input + offset, _inputLength - offset))
+                [self handleMessage: header.type
+                              bytes: _input + offset + sizeof(header)
+                             length: header.size];
             offset += sizeof(header) + header.size;
         }
         if (status < 0)
