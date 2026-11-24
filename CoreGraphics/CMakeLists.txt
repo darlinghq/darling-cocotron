@@ -128,6 +128,7 @@ set(CoreGraphics_sources
 	CGSServerSPI.m
 	CGSSymbolicHotKeys.m
 	CGEvent.m
+	CGEventKeyboardCharacters.m
 	CGEventSource.m
 	CGEventTap.m
 	CGEventStream.m
