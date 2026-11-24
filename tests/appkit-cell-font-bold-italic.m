@@ -117,6 +117,39 @@ static void test_missing_and_null_values(void)
     CHECK((traits(cell) & NSItalicFontMask) != 0);
 }
 
+// A string that reads as true, standing in for a controller marker (the markers are strings in Darling).
+@interface TrueReadingMarker : NSString
+@end
+@implementation TrueReadingMarker
+- (NSUInteger)length { return 3; }
+- (unichar)characterAtIndex:(NSUInteger)index { return "YES"[index]; }
+- (BOOL)boolValue { return YES; }
+@end
+
+// QUIRK: the string "YES" counts as true (macOS 26.1 arm64, probe 661.1); the three controller markers do not
+static void test_string_values(void)
+{
+    NSTextFieldCell *cell = plainCell();
+    [cell setValue:@"YES" forKey:NSFontBoldBinding];
+    CHECK((traits(cell) & NSBoldFontMask) != 0);
+    [cell setValue:@"YES" forKey:NSFontItalicBinding];
+    CHECK((traits(cell) & NSItalicFontMask) != 0);
+    id markers[3] = { NSMultipleValuesMarker, NSNoSelectionMarker, NSNotApplicableMarker };
+    for (int i = 0; i < 3; i++) {
+        [cell setValue:@"YES" forKey:NSFontBoldBinding];
+        [cell setValue:markers[i] forKey:NSFontBoldBinding];
+        CHECK((traits(cell) & NSBoldFontMask) == 0);
+    }
+    // The check is by identity (NSIsControllerMarker), not by what the marker reads as: with a marker that
+    // would read as true, the trait is still off. Darling's markers are strings, so the stand-in is one too.
+    id saved = NSNoSelectionMarker;
+    NSNoSelectionMarker = [[[TrueReadingMarker alloc] init] autorelease];
+    [cell setValue:@"YES" forKey:NSFontBoldBinding];
+    [cell setValue:NSNoSelectionMarker forKey:NSFontBoldBinding];
+    CHECK((traits(cell) & NSBoldFontMask) == 0);
+    NSNoSelectionMarker = saved;
+}
+
 // A column's data cell is prepared from the bound values of each row
 static void test_column_binding(void)
 {
@@ -147,6 +180,7 @@ int main(void)
         test_setting_the_same_value_changes_nothing();
         test_cell_without_font_is_left_alone();
         test_missing_and_null_values();
+        test_string_values();
         test_column_binding();
     }
     if (failures)
