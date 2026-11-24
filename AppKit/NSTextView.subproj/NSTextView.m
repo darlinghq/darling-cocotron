@@ -460,9 +460,15 @@ static NSTextView *s_targetTextView = nil;
 - initWithFrame: (NSRect) frame {
     NSTextStorage *storage = [[NSTextStorage new] autorelease];
     NSLayoutManager *layout = [[NSLayoutManager new] autorelease];
+    // The container of a text view made with a frame is as wide as the view, practically unlimited in
+    // height, and follows the width of the view but not its height: observed on macOS 26.7.3 and 10.14.4
+    // (black-box, tier 2, mac-probes p783: container size {frame width, 10000000}, width tracking on, height
+    // tracking off). The initializers of NSTextContainer default both tracking flags to off.
+    // Test: appkit-textview-default-container.m
     NSTextContainer *container = [[[NSTextContainer alloc]
-            initWithContainerSize: frame.size] autorelease];
+            initWithContainerSize: NSMakeSize(frame.size.width, 10000000)] autorelease];
 
+    [container setWidthTracksTextView: YES];
     [storage addLayoutManager: layout];
     [layout addTextContainer: container];
 
