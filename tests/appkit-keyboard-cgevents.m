@@ -199,7 +199,10 @@ int main(void) {
         int shiftChange = findFlags(tapSeen, tapCount, up + 1, kCGEventFlagMaskShift, YES);
         expect(shiftChange >= 0 && (tapSeen[shiftChange].hidFlagsState & kCGEventFlagMaskShift),
                @"the tap sees the flags change to Shift, and the flags state follows");
+        // The virtual keyboard of wtype has the lowercase keysym only; a compositor with a keymap of its own makes it A
         int bigDown = shiftChange >= 0 ? findKey(tapSeen, tapCount, shiftChange + 1, kCGEventKeyDown, 'a') : -1;
+        if (bigDown < 0 && shiftChange >= 0)
+            bigDown = findKey(tapSeen, tapCount, shiftChange + 1, kCGEventKeyDown, 'A');
         expect(bigDown >= 0 && (tapSeen[bigDown].flags & kCGEventFlagMaskShift), @"the key typed with Shift has the Shift flag");
         int shiftUp = bigDown >= 0 ? findFlags(tapSeen, tapCount, bigDown + 1, kCGEventFlagMaskShift, NO) : -1;
         expect(shiftUp >= 0 && !(tapSeen[shiftUp].hidFlagsState & kCGEventFlagMaskShift),
@@ -207,6 +210,8 @@ int main(void) {
         int nsShift = findFlags(nsSeen, nsCount, 0, NSEventModifierFlagShift, YES);
         expect(nsShift >= 0, @"AppKit gets a flags changed event with Shift");
         int nsBig = nsShift >= 0 ? findKey(nsSeen, nsCount, nsShift + 1, kCGEventKeyDown, 'a') : -1;
+        if (nsBig < 0 && nsShift >= 0)
+            nsBig = findKey(nsSeen, nsCount, nsShift + 1, kCGEventKeyDown, 'A');
         expect(nsBig >= 0 && (nsSeen[nsBig].flags & NSEventModifierFlagShift), @"AppKit's key down has the Shift flag");
 
         // Control + a
