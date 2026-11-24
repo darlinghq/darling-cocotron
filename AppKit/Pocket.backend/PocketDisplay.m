@@ -35,6 +35,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
+#include <pthread.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -166,12 +167,20 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     [self send: type bytes: bytes length: length fd: -1];
 }
 
+static pthread_mutex_t sendLock = PTHREAD_MUTEX_INITIALIZER;
+
 // With a descriptor, it goes with the first byte of the message.
 - (void) send: (uint32_t) type bytes: (const void *) bytes length: (size_t) length fd: (int) fd {
     if (_socket < 0)
         return;
-    if (pocket_send(_socket, type, bytes, length, fd) != 0) {
-        if (errno == EMSGSIZE)
+    // Windows may present from a queue of their own (-[PocketWindow flushBufferAsync]): one message at a
+    // time goes on the socket.
+    pthread_mutex_lock(&sendLock);
+    int result = pocket_send(_socket, type, bytes, length, fd);
+    int error = errno;
+    pthread_mutex_unlock(&sendLock);
+    if (result != 0) {
+        if (error == EMSGSIZE)
             NSLog(@"Pocket backend: not sending a message of %zu bytes", length);
         else
             [self hostGone];

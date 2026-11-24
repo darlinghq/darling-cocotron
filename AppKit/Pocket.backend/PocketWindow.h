@@ -20,6 +20,7 @@
 
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <Onyx2D/O2Geometry.h>
+#include <dispatch/dispatch.h>
 
 @class NSWindow, O2Context, PocketDisplay;
 
@@ -44,6 +45,11 @@
     uint32_t _bufferWidth, _bufferHeight;
     BOOL _busy;         // presented, and the host has not released it yet
     BOOL _needsPresent; // drawn since the last present
+    // Presents copying from the surface on _presentQueue.
+    dispatch_queue_t _presentQueue;
+    dispatch_group_t _presenting;
+    unsigned _asyncFlushes;
+    BOOL _presentsAsync; // the last flush was -flushBufferAsync
 }
 
 - (instancetype) initWithDelegate: (NSWindow *) delegate;
@@ -53,6 +59,12 @@
 - (BOOL) isVisible;
 - (int) level;
 - (uint32_t) number;
+
+// For a view that draws all of its frames into the surface itself: the shared buffer is filled and
+// handed over on a queue, while the next frame is being made. Waits for the last such present
+// before drawing.
+- (void) flushBufferAsync;
+- (void) waitForPresent;
 
 // From the host.
 - (void) bufferReleased;

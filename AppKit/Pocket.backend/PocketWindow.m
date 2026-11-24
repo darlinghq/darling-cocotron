@@ -101,11 +101,15 @@ static int createSharedMemory(size_t size) {
     _frame.size.width = MAX(_frame.size.width, 1.0);
     _frame.size.height = MAX(_frame.size.height, 1.0);
     [_display windowCreated: self];
+    _presentQueue = dispatch_queue_create("Pocket present", DISPATCH_QUEUE_SERIAL);
+    _presenting = dispatch_group_create();
     return self;
 }
 
 - (void) dealloc {
     [self invalidate];
+    dispatch_release(_presentQueue);
+    dispatch_release(_presenting);
     [_display release];
     [_deviceDictionary release];
     [_title release];
@@ -115,6 +119,7 @@ static int createSharedMemory(size_t size) {
 - (void) invalidate {
     if (_invalidated)
         return;
+    [self waitForPresent];
     _invalidated = YES;
     [_context release];
     _context = nil;
@@ -263,6 +268,8 @@ static int createSharedMemory(size_t size) {
 #pragma mark - Drawing
 
 - (O2Context *) cgContext {
+    // Not while a present still copies from it.
+    [self waitForPresent];
     if (_context == nil) {
         CGFloat scale = [_display scale];
         NSSize logical = NSMakeSize(ceil(_frame.size.width), ceil(_frame.size.height));
@@ -291,6 +298,7 @@ static int createSharedMemory(size_t size) {
 - (BOOL) ensureBufferWidth: (uint32_t) width height: (uint32_t) height {
     if (_pixels != NULL && _bufferWidth == width && _bufferHeight == height)
         return YES;
+    [self waitForPresent];
     if (_pixels != NULL)
         munmap(_pixels, _bufferSize);
     _pixels = NULL;
@@ -323,7 +331,12 @@ static int createSharedMemory(size_t size) {
     return YES;
 }
 
+- (void) waitForPresent {
+    dispatch_group_wait(_presenting, DISPATCH_TIME_FOREVER);
+}
+
 - (void) present {
+    [self waitForPresent];
     if (!_needsPresent || _busy || !_visible || _context == nil || _invalidated)
         return;
     O2Surface *surface = [_context surface];
@@ -351,13 +364,57 @@ static int createSharedMemory(size_t size) {
         return;
     O2ContextFlush(_context);
     _needsPresent = YES;
+    _presentsAsync = NO;
     [self present];
     [_display updateKeyboard];
 }
 
+- (void) flushBufferAsync {
+    if (_context == nil)
+        return;
+    [self waitForPresent];
+    O2ContextFlush(_context);
+    _needsPresent = YES;
+    _presentsAsync = YES;
+    [self presentAsync];
+    // The first responder seldom changes while a game draws.
+    if (_asyncFlushes++ % 15 == 0)
+        [_display updateKeyboard];
+}
+
+- (void) presentAsync {
+    // When the host releases the last frame, -bufferReleased presents this one.
+    if (!_needsPresent || _busy || !_visible || _context == nil || _invalidated)
+        return;
+    O2Surface *surface = [_context surface];
+    size_t width = O2SurfaceGetWidth(surface);
+    size_t height = O2SurfaceGetHeight(surface);
+    size_t stride = O2SurfaceGetBytesPerRow(surface);
+    const uint8_t *pixels = O2SurfaceGetPixelBytes(surface);
+    if (pixels == NULL || ![self ensureBufferWidth: (uint32_t) width height: (uint32_t) height])
+        return;
+    _busy = YES;
+    _needsPresent = NO;
+    uint8_t *shared = _pixels;
+    PocketDisplay *display = [_display retain];
+    struct pocket_present message = {[self number], 0, 0, (int32_t) width, (int32_t) height};
+    dispatch_group_async(_presenting, _presentQueue, ^{
+        if (stride == width * 4)
+            memcpy(shared, pixels, width * height * 4);
+        else
+            for (size_t row = 0; row < height; row++)
+                memcpy(shared + row * width * 4, pixels + row * stride, width * 4);
+        [display send: POCKET_PRESENT bytes: &message length: sizeof(message)];
+        [display release];
+    });
+}
+
 - (void) bufferReleased {
     _busy = NO;
-    [self present];
+    if (_presentsAsync)
+        [self presentAsync];
+    else
+        [self present];
 }
 
 @end
