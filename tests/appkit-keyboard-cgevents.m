@@ -124,6 +124,15 @@ static int findKey(Seen *list, int count, int from, CGEventType type, unichar c)
     return -1;
 }
 
+// The index of the first key event of the type after `from` that has the letter in either case, or -1
+static int findLetter(Seen *list, int count, int from, CGEventType type, unichar lower) {
+    for (int i = from < 0 ? 0 : from; i < count; i++) {
+        if (list[i].type == type && (hasChar(&list[i], lower) || hasChar(&list[i], lower - 'a' + 'A')))
+            return i;
+    }
+    return -1;
+}
+
 // The first flags changed event after `from` with the flag set (or cleared)
 static int findFlags(Seen *list, int count, int from, uint64_t flag, BOOL set) {
     for (int i = from < 0 ? 0 : from; i < count; i++) {
@@ -199,14 +208,16 @@ int main(void) {
         int shiftChange = findFlags(tapSeen, tapCount, up + 1, kCGEventFlagMaskShift, YES);
         expect(shiftChange >= 0 && (tapSeen[shiftChange].hidFlagsState & kCGEventFlagMaskShift),
                @"the tap sees the flags change to Shift, and the flags state follows");
-        int bigDown = shiftChange >= 0 ? findKey(tapSeen, tapCount, shiftChange + 1, kCGEventKeyDown, 'a') : -1;
+        // The character the key types with Shift is up to the compositor's keymap (A with a layout's
+        // shift level, a with a keymap that has no level for it), so a and A are both right.
+        int bigDown = shiftChange >= 0 ? findLetter(tapSeen, tapCount, shiftChange + 1, kCGEventKeyDown, 'a') : -1;
         expect(bigDown >= 0 && (tapSeen[bigDown].flags & kCGEventFlagMaskShift), @"the key typed with Shift has the Shift flag");
         int shiftUp = bigDown >= 0 ? findFlags(tapSeen, tapCount, bigDown + 1, kCGEventFlagMaskShift, NO) : -1;
         expect(shiftUp >= 0 && !(tapSeen[shiftUp].hidFlagsState & kCGEventFlagMaskShift),
                @"the flags change back when Shift is released, and the flags state follows");
         int nsShift = findFlags(nsSeen, nsCount, 0, NSEventModifierFlagShift, YES);
         expect(nsShift >= 0, @"AppKit gets a flags changed event with Shift");
-        int nsBig = nsShift >= 0 ? findKey(nsSeen, nsCount, nsShift + 1, kCGEventKeyDown, 'a') : -1;
+        int nsBig = nsShift >= 0 ? findLetter(nsSeen, nsCount, nsShift + 1, kCGEventKeyDown, 'a') : -1;
         expect(nsBig >= 0 && (nsSeen[nsBig].flags & NSEventModifierFlagShift), @"AppKit's key down has the Shift flag");
 
         // Control + a
