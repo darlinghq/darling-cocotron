@@ -90,6 +90,7 @@ set(CoreGraphics_sources
 	CGDisplayConfiguration.m
 	CGDisplayStream.m
 	src/CGEvent.c
+	src/CPS.c
 	src/stubs.c
 	CGFont.m
 	CGFunction.m
