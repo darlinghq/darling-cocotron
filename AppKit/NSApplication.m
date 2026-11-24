@@ -1471,6 +1471,10 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
     return opened;
 }
 
+- (BOOL) _isFinishedLaunching {
+    return NS_EXTRA(NSApplication, self)->_finishedLaunching;
+}
+
 - (void) finishLaunching {
     // The launch notifications are delivered once. Applications may call
     // this themselves before -run, which calls it as well.
