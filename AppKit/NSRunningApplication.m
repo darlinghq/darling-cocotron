@@ -8,7 +8,13 @@
 #import <Foundation/NSURL.h>
 #import <Foundation/NSProcessInfo.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSDate.h>
+#import <Foundation/NSBundle.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <mach-o/fat.h>
+#include <mach-o/loader.h>
+#include <mach/machine.h>
 #include <libproc.h>
 #include <sys/proc_info.h>
 #include <signal.h>
@@ -30,6 +36,10 @@
 // Current application is also observed via LS - _LSGetCurrentApplicationASN().
 // All apps: _LSCopyRunningApplicationArray() - returns an array of ASNs.
 // Running apps: _LSCopyRunningApplicationArray() - ditto.
+
+@interface NSApplication (NSRunningApplicationLaunchState)
+- (BOOL) _isFinishedLaunching;
+@end
 
 @implementation NSRunningApplication
 
@@ -198,6 +208,97 @@ static BOOL processExists(pid_t pid) {
     if (proc_name(_processIdentifier, name, sizeof(name)) <= 0)
         return nil;
     return [NSString stringWithUTF8String: name];
+}
+
+- (NSURL *) executableURL {
+    char path[PROC_PIDPATHINFO_MAXSIZE];
+
+    if (proc_pidpath(_processIdentifier, path, sizeof(path)) <= 0)
+        return nil;
+    return [NSURL fileURLWithPath: [NSString stringWithUTF8String: path] isDirectory: NO];
+}
+
+// The architecture the process runs. For another process it is read from its executable: a thin
+// one has a single CPU type, and of a universal one the 64-bit Intel slice is the one run by default.
+static NSInteger executableArchitectureAtPath(const char *path) {
+    int fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
+        return 0;
+
+    union {
+        uint32_t magic;
+        struct mach_header header;
+        struct {
+            struct fat_header header;
+            struct fat_arch archs[16];
+        } fat;
+    } buffer;
+    ssize_t length = read(fd, &buffer, sizeof(buffer));
+    close(fd);
+    if (length < (ssize_t) sizeof(uint32_t))
+        return 0;
+
+    if ((buffer.magic == MH_MAGIC || buffer.magic == MH_MAGIC_64) &&
+        length >= (ssize_t) sizeof(struct mach_header))
+        return buffer.header.cputype;
+
+    if (buffer.magic == FAT_CIGAM && length >= (ssize_t) sizeof(struct fat_header)) {
+        uint32_t count = OSSwapBigToHostInt32(buffer.fat.header.nfat_arch);
+        NSInteger first = 0;
+        for (uint32_t i = 0; i < count && i < 16 &&
+                             (ssize_t) (sizeof(struct fat_header) + (i + 1) * sizeof(struct fat_arch)) <= length; i++) {
+            cpu_type_t type = OSSwapBigToHostInt32(buffer.fat.archs[i].cputype);
+            if (type == CPU_TYPE_X86_64)
+                return type;
+            if (first == 0)
+                first = type;
+        }
+        return first;
+    }
+    return 0;
+}
+
+- (NSInteger) executableArchitecture {
+    if ([self _isCurrent]) {
+#if defined(__x86_64__)
+        return NSBundleExecutableArchitectureX86_64;
+#elif defined(__i386__)
+        return NSBundleExecutableArchitectureI386;
+#endif
+    }
+
+    char path[PROC_PIDPATHINFO_MAXSIZE];
+    if (proc_pidpath(_processIdentifier, path, sizeof(path)) <= 0)
+        return 0;
+    return executableArchitectureAtPath(path);
+}
+
+- (NSDate *) launchDate {
+    struct proc_bsdinfo info;
+
+    if (proc_pidinfo(_processIdentifier, PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != sizeof(info))
+        return nil;
+    return [NSDate dateWithTimeIntervalSince1970:
+                           (NSTimeInterval) info.pbi_start_tvsec + info.pbi_start_tvusec / 1e6];
+}
+
+// An application has finished launching once its -finishLaunching ran. Other processes are only known
+// once they connected to the window system, which an application does while it launches.
+- (BOOL) isFinishedLaunching {
+    if ([self _isCurrent])
+        return NSApp != nil && [NSApp _isFinishedLaunching];
+    return ![self isTerminated];
+}
+
+// Unlike -terminate, which asks the application to quit, this ends the process at once.
+- (BOOL) forceTerminate {
+    if ([self isTerminated])
+        return NO;
+    return kill(_processIdentifier, SIGKILL) == 0;
+}
+
+// No application here opts into automatic termination, so there is nothing to end.
++ (void) terminateAutomaticallyTerminableApplications {
 }
 
 - (BOOL) isTerminated {
