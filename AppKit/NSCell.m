@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSClipView.h>
+#import <AppKit/NSController.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSMatrix.h>
@@ -921,16 +922,27 @@ static void initImageCellState(NSCell *self, NSImage *image) {
         [self setFont: converted];
 }
 
-// An NSNumber that is true asks for the trait; a row without the key (nil) asks for none. Taking an id keeps
-// key-value coding from raising for nil, which a BOOL parameter would. NSNull raises, as the BOOL setter of
-// key-value coding does on macOS 26.7.3 (black-box observation: NSInternalInconsistencyException, "Cannot
-// create BOOL from object null of class NSNull"; it is not known whether 10.14.4 differs).
-// Test: appkit-cell-font-bold-italic.m, test_missing_and_null_values
+// An NSNumber that is true asks for the trait, and so does a string that reads as true; a row without
+// the key (nil) and the controller markers ask for none. Taking an id keeps key-value coding from
+// raising for nil, which a BOOL parameter would. NSNull raises, as the BOOL setter of key-value coding
+// does on macOS 26.7.3 (black-box observation: NSInternalInconsistencyException, "Cannot create BOOL
+// from object null of class NSNull"; it is not known whether 10.14.4 differs).
+// QUIRK: the string "YES" counts as true. The Bindings Reference calls these bindings Booleans and says
+// nothing about strings. Evidence: black-box observation on macOS 26.1 arm64, probe 661.1: the string
+// "YES" gave bold and italic; the three controller markers gave neither (their class was not shown by the
+// probe). The markers are checked by identity, not by what they read as, because Darling's are strings.
+// INFERENCE (the weakest evidence tier, AGENTS.md section 3, needs maintainer approval): every other
+// string is converted with -boolValue. Only "YES" was observed. The reason given is that the NSNull
+// message above is key-value coding's own error for a scalar setter, and key-value coding is documented
+// to unwrap a BOOL value with boolValue; nothing was observed for "true", "1" or "Y".
+// Test: appkit-cell-font-bold-italic.m, test_missing_and_null_values, test_string_values
 static BOOL bindingValueIsTrue(id value) {
     if ([value isKindOfClass: [NSNull class]])
         [NSException raise: NSInternalInconsistencyException
                     format: @"Cannot create BOOL from object %@ of class %@", value, [value class]];
-    return [value isKindOfClass: [NSNumber class]] && [value boolValue];
+    if (NSIsControllerMarker(value))
+        return NO;
+    return ([value isKindOfClass: [NSNumber class]] || [value isKindOfClass: [NSString class]]) && [value boolValue];
 }
 
 - (id) fontBold {
