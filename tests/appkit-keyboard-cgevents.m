@@ -13,6 +13,7 @@
 //   Control + a                control character, characters ignoring the modifiers
 //   s held for a second        key repeat
 //   d                          the tap turns it into e
+//   Shift + Tab                the NSEvent's characters are U+0019 (NSBackTabCharacter), see appkit-nsevent-backtab
 //   q                          the end
 // Usage: appkit-keyboard-cgevents (no arguments)
 // Prints PASS or FAIL lines, then ALL PASSED or FAILED n.
@@ -124,6 +125,15 @@ static int findKey(Seen *list, int count, int from, CGEventType type, unichar c)
     return -1;
 }
 
+// The index of the first key event of the type after `from` that has the letter in either case, or -1
+static int findLetter(Seen *list, int count, int from, CGEventType type, unichar lower) {
+    for (int i = from < 0 ? 0 : from; i < count; i++) {
+        if (list[i].type == type && (hasChar(&list[i], lower) || hasChar(&list[i], lower - 'a' + 'A')))
+            return i;
+    }
+    return -1;
+}
+
 // The first flags changed event after `from` with the flag set (or cleared)
 static int findFlags(Seen *list, int count, int from, uint64_t flag, BOOL set) {
     for (int i = from < 0 ? 0 : from; i < count; i++) {
@@ -199,19 +209,16 @@ int main(void) {
         int shiftChange = findFlags(tapSeen, tapCount, up + 1, kCGEventFlagMaskShift, YES);
         expect(shiftChange >= 0 && (tapSeen[shiftChange].hidFlagsState & kCGEventFlagMaskShift),
                @"the tap sees the flags change to Shift, and the flags state follows");
-        // The virtual keyboard of wtype has the lowercase keysym only; a compositor with a keymap of its own makes it A
-        int bigDown = shiftChange >= 0 ? findKey(tapSeen, tapCount, shiftChange + 1, kCGEventKeyDown, 'a') : -1;
-        if (bigDown < 0 && shiftChange >= 0)
-            bigDown = findKey(tapSeen, tapCount, shiftChange + 1, kCGEventKeyDown, 'A');
+        // The character the key types with Shift is up to the compositor's keymap (A with a layout's
+        // shift level, a with a keymap that has no level for it), so a and A are both right.
+        int bigDown = shiftChange >= 0 ? findLetter(tapSeen, tapCount, shiftChange + 1, kCGEventKeyDown, 'a') : -1;
         expect(bigDown >= 0 && (tapSeen[bigDown].flags & kCGEventFlagMaskShift), @"the key typed with Shift has the Shift flag");
         int shiftUp = bigDown >= 0 ? findFlags(tapSeen, tapCount, bigDown + 1, kCGEventFlagMaskShift, NO) : -1;
         expect(shiftUp >= 0 && !(tapSeen[shiftUp].hidFlagsState & kCGEventFlagMaskShift),
                @"the flags change back when Shift is released, and the flags state follows");
         int nsShift = findFlags(nsSeen, nsCount, 0, NSEventModifierFlagShift, YES);
         expect(nsShift >= 0, @"AppKit gets a flags changed event with Shift");
-        int nsBig = nsShift >= 0 ? findKey(nsSeen, nsCount, nsShift + 1, kCGEventKeyDown, 'a') : -1;
-        if (nsBig < 0 && nsShift >= 0)
-            nsBig = findKey(nsSeen, nsCount, nsShift + 1, kCGEventKeyDown, 'A');
+        int nsBig = nsShift >= 0 ? findLetter(nsSeen, nsCount, nsShift + 1, kCGEventKeyDown, 'a') : -1;
         expect(nsBig >= 0 && (nsSeen[nsBig].flags & NSEventModifierFlagShift), @"AppKit's key down has the Shift flag");
 
         // Control + a
@@ -246,6 +253,14 @@ int main(void) {
         expect(findKey(nsSeen, nsCount, 0, kCGEventKeyDown, 'd') < 0, @"AppKit got no d");
         expect(nsE >= 0 && nsSeen[nsE].hidFlagsState == 'e',
                @"and its characters ignoring the modifiers follow the changed key code");
+        // Shift + Tab: the NSEvent's characters are the back tab character (the virtual keyboard's key code is not
+        // the Tab key's, so the key is found by its characters: the layout's tab character reaches the tap)
+        int tapTab = findKey(tapSeen, tapCount, 0, kCGEventKeyDown, '\t');
+        expect(tapTab >= 0 && (tapSeen[tapTab].flags & kCGEventFlagMaskShift), @"Shift + Tab: the tap sees the layout's tab character U+0009 with the Shift flag");
+        int nsTab = findKey(nsSeen, nsCount, 0, kCGEventKeyDown, NSBackTabCharacter);
+        expect(nsTab >= 0 && (nsSeen[nsTab].flags & NSEventModifierFlagShift) && nsSeen[nsTab].hidFlagsState == NSBackTabCharacter,
+               @"Shift + Tab: AppKit's characters and charactersIgnoringModifiers are U+0019 (NSBackTabCharacter)");
+        expect(findKey(nsSeen, nsCount, 0, kCGEventKeyDown, '\t') < 0, @"Shift + Tab: AppKit gets no U+0009");
         expect(nsCGEventMatches, @"every NSEvent's CGEvent is the one the tap passed on (key code)");
         expect(nsHasWindow, @"the key events are for a window");
     }
