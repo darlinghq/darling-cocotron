@@ -20,6 +20,21 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
+BOOL O2JPEGStbGetDimensions(CFDataRef data, size_t *width, size_t *height) {
+    int w, h, comp;
+    if (data == NULL || width == NULL || height == NULL)
+        return NO;
+    CFIndex length = CFDataGetLength(data);
+    if (length <= 0 || length > INT_MAX)
+        return NO;
+    if (!stbi_info_from_memory(CFDataGetBytePtr(data), (int) length, &w, &h,
+                               &comp))
+        return NO;
+    *width = w;
+    *height = h;
+    return YES;
+}
+
 @implementation O2ImageDecoder_JPEG_stb
 
 - initWithDataProvider: (O2DataProviderRef) dataProvider {

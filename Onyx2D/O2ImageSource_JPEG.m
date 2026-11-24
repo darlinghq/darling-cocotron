@@ -120,7 +120,9 @@ NSData *O2DCTDecode(NSData *data, size_t *pBytesPerRow) {
     }
 #ifdef LIBJPEG_PRESENT
     size_t width, height;
-    if (!O2JPEGGetDimensions(_jpg, &width, &height))
+    // The files the stb fallback decodes are not always readable by libjpeg.
+    if (!O2JPEGGetDimensions(_jpg, &width, &height) &&
+        !O2JPEGStbGetDimensions(_jpg, &width, &height))
         return NULL;
 #endif
     const unsigned char *data = CFDataGetBytePtr(_jpg);
