@@ -2472,10 +2472,26 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NS_EXTRA(NSTableView, self)->_clickedRow = [self rowAtPoint: location];
 
     if (NS_EXTRA(NSTableView, self)->_clickedRow < 0) { // click beyond the end of the table
+        // QUIRK: a click below the last row still sends the action (the double action on a double click), and
+        // clickedColumn is -1 in it as well as clickedRow, even over column 0. The clickedRow documentation says
+        // -1 for a click where no rows are, and the clickedColumn documentation says -1 only where the point is not
+        // occupied by a column; the observed clickedColumn == -1 over column 0 contradicts that page, and the
+        // action send is not documented.
+        // Observed on macOS 26.1 (build 25B78) arm64 (probe 659, "below the last row, inside column 0"):
+        // `action(clickedRow=-1,clickedColumn=-1,selectedRow=-1)`, then on click count 2
+        // `doubleAction(clickedRow=-1,clickedColumn=-1,selectedRow=-1)`.
+        // Test: test_a_click_below_the_rows_sends_the_action in tests/appkit-table-click-beside-columns.m
+        // Both are reset first so that the delegate's selection and editing notifications below see -1 and -1 too.
+        forgetClickedCell(self);
         if (_editingCell != nil)
             [self _finishEditingWithTextMovement: NSIllegalTextMovement];
         [self selectRowIndexes: [NSIndexSet indexSet] byExtendingSelection: NO];
         [NS_EXTRA(NSTableView, self)->_selectedColumns removeAllObjects];
+
+        if ([event clickCount] < 2)
+            [self sendAction: [self action] to: [self target]];
+        else if ([event clickCount] == 2)
+            [self sendAction: [self doubleAction] to: [self target]];
         forgetClickedCell(self);
         return;
     }
