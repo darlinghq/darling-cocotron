@@ -94,17 +94,26 @@ static BOOL processExists(pid_t pid) {
     if (proc_pidpath(_processIdentifier, path, sizeof(path)) <= 0)
         return nil;
 
+    // An application bundle is recognised by its contents, not by its name: the executable lies in
+    // Contents/MacOS next to an Info.plist that does not declare another package type. On macOS 26.7.3
+    // an application whose bundle directory has no .app extension, started through its executable,
+    // has the same main bundle, bundle URL and activation policy as the same bundle named .app.
     NSArray<NSString *> *components = [[NSString stringWithUTF8String: path] pathComponents];
-    for (NSInteger i = (NSInteger) [components count] - 3; i >= 1; i--) {
-        if ([[components objectAtIndex: i] hasSuffix: @".app"] &&
-            [[components objectAtIndex: i + 1] isEqualToString: @"Contents"] &&
-            [[components objectAtIndex: i + 2] isEqualToString: @"MacOS"]) {
-            NSString *bundlePath = [NSString pathWithComponents:
-                    [components subarrayWithRange: NSMakeRange(0, i + 1)]];
-            return [NSBundle bundleWithPath: bundlePath];
-        }
-    }
-    return nil;
+    NSInteger count = (NSInteger) [components count];
+    if (count < 4 || ![[components objectAtIndex: count - 2] isEqualToString: @"MacOS"] ||
+        ![[components objectAtIndex: count - 3] isEqualToString: @"Contents"])
+        return nil;
+
+    NSString *bundlePath = [NSString pathWithComponents:
+            [components subarrayWithRange: NSMakeRange(0, count - 3)]];
+    NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:
+            [bundlePath stringByAppendingPathComponent: @"Contents/Info.plist"]];
+    if (info == nil)
+        return nil;
+    NSString *type = [info objectForKey: @"CFBundlePackageType"];
+    if (type != nil && ![type isEqual: @"APPL"])
+        return nil;
+    return [NSBundle bundleWithPath: bundlePath];
 }
 
 - (NSString *) bundleIdentifier {
