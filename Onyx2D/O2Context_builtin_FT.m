@@ -293,6 +293,9 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
             matrix = &glyphMatrix;
         }
 
+        // The blend function left by the last fill may be a plain copy (opaque paint): pick it for this paint.
+        O2ContextSetupPaintAndBlendMode(self, paint, gState->_blendMode);
+
         for (i = 0; i < count; i++) {
             // Glyph origin on the pixel grid plus the fractional offset the
             // bitmap is rendered at; without subpixel positioning the origin
@@ -340,6 +343,7 @@ static void renderFreeTypeBitmap(O2Context_builtin_FT *self, O2Surface *surface,
             }
         }
 
+        O2ContextSetPaint(self, nil);
         O2PaintRelease(paint);
         O2ContextConcatAdvancesToTextMatrix(self, useAdvances, count);
         free(defaultAdvances);
