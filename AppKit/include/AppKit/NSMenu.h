@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/Foundation.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 
+@class NSFont;
 @class NSScreen, NSMenu, NSMenuItem, NSWindow, NSEvent, NSView;
 
 @protocol NSMenuDelegate;
@@ -67,10 +68,15 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
         BOOL _showsStateColumn;
         NSUserInterfaceItemIdentifier _identifier;
         NSAppearance *_appearance;
+        NSFont *_font;
     NS_EXTRA_IVARS_END(NSMenu)
 }
 
 @property BOOL showsStateColumn;
+
+// The font of the menu's items; a new menu's is the 14 point menu font (macOS 10.14.4).
+// GUESS: stored and returned only; the menu views draw in the 14 point menu font whatever it is.
+@property(null_resettable, strong) NSFont *font;
 
 @property(nullable, strong) NSAppearance *appearance;
 @property(readonly, strong) NSAppearance *effectiveAppearance;
@@ -140,6 +146,9 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 
 // The size the menu has when it is shown as a pop-up, in points.
 @property(readonly) NSSize size;
+
+// The height of the menu bar when this is the application's main menu, 0 for any other menu.
+@property(readonly) CGFloat menuBarHeight;
 
 @end
 

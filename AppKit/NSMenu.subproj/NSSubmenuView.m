@@ -24,16 +24,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSSubmenuView
 
-#define MIN_TITLE_KEY_GAP 8
-// The menu's frame line is one point wide; the item rows start 5 points below the top and end 5 points above the
-// bottom, and the selection runs the full width of the menu.
-#define WINDOW_BORDER_THICKNESS 1
-#define WINDOW_VERTICAL_PADDING 5
-#define IMAGE_TITLE_GAP 8
-// A menu with a submenu item has a column at the right for the arrow, as wide as the column for the key equivalents or
-// wider (the two share it). Measured on macOS 10.14.4 and 26.7.3 with -[NSMenu size]: a menu with a submenu item
-// is 39 (10.14.4) or 31 (26.7.3) points wider than the same menu without one; the wider value is used.
-#define SUBMENU_COLUMN_WIDTH 39
+// The menu window has no frame line; the item rows start 4 points below the top and end 4 points above the
+// bottom (WINDOW_VERTICAL_PADDING), and the selection runs the full width of the menu.
+#define WINDOW_BORDER_THICKNESS 0
+#define WINDOW_VERTICAL_PADDING 4
+// An item with an image is taller than the row by this much (measured: a 16 point image gives a 21 point row).
+#define IMAGE_ROW_EXTRA 5
 
 - (NSSize) sizeForMenuItemImage: (NSMenuItem *) item {
     NSSize result = NSZeroSize;
@@ -44,103 +40,87 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return result;
 }
 
+// The width of the part of an item left of its key equivalent: indentation, image and title.
+- (CGFloat) leadingWidthForItem: (NSMenuItem *) item {
+    NSGraphicsStyle *style = [self graphicsStyle];
+    CGFloat width = [item indentationLevel] * [style menuItemIndentationWidth];
+    NSSize imageSize = [self sizeForMenuItemImage: item];
+    NSAttributedString *atitle = [item attributedTitle];
+
+    if (imageSize.width > 0)
+        width += imageSize.width + [style menuItemImageTitleGap];
+    if (atitle != nil && [atitle length] > 0)
+        width += [style menuItemAttributedTextSize: atitle].width;
+    else
+        width += [style menuItemTextSize: [item title]].width;
+    return width;
+}
+
 - (NSSize) contentSizeForItem: (NSMenuItem *) item {
-    if ([item isSeparatorItem]) {
-        return [[self graphicsStyle] menuItemSeparatorSize];
-    } else {
-#define ITEM_MAX(size)                                                         \
-    height = MAX(height, size.height);                                         \
-    width += size.width;
-        CGFloat width = [[self graphicsStyle] menuItemGutterGap];
-        CGFloat height = 0.0f;
-        NSSize size;
+    NSGraphicsStyle *style = [self graphicsStyle];
 
-        size = [[self graphicsStyle] menuItemGutterSize];
-        ITEM_MAX(size);
-        size = [self sizeForMenuItemImage: item];
-        if (size.width > 0.0f) {
-            ITEM_MAX(size);
-            width += IMAGE_TITLE_GAP;
-        }
-        size = [[self graphicsStyle] menuItemTextSize: [item title]];
-        ITEM_MAX(size);
-        if ([[item keyEquivalent] length] == 0) {
-            size = [[self graphicsStyle]
-                    menuItemTextSize: [item _keyEquivalentDescription]];
-            ITEM_MAX(size);
-        }
-        if ([item hasSubmenu]) {
-            size = [[self graphicsStyle] menuItemBranchArrowSize];
-            ITEM_MAX(size);
-        }
+    if ([item isSeparatorItem])
+        return [style menuItemSeparatorSize];
 
-        return NSMakeSize(width, height);
-    }
+    CGFloat height = [style menuItemRowHeight];
+    NSSize imageSize = [self sizeForMenuItemImage: item];
+    NSAttributedString *atitle = [item attributedTitle];
+
+    if (imageSize.width > 0)
+        height = MAX(height, imageSize.height + IMAGE_ROW_EXTRA);
+    if (atitle != nil && [atitle length] > 0)
+        height = MAX(height, [style menuItemAttributedTextSize: atitle].height);
+    return NSMakeSize([self leadingWidthForItem: item], height);
 }
 
 - (NSSize) sizeForMenuItems: (NSArray *) items {
-    NSSize result = NSZeroSize;
-    CGFloat maxTitleWidth = 0.0f;
-    BOOL anItemHasAnImage = NO;
+    NSGraphicsStyle *style = [self graphicsStyle];
     CGFloat maxKeyWidth = 0.0f;
-    BOOL anItemHasSubmenu = NO;
     CGFloat totalHeight = 0.0f;
-    NSSize gutterSize = [[self graphicsStyle] menuItemGutterSize];
-    NSSize rightArrowSize = [[self graphicsStyle] menuItemBranchArrowSize];
     unsigned i, count = [items count];
+
+    // Separators at the end of the menu add nothing to its size (measured: an item followed by one or two
+    // separators is as high as the item alone; black-box on macOS 10.14.4, tier 2).
+    unsigned end = count;
+    while (end > 0 && [[items objectAtIndex: end - 1] isSeparatorItem])
+        end--;
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
-        if ([item isSeparatorItem]) {
-            totalHeight += [[self graphicsStyle] menuItemSeparatorSize].height;
-        } else {
-            NSSize size = NSZeroSize;
-            CGFloat height = 0.0f;
-            CGFloat titleAndIconWidth = 0.0f;
 
-            size = [self sizeForMenuItemImage: item];
-            height = MAX(height, size.height);
-            if ((titleAndIconWidth = size.width) > 0.0f)
-                anItemHasAnImage = YES;
+        if (i < end)
+            totalHeight += [self contentSizeForItem: item].height;
+        if ([item isSeparatorItem])
+            continue;
 
-            size = [[self graphicsStyle] menuItemTextSize: [item title]];
-            titleAndIconWidth += size.width;
-            maxTitleWidth = MAX(maxTitleWidth, titleAndIconWidth);
-            height = MAX(height, size.height);
-
-            if ([[item keyEquivalent] length] != 0) {
-                size = [[self graphicsStyle]
-                        menuItemTextSize: [item _keyEquivalentDescription]];
-                maxKeyWidth = MAX(maxKeyWidth, size.width);
-                height = MAX(height, size.height);
-            }
-            if ([item hasSubmenu])
-                anItemHasSubmenu = YES;
-            height = MAX(height, gutterSize.height);
-            height = MAX(height, rightArrowSize.height);
-
-            totalHeight += height;
-        }
+        if ([[item keyEquivalent] length] != 0)
+            maxKeyWidth = MAX(maxKeyWidth, [style menuItemTextSize: [item _keyEquivalentDescription]].width);
     }
 
-    result.height = totalHeight;
-    result.width = gutterSize.width;
-    result.width += [[self graphicsStyle] menuItemGutterGap];
-    if (anItemHasAnImage)
-        result.width += IMAGE_TITLE_GAP;
-    result.width += maxTitleWidth;
-    CGFloat rightColumn = 0.0f;
-    if (maxKeyWidth > 0.0f)
-        rightColumn = MIN_TITLE_KEY_GAP + maxKeyWidth;
-    if (anItemHasSubmenu)
-        rightColumn = MAX(rightColumn, SUBMENU_COLUMN_WIDTH);
-    result.width += rightColumn;
-    result.width += rightArrowSize.width;
+    // Each row needs its own width: the title and the space after it, which is the trailing margin, or the
+    // submenu arrow's column (39 points more), or a key equivalent after the gap; the menu is as wide as the widest.
+    CGFloat gutter = [style menuItemGutterSize].width;
+    CGFloat titleBased = 0.0f, keyBased = 0.0f;
 
-    // border. Magic constants that may not be right for Win7 vs XP
-    result.width += WINDOW_BORDER_THICKNESS * 2;
-    result.height += WINDOW_VERTICAL_PADDING * 2;
+    for (i = 0; i < end; i++) {
+        NSMenuItem *item = [items objectAtIndex: i];
 
+        if ([item isSeparatorItem])
+            continue;
+
+        CGFloat leading = gutter + [self leadingWidthForItem: item];
+
+        if ([item hasSubmenu])
+            titleBased = MAX(titleBased, leading + [style menuItemTrailingMargin] + [style menuItemSubmenuColumnWidth]);
+        else
+            titleBased = MAX(titleBased, leading + [style menuItemTrailingMargin]);
+        if ([[item keyEquivalent] length] != 0)
+            keyBased = MAX(keyBased, leading + [style menuItemKeyEquivalentGap] + maxKeyWidth +
+                                             [style menuItemKeyEquivalentRightMargin] + 1);
+    }
+    NSSize result;
+    result.width = MAX(titleBased, keyBased);
+    result.height = totalHeight + WINDOW_VERTICAL_PADDING * 2;
     return result;
 }
 
@@ -166,6 +146,74 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
     return NSInsetRect(rect, WINDOW_BORDER_THICKNESS, WINDOW_VERTICAL_PADDING);
 }
 
+// The rows' area, moved up by what is scrolled off.
+- (NSRect) itemAreaRect {
+    NSRect result = boundsToTitleAreaRect([self bounds]);
+
+    result.origin.y -= _scrollOffset;
+    return result;
+}
+
+// The height of the zone at each end of a scrolling menu that holds the scroll arrow; the rows run under it.
+- (CGFloat) scrollZoneHeight {
+    return [[self graphicsStyle] menuItemRowHeight];
+}
+
+- (void) limitHeightTo: (CGFloat) height {
+    NSRect frame = [self frame];
+
+    if (frame.size.height <= height || height < 3 * [self scrollZoneHeight])
+        return;
+    _contentHeight = frame.size.height;
+    _scrollOffset = 0;
+    frame.size.height = height;
+    [self setFrame: frame];
+}
+
+- (BOOL) scrolls {
+    return _contentHeight > 0;
+}
+
+- (CGFloat) maxScrollOffset {
+    return [self scrolls] ? _contentHeight - NSHeight([self bounds]) : 0;
+}
+
+- (void) scrollToOffset: (CGFloat) offset {
+    offset = MAX(0, MIN(offset, [self maxScrollOffset]));
+    if (offset != _scrollOffset) {
+        _scrollOffset = offset;
+        [self setNeedsDisplay: YES];
+    }
+}
+
+// Scrolls just far enough to show a row completely, clear of the scroll arrows.
+- (void) scrollRowToVisible: (NSUInteger) index {
+    if (![self scrolls] || index == NSNotFound)
+        return;
+    NSRect row = [self rectForItemAtIndex: index];
+    CGFloat zone = [self scrollZoneHeight], top = zone, bottom = NSHeight([self bounds]) - zone;
+
+    if (_scrollOffset <= 0)
+        top = 0;
+    if (_scrollOffset >= [self maxScrollOffset])
+        bottom = NSHeight([self bounds]);
+    if (NSMinY(row) < top)
+        [self scrollToOffset: _scrollOffset - (top - NSMinY(row))];
+    else if (NSMaxY(row) > bottom)
+        [self scrollToOffset: _scrollOffset + (NSMaxY(row) - bottom)];
+}
+
+- (void) setSelectedItemIndex: (NSUInteger) itemIndex {
+    [super setSelectedItemIndex: itemIndex];
+    [self scrollRowToVisible: itemIndex];
+}
+
+// The scroll wheel scrolls the rows.
+- (void) scrollWheel: (NSEvent *) event {
+    if ([self scrolls])
+        [self scrollToOffset: _scrollOffset - [event deltaY] * [[self graphicsStyle] menuItemRowHeight]];
+}
+
 - (CGFloat) heightOfMenuItem: (NSMenuItem *) item {
     NSSize titleSize = [self contentSizeForItem: item];
 
@@ -174,48 +222,39 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
 
 - (void) drawRect: (NSRect) rect {
     NSRect bounds = [self bounds];
-    NSRect itemArea = boundsToTitleAreaRect(bounds);
+    NSRect itemArea = [self itemAreaRect];
     NSArray *items = [self visibleItemArray];
     unsigned i, count = [items count];
     NSPoint origin = itemArea.origin;
+    NSGraphicsStyle *style = [self graphicsStyle];
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
 
-    [[self graphicsStyle] drawMenuWindowBackgroundInRect: rect];
+    [style drawMenuWindowBackgroundInRect: rect];
+
+    CGContextSaveGState(context);
+    [style clipToMenuWindowShape];
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
 
         if ([item isSeparatorItem]) {
-            NSRect separatorRect = NSMakeRect(
-                    origin.x, origin.y, NSWidth(itemArea),
-                    [[self graphicsStyle] menuItemSeparatorSize].height);
+            NSRect separatorRect = NSMakeRect(origin.x, origin.y, NSWidth(itemArea), [style menuItemSeparatorSize].height);
 
-            [[self graphicsStyle] drawMenuSeparatorInRect: separatorRect];
+            [style drawMenuSeparatorInRect: separatorRect];
 
             origin.y += NSHeight(separatorRect);
         } else {
-#define CENTER_PART_RECT_VERTICALLY(partSize) {                                \
-        NSSize __partSize = (partSize);                                        \
-        partRect.origin.y = origin.y + (itemHeight - __partSize.height) / 2;   \
-        partRect.size.height = __partSize.height;                              \
-        partRect.size.width = __partSize.width;                                \
-    }
             NSImage *image = [item image];
             BOOL selected = (i == _selectedItemIndex) ? YES : NO;
             CGFloat itemHeight = [self heightOfMenuItem: item];
-            NSRect partRect;
-            NSSize partSize;
             BOOL showsEnabled = ([item isEnabled] || [item hasSubmenu]);
-
-            partRect = NSMakeRect(origin.x, origin.y, itemArea.size.width,
-                                  itemHeight);
+            NSRect rowRect = NSMakeRect(origin.x, origin.y, itemArea.size.width, itemHeight);
+            NSSize gutterSize = [style menuItemGutterSize];
 
             if (selected)
-                [[self graphicsStyle] drawMenuSelectionInRect: partRect
-                                                      enabled: showsEnabled];
+                [style drawMenuSelectionInRect: rowRect enabled: showsEnabled];
 
-            // Draw the gutter and checkmark (if any)
-            CENTER_PART_RECT_VERTICALLY(
-                    [[self graphicsStyle] menuItemGutterSize]);
+            // The state mark, in the gutter column at the left edge.
             NSImage *stateImage = nil;
             if ([item state] == NSControlStateValueOn)
                 stateImage = [item onStateImage];
@@ -224,104 +263,85 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
             else
                 stateImage = [item offStateImage];
             if (stateImage != nil) {
-                [[self graphicsStyle] drawMenuGutterInRect: partRect];
-                [[self graphicsStyle] drawMenuStateImage: stateImage
-                                                 inRect: partRect
-                                                enabled: showsEnabled
-                                               selected: selected];
+                NSRect gutterRect = NSMakeRect(origin.x, origin.y, gutterSize.width, itemHeight);
+
+                [style drawMenuGutterInRect: gutterRect];
+                [style drawMenuStateImage: stateImage inRect: gutterRect enabled: showsEnabled selected: selected];
             }
 
-            partRect.origin.x += [[self graphicsStyle] menuItemGutterGap];
-            ;
+            CGFloat x = origin.x + gutterSize.width + [item indentationLevel] * [style menuItemIndentationWidth];
 
-            // Draw the image
+            // The image, then the title after it.
             if (image) {
-                NSRect imageRect;
+                NSSize imageSize = [image size];
+                NSRect drawingRect = NSMakeRect(x, origin.y + floor((itemHeight - imageSize.height) / 2), imageSize.width,
+                                                imageSize.height);
 
-                partRect.origin.x += partRect.size.width;
-                CENTER_PART_RECT_VERTICALLY([image size]);
-
-                CGContextRef ctx =
-                        [[NSGraphicsContext currentContext] graphicsPort];
-                CGContextSaveGState(ctx);
-                CGContextTranslateCTM(ctx, partRect.origin.x,
-                                      partRect.origin.y);
+                CGContextSaveGState(context);
+                CGContextTranslateCTM(context, drawingRect.origin.x, drawingRect.origin.y);
                 if ([self isFlipped]) {
-                    CGContextTranslateCTM(ctx, 0, partRect.size.height);
-                    CGContextScaleCTM(ctx, 1, -1);
+                    CGContextTranslateCTM(context, 0, drawingRect.size.height);
+                    CGContextScaleCTM(context, 1, -1);
                 }
-                NSRect drawingRect = partRect;
                 drawingRect.origin = NSZeroPoint;
-                [[self graphicsStyle] drawButtonImage: image
-                                               inRect: drawingRect
-                                              enabled: showsEnabled
-                                                mixed: NO];
-                CGContextRestoreGState(ctx);
+                [style drawButtonImage: image inRect: drawingRect enabled: showsEnabled mixed: NO];
+                CGContextRestoreGState(context);
 
-                partRect.origin.x += IMAGE_TITLE_GAP;
+                x += imageSize.width + [style menuItemImageTitleGap];
             }
-
-            // Draw the title
-            partRect.origin.x += partRect.size.width;
 
             NSAttributedString *atitle = [item attributedTitle];
+            NSRect textRect = NSMakeRect(x, origin.y, 0, 0);
+
             if (atitle != nil && [atitle length] > 0) {
-                CENTER_PART_RECT_VERTICALLY([atitle size]);
-                [[self graphicsStyle] drawAttributedMenuItemText: atitle
-                                                          inRect: partRect
-                                                         enabled: showsEnabled
-                                                        selected: selected];
+                textRect.size = [style menuItemAttributedTextSize: atitle];
+                textRect.origin.y = origin.y + (itemHeight - textRect.size.height) / 2;
+                [style drawAttributedMenuItemText: atitle inRect: textRect enabled: showsEnabled selected: selected];
             } else {
-                NSString *title = [item title];
-                CENTER_PART_RECT_VERTICALLY(
-                        [[self graphicsStyle] menuItemTextSize: title]);
-                [[self graphicsStyle] drawMenuItemText: title
-                                                inRect: partRect
-                                               enabled: showsEnabled
-                                              selected: selected];
+                textRect.size = [style menuItemTextSize: [item title]];
+                textRect.origin.y = origin.y + (itemHeight - textRect.size.height) / 2;
+                [style drawMenuItemText: [item title] inRect: textRect enabled: showsEnabled selected: selected];
             }
 
-            // Draw the key equivalent
+            // The key equivalent, ending at a fixed distance from the right edge.
             if ([[item keyEquivalent] length] != 0) {
                 NSString *keyString = [item _keyEquivalentDescription];
-                NSSize branchArrowSize =
-                        [[self graphicsStyle] menuItemBranchArrowSize];
-                NSSize keyEquivalentSize =
-                        [[self graphicsStyle] menuItemTextSize: keyString];
+                NSSize keySize = [style menuItemTextSize: keyString];
+                NSRect keyRect = NSMakeRect(NSMaxX(itemArea) - [style menuItemKeyEquivalentRightMargin] - keySize.width,
+                                            origin.y + (itemHeight - keySize.height) / 2, keySize.width, keySize.height);
 
-                partRect.origin.x = origin.x + NSWidth(itemArea) -
-                                    branchArrowSize.width -
-                                    keyEquivalentSize.width;
-                CENTER_PART_RECT_VERTICALLY(keyEquivalentSize);
-                [[self graphicsStyle] drawMenuItemText: keyString
-                                                inRect: partRect
-                                               enabled: showsEnabled
-                                              selected: selected];
+                [style drawMenuItemText: keyString inRect: keyRect enabled: showsEnabled selected: selected];
             }
 
-            // Draw the submenu arrow
+            // The submenu arrow.
             if ([item hasSubmenu]) {
-                NSSize branchArrowSize =
-                        [[self graphicsStyle] menuItemBranchArrowSize];
-                partRect.origin.x = origin.x + NSWidth(itemArea) -
-                                    [[self graphicsStyle] menuItemBranchArrowMargins].right -
-                                    branchArrowSize.width;
-                partRect.size.width = branchArrowSize.width;
-                CENTER_PART_RECT_VERTICALLY(branchArrowSize);
-                [[self graphicsStyle] drawMenuBranchArrowInRect: partRect
-                                                        enabled: showsEnabled
-                                                       selected: selected];
+                NSSize arrowSize = [style menuItemBranchArrowSize];
+                NSRect arrowRect = NSMakeRect(NSMaxX(itemArea) - [style menuItemBranchArrowMargins].right - arrowSize.width,
+                                              origin.y + (itemHeight - arrowSize.height) / 2, arrowSize.width,
+                                              arrowSize.height);
+
+                [style drawMenuBranchArrowInRect: arrowRect enabled: showsEnabled selected: selected];
             }
 
             origin.y += itemHeight;
         }
     }
+
+    if ([self scrolls]) {
+        CGFloat zone = [self scrollZoneHeight];
+
+        if (_scrollOffset > 0)
+            [style drawMenuScrollArrowUp: YES inRect: NSMakeRect(0, 0, NSWidth(bounds), zone)];
+        if (_scrollOffset < [self maxScrollOffset])
+            [style drawMenuScrollArrowUp: NO inRect: NSMakeRect(0, NSHeight(bounds) - zone, NSWidth(bounds), zone)];
+    }
+    CGContextRestoreGState(context);
 }
 
 - (NSUInteger) itemIndexAtPoint: (NSPoint) point {
     NSArray *items = [self itemArray];
     NSUInteger i, count = [items count];
-    NSRect check = boundsToTitleAreaRect([self bounds]);
+    NSRect check = [self itemAreaRect];
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
@@ -340,7 +360,7 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
 - (NSUInteger) itemIndexAtPoint: (NSPoint) point rect: (NSRect*) rect {
     NSArray *items = [self itemArray];
     NSUInteger i, count = [items count];
-    NSRect check = boundsToTitleAreaRect([self bounds]);
+    NSRect check = [self itemAreaRect];
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
@@ -361,7 +381,7 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
 - (NSRect) rectForItemAtIndex: (NSUInteger) index {
     NSArray *items = [self itemArray];
     NSUInteger i, count = [items count];
-    NSRect rect = boundsToTitleAreaRect([self bounds]);
+    NSRect rect = [self itemAreaRect];
 
     for (i = 0; i < count; i++) {
         rect.size.height = [self heightOfMenuItem: [items objectAtIndex: i]];
@@ -379,7 +399,7 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
     NSRect screenVisible = [screen visibleFrame];
     NSArray *items = [self itemArray];
     NSUInteger i, count = [items count];
-    NSRect itemRect = boundsToTitleAreaRect([self bounds]);
+    NSRect itemRect = [self itemAreaRect];
     NSPoint topLeft = NSZeroPoint;
 
     for (i = 0; i < count; i++) {
@@ -391,7 +411,8 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
             topLeft = itemRect.origin;
 
             topLeft.x += itemRect.size.width;
-            topLeft.y -= WINDOW_BORDER_THICKNESS;
+            // the branch's first row lines up with this item, so its window starts its padding above the item
+            topLeft.y -= WINDOW_VERTICAL_PADDING;
 
             break;
         }
@@ -407,7 +428,7 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
 
         topLeft.x += itemRect.size.width;
         topLeft.y += itemRect.size.height;
-        topLeft.y += WINDOW_BORDER_THICKNESS;
+        topLeft.y += WINDOW_VERTICAL_PADDING;
 
         topLeft = [self convertPoint: topLeft toView: nil];
         topLeft = [[self window] convertBaseToScreen: topLeft];

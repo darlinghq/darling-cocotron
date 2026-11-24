@@ -39,7 +39,8 @@ static BOOL analysed;
 static BOOL isInk(NSBitmapImageRep *rep, NSInteger x, NSInteger y) {
     NSUInteger px[4] = {255, 255, 255, 255};
     [rep getPixel: px atX: x y: y];
-    return px[0] < 140 && px[1] < 140 && px[2] < 140;
+    // Transparent pixels (the rounded corners of a menu window) are not ink, whatever their colour values.
+    return px[3] > 200 && px[0] < 140 && px[1] < 140 && px[2] < 140;
 }
 
 // Checks one group of adjacent rows (one menu item) that has ink in the right 30 pixels: the ink must end in a mark

@@ -1066,13 +1066,28 @@ static const int X11ChromelessCornerRadius = 5;
 // The bounding shape follows the window's size and whether it is drawn without a frame; a window that is
 // invisible without a compositor keeps its empty shape.
 - (void) updateWindowShape {
-    if (_window == 0 || _invisibleWithoutCompositor || (!_chromeless && !_roundedShapeSet))
+    int radius = [self shapeRadiusPoints];
+
+    if (_window == 0 || _invisibleWithoutCompositor || (radius == 0 && !_roundedShapeSet))
         return;
     CGFloat scale = [self backingScaleFactor];
     NSSize device = [self deviceSize: _frame.size];
     if (X11WindowSetRoundedCorners(_display, _window, (int) device.width, (int) device.height,
-                                   _chromeless ? (int) lround(X11ChromelessCornerRadius * scale) : 0))
-        _roundedShapeSet = _chromeless;
+                                   (int) lround(radius * scale)))
+        _roundedShapeSet = radius > 0;
+}
+
+// The corner radius of the bounding shape, in points: the chromeless radius, or the radius a window with
+// rounded corners of its own (a menu window, -_shapedCornerRadius) asks for while no compositing manager runs.
+// With one, the window's alpha channel gives the corners and the compositor draws the shadow around them;
+// without one, the alpha channel would show as black corners, so the corners are cut from the shape instead.
+- (int) shapeRadiusPoints {
+    if (_chromeless)
+        return X11ChromelessCornerRadius;
+    if ([_delegate respondsToSelector: @selector(_shapedCornerRadius)] &&
+        !X11CompositorRunning(_display, DefaultScreen(_display)))
+        return (int) lround(((CGFloat (*)(id, SEL)) objc_msgSend)(_delegate, @selector(_shapedCornerRadius)));
+    return 0;
 }
 
 // The promise to a compositing manager that all of an opaque window with an alpha channel is opaque, an occlusion

@@ -98,11 +98,13 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
 - (NSColor *) colorWithName: (NSString *) colorName {
     // The disabled text colour and the menu highlight are the values macOS 10.14 returns in the light
     // appearance, converted to sRGB. There is no public menu background or menu text colour to read back; the
-    // menu text takes the label colour's value and the background is an estimate of the light menu material.
+    // menu text takes the label colour's value. The menu background and the menu bar colour are the sRGB values
+    // of the pixels of window images of a menu and of the menu bar on 10.14.4 (black-box, tier 2; the original
+    // is a translucent material, so these are what it shows over a light backdrop). Test: appkit-menu-look.m.
     if ([colorName isEqual: @"menuBackgroundColor"])
-        return [NSColor colorWithSRGBRed: 0.945f green: 0.945f blue: 0.945f alpha: 1.0f];
+        return [NSColor colorWithSRGBRed: 246.0f / 255 green: 246.0f / 255 blue: 246.0f / 255 alpha: 1.0f];
     if ([colorName isEqual: @"mainMenuBarColor"])
-        return [NSColor colorWithCalibratedWhite: 0.9 alpha: 1.0];
+        return [NSColor colorWithSRGBRed: 251.0f / 255 green: 252.0f / 255 blue: 251.0f / 255 alpha: 1.0f];
     if ([colorName isEqual: @"controlShadowColor"])
         return [NSColor darkGrayColor];
     if ([colorName isEqual: @"controlLightHighlightColor"])

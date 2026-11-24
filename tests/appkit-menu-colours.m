@@ -75,44 +75,46 @@ static void testDrawing(void) {
     NSBitmapImageRep *rep = [v bitmapImageRepForCachingDisplayInRect: b];
     [v cacheDisplayInRect: b toBitmapImageRep: rep];
     NSInteger H = [rep pixelsHigh], W = [rep pixelsWide];
-    CHECK(fabs(b.size.height - menuSize(m).height) < 0.5, "view height %.1f, menu size %.1f", b.size.height, menuSize(m).height);
+    // -[NSMenu size] is 2 points taller than the window (4 point padding in the window, 5 in the size).
+    CHECK(fabs(b.size.height + 2 - menuSize(m).height) < 0.5, "view height %.1f, menu size %.1f", b.size.height, menuSize(m).height);
 
-    // Row boundaries from the metrics: 5 point padding, 19 point rows, then the separator.
-    NSInteger row1a = 5 + 19, row1b = 5 + 38;
+    // Row boundaries from the metrics: 4 point padding, 19 point rows, then the separator.
+    NSInteger row1a = 4 + 19, row1b = 4 + 38;
     double r, g, bl;
     lum(rep, W / 2, (row1a + row1b) / 2, &r, &g, &bl);
     // Blend of text pixels is avoided by sampling the row's left margin, where there is no text.
     lum(rep, 3, (row1a + row1b) / 2, &r, &g, &bl);
-    CHECK(fabs(r - 0.259) < 0.03 && fabs(g - 0.467) < 0.03 && fabs(bl - 0.957) < 0.03,
-          "highlight pixel is %.3f %.3f %.3f, expected 0.259 0.467 0.957", r, g, bl);
+    // The highlight is drawn darker than +selectedMenuItemColor (QUIRK, see appkit-menu-look.m): sRGB 0 86 217.
+    CHECK(fabs(r - 0.0) < 0.03 && fabs(g - 0.337) < 0.03 && fabs(bl - 0.851) < 0.03,
+          "highlight pixel is %.3f %.3f %.3f, expected 0.000 0.337 0.851", r, g, bl);
     lum(rep, 1, (row1a + row1b) / 2, &r, &g, &bl);
-    CHECK(fabs(r - 0.259) < 0.03 && fabs(bl - 0.957) < 0.03, "highlight does not reach the menu's left edge: %.3f %.3f %.3f", r, g, bl);
+    CHECK(fabs(r - 0.0) < 0.03 && fabs(bl - 0.851) < 0.03, "highlight does not reach the menu's left edge: %.3f %.3f %.3f", r, g, bl);
     lum(rep, W - 2, (row1a + row1b) / 2, &r, &g, &bl);
-    CHECK(fabs(r - 0.259) < 0.03 && fabs(bl - 0.957) < 0.03, "highlight does not reach the menu's right edge: %.3f %.3f %.3f", r, g, bl);
+    CHECK(fabs(r - 0.0) < 0.03 && fabs(bl - 0.851) < 0.03, "highlight does not reach the menu's right edge: %.3f %.3f %.3f", r, g, bl);
     lum(rep, 3, row1a - 3, &r, &g, &bl);
-    CHECK(fabs(r - 0.945) < 0.03 && fabs(bl - 0.945) < 0.03, "unhighlighted row is %.3f %.3f %.3f, expected a light grey", r, g, bl);
+    CHECK(fabs(r - 0.965) < 0.03 && fabs(bl - 0.965) < 0.03, "unhighlighted row is %.3f %.3f %.3f, expected a light grey", r, g, bl);
 
     double lo, hi;
     rowRange(rep, row1a + 2, row1b - 2, &lo, &hi);
     CHECK(hi > 0.97, "highlighted row has no white text pixel (brightest %.3f)", hi);
-    rowRange(rep, 5 + 2, 5 + 17, &lo, &hi);
+    rowRange(rep, 4 + 2, 4 + 17, &lo, &hi);
     CHECK(lo < 0.3, "normal text is not dark (darkest %.3f)", lo);
 
-    // Separator: one hairline, in the separator colour over the background, no light line below it.
-    NSInteger sepTop = 5 + 38, sepRows = 9, found = 0;
+    // Separator: 12 points high with a line of two pixel rows of grey 229 (0.898) in the middle, no light line.
+    NSInteger sepTop = 4 + 38, sepRows = 12, found = 0;
     for (NSInteger y = sepTop; y < sepTop + sepRows; y++) {
         double l = lum(rep, W / 2, y, NULL, NULL, NULL);
-        if (l < 0.9) { found++; CHECK(l > 0.78 && l < 0.90, "separator line luminance %.3f, expected about 0.85", l); }
+        if (l < 0.93) { found++; CHECK(l > 0.86 && l < 0.92, "separator line luminance %.3f, expected about 0.898", l); }
         CHECK(l < 0.98, "white line in the separator row at %ld", (long)y);
     }
-    CHECK(found == 1, "separator is %ld pixels thick, expected 1", (long)found);
+    CHECK(found == 2, "separator is %ld pixel rows thick, expected 2", (long)found);
 
     // Disabled text: translucent black over the background (about 0.71), no light shadow.
     NSInteger dy0 = sepTop + sepRows + 2, dy1 = sepTop + sepRows + 17;
     if (dy1 > H) dy1 = H;
     rowRange(rep, dy0, dy1, &lo, &hi);
     CHECK(lo > 0.62 && lo < 0.80, "disabled text darkest pixel %.3f, expected about 0.71", lo);
-    CHECK(hi < 0.96, "disabled row has a light shadow pixel (brightest %.3f)", hi);
+    CHECK(hi < 0.975, "disabled row has a light shadow pixel (brightest %.3f)", hi);
 }
 
 int main(void) {

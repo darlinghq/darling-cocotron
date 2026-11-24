@@ -30,23 +30,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
    - use system menu font
  */
 
+// Each title has 11 points on both sides, the first title's border starts 10 points from the left edge, and
+// the selected title is highlighted over the bar's full height. The first two are measured on macOS 10.14.4
+// from the application menu's title and the Apple menu's mark in the menu bar's window image (black-box, tier
+// 2); the highlighted title's extent is an estimate (never captured: it needs a held pointer).
+#define TITLE_PADDING 11
+#define BAR_LEADING_INSET 10
+
 @implementation NSMainMenuView
 
 + (NSFont *) menuFont {
     return [NSFont menuBarFontOfSize: 0];
 }
 
+// The menu bar is 22 points high on macOS 10.14.4 (-[NSMenu menuBarHeight], the thickness of the status bar and
+// the window of the screen's menu bar, black-box, tier 2).
 + (CGFloat) menuHeight {
-    NSDictionary *attributes = [NSDictionary
-            dictionaryWithObjectsAndKeys: [self menuFont], NSFontAttributeName,
-                                          nil];
-    CGFloat result = [@"Menu" sizeWithAttributes: attributes].height;
-
-    result += 3; // border top/bottom margin
-    result += 4; // border
-    result += 1; // sunken title baseline
-
-    return result;
+    return 22;
 }
 
 - initWithFrame: (NSRect) frame menu: (NSMenu *) menu {
@@ -145,7 +145,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSSize titleSize = [self textSizeForItem: item];
 
     result.origin = NSMakePoint(
-            NSMaxX(previousBorderRect) + 6,
+            NSMaxX(previousBorderRect) + TITLE_PADDING,
             floor(([self bounds].size.height - titleSize.height) / 2));
     result.size = titleSize;
 
@@ -153,7 +153,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 }
 
 - (NSRect) borderRectFromTitleRect: (NSRect) titleRect {
-    NSRect result = NSInsetRect(titleRect, -6, 0);
+    NSRect result = NSInsetRect(titleRect, -TITLE_PADDING, 0);
 
     // The titles span the whole height of the bar: no strip of the bar is on no
     // title, and a menu opens at the bar's real bottom edge.
@@ -239,7 +239,7 @@ static void drawSunkenBorder(NSRect rect) {
     NSRect bounds = [self bounds];
     NSArray *items = [self visibleItems];
     NSUInteger i, count = [items count];
-    NSRect previousBorderRect = NSMakeRect(0, 0, 0, 0);
+    NSRect previousBorderRect = NSMakeRect(BAR_LEADING_INSET, 0, 0, 0);
     BOOL overflow = NO;
     NSPoint mouseLoc = [[NSApp currentEvent] locationInWindow];
 
@@ -309,7 +309,7 @@ static void drawSunkenBorder(NSRect rect) {
     NSRect bounds = [self bounds];
     NSArray *items = [self visibleItems];
     NSUInteger i, count = [items count];
-    NSRect previousBorderRect = NSMakeRect(0, 0, 0, 0);
+    NSRect previousBorderRect = NSMakeRect(BAR_LEADING_INSET, 0, 0, 0);
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
@@ -331,7 +331,7 @@ static void drawSunkenBorder(NSRect rect) {
     NSRect bounds = [self bounds];
     NSArray *items = [self visibleItems];
     NSUInteger i, count = [items count];
-    NSRect previousBorderRect = NSMakeRect(0, 0, 0, 0);
+    NSRect previousBorderRect = NSMakeRect(BAR_LEADING_INSET, 0, 0, 0);
     BOOL overflow = NO;
 
     for (i = 0; i < count; i++) {
@@ -362,7 +362,7 @@ static void drawSunkenBorder(NSRect rect) {
     NSRect bounds = [self bounds];
     NSArray *items = [self visibleItems];
     NSUInteger i, count = [items count];
-    NSRect previousBorderRect = NSMakeRect(0, 0, 0, 0);
+    NSRect previousBorderRect = NSMakeRect(BAR_LEADING_INSET, 0, 0, 0);
     BOOL overflow = NO;
 
     for (i = 0; i < count; i++) {
@@ -399,7 +399,7 @@ static void drawSunkenBorder(NSRect rect) {
     NSRect screenVisible = [screen visibleFrame];
     NSArray *items = [self visibleItems];
     NSUInteger i, count = [items count];
-    NSRect previousBorderRect = NSMakeRect(0, 0, 0, 0);
+    NSRect previousBorderRect = NSMakeRect(BAR_LEADING_INSET, 0, 0, 0);
     NSRect itemRect = NSZeroRect;
     NSPoint topLeft = NSZeroPoint;
 

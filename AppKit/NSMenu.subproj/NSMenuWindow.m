@@ -17,13 +17,29 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenuWindow.h>
+#import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSOverflowMenuView.h>
 #import <AppKit/NSSubmenuView.h>
 
 @implementation NSMenuWindow
 
+// A menu window has rounded corners and a shadow (see -[NSGraphicsStyle clipToMenuWindowShape]): the window
+// is transparent outside the outline the view draws.
+// The radius of the corners the backends cut when they cannot show the window's transparency.
+- (CGFloat) _shapedCornerRadius {
+    return [[_view graphicsStyle] menuWindowCornerRadius];
+}
+
+- (void) _configureForMenuShape {
+    [self setOpaque: NO];
+    [self setBackgroundColor: [NSColor clearColor]];
+    [self setHasShadow: YES];
+}
+
 - initWithMenu: (NSMenu *) menu {
     NSSubmenuView *view = [[NSSubmenuView alloc] initWithMenu: menu];
+    // A menu that does not fit on the screen scrolls.
+    [view limitHeightTo: [[NSScreen mainScreen] visibleFrame].size.height];
     NSRect contentRect = [view frame];
 
     [self initWithContentRect: contentRect
@@ -31,6 +47,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                       backing: NSBackingStoreBuffered
                         defer: NO];
     [self setLevel: NSSubmenuWindowLevel];
+    [self _configureForMenuShape];
 
     NS_EXTRA(NSWindow, self)->_releaseWhenClosed = YES;
 
@@ -52,6 +69,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                       backing: NSBackingStoreBuffered
                         defer: NO];
     [self setLevel: NSSubmenuWindowLevel];
+    [self _configureForMenuShape];
 
     NS_EXTRA(NSWindow, self)->_releaseWhenClosed = YES;
 

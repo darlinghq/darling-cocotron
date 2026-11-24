@@ -38,6 +38,16 @@ typedef struct _Margins {
 
 @interface NSGraphicsStyle (NSMenu)
 - (NSSize) menuItemSeparatorSize;
+- (CGFloat) menuItemRowHeight;
+- (CGFloat) menuWindowCornerRadius;
+- (CGFloat) menuItemTrailingMargin;
+- (CGFloat) menuItemKeyEquivalentGap;
+- (CGFloat) menuItemKeyEquivalentRightMargin;
+- (CGFloat) menuItemIndentationWidth;
+- (CGFloat) menuItemImageTitleGap;
+- (CGFloat) menuItemSubmenuColumnWidth;
+- (void) clipToMenuWindowShape;
+- (void) drawMenuScrollArrowUp: (BOOL) up inRect: (NSRect) zone;
 - (NSSize) menuItemBranchArrowSize;
 - (NSSize) menuItemCheckMarkSize;
 - (NSSize) menuItemGutterSize;

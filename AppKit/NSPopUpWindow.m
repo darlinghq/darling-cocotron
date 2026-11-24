@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSPopUpView.h>
 #import <AppKit/NSPopUpWindow.h>
+#import <AppKit/NSGraphicsStyle.h>
 
 @implementation NSPopUpWindow
 
@@ -28,6 +29,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         defer: NO];
     [self setLevel: NSPopUpMenuWindowLevel];
     NS_EXTRA(NSWindow, self)->_releaseWhenClosed = YES;
+    // Rounded corners and a shadow, as for a menu window (see NSMenuWindow).
+    [self setOpaque: NO];
+    [self setBackgroundColor: [NSColor clearColor]];
+    [self setHasShadow: YES];
 
     _view = [[NSPopUpView alloc]
             initWithFrame: NSMakeRect(0, 0, frame.size.width,
@@ -40,6 +45,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) dealloc {
     [_view release];
     [super dealloc];
+}
+
+// The radius of the corners the backends cut when they cannot show the window's transparency.
+- (CGFloat) _shapedCornerRadius {
+    return [[_view graphicsStyle] menuWindowCornerRadius];
 }
 
 - (void) setMenu: (NSMenu *) menu {

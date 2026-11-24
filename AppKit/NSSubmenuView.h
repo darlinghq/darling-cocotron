@@ -20,11 +20,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenuView.h>
 
 @interface NSSubmenuView : NSMenuView {
+    // A menu taller than the room it has shows part of its rows and scrolls: the full height of the rows, and
+    // how far the rows are scrolled up.
+    CGFloat _contentHeight;
+    CGFloat _scrollOffset;
 }
 
 - initWithMenu: (NSMenu *) menu;
 // The area of the item at an index of the menu's item array, in this view's
 // (flipped) coordinates, as -itemIndexAtPoint: lays the items out.
 - (NSRect) rectForItemAtIndex: (NSUInteger) index;
+// Makes the view at most this high (the menu then scrolls, with an arrow at each end that has more rows); a
+// no-op for a menu that fits. Call before the view is put into a window.
+- (void) limitHeightTo: (CGFloat) height;
 
 @end

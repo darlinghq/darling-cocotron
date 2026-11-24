@@ -85,7 +85,7 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 #define TITLE_BOTTOM_MARGIN 0
 #define BRANCH_ARROW_LEFT_MARGIN 2
 // Space between the arrow and the right edge of the menu.
-#define BRANCH_ARROW_RIGHT_MARGIN 14
+#define BRANCH_ARROW_RIGHT_MARGIN 13
 
 - (NSInterfacePartAttributedString *) branchArrow {
     static NSInterfacePartAttributedString *sBranchArrow = nil;
@@ -96,8 +96,48 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     return sBranchArrow;
 }
 
+// The measurements below are those of a macOS 10.14.4 menu in the light appearance, taken from window images of
+// pop-up menus and from -[NSMenu size] (black-box, tier 2). Test: appkit-menu-look.m. All sizes are in points.
+//   row 19 high, 4 above the first row and 4 below the last; a separator is 12 high with its line in the middle;
+//   the title starts 21 from the left edge (the state mark sits in that gutter, 6 from the edge); the key
+//   equivalent ends 9 from the right edge; the submenu arrow is 8x10 and ends 13 from the right edge.
 - (NSSize) menuItemSeparatorSize {
-    return NSMakeSize(0, 9);
+    return NSMakeSize(0, 12);
+}
+
+- (CGFloat) menuItemRowHeight {
+    return 19;
+}
+
+- (CGFloat) menuWindowCornerRadius {
+    return 5;
+}
+
+// Space added to the right of the widest title when no item has a key equivalent or submenu.
+- (CGFloat) menuItemTrailingMargin {
+    return 20;
+}
+
+// Space between the widest title of an item with a key equivalent and the key equivalents, and the margin right of them.
+- (CGFloat) menuItemKeyEquivalentGap {
+    return 23;
+}
+
+- (CGFloat) menuItemKeyEquivalentRightMargin {
+    return 9;
+}
+
+- (CGFloat) menuItemIndentationWidth {
+    return 12;
+}
+
+- (CGFloat) menuItemImageTitleGap {
+    return 3;
+}
+
+// The submenu arrow's column: the arrow and its margins, as measured from -[NSMenu size].
+- (CGFloat) menuItemSubmenuColumnWidth {
+    return 39;
 }
 
 - (Margins) menuItemBranchArrowMargins {
@@ -110,12 +150,11 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 }
 
 - (NSSize) menuItemBranchArrowSize {
-    return NSMakeSize(5, 9);
+    return NSMakeSize(8, 10);
 }
 
 - (NSSize) menuItemCheckMarkSize {
-    // The state mark is an image (a template, drawn in the text colour), 16 points square.
-    return NSMakeSize(16, 16);
+    return NSMakeSize(11, 11);
 }
 
 - (Margins) menuItemGutterMargins {
@@ -133,7 +172,8 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     NSSize result = NSZeroSize;
     Margins margins = [self menuItemGutterMargins];
 
-    result = [self menuItemCheckMarkSize];
+    // The state mark column; the title starts at its right edge.
+    result = NSMakeSize(21, [self menuItemRowHeight]);
 
     result.height += (margins.top + margins.bottom);
     result.width += (margins.left + margins.right);
@@ -194,10 +234,12 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 }
 
 - (void) drawMenuSeparatorInRect: (NSRect) rect {
-    // A single hairline in the separator colour, centred in the row.
-    CGFloat y = rect.origin.y + floor((rect.size.height - 1) / 2);
+    // A one point line in the middle of the row. It lies on a pixel boundary at the 1x scale and so covers two
+    // rows of pixels at half strength, which is what the original shows (a pair of equal pixel rows).
+    // The colour is that of a black line at 13.8% opacity.
+    CGFloat y = rect.origin.y + [self menuItemSeparatorSize].height / 2 - 0.5;
 
-    [[NSColor separatorColor] setFill];
+    [[NSColor colorWithSRGBRed: 0 green: 0 blue: 0 alpha: 0.138f] setFill];
     NSRectFillUsingOperation(NSMakeRect(rect.origin.x, y, rect.size.width, 1), NSCompositeSourceOver);
 }
 
@@ -303,6 +345,13 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     else
         color = [NSColor disabledControlTextColor];
 
+    BOOL isCheck = (image == [NSImage imageNamed: @"NSMenuCheckmark"]);
+    BOOL isDash = (image == [NSImage imageNamed: @"NSMenuMixedState"]);
+    if (isCheck || isDash) {
+        [self drawMenuStateGlyphIsCheck: isCheck inRect: rect color: color];
+        return;
+    }
+
     NSSize size = [image size];
     NSRect imageRect = NSMakeRect(NSMidX(rect) - size.width / 2, NSMidY(rect) - size.height / 2, size.width,
                                   size.height);
@@ -337,6 +386,55 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     CGContextRestoreGState(context);
 }
 
+// The default on and mixed state marks are drawn with paths, in the text colour: a tick 11 points wide and tall,
+// 6 points from the left edge of the row and starting 3 points below its top, and a dash 10 wide and 2 high
+// vertically centred. The rectangle is the state column of the row (menuItemGutterSize).
+- (void) drawMenuStateGlyphIsCheck: (BOOL) isCheck inRect: (NSRect) rect color: (NSColor *) color {
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+    CGFloat top = flipped ? NSMinY(rect) + 3 : NSMaxY(rect) - 3;
+    CGFloat down = flipped ? 1 : -1;
+    CGFloat left = NSMinX(rect) + 6;
+
+    CGContextSaveGState(context);
+    [color set];
+    if (isCheck) {
+        CGContextSetLineWidth(context, 1.7);
+        CGContextSetLineCap(context, kCGLineCapRound);
+        CGContextSetLineJoin(context, kCGLineJoinRound);
+        CGContextBeginPath(context);
+        CGContextMoveToPoint(context, left + 0.8, top + down * 6.6);
+        CGContextAddLineToPoint(context, left + 3.8, top + down * 10.0);
+        CGContextAddLineToPoint(context, left + 10.2, top + down * 0.9);
+        CGContextStrokePath(context);
+    } else {
+        CGFloat y = flipped ? top + 5.5 : top - 5.5 - 2;
+        CGContextFillRect(context, CGRectMake(left, y, 10, 2));
+    }
+    CGContextRestoreGState(context);
+}
+
+// The scroll arrow of a menu taller than the screen shows: a triangle 10 wide and 7 high in the middle of
+// a zone of the row's height, over a background that hides the rows running under it (measured on macOS 10.14.4
+// from a window image of a menu of 120 items, black-box, tier 2).
+- (void) drawMenuScrollArrowUp: (BOOL) up inRect: (NSRect) zone {
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+    BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
+    CGFloat midX = NSMidX(zone), midY = NSMidY(zone);
+    // up in screen terms; the y axis points down in a flipped view
+    CGFloat dir = (up == flipped) ? -1 : 1;
+
+    [[NSColor menuBackgroundColor] setFill];
+    NSRectFill(zone);
+    [[NSColor menuItemTextColor] setFill];
+    CGContextBeginPath(context);
+    CGContextMoveToPoint(context, midX - 5, midY - dir * 3.5);
+    CGContextAddLineToPoint(context, midX + 5, midY - dir * 3.5);
+    CGContextAddLineToPoint(context, midX, midY + dir * 3.5);
+    CGContextClosePath(context);
+    CGContextFillPath(context);
+}
+
 - (void) drawMenuBranchArrowInRect: (NSRect) rect
                            enabled: (BOOL) enabled
                           selected: (BOOL) selected
@@ -365,18 +463,47 @@ static NSDictionary *sScrollerButtonAttributes = nil;
     CGContextFillPath(context);
 }
 
+// Adds the rounded outline of a menu window of the given bounds to the path of a context.
+static void addMenuWindowShape(CGContextRef context, NSRect bounds, CGFloat r) {
+    CGContextMoveToPoint(context, NSMinX(bounds) + r, NSMinY(bounds));
+    CGContextAddArcToPoint(context, NSMaxX(bounds), NSMinY(bounds), NSMaxX(bounds), NSMaxY(bounds), r);
+    CGContextAddArcToPoint(context, NSMaxX(bounds), NSMaxY(bounds), NSMinX(bounds), NSMaxY(bounds), r);
+    CGContextAddArcToPoint(context, NSMinX(bounds), NSMaxY(bounds), NSMinX(bounds), NSMinY(bounds), r);
+    CGContextAddArcToPoint(context, NSMinX(bounds), NSMinY(bounds), NSMaxX(bounds), NSMinY(bounds), r);
+    CGContextClosePath(context);
+}
+
+// Limits what is drawn to the menu window's outline: corners 5 points in radius, outside of which the window is
+// transparent. Must be bracketed by a saved graphics state.
+- (void) clipToMenuWindowShape {
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+
+    CGContextBeginPath(context);
+    addMenuWindowShape(context, [_view bounds], [self menuWindowCornerRadius]);
+    CGContextClip(context);
+}
+
+// QUIRK: the highlight of the selected row is (0, 86, 217) in sRGB, darker than the sRGB value
+// +[NSColor selectedMenuItemColor] returns on macOS 10.14.4 (0.259, 0.467, 0.957). Not documented. Evidence:
+// window images of pop-up menus on 10.14.4 (tier 2, black-box) whose pixel values were read back in sRGB.
+// Test: appkit-menu-look.m (test_quirk_menu_highlight_pixel).
 - (void) drawMenuSelectionInRect: (NSRect) rect enabled: (BOOL) enabled {
     if (enabled) {
-        [[NSColor selectedMenuItemColor] setFill];
+        [[NSColor colorWithSRGBRed: 0.0f green: 86.0f / 255 blue: 217.0f / 255 alpha: 1.0f] setFill];
         NSRectFill(rect);
     }
 }
 
+// The menu window's background: the light material (an opaque grey) in a rounded outline, with no frame line;
+// the edge is the window's shadow.
 - (void) drawMenuWindowBackgroundInRect: (NSRect) rect {
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+
+    CGContextSaveGState(context);
+    [self clipToMenuWindowShape];
     [[NSColor menuBackgroundColor] setFill];
     NSRectFill(rect);
-    [[NSColor windowFrameColor] set];
-    NSFrameRect(rect);
+    CGContextRestoreGState(context);
 }
 
 - (void) drawMenuBarItemBorderInRect: (NSRect) rect
@@ -384,7 +511,7 @@ static NSDictionary *sScrollerButtonAttributes = nil;
                             selected: (BOOL) selected
 {
     if (selected || hovering) {
-        [[NSColor selectedMenuItemColor] setFill];
+        [[NSColor colorWithSRGBRed: 0.0f green: 86.0f / 255 blue: 217.0f / 255 alpha: 1.0f] setFill];
         NSRectFill(rect);
     }
 }

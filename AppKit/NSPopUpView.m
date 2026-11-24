@@ -38,9 +38,12 @@ enum { KEYBOARD_INACTIVE, KEYBOARD_ACTIVE, KEYBOARD_OK, KEYBOARD_CANCEL };
 // on screen. This threshold is the dividing line between those two behaviours.
 static const NSTimeInterval kMenuInitialClickThreshold = .3f;
 
-#define MIN_TITLE_KEY_GAP 8
-#define WINDOW_BORDER_THICKNESS 3
-#define IMAGE_TITLE_GAP 8
+// The metrics of the menu look (see -[NSGraphicsStyle menuItemGutterSize] and its neighbours): no frame line,
+// 4 points of padding above the first and below the last row, rows of the font size plus 5 points (18 for the
+// 13 point font of a pop-up button on macOS 10.14.4, measured from window images of its menu, black-box, tier 2).
+#define WINDOW_BORDER_THICKNESS 0
+#define WINDOW_VERTICAL_PADDING 4
+#define IMAGE_ROW_EXTRA 5
 
 // Note: moved these above init to avoid compiler warnings
 - (NSDictionary *) itemAttributes {
@@ -76,11 +79,12 @@ static const NSTimeInterval kMenuInitialClickThreshold = .3f;
     CGFloat maxTitleWidth = 0.0f;
     BOOL anItemHasAnImage = NO;
     CGFloat maxKeyWidth = 0.0f;
-    CGFloat totalHeight =
-            WINDOW_BORDER_THICKNESS; // border. Magic constants that may not be
-                                     // right for Win7 vs XP
-    NSSize gutterSize = [[self graphicsStyle] menuItemGutterSize];
-    NSSize rightArrowSize = [[self graphicsStyle] menuItemBranchArrowSize];
+    CGFloat totalHeight = WINDOW_VERTICAL_PADDING;
+    CGFloat maxKeyTitleWidth = 0.0f;
+    BOOL anItemHasSubmenu = NO;
+    NSGraphicsStyle *style = [self graphicsStyle];
+    NSSize gutterSize = [style menuItemGutterSize];
+    CGFloat rowHeight = _font != nil ? ceil([_font pointSize]) + 5 : [style menuItemRowHeight];
     unsigned i, count = [items count];
     NSRect rects[count];
 
@@ -96,16 +100,20 @@ static const NSTimeInterval kMenuInitialClickThreshold = .3f;
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
         CGFloat height = 0.;
-        CGFloat titleAndIconWidth = self.bounds.size.width;
+        CGFloat titleAndIconWidth = 0.0f;
         if ([item isSeparatorItem]) {
-            height = [[self graphicsStyle] menuItemSeparatorSize].height;
+            height = [style menuItemSeparatorSize].height;
         } else {
             NSSize size = NSZeroSize;
 
+            height = rowHeight;
             size = [self sizeForMenuItemImage: item];
-            height = MAX(height, size.height);
-            if ((titleAndIconWidth = size.width) > 0.0f)
+            if (size.width > 0.0f) {
+                height = MAX(height, size.height + IMAGE_ROW_EXTRA);
                 anItemHasAnImage = YES;
+                titleAndIconWidth = size.width + [style menuItemImageTitleGap];
+            }
+            titleAndIconWidth += [item indentationLevel] * [style menuItemIndentationWidth];
 
             if ([item attributedTitle]) {
                 size = [[self graphicsStyle]
@@ -132,30 +140,26 @@ static const NSTimeInterval kMenuInitialClickThreshold = .3f;
                 size = [[self graphicsStyle]
                         menuItemTextSize: [item _keyEquivalentDescription]];
                 maxKeyWidth = MAX(maxKeyWidth, size.width);
-                height = MAX(height, size.height);
+                maxKeyTitleWidth = MAX(maxKeyTitleWidth, titleAndIconWidth);
             }
-            height = MAX(height, gutterSize.height);
-            height = MAX(height, rightArrowSize.height);
+            if ([item hasSubmenu])
+                anItemHasSubmenu = YES;
         }
         rects[i] = NSMakeRect(0, totalHeight, titleAndIconWidth, height);
         totalHeight += height;
     }
 
-    result.height = totalHeight;
-    result.width = gutterSize.width;
-    result.width += [[self graphicsStyle] menuItemGutterGap];
-    if (anItemHasAnImage)
-        result.width += IMAGE_TITLE_GAP;
-    result.width += maxTitleWidth;
-    if (maxKeyWidth > 0.0f) {
-        result.width += MIN_TITLE_KEY_GAP;
-        result.width += maxKeyWidth;
-    }
-    result.width += rightArrowSize.width;
-
-    // Add the left+right and bottom borders
-    result.width += WINDOW_BORDER_THICKNESS * 2;
-    result.height += WINDOW_BORDER_THICKNESS;
+    // Wide enough for the widest title and its trailing margin (plus the submenu arrow's column when an item has a
+    // submenu), and for the widest key equivalent after the widest title that has one; as in NSSubmenuView.
+    result.height = totalHeight + WINDOW_VERTICAL_PADDING;
+    CGFloat titleBased = gutterSize.width + maxTitleWidth +
+                         [style menuItemTrailingMargin] + (anItemHasSubmenu ? [style menuItemSubmenuColumnWidth] : 0);
+    CGFloat keyBased = 0.0f;
+    if (maxKeyWidth > 0.0f)
+        keyBased = gutterSize.width + maxKeyTitleWidth + [style menuItemKeyEquivalentGap] + maxKeyWidth +
+                   [style menuItemKeyEquivalentRightMargin] + 1;
+    result.width = MAX(titleBased, keyBased);
+    (void) anItemHasAnImage;
 
     if (_cachedItemRects == nil && [items isEqual: [self visibleItemArray]]) {
         // Build our cached item rects
@@ -246,7 +250,7 @@ static const NSTimeInterval kMenuInitialClickThreshold = .3f;
 }
 
 static NSRect boundsToTitleAreaRect(NSRect rect) {
-    return NSInsetRect(rect, WINDOW_BORDER_THICKNESS, WINDOW_BORDER_THICKNESS);
+    return NSInsetRect(rect, WINDOW_BORDER_THICKNESS, WINDOW_VERTICAL_PADDING);
 }
 
 - (void) drawRect: (NSRect) rect {
@@ -266,6 +270,10 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
     }
 
     [[self graphicsStyle] drawMenuWindowBackgroundInRect: self.bounds];
+
+    CGContextRef clipContext = [[NSGraphicsContext currentContext] graphicsPort];
+    CGContextSaveGState(clipContext);
+    [[self graphicsStyle] clipToMenuWindowShape];
 
     for (i = 0; i < count; i++) {
         NSMenuItem *item = [items objectAtIndex: i];
@@ -306,9 +314,10 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
                 [[self graphicsStyle] drawMenuSelectionInRect: partRect
                                                       enabled: showsEnabled];
 
-            // Draw the gutter and checkmark (if any)
-            CENTER_PART_RECT_VERTICALLY(
-                    [[self graphicsStyle] menuItemGutterSize]);
+            NSGraphicsStyle *style = [self graphicsStyle];
+            NSSize gutterSize = [style menuItemGutterSize];
+
+            // The state mark, in the gutter column at the left edge.
             NSImage *stateImage = nil;
             if ([item state] == NSControlStateValueOn)
                 stateImage = [item onStateImage];
@@ -319,146 +328,80 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
             else
                 stateImage = [item offStateImage];
             if (stateImage != nil) {
-                [[self graphicsStyle] drawMenuGutterInRect: partRect];
-                [[self graphicsStyle] drawMenuStateImage: stateImage
-                                                 inRect: partRect
-                                                enabled: showsEnabled
-                                               selected: selected];
+                NSRect gutterRect = NSMakeRect(origin.x, origin.y, gutterSize.width, itemHeight);
+
+                [style drawMenuGutterInRect: gutterRect];
+                [style drawMenuStateImage: stateImage inRect: gutterRect enabled: showsEnabled selected: selected];
             }
 
-            partRect.origin.x += [[self graphicsStyle] menuItemGutterGap];
+            CGFloat x = origin.x + gutterSize.width + [item indentationLevel] * [style menuItemIndentationWidth];
 
-            // Draw the image
+            // The image, then the title after it.
             if (image) {
-                NSRect imageRect;
+                NSSize imageSize = [image size];
+                NSRect drawingRect = NSMakeRect(x, origin.y + floor((itemHeight - imageSize.height) / 2), imageSize.width,
+                                                imageSize.height);
+                CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
 
-                partRect.origin.x += partRect.size.width;
-                CENTER_PART_RECT_VERTICALLY([image size]);
-
-                CGContextRef ctx =
-                        [[NSGraphicsContext currentContext] graphicsPort];
                 CGContextSaveGState(ctx);
-                CGContextTranslateCTM(ctx, partRect.origin.x,
-                                      partRect.origin.y);
+                CGContextTranslateCTM(ctx, drawingRect.origin.x, drawingRect.origin.y);
                 if ([self isFlipped]) {
-                    CGContextTranslateCTM(ctx, 0, partRect.size.height);
+                    CGContextTranslateCTM(ctx, 0, drawingRect.size.height);
                     CGContextScaleCTM(ctx, 1, -1);
                 }
-                NSRect drawingRect = partRect;
                 drawingRect.origin = NSZeroPoint;
-                [[self graphicsStyle] drawButtonImage: image
-                                               inRect: drawingRect
-                                              enabled: showsEnabled
-                                                mixed: NO];
+                [style drawButtonImage: image inRect: drawingRect enabled: showsEnabled mixed: NO];
                 CGContextRestoreGState(ctx);
 
-                partRect.origin.x += IMAGE_TITLE_GAP;
+                x += imageSize.width + [style menuItemImageTitleGap];
             }
-
-            // Draw the title
-            partRect.origin.x += partRect.size.width;
 
             NSAttributedString *atitle = [item attributedTitle];
-            if (atitle != nil && [atitle length] > 0) {
-                CENTER_PART_RECT_VERTICALLY([[self graphicsStyle]
-                        menuItemAttributedTextSize: atitle]);
-#if WINDOWS
-                // On Windows, when using the AGG graphics context, enabling
-                // font smoothing switches to using AGG for text drawing,
-                // instead of the native Win32 API.
-                // In case we're using a lot of different fonts, like for a
-                // styled for menu, that's leading to much faster drawing thanks
-                // to fonts caching done by this context. However, drawing is
-                // more smoothed that when traditional Win32 text rendering,
-                // leading to a different look than standard Win32 menus - so
-                // we'll do that only if we're just drawing "normal" text,
-                // without any special attributes It would probably be better to
-                // add font caching to the regular Win32 drawing context
-                CGContextSetShouldSmoothFonts(
-                        (CGContextRef)[[NSGraphicsContext
-                                currentContext] graphicsPort],
-                        YES);
-#endif
-                [[self graphicsStyle] drawAttributedMenuItemText: atitle
-                                                          inRect: partRect
-                                                         enabled: showsEnabled
-                                                        selected: selected];
-            } else {
-#if WINDOWS
-                // On Windows, when using the AGG graphics context, enabling
-                // font smoothing switches to using AGG for text drawing,
-                // instead of the native Win32 API.
-                // In case we're using a lot of different fonts, like for a
-                // styled for menu, that's leading to much faster drawing thanks
-                // to fonts caching done by this context. However, drawing is
-                // more smoothed that when traditional Win32 text rendering,
-                // leading to a different look than standard Win32 menus - so
-                // we'll do that only if we're just drawing "normal" text,
-                // without any special attributes It would probably be better to
-                // add font caching to the regular Win32 drawing context
-                CGContextSetShouldSmoothFonts(
-                        (CGContextRef)[[NSGraphicsContext
-                                currentContext] graphicsPort],
-                        NO);
-#endif
-                NSString *title = [item title];
-                if (useCustomFont) {
-                    NSDictionary *attributes = [self itemAttributes];
-                    NSAttributedString *attributedTitle =
-                            [[[NSAttributedString alloc]
-                                    initWithString: title
-                                        attributes: attributes] autorelease];
-                    CENTER_PART_RECT_VERTICALLY([[self graphicsStyle]
-                            menuItemAttributedTextSize: attributedTitle]);
-                    [[self graphicsStyle]
-                            drawAttributedMenuItemText: attributedTitle
-                                                inRect: partRect
-                                               enabled: showsEnabled
-                                              selected: selected];
-                } else {
-                    CENTER_PART_RECT_VERTICALLY(
-                            [[self graphicsStyle] menuItemTextSize: title]);
-                    [[self graphicsStyle] drawMenuItemText: title
-                                                    inRect: partRect
-                                                   enabled: showsEnabled
-                                                  selected: selected];
-                }
-            }
+            NSString *title = [item title];
 
-            // Draw the key equivalent
+            partRect = NSMakeRect(x, origin.y, 0, 0);
+            if (atitle != nil && [atitle length] > 0) {
+                partSize = [style menuItemAttributedTextSize: atitle];
+            } else if (useCustomFont) {
+                NSDictionary *attributes = [self itemAttributes];
+
+                atitle = [[[NSAttributedString alloc] initWithString: title attributes: attributes] autorelease];
+                partSize = [style menuItemAttributedTextSize: atitle];
+            } else {
+                partSize = [style menuItemTextSize: title];
+            }
+            partRect.size = partSize;
+            partRect.size.width = ceilf(partRect.size.width);
+            partRect.origin.y = origin.y + (itemHeight - partSize.height) / 2;
+            if (atitle != nil && [atitle length] > 0)
+                [style drawAttributedMenuItemText: atitle inRect: partRect enabled: showsEnabled selected: selected];
+            else
+                [style drawMenuItemText: title inRect: partRect enabled: showsEnabled selected: selected];
+
+            // The key equivalent, ending at a fixed distance from the right edge.
             if ([[item keyEquivalent] length] != 0) {
                 NSString *keyString = [item _keyEquivalentDescription];
-                NSSize branchArrowSize =
-                        [[self graphicsStyle] menuItemBranchArrowSize];
-                NSSize keyEquivalentSize =
-                        [[self graphicsStyle] menuItemTextSize: keyString];
+                NSSize keySize = [style menuItemTextSize: keyString];
+                NSRect keyRect = NSMakeRect(NSMaxX(itemArea) - [style menuItemKeyEquivalentRightMargin] - keySize.width,
+                                            origin.y + (itemHeight - keySize.height) / 2, keySize.width, keySize.height);
 
-                partRect.origin.x = origin.x + NSWidth(itemArea) -
-                                    branchArrowSize.width -
-                                    keyEquivalentSize.width;
-                CENTER_PART_RECT_VERTICALLY(keyEquivalentSize);
-                [[self graphicsStyle] drawMenuItemText: keyString
-                                                inRect: partRect
-                                               enabled: showsEnabled
-                                              selected: selected];
+                [style drawMenuItemText: keyString inRect: keyRect enabled: showsEnabled selected: selected];
             }
 
-            // Draw the submenu arrow
+            // The submenu arrow.
             if ([item hasSubmenu]) {
-                NSSize branchArrowSize =
-                        [[self graphicsStyle] menuItemBranchArrowSize];
-                partRect.origin.x =
-                        origin.x + NSWidth(itemArea) - branchArrowSize.width;
-                partRect.size.width = branchArrowSize.width;
-                CENTER_PART_RECT_VERTICALLY(branchArrowSize);
-                [[self graphicsStyle] drawMenuBranchArrowInRect: partRect
-                                                        enabled: showsEnabled
-                                                       selected: selected];
+                NSSize arrowSize = [style menuItemBranchArrowSize];
+                NSRect arrowRect = NSMakeRect(NSMaxX(itemArea) - [style menuItemBranchArrowMargins].right - arrowSize.width,
+                                              origin.y + (itemHeight - arrowSize.height) / 2, arrowSize.width,
+                                              arrowSize.height);
+
+                [style drawMenuBranchArrowInRect: arrowRect enabled: showsEnabled selected: selected];
             }
 
             origin.y += itemHeight;
         }
     }
+    CGContextRestoreGState(clipContext);
 }
 /*
  * Returns NSNotFound if the point is outside of the menu
@@ -469,8 +412,6 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
     NSInteger result;
     NSArray *items = [self visibleItemArray];
     int i, count = [items count];
-
-    point.y -= 2;
 
     if (point.y < 0) {
         return NSNotFound;

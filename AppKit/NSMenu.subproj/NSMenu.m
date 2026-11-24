@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSMenuView.h>
 #import <AppKit/NSMenuWindow.h>
+#import <AppKit/NSMainMenuView.h>
 #import <AppKit/NSSubmenuView.h>
 #import <AppKit/NSKeyEquivalentMatching.h>
 #import <AppKit/NSWindow.h>
@@ -80,6 +81,32 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
     return own != nil ? own : [NSApp effectiveAppearance];
 }
 
+// Moves a menu window's frame as little as needed to keep it inside the visible area of the screen that has
+// the point (the main screen when none has it).
+static NSRect _NSMenuFrameOnScreen(NSRect frame, NSPoint screenPoint) {
+    NSScreen *screen = nil;
+    for (NSScreen *candidate in [NSScreen screens])
+        if (NSPointInRect(screenPoint, [candidate frame])) {
+            screen = candidate;
+            break;
+        }
+    if (screen == nil)
+        screen = [NSScreen mainScreen];
+    if (screen != nil) {
+        NSRect visible = [screen visibleFrame];
+
+        if (NSMaxX(frame) > NSMaxX(visible))
+            frame.origin.x = NSMaxX(visible) - frame.size.width;
+        if (NSMinX(frame) < NSMinX(visible))
+            frame.origin.x = NSMinX(visible);
+        if (NSMinY(frame) < NSMinY(visible))
+            frame.origin.y = NSMinY(visible);
+        if (NSMaxY(frame) > NSMaxY(visible))
+            frame.origin.y = NSMaxY(visible) - frame.size.height;
+    }
+    return frame;
+}
+
 + (void) popUpContextMenu: (NSMenu *) menu
                 withEvent: (NSEvent *) event
                   forView: (NSView *) view
@@ -98,6 +125,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
 
         [menuWindow setReleasedWhenClosed: YES];
         [menuWindow setFrameTopLeftPoint: [window convertBaseToScreen: point]];
+        [menuWindow setFrame: _NSMenuFrameOnScreen([menuWindow frame], [window convertBaseToScreen: point]) display: NO];
         [menuWindow orderFront: nil];
 
         item = [menuView trackForEvent: event];
@@ -174,26 +202,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
     }
     NSRect frame = NSMakeRect(screenPoint.x - anchor.x, screenPoint.y + anchor.y - size.height, size.width, size.height);
 
-    NSScreen *screen = nil;
-    for (NSScreen *candidate in [NSScreen screens])
-        if (NSPointInRect(screenPoint, [candidate frame])) {
-            screen = candidate;
-            break;
-        }
-    if (screen == nil)
-        screen = [NSScreen mainScreen];
-    if (screen != nil) {
-        NSRect visible = [screen visibleFrame];
-
-        if (NSMaxX(frame) > NSMaxX(visible))
-            frame.origin.x = NSMaxX(visible) - frame.size.width;
-        if (NSMinX(frame) < NSMinX(visible))
-            frame.origin.x = NSMinX(visible);
-        if (NSMinY(frame) < NSMinY(visible))
-            frame.origin.y = NSMinY(visible);
-        if (NSMaxY(frame) > NSMaxY(visible))
-            frame.origin.y = NSMaxY(visible) - frame.size.height;
-    }
+    frame = _NSMenuFrameOnScreen(frame, screenPoint);
 
     id<NSMenuDelegate> delegate = [self delegate];
     if ([delegate respondsToSelector: @selector(menuWillOpen:)])
@@ -365,6 +374,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
     [NS_EXTRA(NSMenu, self)->_itemArray release];
     [NS_EXTRA(NSMenu, self)->_identifier release];
     [NS_EXTRA(NSMenu, self)->_appearance release];
+    [NS_EXTRA(NSMenu, self)->_font release];
     NS_EXTRA_FREE(NSMenu, self);
     [super dealloc];
 }
@@ -376,6 +386,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
         [NS_EXTRA(NSMenu, self)->_identifier copyWithZone: zone];
     // Observed on macOS 26.7.3: a copy keeps the appearance, as it keeps the identifier.
     [NS_EXTRA(NSMenu, copy)->_appearance retain];
+    [NS_EXTRA(NSMenu, copy)->_font retain];
     // QUIRK: a copy of a submenu has no supermenu. Not documented. Evidence: black-box observation on macOS
     // 26.7.3 (tier 2): the supermenu of a copy of a submenu, and of a copy of a menu with a supermenu, was nil.
     // Test: appkit-menu-appearance (test_copy_of_a_hierarchy)
@@ -404,12 +415,33 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
 }
 
 // The size of the pop-up form of the menu: the one its view lays out for the visible items.
+- (NSFont *) font {
+    NSFont *font = NS_EXTRA(NSMenu, self)->_font;
+
+    return font != nil ? font : [NSFont menuFontOfSize: 14];
+}
+
+- (void) setFont: (NSFont *) font {
+    if (font != NS_EXTRA(NSMenu, self)->_font) {
+        [NS_EXTRA(NSMenu, self)->_font release];
+        NS_EXTRA(NSMenu, self)->_font = [font retain];
+    }
+}
+
 - (NSSize) size {
     NSSubmenuView *view = [[NSSubmenuView alloc] initWithMenu: self];
     NSSize result = [view frame].size;
 
     [view release];
+    // The size is 2 points taller than the window the menu is shown in (4 points of padding above and below the
+    // rows, 5 in the size). Measured on macOS 10.14.4 (window bounds of pop-up menus against -[NSMenu size],
+    // black-box, tier 2). Test: appkit-menu-look.m.
+    result.height += 2;
     return result;
+}
+
+- (CGFloat) menuBarHeight {
+    return self == [NSApp mainMenu] ? [NSMainMenuView menuHeight] : 0;
 }
 
 - (NSArray *) itemArray {

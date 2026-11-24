@@ -86,7 +86,8 @@ static double bestCorrelation(NSBitmapImageRep *rep, NSImage *image) {
 
 static double inkInColumns(NSBitmapImageRep *rep, NSInteger x0, NSInteger x1) {
     double total = 0;
-    for (NSInteger y = 0; y < [rep pixelsHigh]; y++) {
+    // The rows at the top and bottom edge are left out: the menu window's rounded corners are transparent there.
+    for (NSInteger y = 6; y < [rep pixelsHigh] - 6; y++) {
         double bg = lum(rep, 1, y);
         for (NSInteger x = x0; x < x1; x++)
             total += fabs(lum(rep, x, y) - bg);
