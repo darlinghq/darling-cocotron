@@ -45,6 +45,10 @@
 
     // Bottom to top, not retained.
     CFMutableArrayRef _windows;
+
+    NSPoint _lastTouch;                 // where a finger last was, in AppKit's global space
+    NSUInteger _modifierFlags;          // the modifiers of the last key
+    NSMutableDictionary *_windowsByFinger; // finger -> number of the window it began in
 }
 
 // Pixels per point.

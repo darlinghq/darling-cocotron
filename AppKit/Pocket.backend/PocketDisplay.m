@@ -21,9 +21,14 @@
 #import "PocketDisplay.h"
 #import "PocketSocket.h"
 #import "PocketWindow.h"
+#import "../private-include/AppKit/NSTouchBackend.h"
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSEvent.h>
 #import <AppKit/NSScreen.h>
+#import <AppKit/NSTouch.h>
+#import <AppKit/NSWindow.h>
 #import <CoreFoundation/CFSocket.h>
+#import <HIToolbox/Events.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -50,11 +55,20 @@
 @end
 
 @interface PocketDisplay ()
+- (PocketWindow *) windowWithNumber: (uint32_t) number;
+- (void) touch: (struct pocket_touch) touch;
+- (void) key: (struct pocket_key) key characters: (NSString *) characters;
+- (void) commitText: (NSString *) text;
 - (void) processPendingEvents;
 - (BOOL) readMessages;
 - (void) handleMessage: (uint32_t) type bytes: (const uint8_t *) bytes length: (size_t) length;
 - (void) screenChanged: (struct pocket_screen) screen;
 @end
+
+static NSString *stringFromBytes(const uint8_t *bytes, size_t length) {
+    NSString *string = [[NSString alloc] initWithBytes: bytes length: length encoding: NSUTF8StringEncoding];
+    return [string autorelease];
+}
 
 static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef address, const void *data, void *info) {
     [(PocketDisplay *) info processPendingEvents];
@@ -75,6 +89,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     if (self == nil)
         return nil;
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
+    _windowsByFinger = [NSMutableDictionary new];
 
     struct sockaddr_un address = {.sun_family = AF_UNIX};
     if (strlen(path) >= sizeof(address.sun_path)) {
@@ -132,6 +147,7 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
         close(_socket);
     if (_windows != NULL)
         CFRelease(_windows);
+    [_windowsByFinger release];
     [super dealloc];
 }
 
@@ -208,6 +224,24 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
             [[self windowWithNumber: message.window] bufferReleased];
         }
         break;
+    case POCKET_TOUCH:
+        if (length >= sizeof(struct pocket_touch)) {
+            struct pocket_touch touch;
+            memcpy(&touch, bytes, sizeof(touch));
+            [self touch: touch];
+        }
+        break;
+    case POCKET_KEY:
+        if (length >= sizeof(struct pocket_key)) {
+            struct pocket_key key;
+            memcpy(&key, bytes, sizeof(key));
+            if (key.length <= length - sizeof(key))
+                [self key: key characters: stringFromBytes(bytes + sizeof(key), key.length)];
+        }
+        break;
+    case POCKET_TEXT:
+        [self commitText: stringFromBytes(bytes, length)];
+        break;
     case POCKET_SCREEN:
         if (length >= sizeof(struct pocket_screen)) {
             struct pocket_screen screen;
@@ -228,6 +262,131 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     }
     return nil;
 }
+
+#pragma mark - Input
+
+// The topmost visible window under a point of the screen, in points.
+- (PocketWindow *) windowAtPoint: (NSPoint) point {
+    PocketWindow *found = nil;
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        PocketWindow *window = (PocketWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window isVisible] && NSPointInRect(point, [window frame]) &&
+            (found == nil || [window level] >= [found level]))
+            found = window;
+    }
+    return found;
+}
+
+// A finger goes to the window it began in, wherever it moves.
+- (void) touch: (struct pocket_touch) touch {
+    NSTouchPhase phase;
+    switch (touch.phase) {
+    case POCKET_TOUCH_BEGAN: phase = NSTouchPhaseBegan; break;
+    case POCKET_TOUCH_MOVED: phase = NSTouchPhaseMoved; break;
+    case POCKET_TOUCH_ENDED: phase = NSTouchPhaseEnded; break;
+    case POCKET_TOUCH_CANCELLED: phase = NSTouchPhaseCancelled; break;
+    default: return;
+    }
+    CGFloat scale = [self scale];
+    NSPoint point = NSMakePoint(touch.x / scale, NSMaxY([self screenFrame]) - touch.y / scale);
+    NSNumber *finger = [NSNumber numberWithUnsignedInt: touch.finger];
+    PocketWindow *window;
+    if (phase == NSTouchPhaseBegan) {
+        window = [self windowAtPoint: point];
+        if (window != nil)
+            [_windowsByFinger setObject: [NSNumber numberWithUnsignedInt: [window number]] forKey: finger];
+    } else {
+        window = [self windowWithNumber: [[_windowsByFinger objectForKey: finger] unsignedIntValue]];
+        if (phase == NSTouchPhaseEnded || phase == NSTouchPhaseCancelled)
+            [_windowsByFinger removeObjectForKey: finger];
+    }
+    _lastTouch = point;
+    if (window == nil || [window delegate] == nil)
+        return;
+    NSRect frame = [window frame];
+    NSTouchPost([window delegate], touch.finger, phase,
+                NSMakePoint(point.x - frame.origin.x, point.y - frame.origin.y), touch.time);
+}
+
+// Keys go to the key window, or the topmost one while none is key.
+- (NSWindow *) keyWindow {
+    NSWindow *window = [NSApp keyWindow];
+    if (window == nil) {
+        for (CFIndex i = CFArrayGetCount(_windows) - 1; i >= 0 && window == nil; i--) {
+            PocketWindow *platform = (PocketWindow *) CFArrayGetValueAtIndex(_windows, i);
+            if ([platform isVisible])
+                window = [platform delegate];
+        }
+    }
+    return window;
+}
+
+- (void) postKey: (BOOL) down
+         keyCode: (unsigned short) keyCode
+       modifiers: (NSEventModifierFlags) modifiers
+      characters: (NSString *) characters
+{
+    NSWindow *window = [self keyWindow];
+    if (window == nil)
+        return;
+    NSEvent *event = [NSEvent keyEventWithType: down ? NSKeyDown : NSKeyUp
+                                      location: NSZeroPoint
+                                 modifierFlags: modifiers
+                                     timestamp: [NSDate timeIntervalSinceReferenceDate]
+                                  windowNumber: [window windowNumber]
+                                       context: nil
+                                    characters: characters
+                   charactersIgnoringModifiers: characters
+                                     isARepeat: NO
+                                       keyCode: keyCode];
+    [self postEvent: event atStart: NO];
+}
+
+// The characters AppKit's key bindings expect from the keys that type none. The Mac virtual key
+// codes are HIToolbox's (Events.h). Delete is a backspace here (0x08), as the standard key bindings
+// of this AppKit expect, not the 0x7f of macOS.
+static NSString *charactersForSpecialKey(uint32_t keycode) {
+    unichar character;
+    switch (keycode) {
+    case kVK_Return: character = '\r'; break;
+    case kVK_ANSI_KeypadEnter: character = 0x03; break;
+    case kVK_Tab: character = '\t'; break;
+    case kVK_Delete: character = 0x08; break;
+    case kVK_Escape: character = 0x1B; break;
+    case kVK_ForwardDelete: character = NSDeleteFunctionKey; break;
+    case kVK_Home: character = NSHomeFunctionKey; break;
+    case kVK_End: character = NSEndFunctionKey; break;
+    case kVK_PageUp: character = NSPageUpFunctionKey; break;
+    case kVK_PageDown: character = NSPageDownFunctionKey; break;
+    case kVK_LeftArrow: character = NSLeftArrowFunctionKey; break;
+    case kVK_RightArrow: character = NSRightArrowFunctionKey; break;
+    case kVK_DownArrow: character = NSDownArrowFunctionKey; break;
+    case kVK_UpArrow: character = NSUpArrowFunctionKey; break;
+    default: return nil;
+    }
+    return [NSString stringWithCharacters: &character length: 1];
+}
+
+- (void) key: (struct pocket_key) key characters: (NSString *) characters {
+    _modifierFlags = key.modifiers;
+    NSString *special = charactersForSpecialKey(key.keycode);
+    if (special != nil)
+        characters = special;
+    [self postKey: key.down != 0
+          keyCode: key.keycode == 0xFFFF ? 0 : (unsigned short) key.keycode
+        modifiers: key.modifiers
+       characters: characters ? characters : @""];
+}
+
+// An input method's text, as a key typing it.
+- (void) commitText: (NSString *) text {
+    if ([text length] == 0)
+        return;
+    [self postKey: YES keyCode: 0 modifiers: 0 characters: text];
+    [self postKey: NO keyCode: 0 modifiers: 0 characters: text];
+}
+
+#pragma mark - Screen changes
 
 - (void) screenChanged: (struct pocket_screen) screen {
     if (screen.width == 0 || screen.height == 0)
@@ -355,12 +514,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     return frame;
 }
 
+// Where the last finger was.
 - (NSPoint) mouseLocation {
-    return NSZeroPoint;
+    return _lastTouch;
 }
 
 - (NSUInteger) currentModifierFlags {
-    return 0;
+    return _modifierFlags;
 }
 
 // There is no pointer.
