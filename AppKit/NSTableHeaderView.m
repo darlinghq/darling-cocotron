@@ -107,8 +107,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSTableColumn *tableColumn = [tableColumns objectAtIndex: column];
 
     headerRect.size.width = [_tableView _spaceTakenByColumn: tableColumn];
-    // QUIRK: the rectangle of a hidden column is an empty one at x 0, wherever the column is in the table; see
-    // -[NSTableView rectOfColumn:].
+    // QUIRK: the header rectangle of a hidden column is at x 0 with width 0, wherever the column is in the table,
+    // and keeps the header's height; unlike -[NSTableView rectOfColumn:] it is not NSZeroRect. Observed on macOS
+    // 26.1 (arm64): probe 657.R "hidden=4 ... column 4 -> HIDDEN ; ... headerRectOfColumn:={{0,0},{0,28}}"
+    // with a header of height 28.
     if ([tableColumn isHidden]) {
         headerRect.origin.x = 0.;
         return headerRect;
