@@ -62,6 +62,11 @@ BOOL O2JPEGGetDimensions(CFDataRef data, size_t *width, size_t *height) {
     return YES;
 }
 
+// Upper bound for a decoded RGBA image, the same 1 GiB the PNG decoder allows.
+// A header of a few hundred bytes can declare up to 65500x65500 pixels, and the
+// decoded size must neither overflow nor force a huge allocation.
+#define O2JPEG_MAX_DECODED_BYTES ((size_t) 1 << 30)
+
 static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
                                                  int len, int *x, int *y)
 {
@@ -94,6 +99,16 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     // Setup the jpeg header and set the decompress options
     jpeg_read_header(&cinfo, TRUE);
 
+    // Reject an image whose decoded size overflows or is absurd before libjpeg
+    // allocates anything for it.
+    if (cinfo.image_width == 0 || cinfo.image_height == 0 ||
+        cinfo.image_width > O2JPEG_MAX_DECODED_BYTES / 4 ||
+        cinfo.image_height >
+                O2JPEG_MAX_DECODED_BYTES / ((size_t) cinfo.image_width * 4)) {
+        jpeg_destroy_decompress(&cinfo);
+        return NULL;
+    }
+
     // We only support RGBA format for the output format
     if (cinfo.jpeg_color_space == JCS_CMYK ||
         cinfo.jpeg_color_space == JCS_YCCK) {
@@ -117,7 +132,7 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     *y = cinfo.output_height;
 
     // Number of bytes in a decompressed row
-    int bytesPerRow = cinfo.output_width * wantedPixelSize;
+    size_t bytesPerRow = (size_t) cinfo.output_width * wantedPixelSize;
 
     // Buffer for the final decompressed data
     outputImage = (unsigned char *) malloc(bytesPerRow * cinfo.output_height);
@@ -134,18 +149,24 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
 #endif
 
         while (cinfo.output_scanline < cinfo.image_height) {
-            int currentLine = cinfo.output_scanline;
+            size_t currentLine = cinfo.output_scanline;
 #ifdef JCS_ALPHA_EXTENSIONS
-            // We'll decode directly into the final buffer
-            for (int i = 0; i < cinfo.rec_outbuf_height; ++i) {
+            // We'll decode directly into the final buffer. Only rows inside it
+            // are handed to libjpeg, and only the rows it returns in linesRead
+            // are converted.
+            JDIMENSION rowsLeft = cinfo.output_height - cinfo.output_scanline;
+            JDIMENSION rowsWanted = (JDIMENSION) cinfo.rec_outbuf_height;
+            if (rowsWanted > rowsLeft)
+                rowsWanted = rowsLeft;
+            for (JDIMENSION i = 0; i < rowsWanted; ++i) {
                 scanlineBuffer[i] =
                         outputImage + (currentLine + i) * bytesPerRow;
             }
-            jpeg_read_scanlines(&cinfo, scanlineBuffer,
-                                cinfo.rec_outbuf_height);
+            JDIMENSION linesRead =
+                    jpeg_read_scanlines(&cinfo, scanlineBuffer, rowsWanted);
             if (cinfo.out_color_space == JCS_CMYK) {
                 // Convert from CMYK to RGBA
-                for (int i = 0; i < cinfo.rec_outbuf_height; ++i) {
+                for (JDIMENSION i = 0; i < linesRead; ++i) {
                     unsigned char *out =
                             outputImage + (currentLine++) * bytesPerRow;
                     for (int j = 0; j < cinfo.output_width; ++j) {
