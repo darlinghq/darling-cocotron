@@ -221,8 +221,13 @@ static NSPoint locationBesideEdge(NSRect rect, NSSize size, NSRectEdge edge, BOO
 // Only that structure is copied, not the window size. A flipped view is not
 // covered by the probe: GUESS: the edge is read in the view's own coordinates.
 // Test: tests/appkit-sharing-service-picker.m (test_placement)
-// GUESS: the reference does not say what happens with no services (nothing is
-// shown).
+// GUESS: the reference does not say what happens with no services: nothing is
+// shown. macOS 26.1 arm64 (tier 2) differs: it still presents a window for an
+// empty list from the delegate, a nil list (treated the same as empty), an empty
+// items array and an item nothing can share, 4 of 4 cases ("empty items array,
+// no delegate ... own windows=1 ; layer=101 size={266,123}", probe 643 case 5).
+// What the window holds is not visible to the probe, so no empty window is
+// invented here. Sizes of the window are machine specific and not copied.
 - (void) showRelativeToRect: (NSRect) rect ofView: (NSView *) view preferredEdge: (NSRectEdge) preferredEdge {
     NSArray *services = [self _servicesToList];
     NSUInteger generation = ++NS_EXTRA(NSSharingServicePicker, self)->_showGeneration;
