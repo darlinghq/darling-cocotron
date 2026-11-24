@@ -21,7 +21,7 @@
 #import <AppKit/AppKitIvarLayout.h>
 #include <sys/types.h>
 
-@class NSString, NSURL, NSImage;
+@class NSString, NSURL, NSImage, NSDate;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -56,11 +56,17 @@ typedef NS_OPTIONS(NSUInteger, NSApplicationActivationOptions) {
 @property(readonly) NSApplicationActivationPolicy activationPolicy;
 @property(nullable, readonly, copy) NSURL *bundleURL;
 @property(nullable, readonly, strong) NSImage *icon;
+@property(nullable, readonly, copy) NSURL *executableURL;
+@property(readonly) NSInteger executableArchitecture;
+@property(nullable, readonly, copy) NSDate *launchDate;
+@property(readonly, getter=isFinishedLaunching) BOOL finishedLaunching;
 
 - (BOOL) activateWithOptions: (NSApplicationActivationOptions) options;
 - (BOOL) hide;
 - (BOOL) unhide;
 - (BOOL) terminate;
+- (BOOL) forceTerminate;
++ (void) terminateAutomaticallyTerminableApplications;
 - (BOOL) activateFromApplication: (NSRunningApplication *) application
                          options: (NSApplicationActivationOptions) options;
 
