@@ -716,7 +716,6 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Wayland.backend/WaylandAppMenu.m
 			Wayland.backend/WaylandCursor.m
 			Wayland.backend/WaylandDisplay.m
-			Wayland.backend/WaylandOutputManager.m
 			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit.
 			../CoreGraphics/WaylandSupport/WaylandLibrary.m
 			Wayland.backend/WaylandDropSession.m

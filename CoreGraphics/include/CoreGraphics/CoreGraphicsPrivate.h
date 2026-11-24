@@ -201,6 +201,20 @@ extern bool CGContextGetShouldSmoothFonts(CGContextRef context);
 extern uint32_t CGContextGetFontSmoothingStyle(CGContextRef context);
 extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style);
 
+// Display details beyond the public CGDisplay* API, for the frameworks above CoreGraphics that describe displays
+// (AppKit's NSScreen). The display is a CGDirectDisplayID.
+// Device pixels per point of the display (at least 1; 1 for a display that does not exist).
+extern double _CGSDisplayBackingScaleFactor(CGDirectDisplayID display);
+// The EDID the display's output carries, or NULL; the caller releases it.
+extern CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display);
+// The name the window system gives the display's output (a description or a connector name), or NULL; the
+// caller releases it.
+extern CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display);
+// A caller that learns from its own connection to the window system that the displays changed asks
+// CoreGraphics to read what its connection has been sent, which reports the change to the display
+// reconfiguration callbacks, and to forget what it has cached about the displays.
+extern void _CGSRefreshDisplayLayout(void);
+
 // Darling extras, e.g. for CGL
 // Asks the window system to give the windows of a process the input focus and raise them,
 // as a pager would (the window manager may still refuse). The pid is a Darling process

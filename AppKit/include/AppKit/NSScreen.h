@@ -38,6 +38,8 @@ typedef NSString *NSDeviceDescriptionKey;
     NSRect _visibleFrame;
     NSData *_edid;
     CGDirectDisplayID _directDisplayID;
+    CGFloat _backingScale;
+    NSString *_outputName;
     NS_EXTRA_IVARS_END(NSScreen)
 }
 
@@ -83,6 +85,10 @@ typedef NSString *NSDeviceDescriptionKey;
 @property(null_unspecified, nonatomic, copy) NSData *edid;
 
 @property(nonatomic) CGDirectDisplayID cgDirectDisplayID;
+
+// What the display this screen is made from reports (see -[NSDisplay screens]).
+- (void) _setBackingScaleFactor: (CGFloat) scale;
+- (void) _setOutputName: (null_unspecified NSString *) name;
 @end
 
 NS_ASSUME_NONNULL_END

@@ -23,30 +23,30 @@
 // protocol (GNOME's Mutter, KDE's KWin) do not get a manager, and their
 // modes stay as the wl_output events report them.
 
-#import "WaylandDisplay.h"
+#import "CGSConnectionWayland.h"
 
-@protocol WaylandOutputManagementEvents
+@protocol CGSWaylandOutputManagementEvents
 - (void) handleEvent: (uint32_t) opcode
-                kind: (WaylandObjectKind) kind
+                kind: (CGSWaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy
            arguments: (union wl_argument *) args;
 @end
 
-@interface WaylandOutputManager : NSObject <WaylandOutputManagementEvents> {
-    struct wl_display *_display;
+@interface CGSWaylandOutputManager : NSObject <CGSWaylandOutputManagementEvents> {
+    CGSConnectionWayland *_connection;
     struct wl_proxy *_proxy;
     NSMutableArray *_heads;
     uint32_t _serial;
     BOOL _stopped;
 }
 
-// manager is the bound zwlr_output_manager_v1. The caller routes its events
-// (WaylandObjectOutputManager and the kinds below) to -handleEvent:.
-- (instancetype) initWithDisplay: (struct wl_display *) display manager: (struct wl_proxy *) manager;
+// manager is the bound zwlr_output_manager_v1. The connection routes its events
+// (the output management kinds) to -handleEvent:.
+- (instancetype) initWithConnection: (CGSConnectionWayland *) connection manager: (struct wl_proxy *) manager;
 
 // The modes of the head that drives the wl_output at x, y with the given
-// current size, as dictionaries like -modesForScreen: returns; nil when no
-// head is known for it.
+// current size, as dictionaries with Width and Height in device pixels and
+// RefreshRate in Hz; nil when no head is known for it.
 - (NSArray *) modesForOutputAtX: (int) x y: (int) y width: (int) width height: (int) height;
 
 // Changes the mode of that output's head to the listed mode of the given

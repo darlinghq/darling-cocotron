@@ -103,7 +103,6 @@
     // clears it if the other is up too.
     unsigned char _heldModifierKeys[32];
     int _rrEventBase;
-    NSArray* _lastScreens;
     // See -primaryRootFrame. Device pixels, root coordinates.
     NSRect _primaryRootFrame;
     BOOL _primaryRootFrameValid;

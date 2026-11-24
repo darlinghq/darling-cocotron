@@ -23,7 +23,66 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSColorList.h>
 #import <AppKit/NSScreen.h>
+#import <CoreGraphics/CGDirectDisplay.h>
+#import <CoreGraphics/CGDisplayConfiguration.h>
+#import <CoreGraphics/CGSPointerController.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import "NSEventQueue.h"
+
+// What CoreGraphics' pointer functions (CGDisplayHideCursor() and the rest, see CGSPointerController.h) reach
+// the display through: CoreGraphics does not know AppKit, so the display registers this when it starts.
+@interface _NSDisplayPointerController : NSObject <CGSPointerController> {
+    NSDisplay *_display; // The process' display never goes away.
+}
+- (instancetype) initWithDisplay: (NSDisplay *) display;
+@end
+
+@implementation _NSDisplayPointerController
+- (instancetype) initWithDisplay: (NSDisplay *) display {
+    if ((self = [super init]))
+        _display = display;
+    return self;
+}
+- (void) hideCursor {
+    [_display hideCursorCounted];
+}
+- (void) unhideCursor {
+    [_display unhideCursorCounted];
+}
+- (void) forceShowCursor {
+    [_display forceShowCursor];
+}
+- (void) warpPointerToPoint: (CGPoint) point {
+    [_display warpMouse: NSMakePoint(point.x, point.y)];
+}
+- (void) setMouseAssociatedWithCursor: (BOOL) associated {
+    // Disconnecting the mouse from the cursor is what -grabMouse: YES does: the cursor stays put and
+    // the mouse only produces deltas.
+    [_display grabMouse: !associated];
+}
+- (void) takeMouseDeltaX: (int32_t *) dx y: (int32_t *) dy {
+    [_display takeMouseDeltaX: dx y: dy];
+}
+@end
+
+static NSDisplay *processDisplay = nil;
+
+// The displays changed, as CoreGraphics reports it for a change made by this process or by anything else
+// (a window manager, another client). On macOS this is what makes the application post
+// NSApplicationDidChangeScreenParametersNotification.
+static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *info) {
+    if (flags & kCGDisplayBeginConfigurationFlag)
+        return;
+    NSDisplay *current = processDisplay;
+    [current _invalidateScreens];
+    if ([NSThread isMainThread])
+        [current _postScreenParametersChanged];
+    else
+        [current performSelectorOnMainThread: @selector(_postScreenParametersChanged)
+                                  withObject: nil
+                               waitUntilDone: NO
+                                       modes: @[ NSRunLoopCommonModes ]];
+}
 
 @implementation NSDisplay
 
@@ -46,8 +105,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // The instance is published only after the backend has initialized, so a
 // backend that fails to start (or raises) leaves nothing behind and a later
 // call tries again.
-static NSDisplay *processDisplay = nil;
-
 + (NSDisplay *) currentDisplay {
     @synchronized([NSDisplay class]) {
         if (processDisplay == nil) {
@@ -70,6 +127,14 @@ static NSDisplay *processDisplay = nil;
         // The window system's events are kept from now on, also before the application first
         // waits for one
         _NSEventQueueBeginReading();
+
+        static dispatch_once_t once;
+        dispatch_once(&once, ^{
+            static _NSDisplayPointerController *controller;
+            controller = [[_NSDisplayPointerController alloc] initWithDisplay: self];
+            _CGSSetPointerController(controller);
+            CGDisplayRegisterReconfigurationCallback(displaysReconfigured, NULL);
+        });
         return self;
     }
 
@@ -127,21 +192,45 @@ static NSDisplay *processDisplay = nil;
     _mainScreenMaxY = NAN;
 }
 
-// A display that cannot list its screens (a bare subclass) has the origin at the top.
+// The top of the main screen is its height: the global space has its origin at the main screen's
+// bottom-left corner. Without a display the origin is at the top.
 - (CGFloat) _mainScreenMaxY {
     CGFloat maxY = _mainScreenMaxY;
 
     if (isnan(maxY)) {
-        maxY = 0;
-        if ([self methodForSelector: @selector(screens)] !=
-            [NSDisplay instanceMethodForSelector: @selector(screens)]) {
-            NSArray *screens = [self screens];
-            if ([screens count] > 0)
-                maxY = NSMaxY([[screens objectAtIndex: 0] frame]);
-        }
+        CGDirectDisplayID main = CGMainDisplayID();
+
+        maxY = main != kCGNullDirectDisplay ? CGDisplayBounds(main).size.height : 0;
         _mainScreenMaxY = maxY;
     }
     return maxY;
+}
+
+// RandR and wl_output report one change as several events, and CoreGraphics reports a change for
+// each display, so the notification is queued and merged per run loop pass, and goes out on the next
+// pass like the notification on macOS (the screens themselves are already up to date).
+- (void) _postScreenParametersChanged {
+    NSNotification *note = [NSNotification
+            notificationWithName: NSApplicationDidChangeScreenParametersNotification
+                          object: NSApp];
+    [[NSNotificationQueue defaultQueue] enqueueNotification: note
+                                               postingStyle: NSPostASAP
+                                               coalesceMask: NSNotificationCoalescingOnName |
+                                                             NSNotificationCoalescingOnSender
+                                                   forModes: nil];
+}
+
+- (void) _invalidateScreens {
+    @synchronized(self) {
+        [_screens release];
+        _screens = nil;
+    }
+    _mainScreenMaxY = NAN;
+}
+
+- (void) _refreshDisplays {
+    _CGSRefreshDisplayLayout();
+    [self _invalidateScreens];
 }
 
 - (void) _mainMenuDidChange: (NSMenu *) menu {
@@ -151,9 +240,65 @@ static NSDisplay *processDisplay = nil;
     return YES;
 }
 
+// The screens are the displays of CoreGraphics (this framework sits above it): the frame is the
+// display's bounds moved into Cocoa's global space, which has its origin at the main screen's
+// bottom-left corner and y pointing up, and the backing scale, the name and the EDID are the display's.
+- (NSArray<NSScreen *> *) _screensFromDisplays {
+    uint32_t count = 0;
+
+    if (CGGetActiveDisplayList(0, NULL, &count) != kCGErrorSuccess)
+        count = 0;
+    CGDirectDisplayID *displays = calloc(count > 0 ? count : 1, sizeof *displays);
+
+    if (displays == NULL || CGGetActiveDisplayList(count, displays, &count) != kCGErrorSuccess)
+        count = 0;
+
+    NSMutableArray<NSScreen *> *screens = [NSMutableArray arrayWithCapacity: count];
+    CGFloat mainHeight = count > 0 ? CGDisplayBounds(displays[0]).size.height : 0;
+
+    for (uint32_t i = 0; i < count; i++) {
+        CGRect bounds = CGDisplayBounds(displays[i]);
+        NSRect frame = NSMakeRect(bounds.origin.x,
+                                  mainHeight - bounds.origin.y - bounds.size.height,
+                                  bounds.size.width, bounds.size.height);
+        NSScreen *screen = [[[NSScreen alloc] initWithFrame: frame visibleFrame: frame] autorelease];
+
+        [screen setCgDirectDisplayID: displays[i]];
+        [screen _setBackingScaleFactor: _CGSDisplayBackingScaleFactor(displays[i])];
+        CFDataRef edid = _CGSDisplayCopyEDID(displays[i]);
+        if (edid != NULL) {
+            [screen setEdid: (NSData *) edid];
+            CFRelease(edid);
+        }
+        CFStringRef name = _CGSDisplayCopyOutputName(displays[i]);
+        if (name != NULL) {
+            [screen _setOutputName: (NSString *) name];
+            CFRelease(name);
+        }
+        [screens addObject: screen];
+    }
+    free(displays);
+
+    if ([screens count] == 0) {
+        // No display is known (yet). An application still needs a screen to put its windows on.
+        static const CGFloat fallbackWidth = 1920, fallbackHeight = 1080;
+        static BOOL logged;
+        if (!logged) {
+            NSLog(@"AppKit: no display is known, assuming a %.0fx%.0f screen", fallbackWidth, fallbackHeight);
+            logged = YES;
+        }
+        NSRect frame = NSMakeRect(0, 0, fallbackWidth, fallbackHeight);
+        [screens addObject: [[[NSScreen alloc] initWithFrame: frame visibleFrame: frame] autorelease]];
+    }
+    return screens;
+}
+
 - (NSArray<NSScreen *> *) screens {
-    NSInvalidAbstractInvocation();
-    return nil;
+    @synchronized(self) {
+        if (_screens == nil)
+            _screens = [[NSArray alloc] initWithArray: [self _screensFromDisplays]];
+        return [[_screens retain] autorelease];
+    }
 }
 
 - (NSPasteboard *) pasteboardWithName: (NSPasteboardName) name {

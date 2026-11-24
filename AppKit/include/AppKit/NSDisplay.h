@@ -36,11 +36,26 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // The top of the main screen, for the global coordinates of the input's CGEvents; NAN until
     // known, and again when the screens change
     CGFloat _mainScreenMaxY;
+    // The screens, made from CoreGraphics' displays and dropped when they change. Guarded by
+    // @synchronized(self).
+    NSArray *_screens;
 }
 
 + (NSDisplay *) currentDisplay;
 
+// The screens are CoreGraphics' active displays (CGGetActiveDisplayList()), the main display first, as
+// NSScreen objects that stay the same until the displays change.
 - (NSArray *) screens;
+// Drops the screens and the main screen's height after the displays changed, so that the next
+// -screens reads them again. CoreGraphics reports a change to its reconfiguration callbacks, which
+// call this.
+- (void) _invalidateScreens;
+// A backend that learns of a change of the displays from its own connection calls this: it has
+// CoreGraphics read what its connection to the window system has been sent about the displays (which
+// reports the change to the reconfiguration callbacks), then drops the screens.
+- (void) _refreshDisplays;
+// Queues NSApplicationDidChangeScreenParametersNotification (merged per run loop pass).
+- (void) _postScreenParametersChanged;
 
 - (NSPasteboard *) pasteboardWithName: (NSPasteboardName) name;
 
@@ -160,10 +175,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         forNativeWindowBorderWithStyle: (NSUInteger) styleMask;
 - (CGRect) outsetRect: (CGRect) frame
         forNativeWindowBorderWithStyle: (NSUInteger) styleMask;
-
-- (NSArray *) modesForScreen: (int) screenIndex;
-- (NSDictionary *) currentModeForScreen: (int) screenIndex;
-- (BOOL) setMode: (NSDictionary *) mode forScreen: (int) screenIndex;
 
 // Returns an opaque number of the current keyboard layout.
 // This is because apps tend to call TISCopyCurrentKeyboardLayoutInputSource()
