@@ -33,7 +33,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import Bus, build_registrar, check, finish, flatten, parse_variant, read, wait_for  # noqa: E402
+from common import Bus, build_registrar, check, finish, flatten, parse_variant, read, require_no_lockscreen, wait_for  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOCKET = "darling-menu-test"
@@ -165,6 +165,7 @@ def main():
     menu = None
     try:
         wait_for(display_file, ":", 30)
+        require_no_lockscreen(kwin)
         x_display = read(display_file).strip()
         watcher = subprocess.Popen([sys.executable, os.path.join(HERE, "appmenu-watcher.py"), "500"], env=env,
                                    stdout=open(watch, "w"), stderr=subprocess.STDOUT)
