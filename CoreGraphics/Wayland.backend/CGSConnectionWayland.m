@@ -695,7 +695,8 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
                              arguments: args
                                   kind: CGSWaylandObjectKeyboard
                                 object: self];
-    } else if (!(capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard != NULL) {
+    } else if (!(capabilities & WP_SEAT_CAPABILITY_KEYBOARD)) {
+        // Also with no wl_keyboard object: the decoder may still hold state (a pending modifier key).
         [self releaseKeyboard];
     }
 }
