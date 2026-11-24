@@ -13,3 +13,6 @@ CORETEXT_EXPORT const CFStringRef kCTKernAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTHorizontalInVerticalFormsAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTStrokeColorAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTWritingDirectionAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTStrokeWidthAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTVerticalFormsAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTLanguageAttributeName;

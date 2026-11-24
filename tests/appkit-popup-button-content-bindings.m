@@ -13,8 +13,9 @@
 // 26.7.3 and 10.14.4 gave: an item keeps its content object as its representedObject; every content object gets
 // its own item even when two descriptions are equal (test_equal_descriptions_keep_every_item); a bound selection
 // survives a content change (test_bound_selection_survives_a_content_change); and the QUIRK tests
-// test_quirk_unmatched_selection_gets_an_item, test_quirk_first_bound_selection_wins_on_content_change and
-// test_quirk_content_values_need_the_content_key_path_as_prefix.
+// test_quirk_unmatched_selection_gets_an_item, test_quirk_first_bound_selection_wins_on_content_change,
+// test_quirk_content_values_need_the_content_key_path_as_prefix, test_quirk_bound_items_are_tagged_by_index and
+// test_quirk_index_bindings_make_items_stand_for_indexes.
 // Build: clang -framework AppKit appkit-popup-button-content-bindings.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -308,6 +309,130 @@ static void test_quirk_first_bound_selection_wins_on_content_change(void) {
     }
 }
 
+// QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 641.1, 641.3, 641.25, 641.35): the items the content bindings build are tagged with their
+// index, so a bound selectedTag selects the item with that index; a pull-down's items are tagged the same way.
+static void test_quirk_bound_items_are_tagged_by_index(void) {
+    NSString *a = @"a", *b = @"b", *c = @"c";
+    Model *model = [[Model new] autorelease];
+    NSPopUpButton *button = makeButton();
+
+    model.things = [NSArray arrayWithObjects: a, b, c, nil];
+    model.tag = [NSNumber numberWithInt: 1];
+    [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
+    CHECK([[button itemAtIndex: 0] tag] == 0 && [[button itemAtIndex: 1] tag] == 1 && [[button itemAtIndex: 2] tag] == 2);
+    [button bind: NSSelectedTagBinding toObject: model withKeyPath: @"tag" options: nil];
+    CHECK([button indexOfSelectedItem] == 1);
+    CHECK([[button titleOfSelectedItem] isEqual: @"b"]);
+
+    // Rebuilt items are tagged afresh.
+    model.things = [NSArray arrayWithObjects: c, b, a, @"d", nil];
+    CHECK([[button itemAtIndex: 3] tag] == 3);
+    CHECK([button indexOfSelectedItem] == 1);
+
+    // contentValues alone (no content) tags them too
+    Model *valuesModel = [[Model new] autorelease];
+    NSPopUpButton *valuesButton = makeButton();
+
+    valuesModel.titles = [NSArray arrayWithObjects: @"A", @"B", nil];
+    [valuesButton bind: NSContentValuesBinding toObject: valuesModel withKeyPath: @"titles" options: nil];
+    CHECK([[valuesButton itemAtIndex: 1] tag] == 1);
+
+    NSPopUpButton *pullDown = [[[NSPopUpButton alloc] initWithFrame: NSMakeRect(0, 0, 100, 22) pullsDown: YES] autorelease];
+    Model *pullModel = [[Model new] autorelease];
+
+    pullModel.things = [NSArray arrayWithObjects: @"t", @"a", @"b", nil];
+    [pullDown bind: NSContentBinding toObject: pullModel withKeyPath: @"things" options: nil];
+    CHECK([pullDown numberOfItems] == 3 && [[pullDown itemAtIndex: 2] tag] == 2);
+}
+
+// QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 641.20 to 641.29): with selectedIndex or selectedTag as the first selection binding the
+// items' representedObjects are their indexes, so a selectedObject made later matches no item and gets one of its
+// own; with selectedObject or selectedValue first they stay the content objects.
+static void test_quirk_index_bindings_make_items_stand_for_indexes(void) {
+    NSString *a = @"a", *b = @"b", *c = @"c", *d = @"d";
+    int which;
+
+    for (which = 0; which < 2; which++) {
+        Model *model = [[Model new] autorelease];
+        NSPopUpButton *button = makeButton();
+
+        model.things = [NSArray arrayWithObjects: a, b, c, nil];
+        model.index = [NSNumber numberWithInt: 2];
+        model.tag = [NSNumber numberWithInt: 2];
+        [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
+        CHECK([[button itemAtIndex: 1] representedObject] == b); // no selection binding yet: the content object
+        [button bind: which == 0 ? NSSelectedIndexBinding : NSSelectedTagBinding toObject: model
+         withKeyPath: which == 0 ? @"index" : @"tag" options: nil];
+        // the items already there change too
+        CHECK([[[button itemAtIndex: 0] representedObject] isEqual: [NSNumber numberWithInt: 0]]);
+        CHECK([[[button itemAtIndex: 2] representedObject] isEqual: [NSNumber numberWithInt: 2]]);
+        CHECK([button indexOfSelectedItem] == 2);
+
+        model.things = [NSArray arrayWithObjects: a, b, c, d, nil];
+        CHECK([[[button itemAtIndex: 3] representedObject] isEqual: [NSNumber numberWithInt: 3]]);
+
+        // a selectedObject bound later finds no item for "c" and gets an extra one (641.27)
+        model.selected = c;
+        [button bind: NSSelectedObjectBinding toObject: model withKeyPath: @"selected" options: nil];
+        CHECK([button numberOfItems] == 5 && [[button itemAtIndex: 4] representedObject] == nil);
+        CHECK([[button titleOfSelectedItem] isEqual: @"c"] && [button indexOfSelectedItem] == 4);
+    }
+
+    // selectedValue first: the content objects stay
+    Model *model = [[Model new] autorelease];
+    NSPopUpButton *button = makeButton();
+
+    model.things = [NSArray arrayWithObjects: a, b, c, nil];
+    model.value = @"b";
+    [button bind: NSContentBinding toObject: model withKeyPath: @"things" options: nil];
+    [button bind: NSSelectedValueBinding toObject: model withKeyPath: @"value" options: nil];
+    CHECK([[button itemAtIndex: 1] representedObject] == b);
+    CHECK([[button itemAtIndex: 2] representedObject] == c);
+
+    // Items that no content binding built keep their representedObjects (not observed on macOS; the rule is
+    // limited to what the probe showed)
+    NSPopUpButton *plain = makeButton();
+    Model *plainModel = [[Model new] autorelease];
+
+    [plain addItemWithTitle: @"x"];
+    [[plain itemAtIndex: 0] setRepresentedObject: a];
+    plainModel.index = [NSNumber numberWithInt: 0];
+    [plain bind: NSSelectedIndexBinding toObject: plainModel withKeyPath: @"index" options: nil];
+    CHECK([[plain itemAtIndex: 0] representedObject] == a);
+
+    // contentValues alone: the items stand for their indexes too (macOS 26.7.3 and 10.14.4, probe popup2.m), whichever
+    // of the two bindings is made first; a selectedValue binding leaves the titles as the representedObjects
+    NSPopUpButton *titled = makeButton();
+    Model *titledModel = [[Model new] autorelease];
+
+    titledModel.titles = [NSArray arrayWithObjects: @"A", @"B", nil];
+    titledModel.index = [NSNumber numberWithInt: 1];
+    [titled bind: NSContentValuesBinding toObject: titledModel withKeyPath: @"titles" options: nil];
+    [titled bind: NSSelectedIndexBinding toObject: titledModel withKeyPath: @"index" options: nil];
+    CHECK([[[titled itemAtIndex: 1] representedObject] isEqual: [NSNumber numberWithInt: 1]]);
+    CHECK([titled indexOfSelectedItem] == 1);
+
+    NSPopUpButton *selectionFirst = makeButton();
+    Model *selectionFirstModel = [[Model new] autorelease];
+
+    selectionFirstModel.titles = [NSArray arrayWithObjects: @"A", @"B", nil];
+    selectionFirstModel.tag = [NSNumber numberWithInt: 1];
+    [selectionFirst bind: NSSelectedTagBinding toObject: selectionFirstModel withKeyPath: @"tag" options: nil];
+    [selectionFirst bind: NSContentValuesBinding toObject: selectionFirstModel withKeyPath: @"titles" options: nil];
+    CHECK([[[selectionFirst itemAtIndex: 0] representedObject] isEqual: [NSNumber numberWithInt: 0]]);
+    CHECK([[[selectionFirst itemAtIndex: 1] representedObject] isEqual: [NSNumber numberWithInt: 1]]);
+    CHECK([selectionFirst indexOfSelectedItem] == 1);
+
+    NSPopUpButton *valueBound = makeButton();
+    Model *valueModel = [[Model new] autorelease];
+
+    valueModel.titles = [NSArray arrayWithObjects: @"A", @"B", nil];
+    valueModel.value = @"B";
+    [valueBound bind: NSContentValuesBinding toObject: valueModel withKeyPath: @"titles" options: nil];
+    [valueBound bind: NSSelectedValueBinding toObject: valueModel withKeyPath: @"value" options: nil];
+    CHECK([[[valueBound itemAtIndex: 1] representedObject] isEqual: @"B"]);
+}
+
 #define RUN(t) do { @try { t; } @catch (id e) { fprintf(stderr, "FAIL: %s raised %s\n", #t, [[e description] UTF8String]); failures++; } } while (0)
 
 int main(void) {
@@ -322,6 +447,8 @@ int main(void) {
     RUN(test_bound_selection_survives_a_content_change());
     RUN(test_quirk_unmatched_selection_gets_an_item());
     RUN(test_quirk_first_bound_selection_wins_on_content_change());
+    RUN(test_quirk_bound_items_are_tagged_by_index());
+    RUN(test_quirk_index_bindings_make_items_stand_for_indexes());
     if (failures == 0)
         printf("PASS appkit-popup-button-content-bindings\n");
     [pool release];

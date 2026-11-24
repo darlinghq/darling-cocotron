@@ -226,6 +226,33 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSTableColumn, self)->_resizingMask = value;
 }
 
+// The documentation gives the contract: the width becomes that of the header cell, widening a maximum that is
+// narrower and narrowing a minimum that is wider, so the width never has to be clamped, and the table view
+// is marked as needing display when the width changes.
+// Observed on macOS 26.7.3 and Mac OS X 10.14.4 (black-box, x86_64 and i386, identical; probe sizetofit.m):
+// the header cell's width is that of -cellSize, unrounded; the limits and the width are changed through
+// -setMaxWidth:, -setMinWidth: and -setWidth: (a subclass's overrides are called, the limit first); the cell is
+// the stored header cell, not what an override of -headerCell returns; the table view is marked as needing
+// display when the width changes (26.7.3). A column cannot have no header cell on macOS (-setHeaderCell: raises
+// for nil); the nil check below only guards what this implementation lets through.
+- (void) sizeToFit {
+    NSCell *headerCell = NS_EXTRA(NSTableColumn, self)->_headerCell;
+    if (headerCell == nil)
+        return;
+
+    CGFloat headerWidth = [headerCell cellSize].width;
+    CGFloat oldWidth = [self width];
+
+    if ([self maxWidth] < headerWidth)
+        [self setMaxWidth: headerWidth];
+    if ([self minWidth] > headerWidth)
+        [self setMinWidth: headerWidth];
+    [self setWidth: headerWidth];
+
+    if ([self width] != oldWidth)
+        [[self tableView] setNeedsDisplay: YES];
+}
+
 - (NSCell *) dataCellForRow: (NSInteger) row {
     return [self dataCell];
 }

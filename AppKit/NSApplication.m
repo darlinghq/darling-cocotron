@@ -55,6 +55,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <HIToolbox/CarbonEvents.h>
 #import <HIToolbox/CarbonEventsCore.h>
 #import <CoreGraphics/CGWindowPrivate.h>
+#import "NSEventQueue.h"
 #import <Foundation/NSAppleEventManager.h>
 #import "private-include/AppKit/NSEventTime.h"
 #import <Foundation/NSAppleEventDescriptor.h>
@@ -157,33 +158,6 @@ NSApplication *NSApp = nil;
 @interface NSDockTile (private)
 - initWithOwner: owner;
 @end
-
-// The window system reports a hot key press or release as a system-defined event record; it is
-// queued for the application like any event, and -[NSApplication sendEvent:] passes it on.
-static void hotKeyEventNotification(CGSNotificationType type, void *data, unsigned long length, void *client) {
-    const CGSEventRecord *record = data;
-
-    if (length < sizeof(*record) || record->type != NX_SYSDEFINED)
-        return;
-
-    int subtype = record->data.compound.subType;
-    if (subtype != kCGSHotKeyPressedSubtype && subtype != kCGSHotKeyReleasedSubtype)
-        return;
-
-    // CG global coordinates have y down from the main display's top; NSEvent's have y up
-    NSRect main = [[[NSScreen screens] firstObject] frame];
-    NSPoint location = NSMakePoint(record->location.x, NSMaxY(main) - record->location.y);
-    NSEvent *event = [NSEvent otherEventWithType: NSSystemDefined
-                                        location: location
-                                   modifierFlags: (NSUInteger) record->flags & NSDeviceIndependentModifierFlagsMask
-                                       timestamp: (NSTimeInterval) record->time / 1e9
-                                    windowNumber: 0
-                                         context: nil
-                                         subtype: subtype
-                                           data1: record->data.compound.misc.L[0]
-                                           data2: 0];
-    [NSApp postEvent: event atStart: NO];
-}
 
 // The documents a process argument list asks to open (arguments[0] is the
 // executable), by the rule the Cocoa application object follows: every
@@ -366,8 +340,6 @@ static void observeProcessCommands(NSApplication *application) {
 
     NS_EXTRA(NSApplication, self)->_dockTile = [[NSDockTile alloc] initWithOwner: self];
     NS_EXTRA(NSApplication, self)->_modalStack = [NSMutableArray new];
-
-    CGSRegisterNotifyProc(hotKeyEventNotification, CGSNotificationSingleEventType(NX_SYSDEFINED), NULL);
 
     NS_EXTRA(NSApplication, self)->_lock = NSZoneMalloc(NULL, sizeof(pthread_mutex_t));
 
@@ -653,6 +625,17 @@ static NSMutableArray *pendingOpenURLs = nil;
     return window;
 }
 
+// Private. The argument is an NSInteger (type encoding q on 64-bit, i on i386, observed on
+// macOS 26.7.3 and 10.14.4). AppKit-hosting frameworks (Mac Catalyst) ask the application which
+// window owns a rendering context id. Cocotron has no per-window context ids:
+// -contextID is the process's one CGS connection id, a counter apart from window
+// numbers, so no id can be mapped to a window honestly. Answering with the window
+// of the same number would return a wrong window for a caller's context id, so
+// no window is ever found.
+- (NSWindow *) _findWindowUsingContextID: (NSInteger) contextID {
+    return nil;
+}
+
 - (NSMenu *) mainMenu {
     return _mainMenu;
 }
@@ -704,6 +687,78 @@ static NSMutableArray *pendingOpenURLs = nil;
     NSImage *image = NS_EXTRA(NSApplication, self)->_applicationIconImage;
 
     return image != nil ? image : [self _bundleApplicationIconImage];
+}
+
+// Whether the main bundle declares an application without a Dock presence (LSUIElement or LSBackgroundOnly).
+static BOOL bundleIsFaceless(NSDictionary *info) {
+    for (NSString *key in @[ @"LSUIElement", @"LSBackgroundOnly" ]) {
+        id value = [info objectForKey: key];
+        if ([value respondsToSelector: @selector(boolValue)] && [value boolValue])
+            return YES;
+    }
+    return NO;
+}
+
+// Whether a directory is an application bundle, judged by its contents and not by its name: it has
+// Contents/Info.plist that declares package type APPL or, with no package type, an executable that is in
+// Contents/MacOS.
+static NSBundle *applicationBundleAtPath(NSString *path) {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    if (![fm fileExistsAtPath: [path stringByAppendingPathComponent: @"Contents/Info.plist"]])
+        return nil;
+    NSBundle *bundle = [NSBundle bundleWithPath: path];
+    NSDictionary *info = [bundle infoDictionary];
+    id type = [info objectForKey: @"CFBundlePackageType"];
+    if ([type isKindOfClass: [NSString class]])
+        return [type isEqualToString: @"APPL"] ? bundle : nil;
+    id executable = [info objectForKey: @"CFBundleExecutable"];
+    if ([executable isKindOfClass: [NSString class]] && [executable length] > 0 &&
+        [fm fileExistsAtPath: [[path stringByAppendingPathComponent: @"Contents/MacOS"]
+                                  stringByAppendingPathComponent: executable]])
+        return bundle;
+    return nil;
+}
+
+// The icon file of an application bundle, from its CFBundleIconFile (the extension may be left out).
+static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
+    NSString *name = [[bundle infoDictionary] objectForKey: @"CFBundleIconFile"];
+    if (![name isKindOfClass: [NSString class]] || [name length] == 0)
+        return nil;
+    if ([[name pathExtension] length] == 0)
+        name = [name stringByAppendingPathExtension: @"icns"];
+    NSString *path = [[bundle resourcePath] stringByAppendingPathComponent: name];
+    return [[[NSImage alloc] initWithContentsOfFile: path] autorelease];
+}
+
+// The image the window system gets for this application's windows (title bars, task managers): the
+// application icon, and for a faceless helper without an icon of its own, the icon of the application
+// bundle it is nested in (an application bundle is recognised by its contents, not by a .app name).
+//
+// This is a presentation mapping of the window-system backends, not a change of what the application
+// can observe: -applicationIconImage, NSRunningApplication and NSWorkspace give such a helper the
+// generic application icon, as macOS does. macOS windows carry no icon of their own; the user meets an
+// application in the Dock and the application switcher, where a faceless helper never shows and the
+// application that contains (and started) it does. Other window systems show a per-window icon, and the
+// helper window would be shown with a default one, so it takes the nearest enclosing application's
+// icon. An image set with -setApplicationIconImage: always wins.
+- (NSImage *) _windowApplicationIconImage {
+    NSImage *image = [self applicationIconImage];
+    if (image != nil)
+        return image;
+    NSBundle *main = [NSBundle mainBundle];
+    if (!bundleIsFaceless([main infoDictionary]))
+        return nil;
+    NSString *directory = [[main bundlePath] stringByDeletingLastPathComponent];
+    while ([directory length] > 1) {
+        NSBundle *enclosing = applicationBundleAtPath(directory);
+        if (enclosing != nil) {
+            image = iconOfApplicationBundle(enclosing);
+            if (image != nil)
+                return image;
+        }
+        directory = [directory stringByDeletingLastPathComponent];
+    }
+    return nil;
 }
 
 - (BOOL) isActiveExcludingWindow: (NSWindow *) exclude {
@@ -962,6 +1017,20 @@ static void _propagateAppearanceChangeToView(NSView *view) {
 
     while (--count >= 0)
         [[_windows objectAtIndex: count] miniaturize: sender];
+}
+
+// Private, required by Mac Catalyst frameworks and not documented. It restores one minimized
+// window, as a click on the application's Dock tile does: the first miniaturized window in
+// -orderedWindows order, and none when no window is miniaturized. It returns nothing (type
+// encoding v on macOS 10.14.4 and 26.7.3, where a probe with real windows restored the first
+// miniaturized one in -orderedWindows order on each call). Test: appkit-application-catalyst-methods.
+- (void) _restoreMiniaturizedWindow {
+    for (NSWindow *window in [self orderedWindows]) {
+        if ([window isMiniaturized]) {
+            [window deminiaturize: nil];
+            return;
+        }
+    }
 }
 
 - (NSArray *) orderedDocuments {
@@ -1244,12 +1313,29 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
     return opened;
 }
 
+// Whether the application declares documents it can open (CFBundleDocumentTypes), which is
+// what makes the document controller the one to open documents for it.
+- (BOOL) _declaresDocumentTypes {
+    id types = [[[NSBundle mainBundle] infoDictionary]
+            objectForKey: @"CFBundleDocumentTypes"];
+
+    return [types count] > 0;
+}
+
 // Hands launch documents to the delegate (or the document controller) one call
 // per file, in order, as macOS does for documents named in the process
 // arguments: -application:openFiles: with a one-element array when the
 // delegate implements it, otherwise -application:openFile:.
+//
+// An application that declares no document types (an executable without a
+// bundle, or a bundle without CFBundleDocumentTypes) has no document
+// controller to fall back to: the document controller is never offered a
+// document of such an application, whatever its delegate implements and
+// answers. Words that are not files are common arguments of such programs,
+// and the controller would fail on each and present an error.
 - (BOOL) _openArgumentDocuments: (NSArray *) documents {
     BOOL opened = NO;
+    BOOL documentTypes = [self _declaresDocumentTypes];
 
     for (NSString *document in documents) {
         NSArray *one = [NSArray arrayWithObject: document];
@@ -1262,13 +1348,17 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
 
             // QUIRK: a document named in the process arguments that the delegate's -application:openFile: does
             // not take (answers NO) is then tried by the document controller, which presents an error when it
-            // cannot open it. Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2), a
-            // document-based application started from its executable with words that are no documents.
-            // Test: appkit-argument-documents (-delegate openFile)
-            if (!taken)
+            // cannot open it, but only in an application that declares document types (CFBundleDocumentTypes):
+            // one that declares none never reaches the controller. Not documented. Evidence: black-box
+            // observation on macOS 26.7.3 and 10.14.4 (tier 2), a document-based application started from its
+            // executable with words that are no documents, and an application without document types with a
+            // delegate that answers NO.
+            // Test: appkit-argument-documents (-delegate openFile),
+            // appkit-argument-documents-non-document-apps
+            if (!taken && documentTypes)
                 taken = [[NSDocumentController sharedDocumentController] application: self openFile: document];
             opened |= taken;
-        } else {
+        } else if (documentTypes) {
             opened |= [self _openFileNames: one];
         }
     }
@@ -1346,9 +1436,7 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
 - (void) _openUntitledFileIfNeeded {
     BOOL needsUntitled = YES;
     NSDocumentController *controller = nil;
-    id types = [[[NSBundle mainBundle] infoDictionary]
-            objectForKey: @"CFBundleDocumentTypes"];
-    if ([types count] > 0)
+    if ([self _declaresDocumentTypes])
         controller = [NSDocumentController sharedDocumentController];
 
     if (needsUntitled && _delegate &&
@@ -1650,7 +1738,7 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
 
     // QUIRK: a system-defined event of subtype 6 is a hot key press and one of subtype 9 a
     // release; data1 names the hot key. HIToolbox turns it into the Carbon hot key event (AppKit
-    // passes it on with CreateEventWithCGEvent and SendEventToEventTarget), so an
+    // passes the event's Carbon event on with SendEventToEventTarget), so an
     // application that overrides -sendEvent: without calling super gets no Carbon callback, as on
     // macOS. Not documented. Evidence: public write-ups (The Register, 2009,
     // https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/; cocoa-dev 2011-10,
@@ -1661,15 +1749,13 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     // Test: tests/src/carbon_hotkeys_appkit.m
     if ([event type] == NSSystemDefined &&
         ([event subtype] == kCGSHotKeyPressedSubtype || [event subtype] == kCGSHotKeyReleasedSubtype)) {
-        // Through the public Carbon Event Manager: a raw event made from the event's CGEvent goes to
-        // the event dispatcher target, whose standard handler (in HIToolbox) sends the hot key event.
-        CGEventRef cgEvent = [event CGEvent];
-        EventRef carbonEvent = NULL;
+        // Through the public Carbon Event Manager: the raw event (the one taken from HIToolbox's
+        // queue) goes to the event dispatcher target, whose standard handler (in HIToolbox) sends the
+        // hot key event.
+        EventRef carbonEvent = (EventRef) [event eventRef];
 
-        if (cgEvent != NULL && CreateEventWithCGEvent(NULL, cgEvent, kEventAttributeNone, &carbonEvent) == noErr) {
+        if (carbonEvent != NULL)
             SendEventToEventTarget(carbonEvent, GetEventDispatcherTarget());
-            ReleaseEvent(carbonEvent);
-        }
         return;
     }
 
@@ -1720,15 +1806,9 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
         [self _checkForAppActivation];
         [self _displayAllWindowsIfNeeded];
 
-        nextEvent = [[NS_EXTRA(NSApplication, self)->_display nextEventMatchingMask: mask
-                                           untilDate: untilDate
-                                              inMode: mode
-                                             dequeue: dequeue] retain];
-
-        if ([nextEvent type] == NSAppKitSystem) {
-            [nextEvent release];
-            nextEvent = nil;
-        }
+        // One wait in HIToolbox's event queue, which holds AppKit's events
+        [NS_EXTRA(NSApplication, self)->_display willWaitForEvents];
+        nextEvent = [_NSEventQueueNextEvent(mask, untilDate, mode, dequeue) retain];
 
         NS_HANDLER [self reportException: localException];
         NS_ENDHANDLER
@@ -1763,11 +1843,14 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
 - (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event
 {
-    [NS_EXTRA(NSApplication, self)->_display discardEventsMatchingMask: mask beforeEvent: event];
+    _NSEventQueueDiscard(mask, event);
 }
 
+// QUIRK: what an application posts with -[NSApplication postEvent:atStart:] is queued as it is: posted drags are
+// dequeued one by one, never coalesced. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+// Test: appkit-posted-events-not-coalesced.m
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
-    [NS_EXTRA(NSApplication, self)->_display _postEventWithoutCoalescing: event atStart: atStart];
+    _NSEventQueuePost(event, atStart);
 }
 
 - _searchForAction: (SEL) action responder: target {

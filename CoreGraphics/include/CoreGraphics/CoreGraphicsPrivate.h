@@ -69,8 +69,10 @@ extern void CGRegionRelease(CGRegionRef region);
 // CGSNotificationSingleEventType(NX_SYSDEFINED) (or kCGSNotificationAllEvents); the data is a
 // CGSEventRecord whose data.compound.subType is kCGSHotKeyPressedSubtype or
 // kCGSHotKeyReleasedSubtype, whose data.compound.misc.L[0] is the uid, and whose flags,
-// location and time are those of the key event. AppKit turns it into an NSEvent of type
-// NSSystemDefined, which NSApplication hands to HIToolbox.
+// location and time are those of the key event. The same event, made with
+// CGEventCreateWithEventRecord(), goes through the event taps into the event stream of the process
+// (_CGSEventStreamPost), where HIToolbox reads it; AppKit gets it from HIToolbox's queue as an
+// NSEvent of type NSSystemDefined and hands it back to HIToolbox in -[NSApplication sendEvent:].
 // QUIRK: system-defined subtype 6 is a hot key press, 9 a release, and the event's data1 names
 // the hot key (the uid given when it was set). Not documented. Evidence: public write-ups of
 // the observed event (The Register, 2009, https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/;
@@ -199,6 +201,20 @@ extern bool CGContextGetShouldSmoothFonts(CGContextRef context);
 extern uint32_t CGContextGetFontSmoothingStyle(CGContextRef context);
 extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style);
 
+// Display details beyond the public CGDisplay* API, for the frameworks above CoreGraphics that describe displays
+// (AppKit's NSScreen). The display is a CGDirectDisplayID.
+// Device pixels per point of the display (at least 1; 1 for a display that does not exist).
+extern double _CGSDisplayBackingScaleFactor(CGDirectDisplayID display);
+// The EDID the display's output carries, or NULL; the caller releases it.
+extern CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display);
+// The name the window system gives the display's output (a description or a connector name), or NULL; the
+// caller releases it.
+extern CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display);
+// A caller that learns from its own connection to the window system that the displays changed asks
+// CoreGraphics to read what its connection has been sent, which reports the change to the display
+// reconfiguration callbacks, and to forget what it has cached about the displays.
+extern void _CGSRefreshDisplayLayout(void);
+
 // Darling extras, e.g. for CGL
 // Asks the window system to give the windows of a process the input focus and raise them,
 // as a pager would (the window manager may still refuse). The pid is a Darling process
@@ -266,6 +282,19 @@ void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
 
+// Surfaces of application windows. There is no window server to own the drawable of an
+// NSOpenGLView, so AppKit records it here: a surface on the AppKit window with this window
+// number, backed by `nativeWindow` (the handle a GL surface is made for), with the given size
+// in points. The surface can then be looked up by its ids as for a CGS surface:
+// CGSGetSurfaceBounds() reports its size, and CGLGetSurface() reports the ids of a context
+// that draws to it. Returns the new surface id, never 0.
+CGSSurfaceID _CGSAddWindowSurface(CGSWindowID winId, void* nativeWindow, CGSize size);
+void _CGSSetWindowSurfaceSize(CGSSurfaceID surfaceId, CGSize size);
+void _CGSRemoveWindowSurface(CGSSurfaceID surfaceId);
+// The ids of the application window surface backed by `nativeWindow`. False if there is none.
+bool _CGSWindowSurfaceForNativeWindow(void* nativeWindow, CGSConnectionID* connId,
+                                      CGSWindowID* winId, CGSSurfaceID* surfaceId);
+
 // Creates a window covering `bounds` (global display coordinates), above ordinary
 // windows and shown, so that a GL context can fill a display (CGLSetFullScreen).
 // The window is not one of the application's own: its keyboard and pointer input
@@ -297,6 +326,34 @@ extern CGEventRef CGEventCreateWithEventRecord(const CGSEventRecordPtr event, ui
 extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
 extern CGError CGEventSetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
 extern uint32_t CGEventGetEventRecordSize(CGEventRef event);
+
+// The event stream of the process: the events that are for this process once they have been
+// through the event taps (CGEventPost() and friends deliver here), in the order they came, for
+// the frameworks above CoreGraphics to read. Thread safe. There is no Mach message, port or
+// thread behind it.
+//
+// The stream keeps events only while a reader is registered with _CGSEventStreamSetReadySource().
+// _CGSEventStreamPost() is for the window system: it enters the event at the first tap, as an
+// event of the hardware, and retains it until it has been delivered.
+extern void _CGSEventStreamPost(CGEventRef event);
+// The oldest event, which the caller releases, or NULL once the stream is empty. A reader that was
+// woken has to call this until it returns NULL: the source is signalled again only after that.
+extern CGEventRef _CGSEventStreamCopyNextEvent(void);
+// Registers the run loop source that is signalled, and its run loop woken, when an event arrives
+// at an empty stream. For the thread that waits for events: it reads the stream from where it
+// waits (before each wait, and after each wake up). A new registration replaces the old one;
+// NULL for both stops the stream and drops what is waiting.
+extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef _Nullable source, CFRunLoopRef _Nullable runLoop);
+
+// Interim (darlinghq/darling#937, until the window system backends live in CoreGraphics): the
+// poster of a window system event can attach an object to it, which the framework that reads the
+// event from the stream takes back. AppKit attaches the NSEvent its backend built, with what a
+// CGEvent cannot carry yet (input method text, gesture phases, tablet data). The object is not
+// part of the event: copies of the event do not have it, and an active event tap that changes the
+// event or replaces it with another drops it, so the reader then builds what it needs from the
+// event's fields. The event retains the object.
+extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
+extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
 
 // Registers the 'uchr' keyboard layout (a UCKeyboardLayout blob of `length` bytes, copied) of the
 // window system's current keymap, for a backend that cannot read the keymap itself. The Text Input

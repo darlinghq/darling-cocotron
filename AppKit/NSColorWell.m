@@ -79,6 +79,10 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
         _isContinuous = ![keyed decodeBoolForKey: @"NSIsNotContinuous"];
         _isBordered = [keyed decodeBoolForKey: @"NSIsBordered"];
         _color = [[keyed decodeObjectForKey: @"NSColor"] retain];
+        // written by macOS 26.7.3 only when the style is not the default (probe p770.m of batch 12a in
+        // mac-probes/cristim)
+        if ([keyed containsValueForKey: @"NSColorWellStyle"])
+            NS_EXTRA(NSColorWell, self)->_colorWellStyle = (NSColorWellStyle) [keyed decodeIntegerForKey: @"NSColorWellStyle"];
     } else {
         NSInteger version = [coder versionForClassName: @"NSColorWell"];
         char bordered = 0, notContinuous = 0, unknown = 0;
@@ -142,6 +146,17 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
                    name: _NSColorWellDidBecomeExclusiveNotification
                  object: nil];
     [self registerForDraggedTypes: @[ NSColorPboardType ]];
+}
+
+// The property starts as NSColorWellStyleDefault (the side storage starts zeroed) and any value is stored, one that
+// is not a case included, as on macOS 26.7.3 (probe p770.m of batch 12a in mac-probes/cristim). The well is not
+// yet drawn or driven differently for the minimal or expanded style.
+- (NSColorWellStyle) colorWellStyle {
+    return NS_EXTRA(NSColorWell, self)->_colorWellStyle;
+}
+
+- (void) setColorWellStyle: (NSColorWellStyle) style {
+    NS_EXTRA(NSColorWell, self)->_colorWellStyle = style;
 }
 
 - (void) dealloc {

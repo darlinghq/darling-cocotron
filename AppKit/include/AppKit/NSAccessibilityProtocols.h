@@ -59,6 +59,8 @@
 @property(copy) NSString *accessibilityValueDescription;
 @property(copy) NSString *accessibilityHelp;
 @property(copy) NSString *accessibilityPlaceholderValue;
+// The URL of the file the element represents, as a string (macOS 10.10); stored only.
+@property(copy) NSString *accessibilityDocument;
 @property(strong) id accessibilityMinValue;
 @property(strong) id accessibilityMaxValue;
 @property(getter = isAccessibilityEnabled) BOOL accessibilityEnabled;

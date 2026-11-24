@@ -16,8 +16,13 @@
                                 [coder class]];
         }
 
-        [self setPlaceholderString:
-                        [coder decodeObjectForKey: @"NSPlaceholderString"]];
+        // The one key holds either a plain string or an attributed string, whichever the cell had.
+        id placeholder = [coder decodeObjectForKey: @"NSPlaceholderString"];
+
+        if ([placeholder isKindOfClass: [NSAttributedString class]])
+            [self setPlaceholderAttributedString: placeholder];
+        else
+            [self setPlaceholderString: placeholder];
         [self setBackgroundColor:
                         [coder decodeObjectForKey: @"NSBackgroundColor"]];
         [self setPathComponentCells:
@@ -89,8 +94,15 @@
                         [self class], _cmd, [(id) value class]];
 }
 
+// A cell has one placeholder, a plain string or an attributed string: setting either replaces what was there (a
+// nil clears it whichever kind it was), and each getter answers nil while the placeholder is of the other kind.
+// Not documented (the documentation only says the attributed string is drawn when it is not nil and the plain one
+// with default attributes otherwise). Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (x86_64 and
+// i386) (tier 2), probes p765.m and p765b.m of batch 12a in mac-probes/cristim; the archive holds the one object
+// under the key NSPlaceholderString.
+// Test: appkit-pathcell-nil-placeholder (test_quirk_pathcell_has_one_placeholder)
 - (NSAttributedString *) placeholderAttributedString {
-    return _placeholder;
+    return [_placeholder isKindOfClass: [NSAttributedString class]] ? _placeholder : nil;
 }
 
 - (void) setPlaceholderAttributedString: (NSAttributedString *) value {
@@ -100,13 +112,15 @@
 }
 
 - (NSString *) placeholderString {
-    return [_placeholder string];
+    return [_placeholder isKindOfClass: [NSString class]] ? _placeholder : nil;
 }
 
+// The documented property is optional: nil clears the placeholder, and it is the
+// normal value of a cell decoded from an archive that has none.
 - (void) setPlaceholderString: (NSString *) string {
-    [self setPlaceholderAttributedString: [[[NSAttributedString alloc]
-                                                  initWithString: string]
-                                                  autorelease]];
+    string = [string copy];
+    [_placeholder release];
+    _placeholder = string;
 }
 
 - (NSColor *) backgroundColor {

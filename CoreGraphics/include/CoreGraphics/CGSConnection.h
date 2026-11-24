@@ -34,6 +34,16 @@
 	_Atomic CGSWindowID _nextWindowId;
 	NSMutableDictionary<NSNumber*, CGSWindow*>* _windows;
 	_Atomic int _hotKeyOperatingMode;
+
+@protected
+	// The displays as -buildScreens described them, until the layout changes. Guarded by
+	// @synchronized(self).
+	NSArray<CGSScreen*>* _screens;
+	// The displays the reconfiguration callbacks were last told about (nil until the displays
+	// have been read once). Guarded by @synchronized(self).
+	NSArray<CGSScreen*>* _reportedScreens;
+	// Non-zero while this process changes a mode itself, which it reports itself.
+	_Atomic int _suppressLayoutReports;
 }
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
 -(void) dealloc;
@@ -91,9 +101,43 @@
 // time (nanoseconds since startup) are those of the key event (the time is when it was seen).
 -(void) postHotKeyEventForUID:(int)uid pressed:(BOOL)pressed flags:(CGEventFlags)flags location:(CGPoint)location time:(uint64_t)time;
 
+// The modes of a display, and the one it is in, are in the display's CGSScreen (-createScreens).
+// Calls -setMode:forScreen: and, when it succeeded, makes the new layout the one that was reported:
+// the caller reports the change itself (CGDisplaySwitchToMode() does), so what the window system
+// sends about it is not a further change. Backends implement -setMode:forScreen:.
+-(BOOL) changeMode:(NSDictionary *)mode forScreen:(int)screenIndex;
+// Changes the mode of display screenIndex + 1 (the CGDirectDisplayID minus one) to one of the
+// modes in its CGSScreen, matched by PixelWidth, PixelHeight and RefreshRate. Returns whether the
+// window system applied it; the new layout is then visible to -createScreens. A window system
+// that leaves the mode to the user's session answers NO. The default implementation answers NO.
 -(BOOL) setMode:(NSDictionary *)mode forScreen:(int)screenIndex;
-// Implementations should cache this information, because it may be accessed frequently
+
+// The active displays, the main display first, as the window system describes them now; nil when
+// it reports none. Cached (it is read for every CoreGraphics call about displays) until the
+// layout changes, and every call returns the same objects until then. The caller releases the
+// array. Backends implement -buildScreens, not this.
 -(NSArray<CGSScreen*>*) createScreens;
+// For backends: describes the displays afresh, each with its displayID, bounds, backingScale, modes
+// and currentMode (and the edid and name when the window system tells). Called with the lock held.
+-(NSArray<CGSScreen*>*) buildScreens;
+// Drops the cached displays without telling anyone. Backends that cache more of the layout
+// override it and call super.
+-(void) invalidateScreens;
+// For backends: the window system reported that the layout or a mode changed. Drops the cache and
+// reports what differs from the previously reported layout to the callbacks registered with
+// CGDisplayRegisterReconfigurationCallback(), on the calling thread, which is the main thread
+// for events the backend reads.
+-(void) displayLayoutChanged;
+// Makes the current layout the one that was reported, for a change CoreGraphics itself reported.
+-(void) acceptDisplayLayout;
+// A request to bring the layout up to date with what the window system has sent already (it
+// reads events that are waiting) without waiting for the run loop. The default implementation
+// only invalidates. Backends override it to read their events, which reports the changes found.
+-(void) refreshDisplayLayout;
+
+// Moves the pointer to a point in CoreGraphics' global space (inside the desktop). The default
+// implementation does nothing and returns kCGErrorCannotComplete.
+-(CGError) warpPointerToPoint:(CGPoint)point;
 
 // Implementations should also emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 // if layout changes.

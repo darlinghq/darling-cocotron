@@ -62,6 +62,16 @@ BOOL O2JPEGGetDimensions(CFDataRef data, size_t *width, size_t *height) {
     return YES;
 }
 
+// QUIRK: ImageIO refuses to create an image for a JPEG whose declared size is more than 100 million pixels (10000x10000
+// is the largest square one it decodes; 10001x10000 and 16384x16384 give no image), and the decoded size must neither
+// overflow nor force a huge allocation for a header of a few hundred bytes (up to 65500x65500 pixels).
+// Evidence: black-box observation of CGImageSourceCreateImageAtIndex on macOS 26.7.3 and 10.14.4 (x86_64 and i386,
+// identical), tier 2: header-only JPEGs of 8192x8192, 9000x9000, 9999x10000, 10000x9999 and 10000x10000 give an image,
+// 10001x10000, 10000x10001, 11000x11000, 12000x8334 and 16384x16384 give none. macOS also refuses some narrower
+// images than that (for example 20000x20 and 3x60000); only the area bound is reproduced here.
+// Test: tests/imageio-jpeg-decode-limits.c
+#define O2JPEG_MAX_PIXELS ((size_t) 100000000)
+
 static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
                                                  int len, int *x, int *y)
 {
@@ -94,6 +104,15 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     // Setup the jpeg header and set the decompress options
     jpeg_read_header(&cinfo, TRUE);
 
+    // Reject an image with too many pixels before libjpeg allocates anything
+    // for it.
+    if (cinfo.image_width == 0 || cinfo.image_height == 0 ||
+        cinfo.image_width > O2JPEG_MAX_PIXELS ||
+        cinfo.image_height > O2JPEG_MAX_PIXELS / cinfo.image_width) {
+        jpeg_destroy_decompress(&cinfo);
+        return NULL;
+    }
+
     // We only support RGBA format for the output format
     if (cinfo.jpeg_color_space == JCS_CMYK ||
         cinfo.jpeg_color_space == JCS_YCCK) {
@@ -117,7 +136,7 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     *y = cinfo.output_height;
 
     // Number of bytes in a decompressed row
-    int bytesPerRow = cinfo.output_width * wantedPixelSize;
+    size_t bytesPerRow = (size_t) cinfo.output_width * wantedPixelSize;
 
     // Buffer for the final decompressed data
     outputImage = (unsigned char *) malloc(bytesPerRow * cinfo.output_height);
@@ -134,18 +153,24 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
 #endif
 
         while (cinfo.output_scanline < cinfo.image_height) {
-            int currentLine = cinfo.output_scanline;
+            size_t currentLine = cinfo.output_scanline;
 #ifdef JCS_ALPHA_EXTENSIONS
-            // We'll decode directly into the final buffer
-            for (int i = 0; i < cinfo.rec_outbuf_height; ++i) {
+            // We'll decode directly into the final buffer. Only rows inside it
+            // are handed to libjpeg, and only the rows it returns in linesRead
+            // are converted.
+            JDIMENSION rowsLeft = cinfo.output_height - cinfo.output_scanline;
+            JDIMENSION rowsWanted = (JDIMENSION) cinfo.rec_outbuf_height;
+            if (rowsWanted > rowsLeft)
+                rowsWanted = rowsLeft;
+            for (JDIMENSION i = 0; i < rowsWanted; ++i) {
                 scanlineBuffer[i] =
                         outputImage + (currentLine + i) * bytesPerRow;
             }
-            jpeg_read_scanlines(&cinfo, scanlineBuffer,
-                                cinfo.rec_outbuf_height);
+            JDIMENSION linesRead =
+                    jpeg_read_scanlines(&cinfo, scanlineBuffer, rowsWanted);
             if (cinfo.out_color_space == JCS_CMYK) {
                 // Convert from CMYK to RGBA
-                for (int i = 0; i < cinfo.rec_outbuf_height; ++i) {
+                for (JDIMENSION i = 0; i < linesRead; ++i) {
                     unsigned char *out =
                             outputImage + (currentLine++) * bytesPerRow;
                     for (int j = 0; j < cinfo.output_width; ++j) {

@@ -26,8 +26,14 @@
 #import "DarlingFileURIList.h"
 #import <AppKit/NSDBusMenu.h>
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSBox.h>
+#import <AppKit/NSButton.h>
+#import <AppKit/NSButtonCell.h>
 #import <AppKit/NSDisplay.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSOpenPanel.h>
+#import <AppKit/NSPopUpButton.h>
+#import <AppKit/NSTextField.h>
 #import <AppKit/NSSavePanel.h>
 #import <AppKit/NSWindow.h>
 #import <CoreServices/CoreServices.h>
@@ -177,8 +183,8 @@ static NSString *globForExtension(NSString *extension) {
     // A subclass may override the presentation or the result.
     if ([self class] != panelClass)
         return @"a subclass of the panel class";
-    if ([self accessoryView] != nil)
-        return @"an accessory view";
+    if ([self accessoryView] != nil && DarlingPortalChoicesForAccessoryView([self accessoryView]) == nil)
+        return @"an accessory view that is not made of pop-up buttons, check boxes and labels";
     if ([self showsHiddenFiles])
         return @"showsHiddenFiles";
     if ([self treatsFilePackagesAsDirectories])
@@ -271,6 +277,14 @@ static NSString *globForExtension(NSString *extension) {
         options[@"current_folder"] = bytes;
     }
 
+    if ([self accessoryView] != nil) {
+        NSMutableArray *choices = [NSMutableArray array];
+        for (NSDictionary *choice in DarlingPortalChoicesForAccessoryView([self accessoryView]))
+            [choices addObject: @[ choice[@"id"], choice[@"label"], choice[@"options"], choice[@"initial"] ]];
+        if ([choices count] > 0)
+            options[@"choices"] = choices;
+    }
+
     if (!open) {
         NSString *name = [self nameFieldStringValue];
         if ([name length] == 0)
@@ -294,6 +308,197 @@ NSString *DarlingPortalUnsupportedFeature(NSSavePanel *panel) {
 
 NSDictionary *DarlingPortalRequestForPanel(NSSavePanel *panel) {
     return [panel _portalRequest];
+}
+
+#pragma mark - Accessory view as choices
+
+// The portal has no place for a view of the application's own. What it can show are "choices": combo boxes
+// (a label, a list of options, the initial option) and, as a special case with no options, check boxes. An
+// accessory view made only of pop-up buttons and check boxes, with static labels and plain container views around
+// them, is shown that way, and the user's answers are put back into the controls. This is a decision of Darling's
+// desktop integration, not something macOS does: the built-in panel shows any accessory view that the portal
+// cannot express (see DarlingPortalUnsupportedFeature).
+
+static BOOL isCheckBox(NSButton *button) {
+    NSButtonCell *cell = [button cell];
+    return ![button isKindOfClass: [NSPopUpButton class]] && [cell isKindOfClass: [NSButtonCell class]] &&
+           [cell highlightsBy] == NSContentsCellMask && [cell showsStateBy] == NSContentsCellMask &&
+           [[[cell image] name] isEqualToString: @"NSSwitch"];
+}
+
+// A pop-up button the portal can show: a list of items, one chosen, with usable titles.
+static BOOL isSupportedPopUp(NSPopUpButton *popUp) {
+    if ([popUp pullsDown] || ![popUp isEnabled])
+        return NO;
+    for (NSMenuItem *item in [popUp itemArray]) {
+        if (![item isSeparatorItem] && [item isEnabled] && [[item title] length] > 0)
+            return YES;
+    }
+    return NO;
+}
+
+// Collects the controls and static labels below a view, in the coordinates of the root view; NO when there is
+// anything else. Hidden views are not shown and are left out.
+static BOOL collectAccessoryControls(NSView *root, NSView *view, NSMutableArray *controls, NSMutableArray *labels) {
+    for (NSView *subview in [view subviews]) {
+        if ([subview isHidden])
+            continue;
+        NSRect frame = [root convertRect: [subview bounds] fromView: subview];
+        NSDictionary *entry = @{ @"view": subview, @"frame": [NSValue valueWithRect: frame] };
+        if ([subview isKindOfClass: [NSPopUpButton class]]) {
+            if (!isSupportedPopUp((NSPopUpButton *) subview))
+                return NO;
+            [controls addObject: entry];
+        } else if ([subview isKindOfClass: [NSButton class]]) {
+            NSButton *button = (NSButton *) subview;
+            if (!isCheckBox(button) || ![button isEnabled] || [[button title] length] == 0 ||
+                [button state] == NSMixedState)
+                return NO;
+            [controls addObject: entry];
+        } else if ([subview isKindOfClass: [NSTextField class]]) {
+            if ([(NSTextField *) subview isEditable])
+                return NO;
+            [labels addObject: entry];
+        } else if ([subview isMemberOfClass: [NSView class]] || [subview isKindOfClass: [NSBox class]]) {
+            if (!collectAccessoryControls(root, subview, controls, labels))
+                return NO;
+        } else {
+            return NO;
+        }
+    }
+    return YES;
+}
+
+// A label's text as the portal's label: without the colon that a label before a control ends with.
+static NSString *labelText(NSTextField *field) {
+    NSString *text = [[field stringValue] stringByTrimmingCharactersInSet:
+                                                  [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if ([text hasSuffix: @":"])
+        text = [text substringToIndex: [text length] - 1];
+    return text;
+}
+
+// The label of a pop-up button: the nearest static label on its left in the same row, else the nearest above it.
+static NSString *labelForControl(NSRect frame, NSArray *labels, BOOL flipped) {
+    NSString *best = nil;
+    CGFloat bestDistance = 0;
+    for (NSDictionary *entry in labels) {
+        NSRect label = [entry[@"frame"] rectValue];
+        NSString *text = labelText(entry[@"view"]);
+        if ([text length] == 0)
+            continue;
+        BOOL sameRow = NSMidY(label) >= NSMinY(frame) && NSMidY(label) <= NSMaxY(frame);
+        if (sameRow && NSMaxX(label) <= NSMinX(frame) + 4) {
+            CGFloat distance = NSMinX(frame) - NSMaxX(label);
+            if (best == nil || distance < bestDistance) {
+                best = text;
+                bestDistance = distance;
+            }
+        }
+    }
+    if (best != nil)
+        return best;
+    for (NSDictionary *entry in labels) {
+        NSRect label = [entry[@"frame"] rectValue];
+        NSString *text = labelText(entry[@"view"]);
+        if ([text length] == 0 || NSMaxX(label) <= NSMinX(frame) || NSMinX(label) >= NSMaxX(frame))
+            continue;
+        // above: later y in a flipped view, earlier in an unflipped one
+        CGFloat distance = flipped ? NSMinY(frame) - NSMaxY(label) : NSMinY(label) - NSMaxY(frame);
+        if (distance >= -2 && (best == nil || distance < bestDistance)) {
+            best = text;
+            bestDistance = distance;
+        }
+    }
+    return best;
+}
+
+NSArray *DarlingPortalChoicesForAccessoryView(NSView *view) {
+    if (view == nil)
+        return nil;
+    NSMutableArray *controls = [NSMutableArray array];
+    NSMutableArray *labels = [NSMutableArray array];
+    if (!collectAccessoryControls(view, view, controls, labels) || [controls count] == 0)
+        return nil;
+
+    // top to bottom, then left to right
+    BOOL flipped = [view isFlipped];
+    [controls sortUsingComparator: ^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+        NSRect fa = [a[@"frame"] rectValue], fb = [b[@"frame"] rectValue];
+        CGFloat ya = flipped ? NSMinY(fa) : -NSMaxY(fa), yb = flipped ? NSMinY(fb) : -NSMaxY(fb);
+        if (fabs(ya - yb) > 2)
+            return ya < yb ? NSOrderedAscending : NSOrderedDescending;
+        return NSMinX(fa) < NSMinX(fb) ? NSOrderedAscending
+               : NSMinX(fa) > NSMinX(fb) ? NSOrderedDescending : NSOrderedSame;
+    }];
+
+    NSMutableArray *choices = [NSMutableArray array];
+    for (NSDictionary *entry in controls) {
+        id control = entry[@"view"];
+        NSString *identifier = [NSString stringWithFormat: @"c%lu", (unsigned long) [choices count]];
+        if ([control isKindOfClass: [NSPopUpButton class]]) {
+            NSPopUpButton *popUp = control;
+            NSMutableArray *options = [NSMutableArray array];
+            NSMutableArray *indexes = [NSMutableArray array];
+            NSString *initial = @"";
+            NSInteger selected = [popUp indexOfSelectedItem];
+            for (NSInteger i = 0; i < [popUp numberOfItems]; i++) {
+                NSMenuItem *item = [popUp itemAtIndex: i];
+                if ([item isSeparatorItem] || ![item isEnabled] || [[item title] length] == 0)
+                    continue;
+                NSString *optionIdentifier = [NSString stringWithFormat: @"%ld", (long) i];
+                [options addObject: @[ optionIdentifier, [item title] ]];
+                [indexes addObject: @(i)];
+                if (i == selected)
+                    initial = optionIdentifier;
+            }
+            NSString *label = labelForControl([entry[@"frame"] rectValue], labels, flipped);
+            [choices addObject: @{
+                @"id": identifier, @"label": [label length] > 0 ? label : [popUp titleOfSelectedItem],
+                @"options": options, @"initial": initial, @"control": popUp, @"itemIndexes": indexes,
+            }];
+        } else {
+            NSButton *button = control;
+            [choices addObject: @{
+                @"id": identifier, @"label": [button title], @"options": @[],
+                @"initial": [button state] == NSOnState ? @"true" : @"false", @"control": button,
+            }];
+        }
+    }
+    return choices;
+}
+
+// Puts the portal's answers into the controls. A control whose value changed also sends its action, once, since the
+// application would have had it sent while the user changed the value; unknown ids and values are ignored.
+static void applyChoices(NSArray *choices, NSDictionary *answers) {
+    for (NSDictionary *choice in choices) {
+        NSString *answer = answers[choice[@"id"]];
+        if (![answer isKindOfClass: [NSString class]])
+            continue;
+        NSControl *control = choice[@"control"];
+        BOOL changed = NO;
+        if ([control isKindOfClass: [NSPopUpButton class]]) {
+            NSPopUpButton *popUp = (NSPopUpButton *) control;
+            NSInteger index = [answer integerValue];
+            if (![[answer stringByTrimmingCharactersInSet: [NSCharacterSet decimalDigitCharacterSet]] isEqualToString: @""] ||
+                ![choice[@"itemIndexes"] containsObject: @(index)] || index >= [popUp numberOfItems])
+                continue;
+            changed = index != [popUp indexOfSelectedItem];
+            [popUp selectItemAtIndex: index];
+        } else {
+            NSInteger state;
+            if ([answer isEqualToString: @"true"])
+                state = NSOnState;
+            else if ([answer isEqualToString: @"false"])
+                state = NSOffState;
+            else
+                continue;
+            changed = state != [(NSButton *) control state];
+            [(NSButton *) control setState: state];
+        }
+        if (changed && [control action] != NULL)
+            [NSApp sendAction: [control action] to: [control target] from: control];
+    }
 }
 
 #pragma mark - Paths
@@ -461,6 +666,43 @@ static BOOL appendCurrentFilterEntry(DBusMessageIter *array, NSArray *filter) {
     return ok;
 }
 
+// The choices are the array a(ssa(ss)s).
+static BOOL appendChoicesEntry(DBusMessageIter *array, NSArray *choices) {
+    DBusMessageIter entry, variant, list;
+    if (!openEntry(array, &entry, &variant, "choices", "a(ssa(ss)s)"))
+        return NO;
+    BOOL ok = dbus_message_iter_open_container(&variant, DBUS_TYPE_ARRAY, "(ssa(ss)s)", &list);
+    if (ok) {
+        for (NSArray *choice in choices) {
+            DBusMessageIter structure, options;
+            ok = dbus_message_iter_open_container(&list, DBUS_TYPE_STRUCT, NULL, &structure) &&
+                 appendString(&structure, choice[0]) && appendString(&structure, choice[1]) &&
+                 dbus_message_iter_open_container(&structure, DBUS_TYPE_ARRAY, "(ss)", &options);
+            if (!ok)
+                break;
+            for (NSArray *option in choice[2]) {
+                DBusMessageIter pair;
+                if (!dbus_message_iter_open_container(&options, DBUS_TYPE_STRUCT, NULL, &pair)) {
+                    ok = NO;
+                    break;
+                }
+                ok = appendString(&pair, option[0]) && appendString(&pair, option[1]);
+                dbus_message_iter_close_container(&options, &pair);
+                if (!ok)
+                    break;
+            }
+            dbus_message_iter_close_container(&structure, &options);
+            ok = ok && appendString(&structure, choice[3]);
+            dbus_message_iter_close_container(&list, &structure);
+            if (!ok)
+                break;
+        }
+        dbus_message_iter_close_container(&variant, &list);
+    }
+    closeEntry(array, &entry, &variant);
+    return ok;
+}
+
 // The options of a request as the a{sv} argument, with the handle token.
 static BOOL appendOptions(DBusMessage *message, NSDictionary *request, NSString *token) {
     DBusMessageIter iterator, array;
@@ -486,6 +728,8 @@ static BOOL appendOptions(DBusMessage *message, NSDictionary *request, NSString 
         ok = appendFiltersEntry(&array, values[@"filters"]);
     if (ok && values[@"current_filter"] != nil)
         ok = appendCurrentFilterEntry(&array, values[@"current_filter"]);
+    if (ok && values[@"choices"] != nil)
+        ok = appendChoicesEntry(&array, values[@"choices"]);
     if (ok && values[@"current_folder"] != nil)
         ok = appendBytesEntry(&array, "current_folder", values[@"current_folder"]);
     dbus_message_iter_close_container(&iterator, &array);
@@ -494,7 +738,7 @@ static BOOL appendOptions(DBusMessage *message, NSDictionary *request, NSString 
 
 // The uris of a Response signal and its code, or NO when it is not a well
 // formed Response.
-static BOOL parseResponse(DBusMessage *message, uint32_t *code, NSArray **uris) {
+static BOOL parseResponse(DBusMessage *message, uint32_t *code, NSArray **uris, NSDictionary **choices) {
     DBusMessageIter iterator, array;
     dbus_uint32_t response = 2;
 
@@ -504,6 +748,7 @@ static BOOL parseResponse(DBusMessage *message, uint32_t *code, NSArray **uris) 
     dbus_message_iter_get_basic(&iterator, &response);
     *code = response;
     *uris = nil;
+    *choices = nil;
     if (!dbus_message_iter_next(&iterator) ||
         dbus_message_iter_get_arg_type(&iterator) != DBUS_TYPE_ARRAY)
         return YES;
@@ -538,6 +783,34 @@ static BOOL parseResponse(DBusMessage *message, uint32_t *code, NSArray **uris) 
                         dbus_message_iter_next(&list);
                     }
                     *uris = result;
+                }
+            } else if (key != NULL && strcmp(key, "choices") == 0 &&
+                       dbus_message_iter_next(&entry) &&
+                       dbus_message_iter_get_arg_type(&entry) == DBUS_TYPE_VARIANT) {
+                // a(ss): the id of each choice that was passed in and the option the user ended with
+                dbus_message_iter_recurse(&entry, &variant);
+                if (dbus_message_iter_get_arg_type(&variant) == DBUS_TYPE_ARRAY &&
+                    dbus_message_iter_get_element_type(&variant) == DBUS_TYPE_STRUCT) {
+                    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+                    dbus_message_iter_recurse(&variant, &list);
+                    while (dbus_message_iter_get_arg_type(&list) == DBUS_TYPE_STRUCT &&
+                           [result count] < MAX_RESULT_URIS) {
+                        DBusMessageIter pair;
+                        const char *choice = NULL, *selected = NULL;
+                        dbus_message_iter_recurse(&list, &pair);
+                        if (dbus_message_iter_get_arg_type(&pair) == DBUS_TYPE_STRING) {
+                            dbus_message_iter_get_basic(&pair, &choice);
+                            if (dbus_message_iter_next(&pair) &&
+                                dbus_message_iter_get_arg_type(&pair) == DBUS_TYPE_STRING)
+                                dbus_message_iter_get_basic(&pair, &selected);
+                        }
+                        NSString *name = choice != NULL ? [NSString stringWithUTF8String: choice] : nil;
+                        NSString *value = selected != NULL ? [NSString stringWithUTF8String: selected] : nil;
+                        if (name != nil && value != nil)
+                            result[name] = value;
+                        dbus_message_iter_next(&list);
+                    }
+                    *choices = result;
                 }
             }
         }
@@ -581,6 +854,8 @@ static BOOL ownerLeft(DBusMessage *message, NSString *owner) {
     // are believed.
     NSString *_portalOwner;
     void (^_handler)(NSModalResponse);
+    // The accessory view's controls that were sent as choices, see DarlingPortalChoicesForAccessoryView.
+    NSArray *_choices;
     BOOL _finished;
     NSModalResponse _response;
 }
@@ -749,6 +1024,7 @@ static unsigned long long requestCounter;
     }
 
     _panel = [panel retain];
+    _choices = [DarlingPortalChoicesForAccessoryView([panel accessoryView]) retain];
     _handler = [handler copy];
     CFSocketContext context = {.version = 0, .info = self};
     _socket = CFSocketCreateWithNative(kCFAllocatorDefault, descriptor,
@@ -768,6 +1044,7 @@ static unsigned long long requestCounter;
 - (void) dealloc {
     [self invalidate];
     [_panel release];
+    [_choices release];
     [_requestPath release];
     [_portalOwner release];
     [_handler release];
@@ -805,7 +1082,7 @@ static unsigned long long requestCounter;
 }
 
 // Takes the dialog's outcome: a successful response sets the panel's result.
-- (void) finishWithCode: (uint32_t) code uris: (NSArray *) uris {
+- (void) finishWithCode: (uint32_t) code uris: (NSArray *) uris choices: (NSDictionary *) answers {
     NSModalResponse response = DarlingPortalModalResponseForCode(code);
     if (response == NSOKButton) {
         NSArray *paths = DarlingPortalPathsFromURIs(uris);
@@ -815,16 +1092,21 @@ static unsigned long long requestCounter;
                        [(NSOpenPanel *) _panel allowsMultipleSelection];
         if (paths == nil || ([paths count] > 1 && !several)) {
             response = NSCancelButton;
-        } else if (isOpenPanel(_panel)) {
-            [_panel _setAcceptedPaths: paths];
         } else {
-            NSString *path = paths[0];
-            // The portal returns the name as typed; the panel adds the first
-            // allowed extension, like its own.
-            [_panel _setFilename: [[path stringByDeletingLastPathComponent]
-                                          stringByAppendingPathComponent:
-                                                  [_panel _portalNameWithRequiredExtension:
-                                                                  [path lastPathComponent]]]];
+            // The controls get the user's answers first: their actions may change what the panel accepts,
+            // such as the allowed file types that name the extension below.
+            applyChoices(_choices, answers);
+            if (isOpenPanel(_panel)) {
+                [_panel _setAcceptedPaths: paths];
+            } else {
+                NSString *path = paths[0];
+                // The portal returns the name as typed; the panel adds the first
+                // allowed extension, like its own.
+                [_panel _setFilename: [[path stringByDeletingLastPathComponent]
+                                              stringByAppendingPathComponent:
+                                                      [_panel _portalNameWithRequiredExtension:
+                                                                      [path lastPathComponent]]]];
+            }
         }
     }
     _response = response;
@@ -858,30 +1140,31 @@ static unsigned long long requestCounter;
             break;
         uint32_t code = 2;
         NSArray *uris = nil;
+        NSDictionary *answers = nil;
         const char *path = dbus_message_get_path(message);
         const char *sender = dbus_message_get_sender(message);
         BOOL fromPortal = sender != NULL && strcmp(sender, [_portalOwner UTF8String]) == 0;
         BOOL isResponse = fromPortal &&
                           dbus_message_is_signal(message, REQUEST_INTERFACE, "Response") &&
                           path != NULL && strcmp(path, [_requestPath UTF8String]) == 0;
-        BOOL parsed = isResponse && parseResponse(message, &code, &uris);
+        BOOL parsed = isResponse && parseResponse(message, &code, &uris, &answers);
         BOOL portalGone = sender != NULL && strcmp(sender, BUS_NAME) == 0 &&
                           dbus_message_is_signal(message, BUS_NAME, "NameOwnerChanged") &&
                           ownerLeft(message, _portalOwner);
         dbus_message_unref(message);
         if (parsed) {
-            [self finishWithCode: code uris: uris];
+            [self finishWithCode: code uris: uris choices: answers];
             return;
         }
         if (portalGone) {
-            [self finishWithCode: 2 uris: nil];
+            [self finishWithCode: 2 uris: nil choices: nil];
             return;
         }
     }
 
     // The bus went away: the dialog's result can no longer arrive.
     if (_connection != NULL && !dbus_connection_get_is_connected(_connection))
-        [self finishWithCode: 2 uris: nil];
+        [self finishWithCode: 2 uris: nil choices: nil];
 }
 
 @end

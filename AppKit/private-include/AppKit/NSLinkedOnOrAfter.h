@@ -12,6 +12,7 @@
 #define NS_SDK_VERSION_MACOSX_10_6 0x000a0600
 #define NS_SDK_VERSION_MACOSX_10_7 0x000a0700
 #define NS_SDK_VERSION_MACOSX_10_11 0x000a0b00
+#define NS_SDK_VERSION_MACOSX_15_0 0x000f0000
 
 // YES when the main program was built against an SDK of at least the given version. A program
 // that records no SDK version at all, as programs built for 10.5 and earlier do, was built

@@ -22,17 +22,66 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSErrors.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSColorList.h>
+#import <AppKit/NSScreen.h>
+#import <CoreGraphics/CGDirectDisplay.h>
+#import <CoreGraphics/CGDisplayConfiguration.h>
+#import <CoreGraphics/CGSPointerController.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
+#import "NSEventQueue.h"
 
-// Handling this source is what makes -[NSRunLoop runMode:beforeDate:] return
-// for a posted event; timers alone never end it.
-static void eventPosted(void *info) {}
+// What CoreGraphics' pointer functions (CGDisplayHideCursor() and the rest, see CGSPointerController.h) reach
+// the display through: CoreGraphics does not know AppKit, so the display registers this when it starts.
+@interface _NSDisplayPointerController : NSObject <CGSPointerController> {
+    NSDisplay *_display; // The process' display never goes away.
+}
+- (instancetype) initWithDisplay: (NSDisplay *) display;
+@end
 
+@implementation _NSDisplayPointerController
+- (instancetype) initWithDisplay: (NSDisplay *) display {
+    if ((self = [super init]))
+        _display = display;
+    return self;
+}
+- (void) hideCursor {
+    [_display hideCursorCounted];
+}
+- (void) unhideCursor {
+    [_display unhideCursorCounted];
+}
+- (void) forceShowCursor {
+    [_display forceShowCursor];
+}
+- (void) warpPointerToPoint: (CGPoint) point {
+    [_display warpMouse: NSMakePoint(point.x, point.y)];
+}
+- (void) setMouseAssociatedWithCursor: (BOOL) associated {
+    // Disconnecting the mouse from the cursor is what -grabMouse: YES does: the cursor stays put and
+    // the mouse only produces deltas.
+    [_display grabMouse: !associated];
+}
+- (void) takeMouseDeltaX: (int32_t *) dx y: (int32_t *) dy {
+    [_display takeMouseDeltaX: dx y: dy];
+}
+@end
 
-// NSEventMaskAny is NSUIntegerMax, which is only 32 bits wide in a 32-bit
-// process, so it has no bit for the event types from 32 up (direct touch is
-// 37). Such a mask still asks for every event.
-static BOOL EventMatchesMask(NSEvent *event, NSEventMask mask) {
-    return mask == NSEventMaskAny || (NSEventMaskFromType([event type]) & mask) != 0;
+static NSDisplay *processDisplay = nil;
+
+// The displays changed, as CoreGraphics reports it for a change made by this process or by anything else
+// (a window manager, another client). On macOS this is what makes the application post
+// NSApplicationDidChangeScreenParametersNotification.
+static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *info) {
+    if (flags & kCGDisplayBeginConfigurationFlag)
+        return;
+    NSDisplay *current = processDisplay;
+    [current _invalidateScreens];
+    if ([NSThread isMainThread])
+        [current _postScreenParametersChanged];
+    else
+        [current performSelectorOnMainThread: @selector(_postScreenParametersChanged)
+                                  withObject: nil
+                               waitUntilDone: NO
+                                       modes: @[ NSRunLoopCommonModes ]];
 }
 
 @implementation NSDisplay
@@ -56,8 +105,6 @@ static BOOL EventMatchesMask(NSEvent *event, NSEventMask mask) {
 // The instance is published only after the backend has initialized, so a
 // backend that fails to start (or raises) leaves nothing behind and a later
 // call tries again.
-static NSDisplay *processDisplay = nil;
-
 + (NSDisplay *) currentDisplay {
     @synchronized([NSDisplay class]) {
         if (processDisplay == nil) {
@@ -70,12 +117,24 @@ static NSDisplay *processDisplay = nil;
 - (instancetype) init {
     if ([self class] != [NSDisplay class]) {
         // Initializing a concrete subclass.
-        _eventQueue = [NSMutableArray new];
-        _eventQueueLock = [NSRecursiveLock new];
-        CFRunLoopSourceContext context = {.version = 0, .perform = eventPosted};
-        _eventSource = CFRunLoopSourceCreate(NULL, 0, &context);
-        CFRunLoopAddSource(CFRunLoopGetMain(), _eventSource,
-                           kCFRunLoopCommonModes);
+        _mouseDeltaLock = [NSLock new];
+        _mainScreenMaxY = NAN;
+        [[NSNotificationCenter defaultCenter]
+                addObserver: self
+                   selector: @selector(_screensDidChange:)
+                       name: NSApplicationDidChangeScreenParametersNotification
+                     object: nil];
+        // The window system's events are kept from now on, also before the application first
+        // waits for one
+        _NSEventQueueBeginReading();
+
+        static dispatch_once_t once;
+        dispatch_once(&once, ^{
+            static _NSDisplayPointerController *controller;
+            controller = [[_NSDisplayPointerController alloc] initWithDisplay: self];
+            _CGSSetPointerController(controller);
+            CGDisplayRegisterReconfigurationCallback(displaysReconfigured, NULL);
+        });
         return self;
     }
 
@@ -124,13 +183,54 @@ static NSDisplay *processDisplay = nil;
 }
 
 - (void) dealloc {
-    if (_eventSource != NULL) {
-        CFRunLoopSourceInvalidate(_eventSource);
-        CFRelease(_eventSource);
-    }
-    [_eventQueueLock release];
-    [_eventQueue release];
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
+    [_mouseDeltaLock release];
     [super dealloc];
+}
+
+- (void) _screensDidChange: (NSNotification *) note {
+    _mainScreenMaxY = NAN;
+}
+
+// The top of the main screen is its height: the global space has its origin at the main screen's
+// bottom-left corner. Without a display the origin is at the top.
+- (CGFloat) _mainScreenMaxY {
+    CGFloat maxY = _mainScreenMaxY;
+
+    if (isnan(maxY)) {
+        CGDirectDisplayID main = CGMainDisplayID();
+
+        maxY = main != kCGNullDirectDisplay ? CGDisplayBounds(main).size.height : 0;
+        _mainScreenMaxY = maxY;
+    }
+    return maxY;
+}
+
+// RandR and wl_output report one change as several events, and CoreGraphics reports a change for
+// each display, so the notification is queued and merged per run loop pass, and goes out on the next
+// pass like the notification on macOS (the screens themselves are already up to date).
+- (void) _postScreenParametersChanged {
+    NSNotification *note = [NSNotification
+            notificationWithName: NSApplicationDidChangeScreenParametersNotification
+                          object: NSApp];
+    [[NSNotificationQueue defaultQueue] enqueueNotification: note
+                                               postingStyle: NSPostASAP
+                                               coalesceMask: NSNotificationCoalescingOnName |
+                                                             NSNotificationCoalescingOnSender
+                                                   forModes: nil];
+}
+
+- (void) _invalidateScreens {
+    @synchronized(self) {
+        [_screens release];
+        _screens = nil;
+    }
+    _mainScreenMaxY = NAN;
+}
+
+- (void) _refreshDisplays {
+    _CGSRefreshDisplayLayout();
+    [self _invalidateScreens];
 }
 
 - (void) _mainMenuDidChange: (NSMenu *) menu {
@@ -140,9 +240,65 @@ static NSDisplay *processDisplay = nil;
     return YES;
 }
 
+// The screens are the displays of CoreGraphics (this framework sits above it): the frame is the
+// display's bounds moved into Cocoa's global space, which has its origin at the main screen's
+// bottom-left corner and y pointing up, and the backing scale, the name and the EDID are the display's.
+- (NSArray<NSScreen *> *) _screensFromDisplays {
+    uint32_t count = 0;
+
+    if (CGGetActiveDisplayList(0, NULL, &count) != kCGErrorSuccess)
+        count = 0;
+    CGDirectDisplayID *displays = calloc(count > 0 ? count : 1, sizeof *displays);
+
+    if (displays == NULL || CGGetActiveDisplayList(count, displays, &count) != kCGErrorSuccess)
+        count = 0;
+
+    NSMutableArray<NSScreen *> *screens = [NSMutableArray arrayWithCapacity: count];
+    CGFloat mainHeight = count > 0 ? CGDisplayBounds(displays[0]).size.height : 0;
+
+    for (uint32_t i = 0; i < count; i++) {
+        CGRect bounds = CGDisplayBounds(displays[i]);
+        NSRect frame = NSMakeRect(bounds.origin.x,
+                                  mainHeight - bounds.origin.y - bounds.size.height,
+                                  bounds.size.width, bounds.size.height);
+        NSScreen *screen = [[[NSScreen alloc] initWithFrame: frame visibleFrame: frame] autorelease];
+
+        [screen setCgDirectDisplayID: displays[i]];
+        [screen _setBackingScaleFactor: _CGSDisplayBackingScaleFactor(displays[i])];
+        CFDataRef edid = _CGSDisplayCopyEDID(displays[i]);
+        if (edid != NULL) {
+            [screen setEdid: (NSData *) edid];
+            CFRelease(edid);
+        }
+        CFStringRef name = _CGSDisplayCopyOutputName(displays[i]);
+        if (name != NULL) {
+            [screen _setOutputName: (NSString *) name];
+            CFRelease(name);
+        }
+        [screens addObject: screen];
+    }
+    free(displays);
+
+    if ([screens count] == 0) {
+        // No display is known (yet). An application still needs a screen to put its windows on.
+        static const CGFloat fallbackWidth = 1920, fallbackHeight = 1080;
+        static BOOL logged;
+        if (!logged) {
+            NSLog(@"AppKit: no display is known, assuming a %.0fx%.0f screen", fallbackWidth, fallbackHeight);
+            logged = YES;
+        }
+        NSRect frame = NSMakeRect(0, 0, fallbackWidth, fallbackHeight);
+        [screens addObject: [[[NSScreen alloc] initWithFrame: frame visibleFrame: frame] autorelease]];
+    }
+    return screens;
+}
+
 - (NSArray<NSScreen *> *) screens {
-    NSInvalidAbstractInvocation();
-    return nil;
+    @synchronized(self) {
+        if (_screens == nil)
+            _screens = [[NSArray alloc] initWithArray: [self _screensFromDisplays]];
+        return [[_screens retain] autorelease];
+    }
 }
 
 - (NSPasteboard *) pasteboardWithName: (NSPasteboardName) name {
@@ -258,48 +414,8 @@ static NSDisplay *processDisplay = nil;
                              inMode: (NSString *) mode
                             dequeue: (BOOL) dequeue
 {
-    NSEvent *result = nil;
-
-    // Only an event the caller asked for lets it return at once: waiting for
-    // an event of another type must still block until the date.
-    BOOL queued = NO;
-
-    [_eventQueueLock lock];
-    for (NSEvent *candidate in _eventQueue) {
-        if (EventMatchesMask(candidate, mask)) {
-            queued = YES;
-            break;
-        }
-    }
-    [_eventQueueLock unlock];
-    if (queued)
-        untilDate = [NSDate date];
-
-    [[NSRunLoop currentRunLoop] runMode: mode beforeDate: untilDate];
-
-    // Scan for the first event of a wanted type. Events that do not match stay
-    // queued: AppKit's contract is that nextEventMatchingMask: returns only
-    // what was asked for and leaves the rest for the main loop, but removing
-    // them here destroyed every other pending event whenever a caller asked
-    // for a narrow mask - a tracking loop asking for NSLeftMouseUpMask would
-    // silently discard queued key events.
-    [_eventQueueLock lock];
-    @try {
-        NSUInteger i, count = [_eventQueue count];
-        for (i = 0; i < count; i++) {
-            NSEvent *event = _eventQueue[i];
-
-            if (EventMatchesMask(event, mask)) {
-                result = [[event retain] autorelease];
-
-                if (dequeue)
-                    [_eventQueue removeObjectAtIndex: i];
-                break;
-            }
-        }
-    } @finally {
-        [_eventQueueLock unlock];
-    }
+    [self willWaitForEvents];
+    NSEvent *result = _NSEventQueueNextEvent(mask, untilDate, mode, dequeue);
 
     if (result == nil) {
         result = [[[NSEvent alloc] initWithType: NSAppKitSystem
@@ -307,128 +423,56 @@ static NSDisplay *processDisplay = nil;
                                   modifierFlags: 0
                                          window: nil] autorelease];
     }
-
     return result;
 }
 
 - (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event
 {
-    [_eventQueueLock lock];
-    @try {
-        NSInteger count = [_eventQueue count];
+    _NSEventQueueDiscard(mask, event);
+}
 
-        while (--count >= 0) {
-            if (_eventQueue[count] == event) {
-                break;
-            }
-        }
-
-        // The mask selects which events to drop, so it has to be tested against
-        // each candidate. Testing it against the stop marker makes the test
-        // constant for the whole scan, so a coalescing call drops every earlier
-        // event whatever its type - and the periodic-event coalescer wipes queued
-        // key and mouse events on every tick.
-        while (--count >= 0) {
-            if (EventMatchesMask(_eventQueue[count], mask)) {
-                [_eventQueue removeObjectAtIndex: count];
-            }
-        }
-    } @finally {
-        [_eventQueueLock unlock];
-    }
+- (void) willWaitForEvents {
 }
 
 - (void) accumulateMouseDeltaX: (CGFloat) dx y: (CGFloat) dy {
-    [_eventQueueLock lock];
+    [_mouseDeltaLock lock];
     _mouseDeltaX += dx;
     _mouseDeltaY += dy;
-    [_eventQueueLock unlock];
+    [_mouseDeltaLock unlock];
 }
 
 // Whole units are taken; the fraction stays for the next call, so a slow
 // motion in a fractional scale is not lost.
 - (void) takeMouseDeltaX: (int32_t *) dx y: (int32_t *) dy {
-    [_eventQueueLock lock];
+    [_mouseDeltaLock lock];
     double wholeX = _mouseDeltaX < 0 ? ceil(_mouseDeltaX) : floor(_mouseDeltaX);
     double wholeY = _mouseDeltaY < 0 ? ceil(_mouseDeltaY) : floor(_mouseDeltaY);
     _mouseDeltaX -= wholeX;
     _mouseDeltaY -= wholeY;
-    [_eventQueueLock unlock];
+    [_mouseDeltaLock unlock];
     if (dx != NULL)
         *dx = (int32_t) wholeX;
     if (dy != NULL)
         *dy = (int32_t) wholeY;
 }
 
-// The backends post the input devices' events here; mouse motion is coalesced
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
-    [self _postEvent: event atStart: atStart coalesce: YES];
+    if (atStart)
+        _NSEventQueuePost(event, YES);
+    else
+        _NSEventQueuePostWindowSystemEvent(event, [self _mainScreenMaxY]);
 }
 
 // QUIRK: what an application posts with -[NSApplication postEvent:atStart:] is queued as it is: posted drags are
 // dequeued one by one, never coalesced. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
 // Test: appkit-posted-events-not-coalesced.m
 - (void) _postEventWithoutCoalescing: (NSEvent *) event atStart: (BOOL) atStart {
-    [self _postEvent: event atStart: atStart coalesce: NO];
-}
-
-- (void) _postEvent: (NSEvent *) event atStart: (BOOL) atStart coalesce: (BOOL) coalesce {
-    // Callable from any thread
-    [_eventQueueLock lock];
-    @try {
-        BOOL coalesced = NO;
-
-        // A moved or dragged event replaces the one still queued last for the
-        // same window and type.
-        if (coalesce && !atStart && [NSEvent isMouseCoalescingEnabled]) {
-            NSEventType type = [event type];
-            if (type == NSMouseMoved || type == NSLeftMouseDragged ||
-                type == NSRightMouseDragged || type == NSOtherMouseDragged) {
-                NSInteger count = [_eventQueue count];
-                if (count > 0) {
-                    NSEvent *last = [_eventQueue objectAtIndex: count - 1];
-                    if ([last type] == type && [last window] == [event window]) {
-                        [_eventQueue replaceObjectAtIndex: count - 1 withObject: event];
-                        coalesced = YES;
-                    }
-                }
-            }
-        }
-
-        if (coalesced) {
-            // nothing more to queue
-        } else if (atStart) {
-            [_eventQueue insertObject: event atIndex: 0];
-        } else {
-            [_eventQueue addObject: event];
-        }
-    } @finally {
-        [_eventQueueLock unlock];
-    }
-    CFRunLoopSourceSignal(_eventSource);
-    CFRunLoopWakeUp(CFRunLoopGetMain());
+    _NSEventQueuePost(event, atStart);
 }
 
 - (BOOL) containsAndRemovePeriodicEvents {
-    BOOL result = NO;
-    [_eventQueueLock lock];
-    @try {
-        // signed: with an unsigned index "--count >= 0" never ends
-        NSInteger count = [_eventQueue count];
-
-        while (--count >= 0) {
-            NSEvent *event = _eventQueue[count];
-            if ([event type] == NSPeriodic) {
-                result = YES;
-                [_eventQueue removeObjectAtIndex: count];
-            }
-        }
-    } @finally {
-        [_eventQueueLock unlock];
-    }
-
-    return result;
+    return _NSEventQueueDiscard(NSPeriodicMask, nil) > 0;
 }
 
 - (NSEventModifierFlags) modifierForDefault: (NSString *) key

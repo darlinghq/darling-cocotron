@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSBundle.h>
+#import <AppKit/NSNib.h>
 
 // clang has these as builtins, guard against that
 #ifndef IBOutlet
@@ -60,6 +61,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) loadNibFile: (NSString *) fileName
         externalNameTable: (NSDictionary *) nameTable
                  withZone: (NSZone *) zone;
+
+- (BOOL) loadNibNamed: (NSNibName) nibName
+                  owner: (nullable id) owner
+        topLevelObjects: (NSArray *_Nullable *_Nullable) topLevelObjects;
 
 @end
 

@@ -18,10 +18,21 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSControl.h>
+#import <AppKit/AppKitIvarLayout.h>
 
 @class NSColor;
 
-// Legacy ObjC ABI (i386): instance size must stay 0x6c, Apple's.
+// The looks and click behaviour a color well can be given (macOS 13): a standard well, a slimmer one and one with
+// an extra button. The values are those of the public header.
+typedef NS_ENUM(NSInteger, NSColorWellStyle) {
+    NSColorWellStyleDefault = 0,
+    NSColorWellStyleMinimal = 1,
+    NSColorWellStyleExpanded = 2,
+};
+
+#define _NS_SIDE_NSColorWell 0, 1,
+// Legacy ObjC ABI (i386): instance size must stay 0x6c, Apple's. New state goes to the side struct, never
+// to an ivar of its own.
 @interface NSColorWell : NSControl {
     NSColor *_color;
     id _target;
@@ -33,11 +44,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     unsigned _isBordered : 1;
     unsigned _isActive : 1;
     unsigned _notifyingColorPanel : 1;
+    NS_EXTRA_IVARS_BEGIN(NSColorWell)
+        NSColorWellStyle _colorWellStyle;
+    NS_SIDE_IVARS_END(NSColorWell)
 }
 
 - (NSColor *) color;
 - (BOOL) isBordered;
 - (BOOL) isActive;
+
+// Which of the styles the well uses; stored only. Starts as NSColorWellStyleDefault.
+@property NSColorWellStyle colorWellStyle API_AVAILABLE(macos(13.0));
 
 - (void) setColor: (NSColor *) color;
 - (void) setBordered: (BOOL) flag;

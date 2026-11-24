@@ -284,7 +284,7 @@ NSString *const NSDrawerDidCloseNotification = @"NSDrawerDidCloseNotification";
     return _preferredEdge;
 }
 
-- (int) state {
+- (NSInteger) state {
     return _state;
 }
 

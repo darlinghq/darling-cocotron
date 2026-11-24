@@ -75,6 +75,7 @@ int main(void) {
             @{@"CFBundleTypeName": @"Silent", @"CFBundleTypeRole": @"Editor", @"NSDocumentClass": @"SilentDocument"},
             @{@"CFBundleTypeName": @"Legacy", @"CFBundleTypeRole": @"Editor", @"NSDocumentClass": @"LegacyDocument"},
             @{@"CFBundleTypeName": @"Classless", @"CFBundleTypeRole": @"Viewer"},
+            @{@"CFBundleTypeName": @"MissingClass", @"CFBundleTypeRole": @"Editor", @"NSDocumentClass": @"ClassThatDoesNotExist"},
         ]];
         NSURL *url = [NSURL fileURLWithPath:@"/nonexistent/document.fixture"];
         NSError *error = nil;
@@ -104,6 +105,29 @@ int main(void) {
         error = nil;
         document = [controller makeDocumentWithContentsOfURL:url ofType:@"Unknown" error:&error];
         expect(document == nil, @"an undeclared type makes no document");
+
+        // QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 669.make "NoClass"): a type whose NSDocumentClass names a class that does not
+        // exist gives nil and NSCocoaErrorDomain code 256 (NSFileReadUnknownError), from both make methods.
+        error = nil;
+        document = [controller makeDocumentWithContentsOfURL:url ofType:@"MissingClass" error:&error];
+        expect(document == nil, @"a missing document class makes no document");
+        expect([[error domain] isEqual:NSCocoaErrorDomain] && [error code] == NSFileReadUnknownError,
+               @"a missing document class sets the generic read error");
+        error = nil;
+        document = [controller makeDocumentForURL:nil withContentsOfURL:url ofType:@"MissingClass" error:&error];
+        expect(document == nil, @"a missing document class makes no document for a URL either");
+        expect([[error domain] isEqual:NSCocoaErrorDomain] && [error code] == NSFileReadUnknownError,
+               @"makeDocumentForURL sets the generic read error too");
+        expect([controller makeDocumentWithContentsOfURL:url ofType:@"MissingClass" error:NULL] == nil, @"NULL error pointer, missing class");
+
+        // The same for a type with no NSDocumentClass entry and for an undeclared type (the documentation's rule:
+        // an error comes with every nil; only the missing-class case above was observed)
+        error = nil;
+        document = [controller makeDocumentWithContentsOfURL:url ofType:@"Classless" error:&error];
+        expect(document == nil && [error code] == NSFileReadUnknownError, @"no NSDocumentClass entry sets the generic read error");
+        error = nil;
+        document = [controller makeDocumentForURL:nil withContentsOfURL:url ofType:@"Unknown" error:&error];
+        expect(document == nil && [error code] == NSFileReadUnknownError, @"an undeclared type sets the generic read error");
 
         // A NULL error pointer is allowed.
         expect([controller makeDocumentWithContentsOfURL:url ofType:@"Failing" error:NULL] == nil, @"NULL error pointer");

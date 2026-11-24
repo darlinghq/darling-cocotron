@@ -433,6 +433,28 @@ static NSView *copyToolbarItemView(NSView *view) {
     NS_EXTRA(NSToolbarItem, self)->_autovalidates = value;
 }
 
+// The drawing of the item itself is unchanged, so the flag is stored and, as the documentation says,
+// handed to the item's view when that has a -setBordered:. A view set later is not given the value
+// (observed on macOS 26.7.3, probe toolbar.m), and while the item has a view that answers -isBordered the
+// getter answers the view's value, not the stored one (same observation).
+- (BOOL) isBordered {
+    id view = NS_EXTRA(NSToolbarItem, self)->_view;
+
+    if ([view respondsToSelector: @selector(isBordered)])
+        return [view isBordered];
+    return NS_EXTRA(NSToolbarItem, self)->_bordered;
+}
+
+// The view is told only when the stored value changes (a bordered button in a new item stays bordered when the
+// item is set to the default NO); observed on macOS 26.7.3, probes toolbar.m and the PR's test.
+- (void) setBordered: (BOOL) flag {
+    BOOL changed = !NS_EXTRA(NSToolbarItem, self)->_bordered != !flag;
+
+    NS_EXTRA(NSToolbarItem, self)->_bordered = flag;
+    if (changed && [NS_EXTRA(NSToolbarItem, self)->_view respondsToSelector: @selector(setBordered:)])
+        [(id) NS_EXTRA(NSToolbarItem, self)->_view setBordered: flag];
+}
+
 /* The understanding is that NSToolbarItem only forwards
  * enabled/tag/action/target/image setters and getters to the publicly settable
  * view. The rest are managed internally.

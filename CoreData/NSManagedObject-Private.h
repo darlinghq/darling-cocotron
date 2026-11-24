@@ -7,6 +7,9 @@
 - (void)_didCommit;
 - (long long)_storeVersion;
 - (void)_mergeCommittedValues;
+- (void)_reloadCommittedValuesDiscardingChanges:(BOOL)discard;
+- (void)_discardInsertedValues;
+- (void)_dropChangedValuesEqualToCommitted;
 - (void)_discardPendingValues;
 - (NSDictionary *) _committedValues;
 @end

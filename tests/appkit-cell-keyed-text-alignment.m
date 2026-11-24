@@ -5,6 +5,8 @@
 // center, 3 justified, 4 natural), next to the control size in bits 17-19
 // (the layout of the keyed archives that Interface Builder writes). The
 // alignment must be restored from there and written back to the same bits.
+// The archived numbering is the same on every architecture, while the
+// NSTextAlignment constants swap right and center on arm64.
 // Prints PASS or FAIL.
 #import <AppKit/AppKit.h>
 
@@ -12,6 +14,18 @@
 
 static int failures;
 #define CHECK(c, ...) do { if (!(c)) { failures++; printf("FAIL line %d: ", __LINE__); printf(__VA_ARGS__); printf("\n"); } } while (0)
+
+// The archived value of each alignment, written out from the contract above.
+static unsigned archivedAlignment(NSTextAlignment a) {
+    switch (a) {
+    case NSTextAlignmentLeft: return 0;
+    case NSTextAlignmentRight: return 1;
+    case NSTextAlignmentCenter: return 2;
+    case NSTextAlignmentJustified: return 3;
+    case NSTextAlignmentNatural: return 4;
+    }
+    return 99;
+}
 
 static id decodeCell(NSString *cls, int flags, int flags2, NSDictionary *extra) {
     NSMutableDictionary *cell = [NSMutableDictionary dictionaryWithDictionary:@{
@@ -33,6 +47,11 @@ static id decodeCell(NSString *cls, int flags, int flags2, NSDictionary *extra) 
 int main(void) {
     @autoreleasepool {
         [NSApplication sharedApplication];
+#if defined(__arm64__) || defined(__aarch64__)
+        CHECK(NSTextAlignmentCenter == 1 && NSTextAlignmentRight == 2, "arm64 constants: center %ld, right %ld", (long)NSTextAlignmentCenter, (long)NSTextAlignmentRight);
+#else
+        CHECK(NSTextAlignmentRight == 1 && NSTextAlignmentCenter == 2, "x86_64 constants: right %ld, center %ld", (long)NSTextAlignmentRight, (long)NSTextAlignmentCenter);
+#endif
         // Words as written by Interface Builder: center with and without a control size.
         struct { int flags2; NSTextAlignment alignment; NSControlSize size; } rows[] = {
             {0x00000000, NSTextAlignmentLeft, NSControlSizeRegular},
@@ -71,7 +90,7 @@ int main(void) {
             for (id o in plist[@"$objects"]) {
                 if ([o isKindOfClass:[NSDictionary class]] && o[@"NSCellFlags2"]) {
                     unsigned f2 = [o[@"NSCellFlags2"] unsignedIntValue];
-                    CHECK(((f2 >> 26) & 7) == (unsigned)a, "archive flags2 %#x does not hold alignment %ld in bits 26-28", f2, (long)a);
+                    CHECK(((f2 >> 26) & 7) == archivedAlignment(a), "archive flags2 %#x does not hold alignment %ld in bits 26-28", f2, (long)a);
                 }
             }
         }

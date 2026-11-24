@@ -73,17 +73,17 @@ enum {
     NSScaleNone = NSImageScaleNone,
 };
 
-typedef NS_ENUM(NSInteger, NSControlStateValue) {
-    NSControlStateValueMixed = -1,
-    NSControlStateValueOff = 0,
-    NSControlStateValueOn = 1,
-};
+// An extensible typed enum like the SDK's: the old names are constants of the
+// same type, so they compare and convert without an enum-to-enum cast.
+typedef NSInteger NSControlStateValue NS_TYPED_EXTENSIBLE_ENUM;
+static const NSControlStateValue NSControlStateValueMixed = -1;
+static const NSControlStateValue NSControlStateValueOff = 0;
+static const NSControlStateValue NSControlStateValueOn = 1;
 
-typedef enum {
-    NSMixedState = -1,
-    NSOffState = 0,
-    NSOnState = 1,
-} NSCellState;
+typedef NSControlStateValue NSCellStateValue;
+static const NSControlStateValue NSMixedState = NSControlStateValueMixed;
+static const NSControlStateValue NSOffState = NSControlStateValueOff;
+static const NSControlStateValue NSOnState = NSControlStateValueOn;
 
 typedef NS_ENUM(NSUInteger, NSControlSize) {
     NSControlSizeRegular = 0,
@@ -195,7 +195,7 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
 @property NSControlStateValue state;
 
 - (nullable id) target;
-@property(nonatomic) SEL action;
+@property(nullable, nonatomic) SEL action;
 @property(nonatomic) NSInteger tag;
 @property(nonatomic) NSInteger entryType;
 @property(null_unspecified, nonatomic, retain) id formatter;

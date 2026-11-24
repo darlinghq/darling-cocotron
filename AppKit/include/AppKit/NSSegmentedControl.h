@@ -62,6 +62,7 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 - (BOOL) isEnabledForSegment: (NSInteger) segment;
 - (nullable NSString *) labelForSegment: (NSInteger) segment;
 - (nullable NSMenu *) menuForSegment: (NSInteger) segment;
+- (BOOL) showsMenuIndicatorForSegment: (NSInteger) segment API_AVAILABLE(macos(10.13));
 - (nullable NSString *) toolTipForSegment: (NSInteger) segment;
 - (CGFloat) widthForSegment: (NSInteger) segment;
 - (NSImageScaling) imageScalingForSegment: (NSInteger) segment;
@@ -75,6 +76,7 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 - (void) setEnabled: (BOOL) enabled forSegment: (NSInteger) segment;
 - (void) setLabel: (NSString *) label forSegment: (NSInteger) segment;
 - (void) setMenu: (nullable NSMenu *) menu forSegment: (NSInteger) segment;
+- (void) setShowsMenuIndicator: (BOOL) showsMenuIndicator forSegment: (NSInteger) segment API_AVAILABLE(macos(10.13));
 - (void) setToolTip: (nullable NSString *) string forSegment: (NSInteger) segment;
 - (void) setWidth: (CGFloat) width forSegment: (NSInteger) segment;
 - (void) setImageScaling: (NSImageScaling) value

@@ -28,6 +28,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSDatePickerCell
 
+// A new cell shows the date and the time of day with seconds. Observed on macOS 26.7.3 and 10.14.4 (x86_64 and
+// i386), probe p768c.m of batch 12a in mac-probes/cristim: -init and -initTextCell: give the elements year, month,
+// day, hour, minute and second (238), the single mode and the text field and stepper style; -initImageCell: gives
+// no elements.
+- (id) init {
+    if ((self = [super init]) != nil)
+        _elements = NSDatePickerElementFlagYearMonthDay | NSDatePickerElementFlagHourMinuteSecond;
+    return self;
+}
+
+- (id) initTextCell: (NSString *) string {
+    if ((self = [super initTextCell: string]) != nil)
+        _elements = NSDatePickerElementFlagYearMonthDay | NSDatePickerElementFlagHourMinuteSecond;
+    return self;
+}
+
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];
 

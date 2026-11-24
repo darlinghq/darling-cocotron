@@ -220,8 +220,29 @@ static Class _fontPanelFactory;
 }
 
 - (NSArray *) availableFontNamesWithTraits: (NSFontTraitMask) traits {
-    NSUnimplementedMethod();
-    return nil;
+    NSMutableArray *result = [NSMutableArray array];
+
+    // QUIRK: the answer is every face whose traits (as -availableMembersOfFontFamily: lists them)
+    // contain all the bits of the mask, so NSItalicFontMask also lists bold italic faces, and a
+    // mask of 0 (or one with NSUnitalicFontMask / NSUnboldFontMask, which no face reports) lists
+    // nothing. The documentation says "exactly" the traits and says 0 means neither italic nor
+    // bold; macOS does not do that. Evidence: black-box observation on macOS 10.14.4 (x86_64,
+    // i386) and 26.7.3 (tier 2): masks 0, unitalic, unbold, unitalic|unbold, bold|unitalic give
+    // an empty array; italic, bold, italic|bold, expanded, condensed and fixed pitch equal the
+    // faces of the member table with those bits set. The order is unspecified (not sorted).
+    // Test: appkit-nsfontmanager-font-names-with-traits (quirk_ lines).
+    if (traits == 0)
+        return result;
+
+    for (NSString *familyName in [NSFontFamily allFontFamilyNames]) {
+        NSFontFamily *family = [NSFontFamily fontFamilyWithName: familyName];
+
+        for (NSFontTypeface *typeface in [family typefaces])
+            if (([typeface traits] & traits) == traits)
+                [result addObject: [typeface name]];
+    }
+
+    return result;
 }
 
 - (BOOL) fontNamed: (NSString *) name hasTraits: (NSFontTraitMask) traits {

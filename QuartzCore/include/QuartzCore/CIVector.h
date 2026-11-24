@@ -1,33 +1,3 @@
-#import <CoreGraphics/CoreGraphics.h>
-#import <Foundation/NSObject.h>
-
-@interface CIVector : NSObject {
-    size_t _count;
-    CGFloat *_values;
-}
-
-+ (CIVector *) vectorWithValues: (const CGFloat *) values count: (size_t) count;
-
-+ (CIVector *) vectorWithX: (CGFloat) x;
-+ (CIVector *) vectorWithX: (CGFloat) x Y: (CGFloat) y;
-+ (CIVector *) vectorWithX: (CGFloat) x Y: (CGFloat) y Z: (CGFloat) z;
-+ (CIVector *) vectorWithX: (CGFloat) x
-                         Y: (CGFloat) y
-                         Z: (CGFloat) z
-                         W: (CGFloat) w;
-
-- initWithValues: (const CGFloat *) values count: (size_t) count;
-- initWithX: (CGFloat) x;
-- initWithX: (CGFloat) x Y: (CGFloat) y;
-- initWithX: (CGFloat) x Y: (CGFloat) y Z: (CGFloat) z;
-- initWithX: (CGFloat) x Y: (CGFloat) y Z: (CGFloat) z W: (CGFloat) w;
-
-- (size_t) count;
-- (CGFloat) valueAtIndex: (size_t) index;
-
-- (CGFloat) X;
-- (CGFloat) Y;
-- (CGFloat) Z;
-- (CGFloat) W;
-
-@end
+/* QuartzCore re-exports CoreImage, which implements this class (the sources here are not
+   built). One declaration, as in Apple's SDK, so code that sees both frameworks agrees. */
+#import <CoreImage/CIVector.h>

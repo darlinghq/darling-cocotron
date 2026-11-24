@@ -6,7 +6,7 @@
 # manager) and checks it holds the application icon: for the "bundle" mode the green icon of the bundle,
 # for "runtime" the red image given to -setApplicationIconImage:, and for "change" red first and blue after
 # the image was replaced. Usage:
-#   appkit-window-icon-x11.sh bundle|runtime|change <command that runs the guest binary, such as "darling shell /path/appkit-window-icon">
+#   appkit-window-icon-x11.sh bundle|runtime|change|nested|nested-regular|nested-runtime|plain <command that runs the guest binary, such as "darling shell /path/appkit-window-icon">
 # The program gets the mode and a duration of 14 seconds appended.
 # The command's environment must have DARLING_APPKIT_BACKEND=x11 and DISPLAY. Needs xdotool, xprop and python3.
 set -u
@@ -60,6 +60,11 @@ sleep 1
 case "$mode" in
 bundle) check "bundle icon" FF00FF00 ;;
 runtime) check "runtime icon" FFFF0000 ;;
+nested|nested-noext) check "icon of the enclosing application" FF00FF00 ;;
+nested-runtime) check "the helper's own image wins" FFFF0000 ;;
+plain|nested-regular)
+    got=$(icon)
+    [ "$got" = none ] && echo "PASS: no _NET_WM_ICON for $mode" || { echo "FAIL: $mode has an icon: $got"; status=1; } ;;
 change)
     check "first icon" FFFF0000
     wait_for CHANGED || { echo "FAIL: the image was never changed"; status=1; }

@@ -74,6 +74,7 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
     NSInteger _visibilityPriority;
     BOOL _autovalidates;
     BOOL _isEnabled;
+    BOOL _bordered;
     NS_EXTRA_IVARS_END(NSToolbarItem)
 }
 
@@ -90,6 +91,9 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 @property(nonatomic) NSSize maxSize;
 @property(nonatomic) NSInteger visibilityPriority;
 @property(nonatomic) BOOL autovalidates;
+// Whether the item has a bordered style; the default is NO. A custom view that has a bordered property gets
+// the value too.
+@property(nonatomic, getter=isBordered) BOOL bordered API_AVAILABLE(macos(10.15));
 - (BOOL) allowsDuplicatesInToolbar;
 
 

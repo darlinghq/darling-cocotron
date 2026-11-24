@@ -203,12 +203,60 @@ check(result(out) == (1, ["/Volumes/SystemRoot/tmp/a.txt"]), "a Response that ar
 s.close()
 
 # Panels the portal cannot show use the built-in panel.
-for mode, why in (("accessory", "an accessory view"), ("delegate", "a filtering delegate")):
+for mode, why in (("accessory", "an accessory view without controls"),
+                  ("accessory-text", "an accessory view with a text field"),
+                  ("delegate", "a filtering delegate")):
     s = Scenario(mode, URIS)
     out = s.run(mode)
     check("CALL" not in s.calls(), "%s: the portal is not called" % why)
     check(result(out) == (0, []) and "DONE" in out, "%s: the built-in panel ran and was cancelled" % why)
     s.close()
+
+# An accessory view of pop-up buttons and check boxes goes to the portal as "choices", and the answers are put back
+# into the controls (the action of a control that changed is sent: here the pop-up's changes the allowed file type).
+s = Scenario("choices", ["--choice=c0=2", "--choice=c1=true", "0", "file:///tmp/a.txt"])
+out = s.run("choices", "domain")
+log = s.calls()
+check("CALL OpenFile" in log, "an accessory view of a pop-up and a check box: the portal is called")
+check("s'choices':<[(s'c0',s'Plain Text Encoding',[(s'0',s'Automatic'),(s'1',s'Unicode (UTF-8)'),"
+      "(s'2',s'Western (ISO Latin 1)')],s'0'),(s'c1',s'Ignore rich text commands',[],s'false')]>" in log,
+      "the pop-up (with its label, colon removed) and the check box are the choices: %r" %
+      ([l for l in log.splitlines() if "choices" in l],))
+check(result(out) == (1, ["/Volumes/SystemRoot/tmp/a.txt"]), "the file is returned: %r" % (result(out),))
+check("CONTROLS popup=2 check=1 popupActions=1 checkActions=1" in out,
+      "the portal's answers are in the controls, once each action: %r" % ([l for l in out.splitlines() if "CONTROLS" in l],))
+s.close()
+
+# No answers for the choices (a portal that ignores them): the controls keep their values.
+s = Scenario("choices-ignored", ["0", "file:///tmp/a.txt"])
+out = s.run("choices", "domain")
+check("CONTROLS popup=0 check=0 popupActions=0 checkActions=0" in out,
+      "without answers the controls are unchanged: %r" % ([l for l in out.splitlines() if "CONTROLS" in l],))
+s.close()
+
+# A cancelled dialog leaves the controls as they were, whatever the portal says.
+s = Scenario("choices-cancel", ["--choice=c0=1", "1"])
+out = s.run("choices", "domain")
+check(result(out) == (0, []) and "CONTROLS popup=0 check=0 popupActions=0 checkActions=0" in out,
+      "a cancelled dialog does not change the controls: %r" % ([l for l in out.splitlines() if "CONTROLS" in l],))
+s.close()
+
+# Answers that are not an option of the choice are ignored.
+s = Scenario("choices-bad", ["--choice=c0=7", "--choice=c1=maybe", "--choice=zzz=1", "0", "file:///tmp/a.txt"])
+out = s.run("choices", "domain")
+check("CONTROLS popup=0 check=0 popupActions=0 checkActions=0" in out,
+      "answers that are not an option of their choice are ignored: %r" % ([l for l in out.splitlines() if "CONTROLS" in l],))
+s.close()
+
+# A save panel: the pop-up's action runs before the name gets its extension.
+s = Scenario("choices-save", ["--choice=c0=1", "0", "file:///tmp/out"])
+out = s.run("choices-save", "domain")
+log = s.calls()
+check("CALL SaveFile" in log and "s'File Format',[(s'0',s'Plain text'),(s'1',s'Rich text')],s'0')" in log,
+      "a save panel's pop-up is a choice of SaveFile")
+check(result(out) == (1, ["/Volumes/SystemRoot/tmp/out.rtf"]),
+      "the choice made in the dialog decides the extension: %r" % (result(out),))
+s.close()
 
 s = Scenario("off", URIS)
 out = s.run("plain", "off")

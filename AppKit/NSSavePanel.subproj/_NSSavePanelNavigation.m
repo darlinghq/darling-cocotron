@@ -3,6 +3,7 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSEvent.h>
+#import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPanel.h>
 #import <AppKit/NSPopUpButton.h>
@@ -86,6 +87,17 @@ static const CGFloat sidebarWidth = 150, margin = 16, gap = 12;
 }
 
 - (void) detachFromViews {
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
+    _accessory = nil;
+    _accessoryHost = nil;
+    [_hostWidth release];
+    [_hostHeight release];
+    _hostWidth = nil;
+    _hostHeight = nil;
+    _optionsButton = nil;
+    _content = nil;
+    _listScroll = nil;
+    _sidebarScroll = nil;
     [_list setDataSource: nil];
     [_list setDelegate: nil];
     [_list setTarget: nil];
@@ -96,6 +108,7 @@ static const CGFloat sidebarWidth = 150, margin = 16, gap = 12;
 }
 
 - (void) dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver: self];
     // The list and sidebar belong to the panel's windows and are gone by now: detachFromViews already ran, while the
     // panel was being deallocated and its views were alive.
     _source.enabledBlock = nil;
@@ -291,8 +304,262 @@ static NSTextField *makeLabel(NSString *text, NSRect frame) {
     [sidebarScroll setDocumentView: _sidebar];
     [content addSubview: sidebarScroll];
     [_sidebar reloadData];
+    _content = content;
+    _listScroll = listScroll;
+    _sidebarScroll = sidebarScroll;
+    _baseSize = NSMakeSize(contentWidth, contentHeight);
+    _listTopInset = contentHeight - NSMaxY([listScroll frame]);
+    // The window system may answer a resize later than the call (Wayland): the layout is applied again
+    // whenever the panel's size changes.
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector(_panelDidResize:)
+                                                 name: NSWindowDidResizeNotification
+                                               object: _panel];
 
     [self directoryDidChange];
+}
+
+#pragma mark - The accessory view
+
+// The accessory view sits between the file list and the row of buttons, centred in the panel, and the panel is made
+// as much taller as the view is high (and as wide as the view if it is wider than the panel), so that the file list
+// keeps its size. The panel follows later changes of the view's frame and replacing or removing the view. The view is
+// in the panel's view hierarchy from the moment it is set, shown or not, inside a plain host view (as on macOS, where
+// the view's superview is an intermediate view too). An open panel shows it only while accessoryViewDisclosed is YES,
+// which its "Options" button changes; a save panel always shows it.
+//
+// A view laid out by Auto Layout (translatesAutoresizingMaskIntoConstraints is NO) has the size its constraints ask
+// for (-fittingSize); the host pins the view to its corner at that size. A view with a frame has its frame's size.
+
+// The top of the accessory area: the buttons and the gap above them are below it.
+static CGFloat accessoryAreaBottom(void) {
+    return margin + 28 + gap;
+}
+
+- (BOOL) _isOpenPanel {
+    return [_panel isKindOfClass: NSClassFromString(@"NSOpenPanel")];
+}
+
+- (BOOL) _accessoryIsShown {
+    return _accessory != nil && (![self _isOpenPanel] || _accessoryDisclosed);
+}
+
+- (BOOL) _accessoryUsesConstraints {
+    return ![_accessory translatesAutoresizingMaskIntoConstraints];
+}
+
+// The size the accessory view asks for. The size constraints that pin a view laid out by constraints are taken out
+// while its fitting size is measured, since they would decide the answer.
+- (NSSize) _accessorySize {
+    if (![self _accessoryUsesConstraints])
+        return [_accessory frame].size;
+    BOOL pinned = [[_accessoryHost constraints] containsObject: _hostWidth];
+    if (pinned)
+        [_accessoryHost removeConstraints: @[ _hostWidth, _hostHeight ]];
+    NSSize fitting = [_accessory fittingSize];
+    if (pinned)
+        [_accessoryHost addConstraints: @[ _hostWidth, _hostHeight ]];
+    return fitting.width > 0 && fitting.height > 0 ? fitting : [_accessory frame].size;
+}
+
+// Resizes the panel's content, keeping the top and the horizontal centre of the panel where they are.
+- (void) _setPanelContentSize: (NSSize) size {
+    NSRect frame = [_panel frame];
+    NSRect contentRect = [_panel contentRectForFrameRect: frame];
+    if (NSEqualSizes(contentRect.size, size)) {
+        _hasRequest = NO;
+        return;
+    }
+    contentRect.size = size;
+    NSRect newFrame = [_panel frameRectForContentRect: contentRect];
+    newFrame.origin.y = NSMaxY(frame) - NSHeight(newFrame);
+    newFrame.origin.x = floor(NSMidX(frame) - NSWidth(newFrame) / 2);
+    // set before the call: the window may answer within it
+    _requestedSize = size;
+    _hasRequest = YES;
+    [_panel setFrame: newFrame display: [_panel isVisible]];
+}
+
+// Puts the views of the panel in their places for the panel's size at the moment. Safe to repeat.
+- (void) _placeViews {
+    BOOL shown = [self _accessoryIsShown];
+    NSSize content = [_content frame].size;
+    CGFloat listBottom = accessoryAreaBottom() + _reservedSize.height;
+    NSRect listFrame = [_listScroll frame];
+    listFrame.origin.y = listBottom;
+    listFrame.size.height = MAX(content.height - _listTopInset - listBottom, 0);
+    if (!NSEqualRects(listFrame, [_listScroll frame]))
+        [_listScroll setFrame: listFrame];
+    NSRect sidebarFrame = [_sidebarScroll frame];
+    sidebarFrame.origin.y = shown ? listBottom : 0;
+    sidebarFrame.size.height = MAX(content.height - sidebarFrame.origin.y, 0);
+    if (!NSEqualRects(sidebarFrame, [_sidebarScroll frame]))
+        [_sidebarScroll setFrame: sidebarFrame];
+    if (_accessoryHost != nil && shown) {
+        NSRect hostFrame = NSMakeRect(floor((content.width - _reservedSize.width) / 2), accessoryAreaBottom(),
+                                      _reservedSize.width, _reservedSize.height);
+        if (!NSEqualRects(hostFrame, [_accessoryHost frame]))
+            [_accessoryHost setFrame: hostFrame];
+    }
+}
+
+- (void) _panelDidResize: (NSNotification *) notification {
+    if (_content == nil)
+        return;
+    NSSize live = [_content frame].size;
+    if (_hasRequest) {
+        // an answer to what was asked, or an earlier size still on its way
+        if (NSEqualSizes(live, _requestedSize))
+            _hasRequest = NO;
+    } else {
+        // resized by the user (or the window system): what is left of the size once the accessory view is out is
+        // the panel's own
+        _baseSize = NSMakeSize(live.width, live.height - _reservedSize.height);
+    }
+    [self _placeViews];
+}
+
+- (void) _layoutAccessory {
+    // Laying the view out changes its frame and constraints, which are reported back here.
+    if (_content == nil || _layingOutAccessory)
+        return;
+    _layingOutAccessory = YES;
+    [self _layoutAccessoryNow];
+    _layingOutAccessory = NO;
+}
+
+- (void) _layoutAccessoryNow {
+    BOOL shown = [self _accessoryIsShown];
+    NSSize wanted = shown ? [self _accessorySize] : NSZeroSize;
+    _reservedSize = wanted;
+    // a view wider than the panel makes it as wide; the panel is as wide as before when the view is gone or narrower
+    [_panel setMinSize: NSMakeSize(MAX(480, wanted.width), 320)];
+    [self _setPanelContentSize: NSMakeSize(MAX(_baseSize.width, wanted.width), _baseSize.height + wanted.height)];
+
+    if (_accessoryHost != nil) {
+        [_accessoryHost setHidden: !shown];
+        if (shown) {
+            if (_hostWidth != nil) {
+                [_hostWidth setConstant: wanted.width];
+                [_hostHeight setConstant: wanted.height];
+                if (![[_accessoryHost constraints] containsObject: _hostWidth])
+                    [_accessoryHost addConstraints: @[ _hostWidth, _hostHeight ]];
+            }
+            [_accessoryHost setAutoresizingMask: NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin];
+            [self _placeViews];
+            [_accessory setFrameOrigin: NSZeroPoint];
+            if (![self _accessoryUsesConstraints])
+                [_accessory setFrameSize: wanted];
+            else
+                [_accessoryHost layoutSubtreeIfNeeded];
+            return;
+        }
+    }
+    [self _placeViews];
+}
+
+- (void) _accessoryFrameDidChange: (NSNotification *) notification {
+    if (_layingOutAccessory)
+        return;
+    if ([self _accessoryIsShown] && !NSEqualSizes([self _accessorySize], _reservedSize))
+        [self _layoutAccessory];
+}
+
+- (void) _toggleAccessory: (id) sender {
+    [self setAccessoryViewDisclosed: [(NSButton *) sender state] == NSOnState];
+}
+
+// The "Options" button of an open panel that has an accessory view.
+- (void) _updateOptionsButton {
+    BOOL wanted = _accessory != nil && [self _isOpenPanel];
+    if (wanted && _optionsButton == nil) {
+        _optionsButton = [[[NSButton alloc]
+                initWithFrame: NSMakeRect(margin, margin, 90, 28)] autorelease];
+        [_optionsButton setTitle: NSLocalizedStringFromTableInBundle(
+                                          @"Options", nil, [NSBundle bundleForClass: [NSSavePanel class]],
+                                          @"The button of an open panel that discloses its accessory view")];
+        [_optionsButton setBezelStyle: NSRoundedBezelStyle];
+        [_optionsButton setButtonType: NSPushOnPushOffButton];
+        [_optionsButton setTarget: self];
+        [_optionsButton setAction: @selector(_toggleAccessory:)];
+        [_optionsButton setAutoresizingMask: NSViewMaxXMargin | NSViewMaxYMargin];
+        [_content addSubview: _optionsButton];
+    }
+    if (_optionsButton != nil) {
+        [_optionsButton setHidden: !wanted];
+        [_optionsButton setState: _accessoryDisclosed ? NSOnState : NSOffState];
+    }
+}
+
+- (void) _removeAccessoryHost {
+    [[NSNotificationCenter defaultCenter] removeObserver: self
+                                                    name: NSViewFrameDidChangeNotification
+                                                  object: _accessory];
+    if ([_accessory superview] == _accessoryHost)
+        [_accessory removeFromSuperview];
+    [_accessoryHost removeFromSuperview];
+    _accessoryHost = nil;
+    [_hostWidth release];
+    [_hostHeight release];
+    _hostWidth = nil;
+    _hostHeight = nil;
+    _accessory = nil;
+}
+
+- (void) accessoryViewDidChangeFrom: (NSView *) oldView {
+    if (_content == nil)
+        return;
+    NSView *view = [_panel accessoryView];
+    if (view != _accessory) {
+        if (_accessory != nil)
+            [self _removeAccessoryHost];
+        _accessory = view;
+        if (view != nil) {
+            _accessoryHost = [[[NSView alloc] initWithFrame: NSZeroRect] autorelease];
+            [_accessoryHost setHidden: YES];
+            [_content addSubview: _accessoryHost];
+            [_accessoryHost addSubview: view];
+            if ([self _accessoryUsesConstraints]) {
+                // pin the view's corner, and its size once it is known, so that the constraint engine has nothing else to decide
+                NSArray *pins = @[
+                    [NSLayoutConstraint constraintWithItem: view attribute: NSLayoutAttributeLeading
+                                                 relatedBy: NSLayoutRelationEqual toItem: _accessoryHost
+                                                 attribute: NSLayoutAttributeLeading multiplier: 1 constant: 0],
+                    [NSLayoutConstraint constraintWithItem: view attribute: NSLayoutAttributeTop
+                                                 relatedBy: NSLayoutRelationEqual toItem: _accessoryHost
+                                                 attribute: NSLayoutAttributeTop multiplier: 1 constant: 0],
+                ];
+                // owned here: they are in the host's constraints only while the view is shown
+                _hostWidth = [[NSLayoutConstraint constraintWithItem: view attribute: NSLayoutAttributeWidth
+                                                           relatedBy: NSLayoutRelationEqual toItem: nil
+                                                           attribute: NSLayoutAttributeNotAnAttribute multiplier: 1 constant: 0] retain];
+                _hostHeight = [[NSLayoutConstraint constraintWithItem: view attribute: NSLayoutAttributeHeight
+                                                            relatedBy: NSLayoutRelationEqual toItem: nil
+                                                            attribute: NSLayoutAttributeNotAnAttribute multiplier: 1 constant: 0] retain];
+                [_accessoryHost addConstraints: pins];
+                // the size constraints are added once the size is known, see -_layoutAccessory
+            }
+            [view setPostsFrameChangedNotifications: YES];
+            [[NSNotificationCenter defaultCenter] addObserver: self
+                                                     selector: @selector(_accessoryFrameDidChange:)
+                                                         name: NSViewFrameDidChangeNotification
+                                                       object: view];
+        }
+    }
+    [self _updateOptionsButton];
+    [self _layoutAccessory];
+}
+
+- (BOOL) accessoryViewDisclosed {
+    return _accessoryDisclosed;
+}
+
+- (void) setAccessoryViewDisclosed: (BOOL) disclosed {
+    if (_accessoryDisclosed == disclosed)
+        return;
+    _accessoryDisclosed = disclosed;
+    [self _updateOptionsButton];
+    [self _layoutAccessory];
 }
 
 #pragma mark - Which entries can be selected

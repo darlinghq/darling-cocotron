@@ -19,6 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "NSDocumentTypeName.h"
+#import <AppKit/NSAlert.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSDocumentController.h>
@@ -431,11 +432,32 @@ static NSError *DocumentOpenFailureError(NSURL *url) {
                            userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
 }
 
+// A type with no document class gives nil with the generic error, unlike a class that returns nil without one
+// (see -makeDocumentWithContentsOfURL:ofType:error:). The documentation says an error is returned whenever the
+// document cannot be made, and a missing class is the same case for documentClassForType: whether the type has no
+// NSDocumentClass entry or names a class that does not exist; only the latter was observed.
+// QUIRK: observed on macOS 26.7.3 and Mac OS X 10.14.4 (docclass.m, identical, tier 2) and on 26.1 (arm64), probe 669.make: "NoClass makeDocumentWithContentsOfURL:ofType:error:
+// -> doc=nil ; error=NSCocoaErrorDomain/256 ... ; calls=[(none)]" and the same for
+// makeDocumentForURL:withContentsOfURL:ofType:error:, for a type whose NSDocumentClass names a class that does
+// not exist (documentClassForType: is nil there). The documentation does not give the domain or code. Only the
+// domain and the code were observed, not the userInfo.
+// Test: tests/appkit-document-controller-make-document-errors.m
+static BOOL ReportMissingDocumentClass(Class class, NSURL *url, NSError **error) {
+    if (class != Nil)
+        return NO;
+    if (error != NULL)
+        *error = DocumentOpenFailureError(url);
+    return YES;
+}
+
 - makeDocumentWithContentsOfURL: (NSURL *) url
                          ofType: (NSString *) type
                           error: (NSError **) error
 {
     Class class = [self documentClassForType: type];
+
+    if (ReportMissingDocumentClass(class, url, error))
+        return nil;
     NSError *initError = nil;
     id result = [[[class alloc] initWithContentsOfURL: url
                                                ofType: type
@@ -457,6 +479,8 @@ static NSError *DocumentOpenFailureError(NSURL *url) {
     id result = nil;
     Class class = [self documentClassForType: type];
 
+    if (ReportMissingDocumentClass(class, contentsURL, error))
+        return nil;
     result = [[[class alloc] initForURL: url
                       withContentsOfURL: contentsURL
                                  ofType: type
@@ -771,6 +795,75 @@ static NSError *UntitledDocumentError(void) {
     return [[self _runOpenPanel] URLs];
 }
 
+// The types an open panel offers: the content type identifiers and extensions of every document
+// type, or nil (all files) when a type accepts any extension.
+- (NSArray *) _allOpenableTypes {
+    NSMutableArray *types = [NSMutableArray array];
+
+    for (NSDictionary *fileType in _fileTypes) {
+        for (NSString *key in [NSArray arrayWithObjects: @"LSItemContentTypes", @"CFBundleTypeExtensions", nil]) {
+            id list = [fileType objectForKey: key];
+            if (![list isKindOfClass: [NSArray class]])
+                continue;
+            for (NSString *type in list) {
+                if ([type isEqual: @"*"])
+                    return nil;
+                if (![types containsObject: type])
+                    [types addObject: type];
+            }
+        }
+    }
+
+    // An application that declares no types offers every file.
+    return [types count] > 0 ? types : nil;
+}
+
+- (void) beginOpenPanel: (NSOpenPanel *) openPanel
+               forTypes: (NSArray *) types
+      completionHandler: (void (^)(NSInteger result)) completionHandler
+{
+    NSString *directory = [self currentDirectory];
+    if (directory != nil)
+        [openPanel setDirectoryURL: [NSURL fileURLWithPath: directory isDirectory: YES]];
+    if (types != nil)
+        [openPanel setAllowedFileTypes: types];
+
+    [openPanel beginWithCompletionHandler: ^(NSModalResponse result) {
+      if (result == NSModalResponseOK)
+          [[NSUserDefaults standardUserDefaults] setObject: [[openPanel directoryURL] path]
+                                                    forKey: @"NSNavLastRootDirectory"];
+      if (completionHandler != nil)
+          completionHandler(result);
+    }];
+}
+
+- (void) beginOpenPanelWithCompletionHandler: (void (^)(NSArray<NSURL *> *urls)) completionHandler {
+    NSOpenPanel *openPanel = [NSOpenPanel openPanel];
+    [openPanel setAllowsMultipleSelection: YES];
+    NSArray *types = [self _allOpenableTypes];
+
+    IMP begin = [NSDocumentController instanceMethodForSelector: @selector(beginOpenPanel:forTypes:completionHandler:)];
+    IMP modal = [NSDocumentController instanceMethodForSelector: @selector(runModalOpenPanel:forTypes:)];
+    BOOL beginOverridden = [self methodForSelector: @selector(beginOpenPanel:forTypes:completionHandler:)] != begin;
+    BOOL modalOverridden = [self methodForSelector: @selector(runModalOpenPanel:forTypes:)] != modal;
+
+    // Documented compatibility rule: a subclass that overrides only the application-modal
+    // method has that method used.
+    if (modalOverridden && !beginOverridden) {
+        NSInteger result = [self runModalOpenPanel: openPanel forTypes: types];
+        if (completionHandler != nil)
+            completionHandler(result == NSModalResponseOK ? [openPanel URLs] : nil);
+        return;
+    }
+
+    [self beginOpenPanel: openPanel
+                forTypes: types
+       completionHandler: ^(NSInteger result) {
+         if (completionHandler != nil)
+             completionHandler(result == NSModalResponseOK ? [openPanel URLs] : nil);
+       }];
+}
+
 - (NSMutableArray *) _recentDocumentPaths {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSMutableArray *paths = [NSMutableArray
@@ -977,16 +1070,28 @@ static NSError *UntitledDocumentError(void) {
 }
 
 - (void) openDocument: sender {
-    NSArray *files = [self fileNamesFromRunningOpenPanel];
-    int i, count = [files count];
+    IMP legacy = [self methodForSelector: @selector(fileNamesFromRunningOpenPanel)];
+    if (legacy != [NSDocumentController instanceMethodForSelector: @selector(fileNamesFromRunningOpenPanel)]) {
+        // Documented compatibility rule: an override of the Mac OS 10.3 method is used instead.
+        NSArray *files = [self fileNamesFromRunningOpenPanel];
+        for (NSString *file in files) {
+            NSError *error = nil;
+            NSURL *url = [NSURL fileURLWithPath: file];
 
-    for (i = 0; i < count; i++) {
-        NSError *error = nil;
-        NSURL *url = [NSURL fileURLWithPath: [files objectAtIndex: i]];
-
-        if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
-            [self _presentOpenError: error forURL: url];
+            if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+                [self _presentOpenError: error forURL: url];
+        }
+        return;
     }
+
+    [self beginOpenPanelWithCompletionHandler: ^(NSArray<NSURL *> *urls) {
+      for (NSURL *url in urls) {
+          NSError *error = nil;
+
+          if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+              [self _presentOpenError: error forURL: url];
+      }
+    }];
 }
 
 - (void) saveAllDocuments: sender {
@@ -1080,10 +1185,34 @@ static BOOL actionIsDocumentController(SEL selector) {
                                      userInfo: nil];
         return nil;
     }
+    if (displayNameOrNil != nil)
+        [document setDisplayName: [self _copyNameForDisplayName: displayNameOrNil]];
+    // A duplicate is an unsaved document that already has changes to save.
+    [document setDraft: YES];
+    [document updateChangeCount: NSChangeDone];
     [self addDocument: document];
     [document makeWindowControllers];
     [document showWindows];
     return document;
+}
+
+// "name copy", or "name copy 2", "name copy 3" ... when the name is taken by an open document.
+- (NSString *) _copyNameForDisplayName: (NSString *) name {
+    NSBundle *bundle = [NSBundle bundleForClass: [NSDocumentController class]];
+    NSString *candidate = [NSString stringWithFormat: NSLocalizedStringFromTableInBundle(@"%@ copy", nil, bundle, @"Name of a duplicated document"), name];
+
+    for (NSInteger number = 2;; number++) {
+        BOOL taken = NO;
+        for (NSDocument *document in _documents) {
+            if ([[document displayName] isEqualToString: candidate]) {
+                taken = YES;
+                break;
+            }
+        }
+        if (!taken)
+            return candidate;
+        candidate = [NSString stringWithFormat: NSLocalizedStringFromTableInBundle(@"%@ copy %ld", nil, bundle, @"Name of another duplicated document"), name, (long) number];
+    }
 }
 
 @end

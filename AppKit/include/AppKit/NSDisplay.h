@@ -28,18 +28,34 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSOpenPanel, NSFontTypeface, CGWindow;
 
 @interface NSDisplay : NSObject {
-    NSMutableArray *_eventQueue;
-    NSRecursiveLock *_eventQueueLock;
     BOOL _cursorHiddenUntilMouseMoves;
     NSInteger _cursorHideCount;
     BOOL _cursorIsHidden; // what the backend was last told
+    NSLock *_mouseDeltaLock;
     double _mouseDeltaX, _mouseDeltaY;
-    CFRunLoopSourceRef _eventSource;
+    // The top of the main screen, for the global coordinates of the input's CGEvents; NAN until
+    // known, and again when the screens change
+    CGFloat _mainScreenMaxY;
+    // The screens, made from CoreGraphics' displays and dropped when they change. Guarded by
+    // @synchronized(self).
+    NSArray *_screens;
 }
 
 + (NSDisplay *) currentDisplay;
 
+// The screens are CoreGraphics' active displays (CGGetActiveDisplayList()), the main display first, as
+// NSScreen objects that stay the same until the displays change.
 - (NSArray *) screens;
+// Drops the screens and the main screen's height after the displays changed, so that the next
+// -screens reads them again. CoreGraphics reports a change to its reconfiguration callbacks, which
+// call this.
+- (void) _invalidateScreens;
+// A backend that learns of a change of the displays from its own connection calls this: it has
+// CoreGraphics read what its connection to the window system has been sent about the displays (which
+// reports the change to the reconfiguration callbacks), then drops the screens.
+- (void) _refreshDisplays;
+// Queues NSApplicationDidChangeScreenParametersNotification (merged per run loop pass).
+- (void) _postScreenParametersChanged;
 
 - (NSPasteboard *) pasteboardWithName: (NSPasteboardName) name;
 
@@ -72,6 +88,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (id) cursorWithName: (NSString *) name;
 - (void) setCursor: (id) cursor;
 
+// Called on the main thread before each wait for events of -[NSApplication
+// nextEventMatchingMask:...]: a backend handles here what its connection has already read, and
+// sends what it has buffered. Does nothing by default.
+- (void) willWaitForEvents;
+
+// The events are those of HIToolbox's main event queue (NSEventQueue.m). These wait for the next one,
+// as -[NSApplication nextEventMatchingMask:...] does but with an NSAppKitSystem event when there is
+// none, and remove events, as -[NSApplication discardEventsMatchingMask:beforeEvent:] does.
 - (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
                           untilDate: (NSDate *) untilDate
                              inMode: (NSRunLoopMode) mode
@@ -80,7 +104,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) discardEventsMatchingMask: (NSUInteger) mask
                        beforeEvent: (NSEvent *) event;
 
+// What the backends post: the input of the window system, which goes through the CoreGraphics
+// event taps and stream (where mouse motion is coalesced) into the queue. Any thread. With atStart,
+// the event is not input but a notice the application must see before anything else: it is put in
+// front of the queue as it is.
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart;
+// What the application posts (-[NSApplication postEvent:atStart:])
 - (void) _postEventWithoutCoalescing: (NSEvent *) event atStart: (BOOL) atStart;
 
 - (BOOL) containsAndRemovePeriodicEvents;
@@ -146,10 +175,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         forNativeWindowBorderWithStyle: (NSUInteger) styleMask;
 - (CGRect) outsetRect: (CGRect) frame
         forNativeWindowBorderWithStyle: (NSUInteger) styleMask;
-
-- (NSArray *) modesForScreen: (int) screenIndex;
-- (NSDictionary *) currentModeForScreen: (int) screenIndex;
-- (BOOL) setMode: (NSDictionary *) mode forScreen: (int) screenIndex;
 
 // Returns an opaque number of the current keyboard layout.
 // This is because apps tend to call TISCopyCurrentKeyboardLayoutInputSource()
