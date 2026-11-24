@@ -1157,37 +1157,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
                 relativeEventPoint(_display, window, &_relativeMouse, &pos);
         }
 
-        // A wheel notch arrives as a press/release pair and belongs to exactly
-        // one of them, or the notch scrolls twice. The press carries it: a
-        // release the client never sees (a grab, an unmap, focus lost while
-        // the button is held) then cannot swallow the scroll, and the press
-        // has already been accepted by the server when we get it. A notch is
-        // not a click, so it must not touch the click count either.
+        // The wheel buttons (4 to 7, and the XInput2 smooth scrolling) are decoded by CoreGraphics into scroll
+        // CGEvents; the NSEvents are made from those.
         if (ev->xbutton.button >= Button4 &&
-            ev->xbutton.button <= HorizontalScrollRightButton) {
-            // Buttons 4 and 5 are the vertical wheel, 6 and 7 the horizontal
-            // one. -[NSView scrollWheel:] adds the delta to the document view's
-            // bounds origin, so a positive delta scrolls towards the larger
-            // coordinate on both axes: the up and right buttons are positive.
-            CGFloat deltaX = 0.0, deltaY = 0.0;
-            switch (ev->xbutton.button) {
-            case Button4: deltaY = 1.0; break;
-            case Button5: deltaY = -1.0; break;
-            case HorizontalScrollLeftButton: deltaX = -1.0; break;
-            case HorizontalScrollRightButton: deltaX = 1.0; break;
-            }
-            event = [NSEvent
-                    mouseEventWithType: NSScrollWheel
-                              location: pos
-                         modifierFlags: [self modifierFlagsForState: ev->xbutton
-                                                                             .state]
-                               window: delegate
-                           clickCount: 0
-                               deltaX: deltaX
-                               deltaY: deltaY];
-            [self postEvent: event atStart: NO];
+            ev->xbutton.button <= HorizontalScrollRightButton)
             break;
-        }
 
         // CoreGraphics decodes the buttons into CGEvents (click state, button number, flags, window) and
         // the NSEvents are made from those; the relative mouse and the overlay windows are decoded here.
@@ -1228,7 +1202,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case ButtonRelease:;
-        // The wheel's other half of the pair; the press already scrolled.
+        // The wheel's other half of the pair.
         if (ev->xbutton.button >= Button4 &&
             ev->xbutton.button <= HorizontalScrollRightButton)
             break;
@@ -1710,7 +1684,10 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 // (its events report the frozen cursor and the deltas of the physical motion), and for the windows of a display
 // overlay, which belong to no NSWindow and report screen coordinates.
 - (BOOL) observerHandlesPointerEvent: (XEvent *) ev {
-    if (_relativeMouse.active)
+    // The wheel does not depend on where the pointer is, so the relative mouse does not take it from CoreGraphics.
+    BOOL wheel = (ev->type == ButtonPress || ev->type == ButtonRelease) &&
+                 ev->xbutton.button >= Button4 && ev->xbutton.button <= HorizontalScrollRightButton;
+    if (_relativeMouse.active && !wheel)
         return YES;
     return [self windowForID: ev->xany.window] == nil &&
            [_overlayWindows containsObject: @((unsigned long) ev->xany.window)];
@@ -1760,6 +1737,14 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     if (![window isKindOfClass: [X11Window class]])
         return NO;
     *windowNumber = [[window delegate] windowNumber];
+    // While the relative mouse holds the pointer, the events are where its cursor is.
+    NSPoint relativePoint;
+    if (_relativeMouse.active && CGEventGetType(event) == kCGEventScrollWheel &&
+        relativeEventPoint(_display, window, &_relativeMouse, &relativePoint)) {
+        *location = relativePoint;
+        *hasLocation = YES;
+        return YES;
+    }
     CGPoint global = CGEventGetLocation(event);
     if (llround(global.x * 1024) == CGEventGetIntegerValueField(event, kCGSEventPostedLocationX) &&
         llround(global.y * 1024) == CGEventGetIntegerValueField(event, kCGSEventPostedLocationY)) {

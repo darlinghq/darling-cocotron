@@ -16,6 +16,7 @@ add_backend(X11
 		OpenGL
 		# native libraries
 		X11
+		Xi
 		XRandR
 		Xcursor
 		fontconfig

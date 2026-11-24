@@ -605,6 +605,14 @@ static double windowOpacity(Display* display, Window window)
 	return result;
 }
 
++(CGSX11Pointer*) _processPointer
+{
+	pthread_mutex_lock(&g_processConnectionLock);
+	CGSX11Pointer* pointer = g_processConnection != nil ? g_processConnection->_pointer : nil;
+	pthread_mutex_unlock(&g_processConnectionLock);
+	return pointer;
+}
+
 -(CGSWindowID) _windowIDForNativeWindow:(Window)native
 {
 	@synchronized (_windows)
@@ -732,6 +740,11 @@ static double windowOpacity(Display* display, Window window)
 				[_keyboard resyncWithState: event->xcrossing.state window: event->xcrossing.window
 					root: CGPointMake(event->xcrossing.x_root, event->xcrossing.y_root)];
 			[_pointer crossingEvent: event];
+			break;
+		case GenericEvent:
+			// XInput2: the raw scroll valuators and the changes of the devices.
+			if ([_pointer inputExtensionEvent: event])
+				return YES;
 			break;
 		case FocusIn:
 			// Focus changes caused by a grab, or by the pointer entering the window or one of its

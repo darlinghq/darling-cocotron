@@ -25,11 +25,18 @@
 #import <CoreGraphics/CGSNativeConnection.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #include <X11/Xutil.h>
 
 // The wheel buttons: vertical 4 and 5, horizontal 6 and 7.
 static BOOL isWheelButton(unsigned int button) {
     return button >= Button4 && button <= 7;
+}
+
+// Whether a distance in notches is a whole number of them (a wheel click) and not a part of one (a smooth scroll).
+static BOOL isWholeNotches(double notches) {
+    return fabs(notches - round(notches)) < 1e-6;
 }
 
 // Cocoa numbers the mouse buttons from 0 (left), 1 (right) and 2 for the middle one, where X numbers them
@@ -52,10 +59,12 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     _connection = connection;
     // The pointer is hardware: the events it posts change the state the hardware state functions report.
     _source = (void *) CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+    [self setUpInputExtension];
     return self;
 }
 
 - (void) dealloc {
+    free(_scrollAxes);
     if (_source != NULL)
         CFRelease((CFTypeRef) _source);
     [super dealloc];
@@ -108,6 +117,11 @@ static int64_t buttonNumberForX(unsigned int xButton) {
         return;
     _lastRoot = CGPointMake(event->xcrossing.x_root, event->xcrossing.y_root);
     _located = YES;
+    // The pointer leaves for a child of the window it was in when the window reports the inferior.
+    if (event->xcrossing.detail != NotifyInferior)
+        [self setPointerInProcessWindow: event->type == EnterNotify];
+    else if (event->type == EnterNotify)
+        [self setPointerInProcessWindow: YES];
 }
 
 - (void) pointerEvent: (XEvent *) ev {
@@ -122,8 +136,12 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     case ButtonPress:
     case ButtonRelease:
         xButton = ev->xbutton.button;
-        if (isWheelButton(xButton))
+        if (isWheelButton(xButton)) {
+            // A notch of the wheel is a press and a release, and the press scrolls.
+            if (ev->type == ButtonPress)
+                [self wheelButtonPress: &ev->xbutton];
             return;
+        }
         window = ev->xbutton.window;
         winX = ev->xbutton.x;
         winY = ev->xbutton.y;
@@ -151,6 +169,7 @@ static int64_t buttonNumberForX(unsigned int xButton) {
         return;
     }
 
+    [self setPointerInProcessWindow: YES];
     CGPoint root = CGPointMake(rootX, rootY);
     CGPoint global = [_connection _cgPointFromRoot: root];
     int64_t deltaX = 0, deltaY = 0;
@@ -225,6 +244,292 @@ static int64_t buttonNumberForX(unsigned int xButton) {
 
     _CGSEventStreamPost(event);
     CFRelease(event);
+}
+
+
+#pragma mark - Scroll
+
+// The wheel is a different device from the pointer's motion: it posts a scroll event at the position the
+// pointer has, with the modifier flags of the keyboard. The event says which window system window it is for and
+// where the pointer was in it, as the pointer events do.
+- (void) postScrollContinuous: (BOOL) continuous
+                     vertical: (int32_t) vertical
+                   horizontal: (int32_t) horizontal
+                       window: (Window) window
+                         winX: (int) winX
+                         winY: (int) winY
+                         root: (CGPoint) root
+                        state: (unsigned int) state {
+    id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
+    // The observer is asked as for a button press of the window: it holds the windows it does not decode input for.
+    if ([observer respondsToSelector: @selector(nativeConnectionObserverHandlesPointerEvent:)]) {
+        XEvent probe;
+        memset(&probe, 0, sizeof(probe));
+        probe.xbutton.type = ButtonPress;
+        probe.xbutton.button = Button4;
+        probe.xbutton.window = window;
+        probe.xbutton.x = winX;
+        probe.xbutton.y = winY;
+        probe.xbutton.x_root = (int) root.x;
+        probe.xbutton.y_root = (int) root.y;
+        probe.xbutton.state = state;
+        if ([observer nativeConnectionObserverHandlesPointerEvent: &probe])
+            return;
+    }
+
+    CGEventRef event = CGEventCreateScrollWheelEvent2((CGEventSourceRef) _source,
+                                                      continuous ? kCGScrollEventUnitPixel : kCGScrollEventUnitLine, 2,
+                                                      vertical, horizontal, 0);
+    if (event == NULL)
+        return;
+    CGPoint global = [_connection _cgPointFromRoot: root];
+    CGEventSetLocation(event, global);
+    CGEventSetFlags(event, (CGEventFlags) [_connection modifierFlags]);
+    CGEventSetIntegerValueField(event, kCGSEventNativeWindow, (int64_t) window);
+    CGEventSetIntegerValueField(event, kCGSEventNativeLocationX, winX);
+    CGEventSetIntegerValueField(event, kCGSEventNativeLocationY, winY);
+    CGEventSetIntegerValueField(event, kCGSEventPostedLocationX, llround(global.x * 1024));
+    CGEventSetIntegerValueField(event, kCGSEventPostedLocationY, llround(global.y * 1024));
+    _CGSEventStreamPost(event);
+    CFRelease(event);
+}
+
+// A press of a core wheel button: one notch of a wheel. Buttons 4 and 5 are up and down, 6 and 7 left and
+// right; up and right are positive (the direction the content is moved to).
+- (void) wheelButtonPress: (XButtonEvent *) press {
+    // The server emulated the button for a notch of a smooth scrolling device, whose raw motion was posted.
+    for (int i = 0; i < 16; i++) {
+        if (_scrolledTimes[i] != 0 && _scrolledTimes[i] == press->time)
+            return;
+    }
+    int32_t vertical = 0, horizontal = 0;
+    switch (press->button) {
+    case Button4: vertical = 1; break;
+    case Button5: vertical = -1; break;
+    case 6: horizontal = -1; break;
+    case 7: horizontal = 1; break;
+    }
+    [self postScrollContinuous: NO
+                      vertical: vertical
+                    horizontal: horizontal
+                        window: press->window
+                          winX: press->x
+                          winY: press->y
+                          root: CGPointMake(press->x_root, press->y_root)
+                         state: press->state];
+}
+
+// The window of the process the pointer is over, found as the server would deliver a button press: the
+// deepest window at the pointer's position for which this connection selected button presses, and where the
+// pointer is in it. NO when the pointer is not over one.
+- (BOOL) windowUnderPointer: (Window *) found x: (int *) foundX y: (int *) foundY root: (CGPoint *) rootPoint state: (unsigned int *) state {
+    Display *display = _connection->_display;
+    Window rootWindow = DefaultRootWindow(display), reportedRoot, reportedChild;
+    int rootX, rootY, x, y;
+    unsigned int mask;
+
+    if (!XQueryPointer(display, rootWindow, &reportedRoot, &reportedChild, &rootX, &rootY, &x, &y, &mask))
+        return NO;
+    *rootPoint = CGPointMake(rootX, rootY);
+    *state = mask;
+    BOOL result = NO;
+    Window current = rootWindow;
+    for (int depth = 0; depth < 32; depth++) {
+        int atX, atY;
+        Window child = None;
+        if (!XTranslateCoordinates(display, rootWindow, current, rootX, rootY, &atX, &atY, &child))
+            break;
+        XWindowAttributes attributes;
+        if (current != rootWindow && XGetWindowAttributes(display, current, &attributes) &&
+            (attributes.your_event_mask & ButtonPressMask)) {
+            *found = current;
+            *foundX = atX;
+            *foundY = atY;
+            result = YES;
+        }
+        if (child == None)
+            break;
+        current = child;
+    }
+    return result;
+}
+
+- (void) rawMotionEvent: (const XIRawEvent *) raw {
+    if (raw->evtype != XI_RawMotion || raw->valuators.mask == NULL || raw->raw_values == NULL)
+        return;
+    // The distance scrolled, in notches: up and right are positive. A vertical valuator grows when the content
+    // moves up (scrolling down), a horizontal one when it moves left.
+    double vertical = 0, horizontal = 0;
+    BOOL scrolled = NO;
+    const double *values = raw->raw_values;
+    for (int bit = 0, index = 0; bit < raw->valuators.mask_len * 8; bit++) {
+        if (!XIMaskIsSet(raw->valuators.mask, bit))
+            continue;
+        double value = values[index++];
+        for (int i = 0; i < _scrollAxisCount; i++) {
+            const CGSX11ScrollAxis *axis = &_scrollAxes[i];
+            // Some libXi versions leave the source of a raw event 0 (freedesktop.org bug 34240): the first device that
+            // has the valuator then.
+            if ((raw->sourceid != 0 && axis->sourceID != raw->sourceid) || axis->valuator != bit || axis->increment == 0)
+                continue;
+            if (axis->horizontal)
+                horizontal += value / axis->increment;
+            else
+                vertical -= value / axis->increment;
+            scrolled = YES;
+            if (raw->sourceid == 0)
+                break;
+        }
+    }
+    if (!scrolled)
+        return;
+    _scrolledTimes[_scrolledNext++ % 16] = raw->time;
+
+    BOOL continuous = !(isWholeNotches(vertical) && isWholeNotches(horizontal));
+    int32_t v, h;
+    if (continuous) {
+        // Points: what the event source says a line is worth, with the part the whole numbers do not carry kept
+        // for the next event, so that a slow scroll is not lost.
+        double perNotch = CGEventSourceGetPixelsPerLine((CGEventSourceRef) _source);
+        double y = vertical * perNotch + _scrollRemainderY;
+        double x = horizontal * perNotch + _scrollRemainderX;
+        v = (int32_t) (y < 0 ? ceil(y) : floor(y));
+        h = (int32_t) (x < 0 ? ceil(x) : floor(x));
+        _scrollRemainderY = y - v;
+        _scrollRemainderX = x - h;
+        if (v == 0 && h == 0)
+            return;
+    } else {
+        v = (int32_t) lround(vertical);
+        h = (int32_t) lround(horizontal);
+        if (v == 0 && h == 0)
+            return;
+    }
+
+    Window window = None;
+    int winX = 0, winY = 0;
+    CGPoint root = CGPointZero;
+    unsigned int state = 0;
+    if (![self windowUnderPointer: &window x: &winX y: &winY root: &root state: &state])
+        return;
+    [self postScrollContinuous: continuous vertical: v horizontal: h window: window winX: winX winY: winY root: root state: state];
+}
+
+#pragma mark - XInput2
+
+// The raw motion events carry the scroll valuators of the devices that have them; they are selected while the
+// pointer is over a window of the process (every motion over the desktop would otherwise wake the process).
+- (void) setUpInputExtension {
+    Display *display = _connection->_display;
+    int opcode, firstEvent, firstError;
+    if (display == NULL || !XQueryExtension(display, "XInputExtension", &opcode, &firstEvent, &firstError))
+        return;
+    int major = 2, minor = 1;
+    // 2.1 is the version that has smooth scrolling.
+    if (XIQueryVersion(display, &major, &minor) != Success || major < 2 || (major == 2 && minor < 1))
+        return;
+    _xiOpcode = opcode;
+    [self selectInputExtensionEvents];
+    [self queryScrollAxes];
+}
+
+- (void) selectInputExtensionEvents {
+    Display *display = _connection->_display;
+    unsigned char hierarchy[XIMaskLen(XI_LASTEVENT)], masters[XIMaskLen(XI_LASTEVENT)];
+    memset(hierarchy, 0, sizeof(hierarchy));
+    memset(masters, 0, sizeof(masters));
+    XISetMask(hierarchy, XI_HierarchyChanged);
+    XISetMask(masters, XI_DeviceChanged);
+    if (_rawSelected)
+        XISetMask(masters, XI_RawMotion);
+    XIEventMask masks[2] = {
+        {.deviceid = XIAllDevices, .mask_len = sizeof(hierarchy), .mask = hierarchy},
+        {.deviceid = XIAllMasterDevices, .mask_len = sizeof(masters), .mask = masters},
+    };
+    XISelectEvents(display, DefaultRootWindow(display), masks, 2);
+    XFlush(display);
+}
+
+// Reads the scroll axes of the physical devices from the server.
+- (void) queryScrollAxes {
+    int count = 0;
+    XIDeviceInfo *devices = XIQueryDevice(_connection->_display, XIAllDevices, &count);
+    int capacity = 0, axisCount = 0;
+    CGSX11ScrollAxis *axes = NULL;
+    for (int d = 0; d < count; d++) {
+        if (devices[d].use != XISlavePointer && devices[d].use != XIFloatingSlave)
+            continue;
+        for (int c = 0; c < devices[d].num_classes; c++) {
+            if (devices[d].classes[c]->type != XIScrollClass)
+                continue;
+            XIScrollClassInfo *info = (XIScrollClassInfo *) devices[d].classes[c];
+            if (axisCount == capacity) {
+                capacity = capacity ? capacity * 2 : 8;
+                axes = realloc(axes, capacity * sizeof(*axes));
+                if (axes == NULL) {
+                    axisCount = 0;
+                    break;
+                }
+            }
+            axes[axisCount++] = (CGSX11ScrollAxis) {
+                .sourceID = devices[d].deviceid,
+                .valuator = info->number,
+                .horizontal = info->scroll_type == XIScrollTypeHorizontal,
+                .increment = info->increment,
+            };
+        }
+    }
+    if (devices != NULL)
+        XIFreeDeviceInfo(devices);
+    free(_scrollAxes);
+    _scrollAxes = axes;
+    _scrollAxisCount = axisCount;
+    [self updateRawSelection];
+}
+
+- (void) setScrollAxes: (const CGSX11ScrollAxis *) axes count: (int) count {
+    CGSX11ScrollAxis *copy = count > 0 ? malloc(count * sizeof(*copy)) : NULL;
+    if (copy != NULL)
+        memcpy(copy, axes, count * sizeof(*copy));
+    free(_scrollAxes);
+    _scrollAxes = copy;
+    _scrollAxisCount = copy != NULL ? count : 0;
+}
+
+- (void) setPointerInProcessWindow: (BOOL) inside {
+    if (_pointerInside == inside)
+        return;
+    _pointerInside = inside;
+    [self updateRawSelection];
+}
+
+- (void) updateRawSelection {
+    if (_xiOpcode == 0)
+        return;
+    BOOL wanted = _pointerInside && _scrollAxisCount > 0;
+    if (wanted == _rawSelected)
+        return;
+    _rawSelected = wanted;
+    [self selectInputExtensionEvents];
+}
+
+- (BOOL) inputExtensionEvent: (XEvent *) event {
+    Display *display = _connection->_display;
+    if (_xiOpcode == 0 || event->type != GenericEvent || event->xcookie.extension != _xiOpcode)
+        return NO;
+    if (!XGetEventData(display, &event->xcookie))
+        return YES;
+    switch (event->xcookie.evtype) {
+    case XI_RawMotion:
+        [self rawMotionEvent: (XIRawEvent *) event->xcookie.data];
+        break;
+    case XI_HierarchyChanged:
+    case XI_DeviceChanged:
+        [self queryScrollAxes];
+        break;
+    }
+    XFreeEventData(display, &event->xcookie);
+    return YES;
 }
 
 @end
