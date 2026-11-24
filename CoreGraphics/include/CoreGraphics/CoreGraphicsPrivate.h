@@ -230,10 +230,11 @@ CGError _CGSActivateProcess(pid_t pid, uint32_t options);
 // and system daemons, are not applications of the window system.
 Boolean _CGSProcessHasConnection(pid_t pid);
 #define kCGSProcessConnectionNotificationPrefix "org.darlinghq.process-connection."
-// The Darling process that has the input focus. The display server answers where it can (X11:
-// the owner of _NET_ACTIVE_WINDOW). A Wayland compositor does not tell clients, so the answer
-// is the process that most recently reported (through _CGSSetFrontProcess) that it was
-// activated, shared by all Darling processes. Returns kCGErrorSuccess and sets *pid,
+// The Darling process that has the input focus: the process that most recently reported (through
+// _CGSSetFrontProcess) or was requested (through _CGSRequestFrontProcess) to be the front process,
+// as long as it has not resigned since, shared by all Darling processes. When no process is
+// in that state, the display server is asked where it can answer (X11: the owner of
+// _NET_ACTIVE_WINDOW). Returns kCGErrorSuccess and sets *pid,
 // kCGErrorNoneAvailable when no process is known, kCGErrorIllegalArgument for a NULL pid.
 CGError _CGSGetFrontProcess(pid_t* pid);
 // Reports that the process with this pid got the input focus. A windowing backend calls it
@@ -246,6 +247,33 @@ CGError _CGSSetFrontProcess(pid_t pid);
 // asked, such as a Wayland compositor, has focus on a process that is not a Darling process, or on
 // none). Posts the same name as _CGSSetFrontProcess().
 CGError _CGSResignFrontProcess(pid_t pid);
+// Publishes the activation policy of the calling process' application (NSApplicationActivationPolicy:
+// 0 regular, 1 accessory, 2 prohibited) for the other processes; AppKit calls it when the application
+// object is made and when the policy changes.
+void _CGSSetProcessActivationPolicy(int policy);
+// The policy the process with this pid published. kCGErrorNoneAvailable for a process that is gone
+// or never published one (a program that is not an application of the window system),
+// kCGErrorIllegalArgument for a pid that is not positive or a NULL policy.
+CGError _CGSGetProcessActivationPolicy(pid_t pid, int* policy);
+// Makes the process with this pid the front process: what SetFrontProcess() of the Process Manager
+// asks for. The change is visible to every process when the call returns (_CGSGetFrontProcess(),
+// and what is built on it), and every process that watches the front process is notified; then
+// the window system is asked to give the process' windows the input focus (_CGSActivateProcess()),
+// which it may decline. kCGSRequestFrontProcessFrontWindowOnly is passed on to the activation;
+// kCGSRequestFrontProcessMenuBarOwner makes the process the menu bar owner too (for a
+// regular application; an agent keeps the owner that was). Returns kCGErrorIllegalArgument for a pid
+// that is not positive and kCGErrorSuccess otherwise.
+#define kCGSRequestFrontProcessFrontWindowOnly 1
+#define kCGSRequestFrontProcessMenuBarOwner 2
+CGError _CGSRequestFrontProcess(pid_t pid, uint32_t options);
+// Called in this process when the front process changed (by any process), on the main thread, and
+// at once in the thread that reported or requested the change when it was this process. previous
+// and current are pids, 0 for none known (the focus is in another client of the window system).
+// Not called for a change that is undone before the observers looked. An observer is added once and
+// not removed; the first one makes the process watch the front process, and an observer added while
+// this process is the front process is called with a previous pid of 0.
+typedef void (*CGSFrontProcessObserver)(pid_t previous, pid_t current, void* info);
+void _CGSAddFrontProcessObserver(CGSFrontProcessObserver observer, void* info);
 // The name of the Darwin notification that asks the process with this pid to activate its
 // windows (see above); a windowing backend observes the name of its own process.
 #define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
@@ -274,9 +302,37 @@ Boolean _CGSProcessIsHidden(pid_t pid);
 // whenever the front process may have changed.
 #define kCGSFrontProcessNotificationName "org.darlinghq.front-process"
 
+// The libnotify name whose state holds the pid of the process that owns the menu bar (see
+// _CGSSetMenuBarOwnerProcess()).
+#define kCGSMenuBarOwnerNotificationName "org.darlinghq.menubar-owner"
+// Reports that the process with this pid owns the menu bar from now on. A regular application
+// calls it with its own pid when it becomes active; an application that is not regular (an
+// agent or background application) never takes the menu bar over when it becomes active, so
+// the owner stays the application that had it. Posts kCGSFrontProcessNotificationName.
+CGError _CGSSetMenuBarOwnerProcess(pid_t pid);
+// The process that owns the menu bar: the last one that reported it, as long as it is alive and a
+// Darling process reports to have the input focus (_CGSSetFrontProcess() without a later
+// _CGSResignFrontProcess() of the same process). Returns kCGErrorNoneAvailable when there is none (nothing
+// was reported, the owner ended, or the focus is in another client of the display server, where
+// no Darling process shows a menu bar), kCGErrorIllegalArgument for a NULL pid.
+CGError _CGSGetMenuBarOwnerProcess(pid_t* pid);
+
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
+
+// Surfaces of application windows. There is no window server to own the drawable of an
+// NSOpenGLView, so AppKit records it here: a surface on the AppKit window with this window
+// number, backed by `nativeWindow` (the handle a GL surface is made for), with the given size
+// in points. The surface can then be looked up by its ids as for a CGS surface:
+// CGSGetSurfaceBounds() reports its size, and CGLGetSurface() reports the ids of a context
+// that draws to it. Returns the new surface id, never 0.
+CGSSurfaceID _CGSAddWindowSurface(CGSWindowID winId, void* nativeWindow, CGSize size);
+void _CGSSetWindowSurfaceSize(CGSSurfaceID surfaceId, CGSize size);
+void _CGSRemoveWindowSurface(CGSSurfaceID surfaceId);
+// The ids of the application window surface backed by `nativeWindow`. False if there is none.
+bool _CGSWindowSurfaceForNativeWindow(void* nativeWindow, CGSConnectionID* connId,
+                                      CGSWindowID* winId, CGSSurfaceID* surfaceId);
 
 // Creates a window covering `bounds` (global display coordinates), above ordinary
 // windows and shown, so that a GL context can fill a display (CGLSetFullScreen).
@@ -354,6 +410,23 @@ enum {
 extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
 extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
 
+
+// What a key code types, from the current keyboard layout and the keys that give the same on every layout.
+// kCGKeyCharactersDefault is the Unicode string CGEventCreateKeyboardEvent() gives an event (no modifiers),
+// kCGKeyCharactersWithModifiers NSEvent's characters with the flags applied, kCGKeyCharactersIgnoringModifiers
+// NSEvent's charactersIgnoringModifiers (Shift still counts). Returns the number of UTF-16 units written
+// to out (at most max), 0 for a key without characters.
+typedef enum {
+	kCGKeyCharactersDefault,
+	kCGKeyCharactersWithModifiers,
+	kCGKeyCharactersIgnoringModifiers,
+} CGKeyCharactersKind;
+extern size_t _CGKeyCharacters(CGKeyCode key, CGEventFlags flags, CGKeyCharactersKind kind, UniChar* out, size_t max);
+
+// The characters of a keyboard event as NSEvent reports them (see _CGKeyCharacters). A string set with
+// CGEventKeyboardSetUnicodeString() is returned as it is for both; otherwise the characters follow the
+// event's key code and flags. Returns the number of UTF-16 units written to out (at most max).
+extern size_t _CGEventGetKeyCharacters(CGEventRef event, bool ignoringModifiers, UniChar* out, size_t max);
 
 #ifdef __OBJC__
 @class CGSConnection;

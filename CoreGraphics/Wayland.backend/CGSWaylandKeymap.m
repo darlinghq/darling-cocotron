@@ -288,6 +288,9 @@ static int modifierKeyCodeOfKeysym(xkb_keysym_t sym) {
     uint32_t codepoint = CGSKeySymToUnicode(keysym);
     if (codepoint == 0)
         codepoint = WL.xkb_keysym_to_utf32(keysym);
+    // A key xkbcommon has no text for, but a Mac layout gives a control code (ISO_Left_Tab, the keysym of Shift+Tab)
+    if (codepoint == 0)
+        codepoint = DarlingKeysymControlCode(keysym);
     return codepoint;
 }
 
@@ -315,16 +318,21 @@ static int modifierKeyCodeOfKeysym(xkb_keysym_t sym) {
 
         char buffer[64];
         int length = WL.xkb_state_key_get_utf8(_state, keycode, buffer, sizeof(buffer));
+        NSString *text = @"";
         if (length >= (int) sizeof(buffer)) {
             char *larger = malloc(length + 1);
             if (larger == NULL)
                 return @"";
             WL.xkb_state_key_get_utf8(_state, keycode, larger, length + 1);
-            NSString *result = [NSString stringWithUTF8String: larger];
+            text = [NSString stringWithUTF8String: larger] ?: @"";
             free(larger);
-            return result ?: @"";
+        } else if (length > 0) {
+            text = [NSString stringWithUTF8String: buffer] ?: @"";
         }
-        return length > 0 ? ([NSString stringWithUTF8String: buffer] ?: @"") : @"";
+        // No text from xkbcommon for a key that has a control code in a Mac layout: that code (ISO_Left_Tab gives U+0009)
+        if ([text length] == 0)
+            text = stringWithCodepoint(DarlingKeysymControlCode(keysym));
+        return text;
     }
 }
 

@@ -1732,7 +1732,22 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 }
 
 - (void) nativeConnectionKeyboardFocusChanged: (void *) surface {
-    if (surface == NULL)
+    if (surface != NULL) {
+        _keyboardWindowUnmapped = NO;
+        _keyboardFocusWindow = [self windowForSurface: (struct wl_proxy *) surface];
+        return;
+    }
+    // The keyboard focus leaves a window that the application itself unmapped (the last window closed,
+    // a menu popup destroyed): that is not the focus moving to another client. The application stays
+    // active, as on macOS, where an application whose last window closes keeps the activation and
+    // the menu bar; a window that is still shown when its focus goes does resign.
+    // An application that only owns the menu bar, with a menu popup that the keyboard followed, is
+    // the same case.
+    BOOL ownUnmapping = _keyboardWindowUnmapped ||
+            ([_keyboardFocusWindow isPopup] && ![_keyboardFocusWindow isTooltip] && ![_keyboardFocusWindow isGenericPopup]);
+    _keyboardWindowUnmapped = NO;
+    _keyboardFocusWindow = nil;
+    if (!ownUnmapping)
         [self applicationFocusMayHaveLeft];
 }
 
@@ -2003,24 +2018,34 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 // of the screen with xdg-shell, so the windows draw it themselves.
 - (BOOL) _showsMainMenuOutsideWindows {
     // With a layer shell the menu bar window shows the menu when the desktop does not.
-    if (_layerShell != NULL)
-        return YES;
-    if (_appMenuManager == NULL)
-        return NO;
-    if (_appMenu == nil)
-        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self];
-    if ([_appMenu globalMenuPresent])
-        return YES;
-    [_appMenu release];
-    _appMenu = nil;
-    return NO;
+    return _layerShell != NULL || [self _desktopShowsMainMenu];
 }
 
+// Asked once, with a throw-away exporter, because the answer decides whether the application exports its
+// menu at all.
+- (BOOL) _desktopShowsMainMenu {
+    if (!_desktopMenuProbed) {
+        _desktopMenuProbed = YES;
+        if (_appMenuManager != NULL) {
+            WaylandAppMenu *probe = [[WaylandAppMenu alloc] initWithDisplay: self exporting: YES];
+
+            _desktopMenuPresent = [probe globalMenuPresent];
+            [probe release];
+        }
+    }
+    return _desktopMenuPresent;
+}
+
+// The menu is exported for the desktop's global menu unless the windows carry it as strips. The menu bar
+// window, which a layer shell makes possible, is kept for the time no window carries a strip.
 - (void) _mainMenuDidChange: (NSMenu *) menu {
-    if ([NSWindow _usesInWindowMenuBar])
-        return;
-    if (_appMenu == nil)
-        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self];
+    if (_appMenu == nil) {
+        BOOL strips = [NSWindow _usesInWindowMenuBar];
+
+        if (strips && _layerShell == NULL)
+            return;
+        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self exporting: !strips];
+    }
     [_appMenu setMainMenu: menu];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];
@@ -2107,6 +2132,12 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
         _inputWindow = nil;
         [_inputEvent release];
         _inputEvent = nil;
+    }
+    if (_keyboardFocusWindow == window) {
+        // The leave event that may still follow is the application unmapping its own window, not another
+        // client taking the focus.
+        _keyboardWindowUnmapped = YES;
+        _keyboardFocusWindow = nil;
     }
     // The keyboard focus on the window's surface ends with it.
     _CGSNativeConnectionObjectDestroyed([window surface]);
@@ -2407,7 +2438,11 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 #pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
 - (uint32_t) clipboardSerial {
-    return _CGSNativeConnectionKeyboardFocus() != NULL ? _inputSerial : 0;
+    if (_CGSNativeConnectionKeyboardFocus() != NULL)
+        return _inputSerial;
+    // A key or click still being handled entitles its writes to the selection even when the focus
+    // left right after it, as when a virtual keyboard is removed a few milliseconds after its key.
+    return _inputEvent != nil && [NSApp currentEvent] == _inputEvent ? _inputSerial : 0;
 }
 
 - (NSDraggingManager *) draggingManager {
