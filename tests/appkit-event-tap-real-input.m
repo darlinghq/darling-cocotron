@@ -9,9 +9,9 @@
 // keyboard and pointer): the program prints READY and the window's content frame, the harness types
 // "a" and clicks in the window, and the program reports what arrived.
 //
-// Then a second part checks the order of real pointer input that piles up unread: the program
-// prints PHASE2 and does not read events for two seconds; the harness moves the pointer twice,
-// clicks, and moves it twice more. The program must get the moves before the click (their deltas
+// Then a second part, with the tap still active, checks the order of real pointer input that piles
+// up unread: the program prints PHASE2 and does not read events for two seconds; the harness
+// moves the pointer twice, clicks, and moves it twice more. The program must get the moves before the click (their deltas
 // summed into one or two events), the click at the position where it was made, and the moves after
 // it, ending at the last position: a move is never merged into one that is before the click.
 //
@@ -139,13 +139,13 @@ int main(void) {
           [NSString stringWithFormat: @"the Carbon handler runs before -sendEvent: (%@)", order]);
     expect(mouseHasWindow, @"  the mouse-down belongs to the window");
 
-    // Part two: real moves, a click and moves again, read only after they all arrived. The tap is
-    // switched off: an active tap holds the events in its mask while the others go past it, which
-    // would reorder the click, and what is under test here is the queue
-    CGEventTapEnable(tap, false);
+    // Part two: real moves, a click and moves again, read only after they all arrived. The tap stays
+    // active: it holds the mouse-down (it is in its mask) while the moves around it are not, and the
+    // events must still come in the order they were made. The run loop runs meanwhile, which the
+    // tap needs to get its events, but no event is read.
     printf("PHASE2\n");
     fflush(stdout);
-    [NSThread sleepForTimeInterval: 2];
+    [[NSRunLoop currentRunLoop] runUntilDate: [NSDate dateWithTimeIntervalSinceNow: 2]];
     NSMutableArray *motion = [NSMutableArray array]; // "M x" / "D x" / "U x" in the order they arrive
     deadline = [NSDate dateWithTimeIntervalSinceNow: 4];
     NSTimeInterval quietUntil = 0; // reference time when the input has been quiet long enough
