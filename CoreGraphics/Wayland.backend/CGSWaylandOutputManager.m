@@ -16,44 +16,45 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import "WaylandOutputManager.h"
+#import "CGSWaylandOutputManager.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #include <time.h>
 
-@class WaylandOutputHead;
+@class CGSWaylandOutputHead;
 
-@interface WaylandOutputManager ()
-- (void) headFinished: (WaylandOutputHead *) head;
+@interface CGSWaylandOutputManager ()
+- (void) headFinished: (CGSWaylandOutputHead *) head;
+- (void) attachDispatcherTo: (struct wl_proxy *) proxy kind: (CGSWaylandObjectKind) kind object: (id) object;
 @end
 
-@interface WaylandOutputHeadMode : NSObject <WaylandOutputManagementEvents> {
+@interface CGSWaylandOutputHeadMode : NSObject <CGSWaylandOutputManagementEvents> {
 @public
     struct wl_proxy *_proxy;
     int32_t _width, _height, _refresh;
 }
 @end
 
-@interface WaylandOutputHead : NSObject <WaylandOutputManagementEvents> {
+@interface CGSWaylandOutputHead : NSObject <CGSWaylandOutputManagementEvents> {
 @public
     struct wl_proxy *_proxy;
-    WaylandOutputManager *_manager;
+    CGSWaylandOutputManager *_manager;
     NSMutableArray *_modes;
-    WaylandOutputHeadMode *_current;
+    CGSWaylandOutputHeadMode *_current;
     BOOL _enabled;
     int32_t _x, _y, _transform, _scale;
 }
 @end
 
 // Result of a test or apply request.
-@interface WaylandOutputConfiguration : NSObject <WaylandOutputManagementEvents> {
+@interface CGSWaylandOutputConfiguration : NSObject <CGSWaylandOutputManagementEvents> {
 @public
     int _result; // 0 pending, 1 succeeded, 2 failed, 3 cancelled
 }
 @end
 
-@implementation WaylandOutputHeadMode
-- (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
+@implementation CGSWaylandOutputHeadMode
+- (void) handleEvent: (uint32_t) opcode kind: (CGSWaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args
 {
     switch (opcode) {
@@ -70,8 +71,8 @@
 }
 @end
 
-@implementation WaylandOutputConfiguration
-- (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
+@implementation CGSWaylandOutputConfiguration
+- (void) handleEvent: (uint32_t) opcode kind: (CGSWaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args
 {
     switch (opcode) {
@@ -83,7 +84,7 @@
 }
 @end
 
-@implementation WaylandOutputHead
+@implementation CGSWaylandOutputHead
 
 - (instancetype) init {
     if ((self = [super init]))
@@ -96,15 +97,14 @@
     [super dealloc];
 }
 
-- (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
+- (void) handleEvent: (uint32_t) opcode kind: (CGSWaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args
 {
     switch (opcode) {
     case WP_WLR_HEAD_EV_MODE: {
-        WaylandOutputHeadMode *mode = [[WaylandOutputHeadMode new] autorelease];
+        CGSWaylandOutputHeadMode *mode = [[CGSWaylandOutputHeadMode new] autorelease];
         mode->_proxy = (struct wl_proxy *) args[0].o;
-        WL.wl_proxy_add_dispatcher(mode->_proxy, WaylandDispatch,
-                                   (void *) (uintptr_t) WaylandObjectOutputHeadMode, mode);
+        [_manager attachDispatcherTo: mode->_proxy kind: CGSWaylandObjectOutputHeadMode object: mode];
         [_modes addObject: mode];
         break;
     }
@@ -112,7 +112,7 @@
         _enabled = args[0].i != 0;
         break;
     case WP_WLR_HEAD_EV_CURRENT_MODE:
-        _current = args[0].o ? (WaylandOutputHeadMode *) WL.wl_proxy_get_user_data((struct wl_proxy *) args[0].o) : nil;
+        _current = args[0].o ? (CGSWaylandOutputHeadMode *) WL.wl_proxy_get_user_data((struct wl_proxy *) args[0].o) : nil;
         break;
     case WP_WLR_HEAD_EV_POSITION:
         _x = args[0].i;
@@ -134,11 +134,11 @@
 
 @end
 
-@implementation WaylandOutputManager
+@implementation CGSWaylandOutputManager
 
-- (instancetype) initWithDisplay: (struct wl_display *) display manager: (struct wl_proxy *) manager {
+- (instancetype) initWithConnection: (CGSConnectionWayland *) connection manager: (struct wl_proxy *) manager {
     if ((self = [super init])) {
-        _display = display;
+        _connection = connection; // Not retained: the connection owns the manager.
         _proxy = manager;
         _heads = [NSMutableArray new];
     }
@@ -151,11 +151,16 @@
     [super dealloc];
 }
 
+// The dispatcher of the connection for an object the compositor created with an event.
+- (void) attachDispatcherTo: (struct wl_proxy *) proxy kind: (CGSWaylandObjectKind) kind object: (id) object {
+    [_connection attachDispatcherTo: proxy kind: kind object: object];
+}
+
 - (void) stop {
     if (_proxy == NULL)
         return;
-    for (WaylandOutputHead *head in _heads) {
-        for (WaylandOutputHeadMode *mode in head->_modes)
+    for (CGSWaylandOutputHead *head in _heads) {
+        for (CGSWaylandOutputHeadMode *mode in head->_modes)
             WL.wl_proxy_destroy(mode->_proxy);
         WL.wl_proxy_destroy(head->_proxy);
     }
@@ -166,23 +171,22 @@
     _proxy = NULL;
 }
 
-- (void) headFinished: (WaylandOutputHead *) head {
-    for (WaylandOutputHeadMode *mode in head->_modes)
+- (void) headFinished: (CGSWaylandOutputHead *) head {
+    for (CGSWaylandOutputHeadMode *mode in head->_modes)
         WL.wl_proxy_destroy(mode->_proxy);
     WL.wl_proxy_destroy(head->_proxy);
     [_heads removeObject: head];
 }
 
-- (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
+- (void) handleEvent: (uint32_t) opcode kind: (CGSWaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args
 {
     switch (opcode) {
     case WP_WLR_MANAGER_EV_HEAD: {
-        WaylandOutputHead *head = [[WaylandOutputHead new] autorelease];
+        CGSWaylandOutputHead *head = [[CGSWaylandOutputHead new] autorelease];
         head->_manager = self;
         head->_proxy = (struct wl_proxy *) args[0].o;
-        WL.wl_proxy_add_dispatcher(head->_proxy, WaylandDispatch,
-                                   (void *) (uintptr_t) WaylandObjectOutputHead, head);
+        [self attachDispatcherTo: head->_proxy kind: CGSWaylandObjectOutputHead object: head];
         [_heads addObject: head];
         break;
     }
@@ -200,10 +204,10 @@
 // The head of the wl_output at x, y with the given current size: heads are
 // matched by position in the compositor's layout, then by current size;
 // a single enabled head is the one when nothing else tells them apart.
-- (WaylandOutputHead *) headAtX: (int) x y: (int) y width: (int) width height: (int) height {
-    WaylandOutputHead *byPosition = nil, *only = nil;
+- (CGSWaylandOutputHead *) headAtX: (int) x y: (int) y width: (int) width height: (int) height {
+    CGSWaylandOutputHead *byPosition = nil, *only = nil;
     int enabledCount = 0;
-    for (WaylandOutputHead *head in _heads) {
+    for (CGSWaylandOutputHead *head in _heads) {
         if (!head->_enabled || head->_current == nil)
             continue;
         enabledCount++;
@@ -219,11 +223,11 @@
 }
 
 - (NSArray *) modesForOutputAtX: (int) x y: (int) y width: (int) width height: (int) height {
-    WaylandOutputHead *head = [self headAtX: x y: y width: width height: height];
+    CGSWaylandOutputHead *head = [self headAtX: x y: y width: width height: height];
     if (head == nil)
         return nil;
     NSMutableArray *modes = [NSMutableArray array];
-    for (WaylandOutputHeadMode *mode in head->_modes) {
+    for (CGSWaylandOutputHeadMode *mode in head->_modes) {
         if (mode->_width <= 0 || mode->_height <= 0)
             continue;
         NSDictionary *dictionary = @{
@@ -241,15 +245,18 @@
 // Describes every head, with `mode` for `target`, in a new configuration and
 // sends request (test or apply). Returns the configuration's outcome:
 // 1 succeeded, 2 failed, 3 cancelled (state changed), 0 no answer.
-- (int) configureHead: (WaylandOutputHead *) target mode: (WaylandOutputHeadMode *) mode request: (uint32_t) request {
-    WaylandOutputConfiguration *configuration = [[WaylandOutputConfiguration new] autorelease];
+- (int) configureHead: (CGSWaylandOutputHead *) target mode: (CGSWaylandOutputHeadMode *) mode request: (uint32_t) request {
+    CGSWaylandOutputConfiguration *configuration = [[CGSWaylandOutputConfiguration new] autorelease];
     union wl_argument createArgs[] = {{.o = NULL}, {.u = _serial}};
-    struct wl_proxy *configProxy = WaylandCreateObject(_proxy, WP_WLR_MANAGER_CREATE_CONFIGURATION,
-                                                       &zwlr_output_configuration_v1_interface, createArgs,
-                                                       WaylandObjectOutputConfiguration, configuration);
+    struct wl_proxy *configProxy = [_connection createObject: _proxy
+                                                      opcode: WP_WLR_MANAGER_CREATE_CONFIGURATION
+                                                   interface: &zwlr_output_configuration_v1_interface
+                                                   arguments: createArgs
+                                                        kind: CGSWaylandObjectOutputConfiguration
+                                                      object: configuration];
     NSMutableArray *headConfigs = [NSMutableArray array];
 
-    for (WaylandOutputHead *head in _heads) {
+    for (CGSWaylandOutputHead *head in _heads) {
         if (!head->_enabled || head->_current == nil) {
             union wl_argument disable[] = {{.o = (struct wl_object *) head->_proxy}};
             WaylandMarshal(configProxy, WP_WLR_CONFIGURATION_DISABLE_HEAD, NULL, 0, disable);
@@ -273,7 +280,7 @@
 
     // The answer comes with the next events; the compositor may take a few round trips.
     for (int i = 0; i < 400 && configuration->_result == 0; i++) {
-        if (WL.wl_display_roundtrip(_display) < 0)
+        if (WL.wl_display_roundtrip(_connection->_wlDisplay) < 0)
             break;
         if (configuration->_result == 0) {
             struct timespec pause = {0, 5 * 1000 * 1000};
@@ -295,13 +302,13 @@
     // A cancelled configuration means the state moved on while it was built:
     // the events that say so are dispatched meanwhile, so try again with them.
     for (int attempt = 0; attempt < 4; attempt++) {
-        WL.wl_display_roundtrip(_display);
-        WaylandOutputHead *head = [self headAtX: x y: y width: currentWidth height: currentHeight];
+        WL.wl_display_roundtrip(_connection->_wlDisplay);
+        CGSWaylandOutputHead *head = [self headAtX: x y: y width: currentWidth height: currentHeight];
         if (head == nil)
             return NO;
         [[head retain] autorelease]; // a finished head leaves the list while we wait
-        WaylandOutputHeadMode *wanted = nil;
-        for (WaylandOutputHeadMode *mode in head->_modes) {
+        CGSWaylandOutputHeadMode *wanted = nil;
+        for (CGSWaylandOutputHeadMode *mode in head->_modes) {
             if (mode->_width != width || mode->_height != height)
                 continue;
             if (wanted == nil || abs(mode->_refresh - refresh) < abs(wanted->_refresh - refresh))
@@ -324,7 +331,7 @@
             return NO;
         // The new state arrives as head and output events.
         for (int i = 0; i < 400 && head->_current != wanted; i++) {
-            if (WL.wl_display_roundtrip(_display) < 0)
+            if (WL.wl_display_roundtrip(_connection->_wlDisplay) < 0)
                 break;
             if (head->_current != wanted) {
                 struct timespec pause = {0, 5 * 1000 * 1000};

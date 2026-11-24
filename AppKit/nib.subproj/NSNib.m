@@ -65,7 +65,7 @@ static BOOL NSNibDataIsKeyed(NSData *data) {
         // NSNibFileSounds
     } else {
         NSString *bundleIdentifier;
-        BOOL isKeyed;
+        short isKeyed = 0;
         NSArray *imageBlobs, *soundBlobs;
         NSArray *images, *sounds;
 
@@ -74,6 +74,7 @@ static BOOL NSNibDataIsKeyed(NSData *data) {
                                         &sounds, &soundBlobs];
 
         // TODO
+        [bundleIdentifier release];
         [imageBlobs release];
         [images release];
         [soundBlobs release];

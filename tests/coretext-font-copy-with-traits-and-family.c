@@ -3,8 +3,9 @@
  *
  * CTFontCreateCopyWithSymbolicTraits makes a font in the family of the original with the
  * symbolic traits given, and CTFontCreateCopyWithFamily makes a font in the family given with
- * the traits of the original. For both, a size of 0.0 keeps the original's size, and NULL means
- * the system has no such font:
+ * the traits of the original, or NULL when none is found. For both, a size of 0.0 keeps the
+ * original's size. macOS 26.1 departs from that documented NULL for CTFontCreateCopyWithFamily when
+ * the family lacks the original's bold or italic (QUIRK checks below):
  * https://developer.apple.com/documentation/coretext/ctfontcreatecopywithsymbolictraits(_:_:_:_:_:)
  * https://developer.apple.com/documentation/coretext/ctfontcreatecopywithfamily(_:_:_:_:)
  *
@@ -18,7 +19,9 @@
  * Prints PASS/FAIL/SKIP lines; exit status 1 on failure.
  */
 #include <ApplicationServices/ApplicationServices.h>
+#include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 static int failures;
 
@@ -83,6 +86,113 @@ static void release(CTFontRef f)
 {
 	if (f != NULL)
 		CFRelease(f);
+}
+
+static CGFloat weightOf(CTFontRef f)
+{
+	CGFloat weight = 0;
+	CFDictionaryRef traits = CTFontCopyTraits(f);
+	CFNumberRef number = traits != NULL ? CFDictionaryGetValue(traits, kCTFontWeightTrait) : NULL;
+	if (number != NULL)
+		CFNumberGetValue(number, kCFNumberCGFloatType, &weight);
+	if (traits != NULL)
+		CFRelease(traits);
+	return weight;
+}
+
+// The bits CTFontCreateCopyWithSymbolicTraits compares inside a family.
+static const CTFontSymbolicTraits comparedBits = kCTFontTraitItalic | kCTFontTraitBold
+		| kCTFontTraitExpanded | kCTFontTraitCondensed | kCTFontTraitColorGlyphs;
+
+// What the checks over all installed faces need of each face, read once so that the checks do not
+// create a font for every pair of faces.
+typedef struct {
+	CTFontRef font;
+	CFStringRef family, postScriptName;
+	CTFontSymbolicTraits traits;
+	CGFloat weight;
+} FaceInfo;
+
+static FaceInfo *collectFaces(CFArrayRef faces, CFIndex count)
+{
+	FaceInfo *infos = calloc(count > 0 ? count : 1, sizeof(FaceInfo));
+	for (CFIndex i = 0; i < count; i++) {
+		CTFontRef f = faceFont(faces, i);
+		infos[i].font = f;
+		if (f != NULL) {
+			infos[i].family = CTFontCopyFamilyName(f);
+			infos[i].postScriptName = CTFontCopyPostScriptName(f);
+			infos[i].traits = CTFontGetSymbolicTraits(f);
+			infos[i].weight = weightOf(f);
+		}
+	}
+	return infos;
+}
+
+static void releaseFaces(FaceInfo *infos, CFIndex count)
+{
+	for (CFIndex i = 0; i < count; i++) {
+		release(infos[i].font);
+		if (infos[i].family != NULL)
+			CFRelease(infos[i].family);
+		if (infos[i].postScriptName != NULL)
+			CFRelease(infos[i].postScriptName);
+	}
+	free(infos);
+}
+
+static int sameFamilyInfo(const FaceInfo *a, const FaceInfo *b)
+{
+	return a->family != NULL && b->family != NULL && CFEqual(a->family, b->family);
+}
+
+// Whether some face of the family of `member` has the bit.
+static int familyAny(const FaceInfo *infos, CFIndex count, const FaceInfo *member, CTFontSymbolicTraits bit)
+{
+	for (CFIndex i = 0; i < count; i++)
+		if (infos[i].font != NULL && sameFamilyInfo(member, &infos[i]) && (infos[i].traits & bit))
+			return 1;
+	return 0;
+}
+
+static int hasPostScriptName(CTFontRef a, CFStringRef nameOfB)
+{
+	CFStringRef na = CTFontCopyPostScriptName(a);
+	int same = na != NULL && nameOfB != NULL && CFEqual(na, nameOfB);
+	if (na != NULL)
+		CFRelease(na);
+	return same;
+}
+
+// QUIRK (macOS 26.7.3 and 10.14.4, probe 639.E.nochange): a request that changes no trait (value 0, mask 0)
+// returns the original face itself, even where another face of the family has the same traits and weight
+// (Avenir-Roman and Avenir-Book). SKIP when no installed family has such an equal.
+static void checkEmptyMaskKeepsTheFace(const FaceInfo *infos, CFIndex count)
+{
+	int tied = 0, wrong = 0;
+	for (CFIndex i = 0; i < count; i++) {
+		const FaceInfo *f = &infos[i];
+		int hasEqual = 0;
+		for (CFIndex j = 0; f->font != NULL && j < count && !hasEqual; j++) {
+			const FaceInfo *g = &infos[j];
+			hasEqual = j != i && g->font != NULL && sameFamilyInfo(f, g)
+					&& !(f->postScriptName != NULL && g->postScriptName != NULL
+							&& CFEqual(f->postScriptName, g->postScriptName))
+					&& (g->traits & comparedBits) == (f->traits & comparedBits)
+					&& fabs(g->weight - f->weight) < 1e-6;
+		}
+		if (hasEqual) {
+			tied++;
+			CTFontRef copy = CTFontCreateCopyWithSymbolicTraits(f->font, 0, NULL, 0, 0);
+			if (copy == NULL || !hasPostScriptName(copy, f->postScriptName))
+				wrong++;
+			release(copy);
+		}
+	}
+	if (tied == 0)
+		printf("SKIP no installed family has two faces equal in traits and weight\n");
+	else
+		expect(wrong == 0, "QUIRK: an empty mask returns the original face among faces equal in traits and weight");
 }
 
 int main(void)
@@ -152,6 +262,41 @@ int main(void)
 
 		copy = CTFontCreateCopyWithSymbolicTraits(plain, 21, NULL, kCTFontTraitBold, kCTFontTraitBold);
 		expect(copy != NULL && CTFontGetSize(copy) == 21, "an explicit size is used");
+		release(copy);
+
+		// QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 639.B.size): a negative size keeps the original's size.
+		copy = CTFontCreateCopyWithSymbolicTraits(plain, -5, NULL, kCTFontTraitBold, kCTFontTraitBold);
+		expect(copy != NULL && CTFontGetSize(copy) == CTFontGetSize(plain),
+				"QUIRK: a negative size keeps the original size");
+		release(copy);
+
+		// QUIRK (macOS 26.7.3 and 10.14.4, probe ctvert.c): the vertical bit is not looked for but is
+		// carried into the copy's traits, and no later copy loses it, except a copy into another family.
+		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, kCTFontTraitVertical, kCTFontTraitVertical);
+		expect(copy != NULL && sameFamily(plain, copy)
+				&& (CTFontGetSymbolicTraits(copy) & kCTFontTraitVertical),
+				"QUIRK: setting the vertical trait reaches the copy's traits");
+		CTFontRef again = copy != NULL
+				? CTFontCreateCopyWithSymbolicTraits(copy, 0, NULL, 0, kCTFontTraitVertical) : NULL;
+		expect(again != NULL && (CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"QUIRK: clearing the vertical trait does not remove it from a copy that has it");
+		release(again);
+		again = copy != NULL ? CTFontCreateCopyWithSymbolicTraits(copy, 0, NULL, 0, 0) : NULL;
+		expect(again != NULL && (CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"QUIRK: an empty mask keeps the vertical trait");
+		release(again);
+		again = copy != NULL ? CTFontCreateCopyWithSymbolicTraits(copy, 14, NULL, kCTFontTraitBold, kCTFontTraitBold) : NULL;
+		expect(again != NULL && (CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"QUIRK: a copy with a new size and the bold trait keeps the vertical trait");
+		release(again);
+		again = copy != NULL ? CTFontCreateCopyWithAttributes(copy, 0, NULL, NULL) : NULL;
+		expect(again != NULL && (CTFontGetSymbolicTraits(again) & kCTFontTraitVertical),
+				"QUIRK: CTFontCreateCopyWithAttributes keeps the vertical trait");
+		release(again);
+		release(copy);
+		copy = CTFontCreateCopyWithSymbolicTraits(plain, 0, NULL, 0, kCTFontTraitVertical);
+		expect(copy != NULL && !(CTFontGetSymbolicTraits(copy) & kCTFontTraitVertical),
+				"observed (639.C.clear-vertical): clearing the vertical trait of a face without it leaves it without");
 		release(copy);
 
 		// GUESS (value and mask are not defined by the documentation): the mask selects the
@@ -277,6 +422,48 @@ int main(void)
 		CFRelease(family);
 	}
 
+	FaceInfo *infos = collectFaces(faces, count);
+	checkEmptyMaskKeepsTheFace(infos, count);
+
+	// QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 639.F.family): a family without a face of the original's boldness
+	// still gives a face; only a family that does not exist gives NULL. The structure is checked, not
+	// which face a family of several gives. GUESS: italic is kept when the family has it, then
+	// the nearest weight.
+	const FaceInfo *boldFace = NULL, *noBoldFamily = NULL, *boldItalicFace = NULL, *noBoldItalicFamily = NULL;
+	for (CFIndex i = 0; i < count; i++) {
+		const FaceInfo *f = &infos[i];
+		if (f->font == NULL)
+			continue;
+		if (boldFace == NULL && (f->traits & styleBits) == kCTFontTraitBold)
+			boldFace = f;
+		if (boldItalicFace == NULL && (f->traits & styleBits) == (kCTFontTraitBold | kCTFontTraitItalic))
+			boldItalicFace = f;
+		if (!familyAny(infos, count, f, kCTFontTraitBold)) {
+			if (noBoldFamily == NULL)
+				noBoldFamily = f;
+			if (noBoldItalicFamily == NULL && familyAny(infos, count, f, kCTFontTraitItalic))
+				noBoldItalicFamily = f;
+		}
+	}
+	if (boldFace == NULL || noBoldFamily == NULL) {
+		printf("SKIP no bold face and family without a bold face are installed\n");
+	} else {
+		CTFontRef copy = CTFontCreateCopyWithFamily(boldFace->font, 0, NULL, noBoldFamily->family);
+		expect(copy != NULL && sameFamily(copy, noBoldFamily->font),
+				"QUIRK: a bold face copied to a family with no bold face gives a face of that family");
+		release(copy);
+	}
+	if (boldItalicFace == NULL || noBoldItalicFamily == NULL) {
+		printf("SKIP no bold italic face and family with italic but no bold faces are installed\n");
+	} else {
+		CTFontRef copy = CTFontCreateCopyWithFamily(boldItalicFace->font, 0, NULL, noBoldItalicFamily->family);
+		expect(copy != NULL && sameFamily(copy, noBoldItalicFamily->font)
+				&& (CTFontGetSymbolicTraits(copy) & kCTFontTraitItalic),
+				"GUESS: a bold italic face copied to a family with italic faces but no bold face keeps the italic");
+		release(copy);
+	}
+
+	releaseFaces(infos, count);
 	release(plain);
 	release(bold);
 	release(otherPlain);

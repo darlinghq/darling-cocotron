@@ -103,4 +103,27 @@
     return 0;
 }
 
+// QUIRK: whole-cell drawing is the border and background step and then the interior; the border and background of
+// a plain menu item cell is empty (the highlight of a menu item is not drawn here, menus draw their items
+// themselves), and the step does not go through -drawBezelWithFrame:inView:, so a bordered menu item cell has no
+// bezel. A subclass sees the call order border, interior. Not documented beyond the step existing, ahead of the
+// others, on this class (and on NSPopUpButtonCell, which has its own, see there) and not on NSButtonCell or NSCell.
+// Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (x86_64 and i386), probe p767.m of batch 12a in
+// mac-probes/cristim (tier 2): the method is found on NSMenuItemCell and NSPopUpButtonCell and not on NSButtonCell,
+// NSCell or NSActionCell; a menu item cell subclass is called border and then interior by -drawWithFrame:inView:
+// and draws no pixels in either step, whether or not it is bordered and has a menu item.
+// Test: appkit-menuitemcell-draw-border-background (test_quirk_menu_item_cell_border_is_empty)
+- (void) drawBorderAndBackgroundWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+}
+
+- (void) drawWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    _controlView = controlView;
+
+    if ([self isTransparent])
+        return;
+
+    [self drawBorderAndBackgroundWithFrame: cellFrame inView: controlView];
+    [self drawInteriorWithFrame: cellFrame inView: controlView];
+}
+
  @end

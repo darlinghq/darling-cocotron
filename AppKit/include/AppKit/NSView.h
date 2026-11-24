@@ -508,7 +508,7 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 
 - (BOOL) knowsPageRange: (null_unspecified NSRange *) range;
 - (NSPoint) locationOfPrintRect: (NSRect) rect;
-- (NSRect) rectForPage: (int) page;
+- (NSRect) rectForPage: (NSInteger) page;
 
 - (NSData *) dataWithEPSInsideRect: (NSRect) rect;
 - (NSData *) dataWithPDFInsideRect: (NSRect) rect;

@@ -28,6 +28,7 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemBehavior) {
     NSSplitViewItemBehaviorDefault,
     NSSplitViewItemBehaviorSidebar,
     NSSplitViewItemBehaviorContentList,
+    NSSplitViewItemBehaviorInspector,
 };
 
 typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
@@ -37,6 +38,9 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
     NSSplitViewItemCollapseBehaviorUseConstraints,
 };
 
+// The value of a sizing property that sets no limit (-1 on macOS).
+APPKIT_EXPORT const CGFloat NSSplitViewItemUnspecifiedDimension;
+
 @interface NSSplitViewItem : NSObject <NSCoding> {
     NS_LEGACY_IVAR_PAD(_NSSplitViewItemReserved, 4)
     NS_EXTRA_IVARS_BEGIN(NSSplitViewItem)
@@ -45,6 +49,11 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
     BOOL _collapsed;
     BOOL _canCollapse;
     NSLayoutPriority _holdingPriority;
+    CGFloat _minimumThickness;
+    CGFloat _maximumThickness;
+    NSSplitViewItemCollapseBehavior _collapseBehavior;
+    BOOL _springLoaded;
+    BOOL _allowsFullHeightLayout;
     NS_EXTRA_IVARS_END(NSSplitViewItem)
 }
 
@@ -52,6 +61,9 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
 // A collapsible item whose holding priority is NSLayoutPriorityDefaultLow + 10.
 + (instancetype) sidebarWithViewController: (NSViewController *) viewController;
 + (instancetype) contentListWithViewController: (NSViewController *) viewController;
+// A collapsible item whose thickness is fixed at 270 (the documented macOS 14
+// inspector size) and whose holding priority is NSLayoutPriorityDefaultLow + 11.
++ (instancetype) inspectorWithViewController: (NSViewController *) viewController;
 
 @property(readonly) NSSplitViewItemBehavior behavior;
 
@@ -60,6 +72,18 @@ typedef NS_ENUM(NSInteger, NSSplitViewItemCollapseBehavior) {
 @property(getter=isCollapsed) BOOL collapsed;
 @property BOOL canCollapse;
 @property NSLayoutPriority holdingPriority;
+
+// Stored only: the split view controller does not apply the thickness limits or the
+// collapse behavior, and the spring-loaded and full-height flags have no effect.
+// Both limits default to NSSplitViewItemUnspecifiedDimension (270 for an inspector,
+// a minimum of 140 for a sidebar and of 200 for a content list); assigning
+// NSSplitViewItemUnspecifiedDimension stores it, which sets no limit.
+@property CGFloat minimumThickness;
+@property CGFloat maximumThickness;
+@property NSSplitViewItemCollapseBehavior collapseBehavior;
+@property(getter=isSpringLoaded) BOOL springLoaded;
+// Default YES.
+@property BOOL allowsFullHeightLayout;
 
 // Changes apply immediately; there are no animations.
 - (instancetype) animator;

@@ -55,11 +55,49 @@ static CTFontRef fontWithCascade(CTFontRef font, id cascade) {
     return font;
 }
 
+// The vertical-orientation trait a copy was asked for by CTFontCreateCopyWithSymbolicTraits. A face
+// does not carry it (the traits come from the font tables), so it is kept with the font object.
+static char fontVerticalKey;
+
+static CTFontRef fontWithVertical(CTFontRef font, BOOL vertical) {
+    if (font != NULL && vertical)
+        objc_setAssociatedObject(ktFont(font), &fontVerticalKey, (id) kCFBooleanTrue,
+                                 OBJC_ASSOCIATION_RETAIN);
+    return font;
+}
+
 static id cascadeOfAttributes(CTFontDescriptorRef attributes) {
     if (attributes == NULL)
         return nil;
     return [(id) CTFontDescriptorCopyAttribute(attributes, kCTFontCascadeListAttribute)
             autorelease];
+}
+
+// The transformation matrix a font was created with, kept with the font object as the bytes of a
+// CGAffineTransform. A font made without one has none stored and reads as the identity matrix.
+static char fontMatrixKey;
+
+static CGAffineTransform fontMatrix(CTFontRef font) {
+    CGAffineTransform matrix = CGAffineTransformIdentity;
+    NSData *data = objc_getAssociatedObject(ktFont(font), &fontMatrixKey);
+    if ([data length] == sizeof(matrix))
+        [data getBytes: &matrix length: sizeof(matrix)];
+    return matrix;
+}
+
+// Observed on macOS 10.14.4 (x86_64, i386) and 26.7.3 (black-box, tier 2; probe 8 of the cristim
+// batch10b evidence): CTFontGetMatrix returns the matrix the font was created with without its
+// translation (tx and ty read 0). Test: coretext-font-matrix.
+static CTFontRef fontWithMatrix(CTFontRef font, const CGAffineTransform *matrix) {
+    if (font != NULL && matrix != NULL) {
+        CGAffineTransform linear = *matrix;
+        linear.tx = linear.ty = 0;
+        if (!CGAffineTransformIsIdentity(linear))
+            objc_setAssociatedObject(ktFont(font), &fontMatrixKey,
+                                     [NSData dataWithBytes: &linear length: sizeof(linear)],
+                                     OBJC_ASSOCIATION_RETAIN);
+    }
+    return font;
 }
 
 static O2Font_freetype *copyFreeTypeFont(CTFontRef font) {
@@ -94,6 +132,8 @@ static CTFontRef fontWithVariationOfAttributes(CTFontRef font, CTFontDescriptorR
     if (result == NULL)
         return font;
     fontWithCascade(result, fontCascade(font));
+    CGAffineTransform matrix = fontMatrix(font);
+    fontWithMatrix(result, &matrix);
     CFRelease(font);
     return result;
 }
@@ -156,7 +196,9 @@ CTFontRef CTFontCreateWithName(CFStringRef name, CGFloat size, const CGAffineTra
         return NULL;
     CTFontRef result = createFont(graphicsFont, size);
     CGFontRelease(graphicsFont);
-    return result;
+    // The documentation gives the identity matrix for NULL and CTFontGetMatrix returns what was given. It
+    // does not say that the matrix changes the font's metrics or glyph outlines, so only the matrix is kept.
+    return fontWithMatrix(result, matrix);
 }
 
 CTFontRef CTFontCreateWithNameAndOptions(CFStringRef name, CGFloat size,
@@ -190,7 +232,7 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
                 (O2DataProviderRef) provider, KTFontDescriptorGetFaceIndex(descriptor));
         CGDataProviderRelease(provider);
         if (graphicsFont != NULL) {
-            CTFontRef result = createFont(graphicsFont, size);
+            CTFontRef result = fontWithMatrix(createFont(graphicsFont, size), matrix);
             CGFontRelease(graphicsFont);
             result = fontWithVariationOfAttributes(result, descriptor);
             return fontWithCascade(result, cascadeOfAttributes(descriptor));
@@ -231,15 +273,18 @@ CTFontRef CTFontCreateUIFontForLanguage(CTFontUIFontType uiFontType,
     return (CTFontRef) font;
 }
 
-CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
-                                         const CGAffineTransform *matrix,
-                                         CTFontDescriptorRef attributes)
+static CTFontRef copyWithAttributes(CTFontRef font, CGFloat size, const CGAffineTransform *matrix,
+                                    CTFontDescriptorRef attributes)
 {
     KTFont *object = ktFont(font);
     if (object == nil)
         return NULL;
     if (size == 0)
         size = [object pointSize];
+    // A NULL matrix keeps the original font's matrix.
+    CGAffineTransform originalMatrix = fontMatrix(font);
+    if (matrix == NULL)
+        matrix = &originalMatrix;
 
     // The copy keeps the cascade list unless the attributes supply another.
     id cascade = cascadeOfAttributes(attributes) ?: fontCascade(font);
@@ -257,18 +302,29 @@ CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
     }
 
     CGFontRef graphicsFont = [object copyGraphicsFont];
-    CTFontRef result = createFont(graphicsFont, size);
+    CTFontRef result = fontWithMatrix(createFont(graphicsFont, size), matrix);
     CGFontRelease(graphicsFont);
     result = fontWithVariationOfAttributes(result, attributes);
     return fontWithCascade(result, cascade);
+}
+
+CTFontRef CTFontCreateCopyWithAttributes(CTFontRef font, CGFloat size,
+                                         const CGAffineTransform *matrix,
+                                         CTFontDescriptorRef attributes)
+{
+    CTFontRef result = copyWithAttributes(font, size, matrix, attributes);
+    // QUIRK: the copy keeps the vertical trait of the original; see CTFontCreateCopyWithSymbolicTraits.
+    if (result != NULL && ktFont(font) != nil)
+        fontWithVertical(result, (CTFontGetSymbolicTraits(font) & kCTFontTraitVertical) != 0);
+    return result;
 }
 
 // Observed on macOS 26.7.3 and Mac OS X 10.14.4 (black-box, through the public API, identical): within one
 // family a copy with the italic, bold, expanded, condensed or color-glyph trait set differently from the
 // original's is looked up among the faces and gives NULL when there is none (Helvetica has no expanded,
 // condensed or color-glyph face); setting the monospace, UI-optimized, composite or class-mask bits leaves the
-// font as it is, so they are not compared. Not reproduced: the vertical trait, which the original reports in the
-// copy. Test: coretext-font-copy-with-traits-and-family.
+// font as it is, so they are not compared. The vertical trait is not compared either, but is carried
+// into the copy (see CTFontCreateCopyWithSymbolicTraits). Test: coretext-font-copy-with-traits-and-family.
 static const CTFontSymbolicTraits sameFamilyStyleTraits =
         kCTFontTraitItalic | kCTFontTraitBold | kCTFontTraitExpanded | kCTFontTraitCondensed |
         kCTFontTraitColorGlyphs;
@@ -289,23 +345,41 @@ static CGFloat weightOfFont(CTFontRef font) {
     return weight;
 }
 
+static BOOL fontHasPostScriptName(CTFontRef font, CFStringRef name) {
+    CFStringRef own = CTFontCopyPostScriptName(font);
+    BOOL same = own != NULL && name != NULL && CFEqual(own, name);
+    if (own != NULL)
+        CFRelease(own);
+    return same;
+}
+
 // A new font of `family` whose style traits, over the bits in `compared`, are those of `wanted`,
-// or NULL when the family has no such face. A size of 0 keeps the size of the original. The
-// matrix is handed to the creation call as given: fonts here carry no matrix, so NULL, which
-// stands for the original's matrix, has nothing to preserve. The cascade list of the original is carried over to
+// or NULL when the family has no such face. A size of 0 keeps the size of the original and (with keepMatrix) a NULL
+// matrix keeps the original's matrix. The cascade list of the original is carried over to
 // the copy (observed on macOS 26.7.3 and Mac OS X 10.14.4, together with the feature settings, which fonts here do
 // not have); the variation is not.
 // GUESS: when several faces have the wanted traits (a family with Light, Regular and Medium
 // has three non-bold faces) the one whose weight trait is nearest to `targetWeight` is taken,
 // the first listed among equals. The documentation names no rule.
-static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTransform *matrix,
+// QUIRK: a request that changes no trait (an empty mask) returns the original face itself, whichever other
+// faces are as near in weight. Otherwise the first listed of equally near faces wins.
+// Not documented. Evidence: black-box observation of CTFontCreateCopyWithSymbolicTraits with value 0 and
+// mask 0 on macOS 26.7.3 and Mac OS X 10.14.4 (x86_64, i386; tier 2): all 66 faces of the probe return
+// themselves, among them Avenir-Roman beside the equally weighted Avenir-Book (probe 639.E.nochange). With a
+// mask the two versions differ (Avenir-Roman with bold cleared gives Avenir-Roman on 26.7.3 and Avenir-Book on
+// 10.14.4), and CTFontCreateCopyWithFamily into the face's own family gives Avenir-Book on both, so neither is
+// reproduced. Test: coretext-font-copy-with-traits-and-family (checkEmptyMaskKeepsTheFace).
+static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTransform *matrix, BOOL keepMatrix,
                                   CFStringRef family, CTFontSymbolicTraits wanted,
-                                  CTFontSymbolicTraits compared, CGFloat targetWeight)
+                                  CTFontSymbolicTraits compared, CGFloat targetWeight, BOOL originalWinsTies)
 {
     if (ktFont(font) == nil || family == NULL)
         return NULL;
     if (size == 0)
         size = CTFontGetSize(font);
+    CGAffineTransform originalMatrix = fontMatrix(font);
+    if (matrix == NULL && keepMatrix)
+        matrix = &originalMatrix;
 
     const void *keys[] = { kCTFontFamilyNameAttribute };
     const void *values[] = { family };
@@ -320,16 +394,21 @@ static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTr
 
     CTFontRef best = NULL;
     CGFloat bestDistance = 0;
+    CFStringRef originalName = CTFontCopyPostScriptName(font);
     for (CFIndex i = 0; i < CFArrayGetCount(faces); i++) {
         CTFontRef candidate = CTFontCreateWithFontDescriptor(
                 (CTFontDescriptorRef) CFArrayGetValueAtIndex(faces, i), size, matrix);
         if (candidate == NULL)
             continue;
-        CGFloat distance = weightOfFont(candidate) - targetWeight;
-        if (distance < 0)
-            distance = -distance;
-        if ((CTFontGetSymbolicTraits(candidate) & compared) != (wanted & compared) ||
-            (best != NULL && distance >= bestDistance)) {
+        if ((CTFontGetSymbolicTraits(candidate) & compared) != (wanted & compared)) {
+            CFRelease(candidate);
+            continue;
+        }
+        CGFloat distance = fabs(weightOfFont(candidate) - targetWeight);
+        BOOL wins = best == NULL || distance < bestDistance - 1e-9;
+        if (!wins && originalWinsTies && distance <= bestDistance + 1e-9)
+            wins = fontHasPostScriptName(candidate, originalName);
+        if (!wins) {
             CFRelease(candidate);
             continue;
         }
@@ -339,6 +418,8 @@ static CTFontRef copyFontInFamily(CTFontRef font, CGFloat size, const CGAffineTr
         bestDistance = distance;
     }
     CFRelease(faces);
+    if (originalName != NULL)
+        CFRelease(originalName);
     return fontWithCascade(best, fontCascade(font));
 }
 
@@ -349,6 +430,12 @@ CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
 {
     if (ktFont(font) == nil)
         return NULL;
+    // QUIRK: a negative size keeps the original's size, like the documented 0.0. Evidence:
+    // black-box observation of CTFontCreateCopyWithSymbolicTraits on macOS 26.7.3 and Mac OS X 10.14.4
+    // (identical, tier 2) and on 26.1 (arm64): Helvetica at 17 with size -5 gives a copy of size 17 (probe
+    // 639.B.size). Not probed for CTFontCreateCopyWithFamily, which is left as it is. Test: coretext-font-copy-with-traits-and-family.
+    if (size < 0)
+        size = 0;
     // GUESS: the documentation gives "the value of the symbolic traits" and "the mask bits"
     // without saying how they combine. The mask is taken to select the bits of the value that
     // replace the original's traits; the original's other bits stay.
@@ -360,8 +447,16 @@ CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
     CGFloat targetWeight = ((original & kCTFontTraitBold) && !(wanted & kCTFontTraitBold))
             ? 0 : weightOfFont(font);
     CFStringRef family = CTFontCopyFamilyName(font);
-    CTFontRef result = copyFontInFamily(font, size, matrix, family, wanted,
-                                        sameFamilyStyleTraits, targetWeight);
+    CTFontRef result = copyFontInFamily(font, size, matrix, YES, family, wanted,
+                                        sameFamilyStyleTraits, targetWeight, symTraitMask == 0);
+    // QUIRK: the vertical-orientation bit is not compared when looking for a face, but a request
+    // that sets it under the mask is carried into the copy's symbolic traits, and once a font has it no
+    // copy loses it: a request that clears it, an empty mask, a new size, a changed bold trait and
+    // CTFontCreateCopyWithAttributes all keep it (CTFontCreateCopyWithFamily does not). Not documented.
+    // Evidence: black-box observation on macOS 26.7.3 and Mac OS X 10.14.4 (x86_64, i386; tier 2):
+    // Helvetica with value=mask=0x800 gives traits 0x80000800, and every later copy of that font reads
+    // 0x80000800 (probe ctvert.c). Test: coretext-font-copy-with-traits-and-family.
+    fontWithVertical(result, ((original | (symTraitValue & symTraitMask)) & kCTFontTraitVertical) != 0);
     if (family != NULL)
         CFRelease(family);
     return result;
@@ -372,8 +467,29 @@ CTFontRef CTFontCreateCopyWithFamily(CTFontRef font, CGFloat size,
 {
     if (ktFont(font) == nil)
         return NULL;
-    return copyFontInFamily(font, size, matrix, family, CTFontGetSymbolicTraits(font),
-                            crossFamilyStyleTraits, weightOfFont(font));
+    // QUIRK: a NULL matrix gives the identity matrix here, not the original's (unlike
+    // CTFontCreateCopyWithSymbolicTraits and CTFontCreateCopyWithAttributes, which keep it).
+    // Evidence: black-box observation on macOS 10.14.4 (x86_64, i386) and 26.7.3 (tier 2); the
+    // documentation says NULL keeps the original's matrix. Test: coretext-font-matrix.
+    CTFontSymbolicTraits original = CTFontGetSymbolicTraits(font);
+    CTFontRef result = copyFontInFamily(font, size, matrix, NO, family, original,
+                                        crossFamilyStyleTraits, weightOfFont(font), NO);
+    // QUIRK, against the documented return value (a font with the original's traits in the family,
+    // or NULL when none is found; flagged for the maintainer): when the family has no face with the
+    // original's italic and bold traits (a bold original and a family of one regular face) the
+    // family's closest face is returned, not NULL. Evidence: black-box observation of
+    // CTFontCreateCopyWithFamily on macOS 26.7.3 and Mac OS X 10.14.4 (identical, tier 2) and on 26.1
+    // (arm64): Helvetica-Bold into Zapfino and into Apple
+    // Color Emoji gives those families' only face (probe 639.F.family). Only single-face families
+    // were probed; for a family of several the order below is what the test's bold-italic case pins (it passes
+    // on 26.7.3 and 10.14.4). The fewest mismatches are taken,
+    // bold dropped first, then italic, then the nearest weight; the rejected alternative is to
+    // ignore both at once. CTFontCreateCopyWithSymbolicTraits does return NULL for a missing trait
+    // inside one family (probe 639.D.noface). Test: coretext-font-copy-with-traits-and-family.
+    static const CTFontSymbolicTraits relaxed[] = { kCTFontTraitItalic, 0 };
+    for (size_t i = 0; result == NULL && i < sizeof(relaxed) / sizeof(relaxed[0]); i++)
+        result = copyFontInFamily(font, size, matrix, NO, family, original, relaxed[i], weightOfFont(font), NO);
+    return result;
 }
 
 CTFontRef CTFontCreateForString(CTFontRef currentFont, CFStringRef string, CFRange range)
@@ -520,8 +636,9 @@ CGFloat CTFontGetSize(CTFontRef self) {
 
 CGAffineTransform CTFontGetMatrix(CTFontRef font)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return CGAffineTransformIdentity;
+    if (ktFont(font) == nil)
+        return CGAffineTransformIdentity;
+    return fontMatrix(font);
 }
 
 static uint16_t readUInt16(const UInt8 *bytes) {
@@ -595,6 +712,8 @@ static CTFontSymbolicTraits fontTraits(CTFontRef font, CGFloat *weight,
         *slant = -1;
     if (italicAngle != 0)
         traits |= kCTFontTraitItalic;
+    if (objc_getAssociatedObject(ktFont(font), &fontVerticalKey) != nil)
+        traits |= kCTFontTraitVertical;
 
     return traits;
 }
@@ -1018,7 +1137,8 @@ CTFontCreateWithGraphicsFont(CGFontRef cgFont, CGFloat size,
 {
     if (cgFont == NULL)
         return NULL;
-    return fontWithCascade(createFont(cgFont, size), cascadeOfAttributes(attributes));
+    CTFontRef result = fontWithMatrix(createFont(cgFont, size), xform);
+    return fontWithCascade(result, cascadeOfAttributes(attributes));
 }
 
 ATSFontRef CTFontGetPlatformFont(CTFontRef font, CTFontDescriptorRef  _Nullable *attributes)

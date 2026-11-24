@@ -85,6 +85,10 @@ const CFStringRef kCGWindowMemoryUsage = CFSTR("kCGWindowMemoryUsage");
     O2InvalidAbstractInvocation();
 }
 
+- (CGRect) frame {
+    return CGRectNull;
+}
+
 - (void) setOpaque: (BOOL) value {
     O2InvalidAbstractInvocation();
 }

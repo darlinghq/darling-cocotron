@@ -37,6 +37,8 @@ static CATransactionGroup *currentTransactionGroup() {
     return result;
 }
 
+static id implicitTransactionDidBeginHandler;
+
 static CATransactionGroup *createImplicitTransactionGroupIfNeeded() {
     CATransactionGroup *check = currentTransactionGroup();
 
@@ -52,6 +54,15 @@ static CATransactionGroup *createImplicitTransactionGroupIfNeeded() {
                           order: 0
                           modes: [NSArray arrayWithObject:
                                                   NSDefaultRunLoopMode]];
+
+        id handler = nil;
+        @synchronized([CATransaction class]) {
+            handler = [implicitTransactionDidBeginHandler retain];
+        }
+        if (handler != nil) {
+            ((void (^)(void)) handler)();
+            [handler release];
+        }
     }
 
     return check;
@@ -270,6 +281,46 @@ static void scheduleCompletionBlocks(void) {
     // had not run after the following run loop turn.
     // Test: quartzcore_commit_handlers (impl/P114-tests), "a handler added
     // for a passed phase waits for the next commit".
+}
+
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The block is kept (a
+// new one replaces the old one, nil clears it) and is called, without arguments, each time an
+// implicit transaction begins (see createImplicitTransactionGroupIfNeeded). Observed on macOS
+// 26.7.3 (black-box, tier 2): the selector takes a block, the block is called once per implicit
+// transaction, synchronously on the thread that began it, and not for an explicit +begin;
+// 10.14.4 has no such selector, which is why this is the superset behaviour.
+// Test: quartzcore-catransaction-implicit-did-begin-handler.
++ (void) setImplicitTransactionDidBeginHandler: (id) handler {
+    @synchronized([CATransaction class]) {
+        id previous = implicitTransactionDidBeginHandler;
+        implicitTransactionDidBeginHandler = [handler copy];
+        [previous release];
+    }
+}
+
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The argument is a
+// BOOL (type encoding observed on macOS 10.14.4 and 26.7.3). The name asks to stop a run loop
+// observer from committing transactions. Cocotron commits an implicit transaction from a run loop
+// perform, not from an observer, so there is nothing to switch off: the flag is kept and has no
+// effect. Test: quartzcore-catransaction-disable-run-loop-observer-commits.
+static BOOL disableRunLoopObserverCommits;
+
++ (void) setDisableRunLoopObserverCommits: (BOOL) value {
+    @synchronized([CATransaction class]) {
+        disableRunLoopObserverCommits = value;
+    }
+}
+
+// Private, sent to the class by Mac Catalyst frameworks and not documented. The argument is a
+// BOOL (observed on macOS 26.7.3; Mojave 10.14.4 has no such selector, so this is the superset
+// behaviour). The name asks for the default of the flag above for transactions to come. The flag
+// has no effect here, so the default has none either: it is kept and nothing reads it.
+static BOOL defaultDisableRunLoopObserverCommits;
+
++ (void) setDefaultDisableRunLoopObserverCommits: (BOOL) value {
+    @synchronized([CATransaction class]) {
+        defaultDisableRunLoopObserverCommits = value;
+    }
 }
 
 + (void) flush {

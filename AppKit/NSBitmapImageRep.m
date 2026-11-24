@@ -51,6 +51,10 @@ NSBitmapImageRepPropertyKey NSImageCurrentFrame = @"NSImageCurrentFrame";
 
 @implementation NSBitmapImageRep
 
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
+
 + (NSArray *) imageUnfilteredFileTypes {
     return [NSArray arrayWithObjects:
                             // Try to order them so the most used ones are at

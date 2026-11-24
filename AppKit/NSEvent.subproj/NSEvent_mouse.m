@@ -148,59 +148,6 @@ static NSInteger defaultButtonNumber(NSEventType type) {
     return 0.0;
 }
 
-- (CGEventRef) CGEvent {
-    CGEventRef event;
-
-    switch (_type) {
-    case NSLeftMouseDown:
-    case NSLeftMouseUp:
-    case NSRightMouseDown:
-    case NSRightMouseUp:
-    case NSMouseMoved:
-    case NSLeftMouseDragged:
-    case NSRightMouseDragged:
-    case NSOtherMouseDown:
-    case NSOtherMouseUp:
-    case NSOtherMouseDragged:
-        // The mouse event types have the same values in both enums.
-        event = CGEventCreateMouseEvent(NULL, (CGEventType) _type, CGPointZero,
-                                        (CGMouseButton) _buttonNumber);
-        CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber,
-                                    _buttonNumber);
-        CGEventSetIntegerValueField(event, kCGMouseEventClickState,
-                                    _clickCount);
-        break;
-    case NSScrollWheel:
-        event = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 2,
-                                              (int32_t) _deltaY,
-                                              (int32_t) _deltaX);
-        break;
-    default:
-        return NULL;
-    }
-    if (event == NULL)
-        return NULL;
-
-    // CGEvent locations are global, in CoreGraphics' space: origin at the
-    // top-left corner of the main display, y down.
-    NSPoint point = [self locationInWindow];
-    NSWindow *window = [self window];
-    if (window != nil)
-        point = [window convertBaseToScreen: point];
-    NSArray *screens = [NSScreen screens];
-    if ([screens count] > 0)
-        point.y = NSHeight([[screens objectAtIndex: 0] frame]) - point.y;
-    CGEventSetLocation(event, NSPointToCGPoint(point));
-
-    // CGEvent times are nanoseconds on the clock NSEvent times count seconds of.
-    CGEventSetTimestamp(event, (CGEventTimestamp) ([self timestamp] * 1e9));
-
-    // NSEventModifierFlags and CGEventFlags use the same bits.
-    CGEventSetFlags(event, (CGEventFlags) [self modifierFlags]);
-
-    return (CGEventRef) CFAutorelease(event);
-}
-
 // Apple's documentation is a bit confusing here. NSEvent exposes no API to pass
 // a NSTrackingArea object on creation, yet they expose API to get that pointer.
 // Additionally, they state -trackingArea would deliver meaningful returns only
@@ -251,6 +198,11 @@ static NSInteger defaultButtonNumber(NSEventType type) {
 
 - (void) _setButtonNumber: (NSInteger) num {
     _buttonNumber = num;
+}
+
+- (void) _setDeltaX: (CGFloat) deltaX deltaY: (CGFloat) deltaY {
+    _deltaX = deltaX;
+    _deltaY = deltaY;
 }
 
 - (void) _setPreciseScrollingDeltaX: (CGFloat) deltaX deltaY: (CGFloat) deltaY phase: (NSEventPhase) phase {

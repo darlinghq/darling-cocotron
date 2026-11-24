@@ -35,7 +35,15 @@ static NSString *const kReduceMetrics = @"NSUserInterfaceCompressionOptionReduce
 static NSString *const kBreakEqualWidths = @"NSUserInterfaceCompressionOptionBreakEqualWidths";
 static NSString *const kCodingKey = @"NSUserInterfaceCompressionOptionIdentifiers";
 
+// Decodes securely (as on macOS); a secure unarchiver only decodes classes that adopt NSSecureCoding.
+@interface NSUserInterfaceCompressionOptions () <NSSecureCoding>
+@end
+
 @implementation NSUserInterfaceCompressionOptions
+
++ (BOOL) supportsSecureCoding {
+    return YES;
+}
 
 + (NSUserInterfaceCompressionOptions *) _optionWithIdentifier: (NSString *) identifier {
     return [[[self alloc] initWithIdentifier: identifier] autorelease];

@@ -139,8 +139,12 @@ enum {
 
 - (void) ok: (nullable id) sender;
 - (void) cancel: (nullable id) sender;
-// Like NSWindow's delegate, typed for the panel's own delegate protocol.
+// Like NSWindow's delegate, typed for the panel's own delegate protocol (the SDK's
+// header redeclares it the same way).
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wincompatible-property-type"
 @property(nullable, assign) id<NSOpenSavePanelDelegate> delegate;
+#pragma clang diagnostic pop
 - (IBAction) _selectFile: (null_unspecified id) sender;
 - (IBAction) _cancel: (null_unspecified id) sender;
 @end
