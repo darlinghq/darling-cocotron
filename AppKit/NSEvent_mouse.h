@@ -77,6 +77,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void *) userData;
 
 - (void) _setButtonNumber: (NSInteger) num;
+- (void) _setDeltaX: (CGFloat) deltaX deltaY: (CGFloat) deltaY;
 
 // Marks a scroll wheel event as coming from a device with precise deltas, such as a trackpad:
 // scrollingDeltaX and scrollingDeltaY return the given amounts to scroll by, hasPreciseScrollingDeltas

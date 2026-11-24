@@ -26,7 +26,6 @@
 #import "NSEvent_mouse.h"
 #import "WaylandCursor.h"
 #import "WaylandScale.h"
-#import "WaylandOutputManager.h"
 #import "WaylandPasteboard.h"
 #import "WaylandDraggingManager.h"
 #import "WaylandAppMenu.h"
@@ -62,67 +61,26 @@
 #include <unistd.h>
 #include <limits.h>
 
-@interface WaylandScreen : NSScreen {
-@public
-    CGFloat _waylandScale;
-    NSString *_outputName;
-}
-@end
-@implementation WaylandScreen
-- (CGFloat) backingScaleFactor { return _waylandScale; }
-// The output's description or name as the compositor reports it, else the name from an EDID set on the screen, else the
-// generic name.
-- (NSString *) localizedName {
-    return _outputName != nil && [self edid] == nil ? _outputName : [super localizedName];
-}
-- (void) dealloc {
-    [_outputName release];
-    [super dealloc];
-}
-@end
+// What a window needs of a wl_output: its scale and refresh rate, and the properties that
+// take effect together at wl_output.done (version 2 and later). The displays an application sees
+// (CoreGraphics' CGSConnectionWayland) describe the outputs themselves, from a connection of
+// their own.
+typedef struct { int32_t width, height, refresh, scale; } WaylandOutputState;
 
-// Mode pixels are untransformed. Publish v2 properties together at wl_output.done.
-// x, y: the output's position in the compositor's layout (wl_output.geometry).
-typedef struct { int32_t width, height, refresh, scale, transform, x, y; } WaylandOutputState;
-
-typedef struct {
-    int32_t x, y, width, height;
-    BOOL hasPosition, hasSize;
-} WaylandLogicalOutputState;
-
-// A wl_output and the modes it advertised.
+// A wl_output.
 @interface WaylandOutput : NSObject {
 @public
-    struct wl_proxy *_proxy, *_logicalProxy;
-    uint32_t _globalName, _version, _logicalVersion;
+    struct wl_proxy *_proxy;
+    uint32_t _globalName, _version;
     WaylandDisplay *_display;
     WaylandOutputState _current, _pending;
-    WaylandLogicalOutputState _logicalCurrent, _logicalPending;
-    NSArray *_modes;
-    NSMutableArray *_pendingModes;
-    // wl_output version 4: the connector name and the human readable description, published at done.
-    NSString *_name, *_pendingName, *_description, *_pendingDescription;
 }
 @end
 
 @implementation WaylandOutput
-
-- (void) dealloc {
-    [_name release];
-    [_pendingName release];
-    [_description release];
-    [_pendingDescription release];
-    [_modes release];
-    [_pendingModes release];
-    [super dealloc];
-}
-
 @end
 
 @interface WaylandDisplay (Private)
-- (void) logicalOutputEvent: (uint32_t) opcode output: (WaylandOutput *) output
-                 arguments: (union wl_argument *) args;
-- (void) attachLogicalOutput: (WaylandOutput *) output;
 - (void) processPendingEvents;
 - (void) handleEvent: (uint32_t) opcode
                 kind: (WaylandObjectKind) kind
@@ -153,17 +111,6 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                                                  kind: objectKind
                                                 proxy: proxy
                                             arguments: args];
-                break;
-            case WaylandObjectLogicalOutput:
-                [((WaylandOutput *) object)->_display logicalOutputEvent: opcode
-                                                                  output: object arguments: args];
-                break;
-            case WaylandObjectOutputManager:
-            case WaylandObjectOutputHead:
-            case WaylandObjectOutputHeadMode:
-            case WaylandObjectOutputConfiguration:
-                [(id<WaylandOutputManagementEvents>) object handleEvent: opcode kind: objectKind
-                                                                  proxy: proxy arguments: args];
                 break;
             case WaylandObjectDataDevice:
             case WaylandObjectDataOffer:
@@ -445,8 +392,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WL.xkb_context_unref(_xkbContext);
     if (_cursorTheme != NULL)
         WL.wl_cursor_theme_destroy(_cursorTheme);
-    [_outputManager release];
-    _outputManager = nil;
     [_appMenu release];
     _appMenu = nil;
     [_toplevelIcons release];
@@ -457,21 +402,17 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                       _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
                                       _textInput, _textInputManager, _pinchGesture, _pointerGestures, _pointer, _keyboard,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _logicalOutputManager,
-                                      _legacyLogicalOutputManager, _compositor, _registry};
+                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
                 WL.wl_proxy_destroy(proxies[i]);
-        for (WaylandOutput *output in _outputs) {
-            if (output->_logicalProxy) WL.wl_proxy_destroy(output->_logicalProxy);
+        for (WaylandOutput *output in _outputs)
             WL.wl_proxy_destroy(output->_proxy);
-        }
         WL.wl_display_disconnect(_wlDisplay);
     }
 
     [_cursor release];
     [_inputEvent release];
-    [_screens release];
     [_outputs release];
     [_afterDispatch release];
     if (_windows != NULL)
@@ -577,14 +518,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     WL.wl_display_flush(_wlDisplay);
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
-                          untilDate: (NSDate *) untilDate
-                             inMode: (NSRunLoopMode) mode
-                            dequeue: (BOOL) dequeue
-{
+// Sends the requests made since the last wait, and handles the events libwayland has already
+// read (which leave the connection's descriptor quiet)
+- (void) willWaitForEvents {
     [self processPendingEvents];
-
-    return [super nextEventMatchingMask: mask untilDate: untilDate inMode: mode dequeue: dequeue];
 }
 
 #pragma mark - Globals
@@ -710,18 +647,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                             kind: WaylandObjectSeat
                           object: self];
         [self attachTextInput];
-    } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
-        _logicalOutputManagerName = name;
-        _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
-                                        version: MIN(version, 3) kind: 0 object: nil];
-        for (WaylandOutput *output in _outputs) [self attachLogicalOutput: output];
-    } else if (strcmp(interface, "zwlr_output_manager_v1") == 0 && _outputManager == nil) {
-        _outputManagerName = name;
-        _outputManager = [WaylandOutputManager alloc];
-        struct wl_proxy *proxy = [self bindGlobal: name interface: &zwlr_output_manager_v1_interface
-                                          version: 1 kind: WaylandObjectOutputManager
-                                           object: _outputManager];
-        _outputManager = [_outputManager initWithDisplay: _wlDisplay manager: proxy];
     } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
         _layerShellName = name;
         // Version 4 adds the on-demand keyboard interactivity the bar asks for.
@@ -734,8 +659,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         output->_current.scale = output->_pending.scale = 1;
         // Version 2 has scale and done, version 4 the name and the description.
         output->_version = MIN(version, MIN(4u, wl_output_interface.version));
-        output->_pendingModes = [NSMutableArray new];
-        output->_modes = [NSArray new];
         // Version 2 has scale and done.
         output->_proxy = [self bindGlobal: name
                                 interface: &wl_output_interface
@@ -744,50 +667,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                    object: output];
         if (output->_proxy != NULL) {
             [_outputs addObject: output];
-            [self attachLogicalOutput: output];
         }
-    }
-}
-
-- (void) attachLogicalOutput: (WaylandOutput *) output {
-    if (!_logicalOutputManager || output->_logicalProxy) return;
-    struct wl_proxy *manager = _logicalOutputManager;
-    // Typed new_id inherits the server-side manager version. A core v1 output
-    // cannot receive wl_output.done, so it needs a genuinely v2 factory binding.
-    if (output->_version < 2 && WL.wl_proxy_get_version(manager) >= 3) {
-        if (!_legacyLogicalOutputManager)
-            _legacyLogicalOutputManager = [self bindGlobal: _logicalOutputManagerName
-                    interface: &zxdg_output_manager_v1_interface version: 2 kind: 0 object: nil];
-        manager = _legacyLogicalOutputManager;
-    }
-    if (!manager) return;
-    output->_logicalVersion = WL.wl_proxy_get_version(manager);
-    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *)output->_proxy}};
-    output->_logicalProxy = WaylandCreateObject(manager, WP_LOGICAL_MANAGER_GET_OUTPUT,
-            &zxdg_output_v1_interface, args, WaylandObjectLogicalOutput, output);
-}
-
-- (void) logicalOutputEvent: (uint32_t) opcode output: (WaylandOutput *) output
-                 arguments: (union wl_argument *) args {
-    switch (opcode) {
-    case WP_LOGICAL_OUTPUT_EV_POSITION:
-        output->_logicalPending.x = args[0].i;
-        output->_logicalPending.y = args[1].i;
-        output->_logicalPending.hasPosition = YES;
-        break;
-    case WP_LOGICAL_OUTPUT_EV_SIZE:
-        if (args[0].i > 0 && args[1].i > 0) {
-            output->_logicalPending.width = args[0].i;
-            output->_logicalPending.height = args[1].i;
-            output->_logicalPending.hasSize = YES;
-        }
-        break;
-    case WP_LOGICAL_OUTPUT_EV_DONE:
-        if (output->_logicalVersion < 3) {
-            output->_logicalCurrent = output->_logicalPending;
-            [self invalidateScreens];
-        }
-        break;
     }
 }
 
@@ -875,34 +755,14 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _layerShellName = 0;
         return;
     }
-    if (_outputManager && name == _outputManagerName) {
-        [_outputManager release];
-        _outputManager = nil;
-        _outputManagerName = 0;
-        return;
-    }
-    if (_logicalOutputManager && name == _logicalOutputManagerName) {
-        if (_legacyLogicalOutputManager)
-            WaylandMarshal(_legacyLogicalOutputManager, WP_LOGICAL_MANAGER_DESTROY, NULL,
-                           WL_MARSHAL_FLAG_DESTROY, NULL);
-        WaylandMarshal(_logicalOutputManager, WP_LOGICAL_MANAGER_DESTROY, NULL,
-                       WL_MARSHAL_FLAG_DESTROY, NULL);
-        _logicalOutputManager = _legacyLogicalOutputManager = NULL;
-        _logicalOutputManagerName = 0;
-        // Existing logical-output children survive factory removal.
-        return;
-    }
     for (WaylandOutput *output in _outputs) {
         if (output->_globalName == name) {
             for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
                 [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputRemoved: output->_proxy];
-            if (output->_logicalProxy)
-                WaylandMarshal(output->_logicalProxy, WP_LOGICAL_OUTPUT_DESTROY, NULL,
-                               WL_MARSHAL_FLAG_DESTROY, NULL);
             [_draggingManager outputRemoved: output->_proxy];
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
-            [self invalidateScreens];
+            [self _refreshDisplays];
             for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
                 [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputsChanged];
             break;
@@ -929,41 +789,19 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self applyCursor];
 }
 
-- (void) invalidateScreens {
-    [_screens release];
-    _screens = nil;
-}
-
+// An output changed. The displays are CoreGraphics', which learns from its own connection; it is
+// brought up to date first (this reports the change to the display reconfiguration callbacks, which is
+// what posts NSApplicationDidChangeScreenParametersNotification), then the windows learn of it.
 - (void) publishOutput: (WaylandOutput *) output {
-    // Not for the output's first description: the screens are being set up then.
-    BOOL changed = output->_current.width > 0 && output->_current.height > 0 &&
-                   memcmp(&output->_current, &output->_pending, sizeof output->_current) != 0;
     output->_current = output->_pending;
-    [output->_name release];
-    output->_name = [output->_pendingName copy];
-    [output->_description release];
-    output->_description = [output->_pendingDescription copy];
-    if (output->_logicalVersion >= 3)
-        output->_logicalCurrent = output->_logicalPending;
-    [output->_modes release];
-    output->_modes = [output->_pendingModes copy];
-    [self invalidateScreens];
+    // Not while the connection is being set up: the displays are read when they are first needed.
+    if (_wlSource != NULL)
+        [self _refreshDisplays];
     [_draggingManager outputsChanged];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
         [window scheduleScaleUpdate];
         [window outputsChanged];
-    }
-    if (changed) {
-        // One change comes as several events; merge them into one notification for the next run loop pass.
-        NSNotification *note = [NSNotification
-                notificationWithName: NSApplicationDidChangeScreenParametersNotification
-                              object: NSApp];
-        [[NSNotificationQueue defaultQueue] enqueueNotification: note
-                                                   postingStyle: NSPostASAP
-                                                   coalesceMask: NSNotificationCoalescingOnName |
-                                                                 NSNotificationCoalescingOnSender
-                                                       forModes: nil];
     }
 }
 
@@ -972,15 +810,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
            arguments: (union wl_argument *) args
 {
     switch (opcode) {
-    case WP_OUTPUT_EV_GEOMETRY:
-        // Geometry's transform is its eighth argument; dispatch avoids native
-        // variadic/listener ABI differences. Ignore unknown enum values.
-        if (args[7].i >= 0 && args[7].i <= 7)
-            output->_pending.transform = args[7].i;
-        output->_pending.x = args[0].i;
-        output->_pending.y = args[1].i;
-        break;
-    case WP_OUTPUT_EV_MODE: {
+    case WP_OUTPUT_EV_MODE:
         if (args[1].i <= 0 || args[2].i <= 0 || args[3].i < 0)
             return;
         if (args[0].u & WP_OUTPUT_MODE_CURRENT) {
@@ -988,38 +818,17 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             output->_pending.height = args[2].i;
             output->_pending.refresh = args[3].i;
         }
-        NSDictionary *mode = @{
-            @"Width" : @(args[1].i),
-            @"Height" : @(args[2].i),
-            @"Depth" : @(24),
-            @"RefreshRate" : @(args[3].i / 1000.0)
-        };
-        if (![output->_pendingModes containsObject: mode])
-            [output->_pendingModes addObject: mode];
         break;
-    }
     case WP_OUTPUT_EV_SCALE:
         output->_pending.scale = MAX(args[0].i, 1);
         break;
-    case WP_OUTPUT_EV_NAME:
-    case WP_OUTPUT_EV_DESCRIPTION: {
-        NSString *text = args[0].s != NULL ? [NSString stringWithUTF8String: args[0].s] : nil;
-        if (opcode == WP_OUTPUT_EV_NAME) {
-            [output->_pendingName release];
-            output->_pendingName = [text copy];
-        } else {
-            [output->_pendingDescription release];
-            output->_pendingDescription = [text copy];
-        }
-        return; // Published with the next done event.
-    }
     case WP_OUTPUT_EV_DONE:
         [self publishOutput: output];
         return;
     default:
         return;
     }
-    // Version 1 has no done event. Do not leave the fallback screen cached.
+    // Version 1 has no done event.
     if (output->_version < 2)
         [self publishOutput: output];
 }
@@ -1393,8 +1202,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                           clickCount: 1
                                               deltaX: location.x - last.x
                                               deltaY: last.y - location.y];
-        // Not coalesced with -discardEventsMatchingMask:beforeEvent:, which
-        // currently removes every older queued event, mouse-downs included.
+        // The event queue coalesces queued motion of the same kind for the same
+        // window, adding up the deltas.
         [self postEvent: event atStart: NO];
     }
 
@@ -2518,80 +2327,15 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     return result;
 }
 
-// Prefer complete compositor logical topology. If any output is still missing
-// metadata, keep the entire set in the core-protocol horizontal fallback.
-- (NSArray *) screens {
-    if (_screens != nil)
-        return [[_screens retain] autorelease];
-
-    NSMutableArray *screens = [NSMutableArray array];
-    CGFloat x = 0;
-    NSArray *outputs = [self outputsWithModes];
-    BOOL logical = [outputs count] > 0;
-    for (WaylandOutput *output in outputs)
-        if (!output->_logicalCurrent.hasPosition || !output->_logicalCurrent.hasSize)
-            logical = NO;
-    CGFloat referenceX = 0, referenceTop = 0;
-    if (logical) {
-        WaylandOutput *first = [outputs objectAtIndex: 0];
-        referenceX = first->_logicalCurrent.x;
-        referenceTop = (CGFloat)first->_logicalCurrent.y + first->_logicalCurrent.height;
-    }
-    for (WaylandOutput *output in outputs) {
-        BOOL rotated = (output->_current.transform & 1) != 0;
-        CGFloat width = rotated ? output->_current.height : output->_current.width;
-        CGFloat height = rotated ? output->_current.width : output->_current.height;
-        NSRect frame = NSMakeRect(x, 0, width / output->_current.scale,
-                                  height / output->_current.scale);
-        if (logical) {
-            WaylandLogicalOutputState state = output->_logicalCurrent;
-            frame = NSMakeRect((CGFloat)state.x - referenceX,
-                    referenceTop - (CGFloat)state.y - state.height, state.width, state.height);
-        }
-        WaylandScreen *screen = [[[WaylandScreen alloc] initWithFrame: frame
-                                               visibleFrame: frame] autorelease];
-        // Whole scale factors only: a compositor that scales an output by 1.5 reports 2, and the
-        // logical size says so even when wl_output rounds down.
-        CGFloat wholeScale = output->_current.scale;
-        if (logical && output->_logicalCurrent.width > 0) {
-            CGFloat ratio = width / output->_logicalCurrent.width;
-            wholeScale = MAX(wholeScale, ceil(ratio - 0.01));
-        }
-        screen->_waylandScale = wholeScale;
-        NSString *outputName = [output->_description length] > 0 ? output->_description : output->_name;
-        screen->_outputName = [outputName length] > 0 ? [outputName copy] : nil;
-        [screen setCgDirectDisplayID: [screens count] + 1];
-        [screens addObject: screen];
-        x += frame.size.width;
-    }
-
-    if ([screens count] == 0) {
-        // No output has reported a mode yet.
-        static const CGFloat fallbackWidth = 1920, fallbackHeight = 1080;
-        static BOOL logged;
-        if (!logged) {
-            NSLog(@"Wayland backend: no output mode known, assuming a %.0fx%.0f "
-                  @"screen",
-                  fallbackWidth, fallbackHeight);
-            logged = YES;
-        }
-        NSRect frame = NSMakeRect(0, 0, fallbackWidth, fallbackHeight);
-        [screens addObject: [[[NSScreen alloc] initWithFrame: frame
-                                                visibleFrame: frame] autorelease]];
-    }
-
-    _screens = [screens copy];
-    return [[_screens retain] autorelease];
-}
-
-// -screens is built from -outputsWithModes in order, so the indexes agree.
+// The outputs that have reported a mode are CoreGraphics' displays (its connection to the compositor
+// lists the same outputs in the same order), so the indexes agree.
 - (size_t) fullscreenOutputs: (WaylandFullscreenOutput *) result
                      proxies: (struct wl_proxy **) proxies
                          max: (size_t) max
                      entered: (NSSet *) entered
 {
     NSArray *outputs = [self outputsWithModes];
-    // -screens invents a screen when no output has reported a mode yet.
+    // -screens invents a screen when no display is known yet.
     if ([outputs count] == 0)
         return 0;
     NSArray *screens = [self screens];
@@ -2619,59 +2363,6 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         forNativeWindowBorderWithStyle: (NSUInteger) styleMask
 {
     return frame;
-}
-
-- (NSArray *) modesForScreen: (int) screenIndex {
-    NSArray *outputs = [self outputsWithModes];
-    if (screenIndex < 0 || screenIndex >= (int) [outputs count])
-        return nil;
-    WaylandOutput *output = outputs[screenIndex];
-    // The output-management heads list every mode the output can be set to; wl_output
-    // lists only what the compositor chooses to announce.
-    NSArray *managed = [_outputManager modesForOutputAtX: output->_current.x y: output->_current.y
-                                                   width: output->_current.width
-                                                  height: output->_current.height];
-    if ([managed count] > 0)
-        return managed;
-    return [NSArray arrayWithArray: output->_modes];
-}
-
-- (NSDictionary *) currentModeForScreen: (int) screenIndex {
-    NSArray *outputs = [self outputsWithModes];
-    if (screenIndex < 0 || screenIndex >= (int) [outputs count])
-        return @{};
-    WaylandOutput *output = outputs[screenIndex];
-    return @{
-        @"Width" : @(output->_current.width),
-        @"Height" : @(output->_current.height),
-        @"Depth" : @(24),
-        @"RefreshRate" : @(output->_current.refresh / 1000.0)
-    };
-}
-
-// Modes can be changed only through wlr-output-management; a compositor
-// without it keeps its output modes (NO).
-- (BOOL) setMode: (NSDictionary *) mode forScreen: (int) screenIndex {
-    NSArray *outputs = [self outputsWithModes];
-    if (_outputManager == nil || mode == nil || screenIndex < 0 || screenIndex >= (int) [outputs count])
-        return NO;
-    WaylandOutput *output = outputs[screenIndex];
-    BOOL changed = [_outputManager
-            setModeWidth: [[mode objectForKey: @"Width"] intValue]
-                  height: [[mode objectForKey: @"Height"] intValue]
-                 refresh: (int) lround([[mode objectForKey: @"RefreshRate"] doubleValue] * 1000.0)
-            forOutputAtX: output->_current.x y: output->_current.y
-            currentWidth: output->_current.width currentHeight: output->_current.height];
-    if (changed) {
-        // wl_output.done for the new mode normally came with the round trips; if it
-        // is still on its way, wait for it so that the screens are up to date.
-        for (int i = 0; i < 200 && output->_current.width != [[mode objectForKey: @"Width"] intValue]; i++) {
-            if (WL.wl_display_roundtrip(_wlDisplay) < 0)
-                break;
-            usleep(5000);
-        }
-    }
-    return changed;
 }
 
 #pragma mark - Windows

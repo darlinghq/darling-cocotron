@@ -42,7 +42,6 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandOutputManager;
 @class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons;
 
 @protocol WaylandFractionalScaleOwner
@@ -65,7 +64,6 @@ typedef enum {
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
     WaylandObjectKeyboardSync,
-    WaylandObjectLogicalOutput,
     WaylandObjectPinchGesture,
     WaylandObjectTextInput,
     WaylandObjectDataDevice,
@@ -74,10 +72,6 @@ typedef enum {
     WaylandObjectFractionalScale,
     WaylandObjectLockedPointer,
     WaylandObjectRelativePointer,
-    WaylandObjectOutputManager,
-    WaylandObjectOutputHead,
-    WaylandObjectOutputHeadMode,
-    WaylandObjectOutputConfiguration,
     WaylandObjectActivationToken,
     WaylandObjectLayerSurface,
     WaylandObjectTouch,
@@ -113,11 +107,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // Windows of an inactive application that were not mapped are being mapped for an activation.
     BOOL _mappingForActivation;
     uint32_t _viewporterName, _fractionalScaleManagerName;
-    struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
-    uint32_t _logicalOutputManagerName;
-    // wlr-output-management, when the compositor has it: the only way to change a mode.
-    WaylandOutputManager *_outputManager;
-    uint32_t _outputManagerName;
     struct wl_proxy *_subcompositor;
     // KDE's appmenu protocol, when the compositor has it: each toplevel tells it
     // where on the session bus the application's main menu is (see
@@ -175,7 +164,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     CFSocketRef _wlSocket;
     CFRunLoopSourceRef _wlSource;
     NSMutableArray *_outputs;
-    NSArray *_screens;
     // WaylandWindows, not retained, most recently activated first.
     CFMutableArrayRef _windows;
     NSMutableArray *_afterDispatch;
@@ -260,7 +248,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
-// Fills `result` and `proxies` with up to `max` outputs in -screens order: their
+// Fills `result` and `proxies` with up to `max` outputs in -screens order (the order of the displays): their
 // logical sizes and whether they are in `entered` (NSValue pointers, as
 // WaylandWindow keeps its entered outputs). Returns 0 until an output has
 // reported a mode.

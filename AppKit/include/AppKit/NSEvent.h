@@ -319,7 +319,13 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
     NS_LEGACY_IVAR_PAD(_NSEventReserved1, 4)
     NSTimeInterval _timestamp;
     NSInteger _windowNumber;
-    NS_LEGACY_IVAR_PAD(_NSEventReserved2, 24)
+    NS_LEGACY_IVAR_PAD(_NSEventReserved2, 20)
+    NS_EXTRA_IVARS_BEGIN(NSEvent)
+        // The CGEvent and the Carbon event the event was made from or taken from the queue
+        // as, or NULL
+        CGEventRef _cgEvent;
+        void *_eventRef;
+    NS_EXTRA_IVARS_END(NSEvent)
 }
 
 @property(class, readonly) NSPoint mouseLocation;
@@ -427,6 +433,9 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 + (BOOL) isSwipeTrackingFromScrollEventsEnabled;
 
 - (nullable CGEventRef) CGEvent;
++ (nullable NSEvent *) eventWithCGEvent: (CGEventRef) cgEvent;
+@property(readonly) const void *_Nullable eventRef;
++ (nullable NSEvent *) eventWithEventRef: (const void *) eventRef;
 
 @property(nullable, nonatomic, readonly) NSString *characters;
 @property(nullable, readonly, copy) NSString *charactersIgnoringModifiers;
