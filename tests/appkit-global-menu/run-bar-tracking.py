@@ -257,12 +257,24 @@ def main():
 
     def guest(mode, tag, extra_args=()):
         log = os.path.join(work, tag + ".log")
-        open(log, "w").close()
-        process = subprocess.Popen(
-            ["timeout", "-s", "KILL", "150", DARLING, "shell", "env"] + be.guest_env() +
-            ["/Volumes/SystemRoot" + program, "/Volumes/SystemRoot" + log, mode, "100"] + list(extra_args),
-            stdin=subprocess.DEVNULL, stdout=open(os.path.join(work, tag + ".out"), "w"), stderr=subprocess.STDOUT)
-        wait_for(log, "READY", 90)
+        # Right after "darling shutdown" the launcher can fail with "the container exited, try again".
+        for attempt in range(3):
+            open(log, "w").close()
+            process = subprocess.Popen(
+                ["timeout", "-s", "KILL", "150", DARLING, "shell", "env"] + be.guest_env() +
+                ["/Volumes/SystemRoot" + program, "/Volumes/SystemRoot" + log, mode, "100"] + list(extra_args),
+                stdin=subprocess.DEVNULL, stdout=open(os.path.join(work, tag + ".out"), "w"),
+                stderr=subprocess.STDOUT)
+            end = time.time() + 90
+            while time.time() < end and process.poll() is None and "READY" not in read(log):
+                time.sleep(0.3)
+            if "READY" in read(log):
+                break
+            process.kill()
+            process.wait()
+            subprocess.run([DARLING, "shutdown"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=60)
+            time.sleep(4)
         wait_for(log, "bar frame", 10) or wait_for(log, "bar none", 3)
         return log, process
 
@@ -271,7 +283,7 @@ def main():
         process.wait()
         subprocess.run([DARLING, "shutdown"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL, timeout=60)
-        time.sleep(1)
+        time.sleep(4)
 
     def run_case(tag, mode, extra_args=(), keyboard=True, focused=False):
         log, process = guest(mode, tag, extra_args)
@@ -362,16 +374,9 @@ def main():
         settle(1.0)
         be.key("Escape")
         check(wait_until(lambda: count(log, "didClose File") > closed, 8) is not None,
-              tag + ": Escape closes the submenu")
-        if not focused:
-            # With the application not holding the keyboard focus the bar (a layer surface without
-            # keyboard interactivity, or on X11 a window the keyboard grab is not on) gets no keys once its
-            # menu is gone, so the highlighted title is left with the pointer.
-            close_by_title_click()
-            return
-        be.key("Escape")
+              tag + ": Escape closes the menu")
         ended = tracking_ended(end)
-        check(ended, tag + ": the second Escape ends the tracking")
+        check(ended, tag + ": and ends the tracking")
         if not ended:
             close_by_title_click()
 
