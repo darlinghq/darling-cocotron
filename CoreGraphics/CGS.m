@@ -504,6 +504,21 @@ uint64_t _CGSNativeConnectionModifierFlags(void)
 	return [nativeConnection() modifierFlags];
 }
 
+BOOL _CGSNativeConnectionRelativeMouseState(BOOL* requested, CGPoint* frozenRoot)
+{
+	return [nativeConnection() relativeMouseState: requested frozenRoot: frozenRoot];
+}
+
+void _CGSNativeConnectionAccumulateMouseDelta(double dx, double dy)
+{
+	[nativeConnection() accumulateMouseDeltaX: dx y: dy];
+}
+
+void _CGSNativeConnectionPointerWindowsChanged(void)
+{
+	[nativeConnection() pointerWindowsChanged];
+}
+
 void _CGSNativeConnectionObjectDestroyed(void* object)
 {
 	[nativeConnection() nativeObjectDestroyed: object];

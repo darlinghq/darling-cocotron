@@ -73,6 +73,8 @@
 	// Device pixels per point, read together with _primaryRoot.
 	CGFloat _primaryScale;
 	BOOL _primaryRootValid;
+	// The cursor the connection's windows show while the process' cursor is hidden (None before the first hide).
+	Cursor _blankCursor;
 }
 
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
@@ -84,6 +86,10 @@
 -(CGPoint) _cgPointFromRoot:(CGPoint)root;
 // The CGS window that has this X window, 0 when none.
 -(CGSWindowID) _windowIDForNativeWindow:(Window)native;
+// The device pixel position of a point of CoreGraphics' global space (rounded).
+-(void) _getRootX:(int*)x y:(int*)y forPoint:(CGPoint)point;
+// Shows a blank cursor on the windows of this connection, or the cursor they had (the process' cursor is hidden).
+-(void) _setBlankCursorOnWindows:(BOOL)blank;
 -(NSArray<NSDictionary*>*) copyWindowDescriptions;
 
 +(BOOL) isAvailable;
