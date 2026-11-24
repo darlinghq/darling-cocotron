@@ -205,7 +205,7 @@ static NSPoint locationBesideEdge(NSRect rect, NSSize size, NSRectEdge edge, BOO
 }
 
 // Asks the delegate for the services now and pops the list up beside the named
-// edge of the rectangle from the main queue, so this returns before the picker
+// edge of the rectangle from a block on the main run loop, so this returns before the picker
 // is on screen and does not wait for it to be dismissed.
 // QUIRK: that return is not documented. Evidence: black-box observation on macOS
 // 26.1 arm64 (tier 2): 15 of 15 cases returned after 122 to 291 ms with no
@@ -236,7 +236,11 @@ static NSPoint locationBesideEdge(NSRect rect, NSSize size, NSRectEdge edge, BOO
         return;
 
     // The block keeps the picker, the view and the services alive until it has run.
-    dispatch_async(dispatch_get_main_queue(), ^{
+    // Not dispatch_async to the main queue: the menu's tracking loop would run nested in
+    // that block, and the main queue is not drained in a run loop nested in a main-queue
+    // block, so every other main-queue block would wait until the picker closed. On macOS
+    // the picker is an ordinary window and the application keeps running while it is up.
+    CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
         if (generation != NS_EXTRA(NSSharingServicePicker, self)->_showGeneration)
             return;
 
@@ -248,6 +252,7 @@ static NSPoint locationBesideEdge(NSRect rect, NSSize size, NSRectEdge edge, BOO
         NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu = nil;
         [menu release];
     });
+    CFRunLoopWakeUp(CFRunLoopGetMain());
 }
 
 // Dismisses the picker if it is up; a show that has not presented yet does not

@@ -182,6 +182,41 @@ static NSWindow *makeHost(void) {
     return host;
 }
 
+// While the picker is up, blocks dispatched to the main queue still run (on macOS the picker is an
+// ordinary window, so the application keeps running); the timer-based poll alone cannot show that.
+static void test_main_queue_runs_while_picker_is_up(void) {
+    NSWindow *host = makeHost();
+    PickerDelegate *delegate = [[PickerDelegate new] autorelease];
+    delegate->custom = [[[NSSharingService alloc] initWithTitle: @"Custom" image: nil alternateImage: nil handler: ^{}] autorelease];
+    NSSharingServicePicker *picker = [[[NSSharingServicePicker alloc] initWithItems: [NSArray arrayWithObject: @"item"]] autorelease];
+    __block BOOL posted = NO, ran = NO, finished = NO;
+    __block int ticks = 0;
+
+    [picker setDelegate: delegate];
+    NSTimer *timer = poll(^(NSTimer *t) {
+        if (openMenuWindow() == nil)
+            return;
+        if (!posted) {
+            posted = YES;
+            dispatch_async(dispatch_get_main_queue(), ^{ ran = YES; });
+            return;
+        }
+        // Give the posted block time to run while the menu is still up, then dismiss it.
+        if (ran || ++ticks > 50) {
+            finished = YES;
+            [t invalidate];
+            [picker close];
+        }
+    });
+    [picker showRelativeToRect: NSMakeRect(200, 150, 60, 30) ofView: [host contentView] preferredEdge: NSMinYEdge];
+    spin(5.0, ^BOOL { return finished; });
+    [timer invalidate];
+    CHECK(finished);
+    CHECK(ran);
+    spin(0.3, nil);
+    [host close];
+}
+
 // The picker is asked for its services inside the call and shows up only after it has returned.
 static void test_show_returns_before_presenting(void) {
     NSWindow *host = makeHost();
@@ -321,6 +356,7 @@ int main(void) {
     RUN(test_picker_released_by_the_delegate());
     [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
     RUN(test_show_returns_before_presenting());
+    RUN(test_main_queue_runs_while_picker_is_up());
     RUN(test_close_before_presenting());
     RUN(test_placement());
     if (failures == 0)
