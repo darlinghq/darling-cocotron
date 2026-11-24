@@ -2902,6 +2902,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     if (create && newFieldEditor == nil && _sharedFieldEditor == nil) {
         newFieldEditor = _sharedFieldEditor = [[NSTextView alloc] init];
+        // The container of a field editor follows neither the width nor the height of the view (macOS 26.7.3
+        // and 10.14.4, black-box, tier 2, mac-probes p783); the view sizes it to itself.
+        [[_sharedFieldEditor textContainer] setWidthTracksTextView: NO];
         // Cells draw their titles without padding; keep editing aligned.
         [[_sharedFieldEditor textContainer] setLineFragmentPadding: 0];
     }
