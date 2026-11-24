@@ -223,6 +223,42 @@ static void test_the_selection_notification_of_a_click_below_the_rows_sees_no_cl
     CHECK(source->notifiedColumn == -1);
 }
 
+// Sending the double action on a double click on a cell is documented
+// (https://developer.apple.com/documentation/appkit/nstableview/doubleaction). QUIRK pinned: with a double action set
+// the double click on an editable cell also starts no edit; the documentation is silent on that. Observed on macOS 26.1
+// arm64 (probe 659, "editable columns; inside column 0, row 1 (control); click count 2", the data source implements
+// setObjectValue:): `action(clickedRow=1,clickedColumn=0,selectedRow=1)` then
+// `doubleAction(clickedRow=1,clickedColumn=0,selectedRow=1)`, `editedRow=-1` at 0.1 s and 0.5 s, no setObjectValue.
+static void test_double_click_with_a_double_action_starts_no_edit(void)
+{
+    Source *source = setup(); // column 0 is editable, the data source sets values, the double action is set
+    NSPoint cell = NSMakePoint(50, NSMidY([table rectOfRow:1]));
+    click(cell, 1);
+    click(cell, 2);
+    CHECK(source->actions == 1 && source->doubleActions == 1);
+    CHECK(source->actionRow == 1 && source->actionColumn == 0);
+    CHECK([table editedRow] == -1 && [table editedColumn] == -1);
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+    drain();
+    CHECK([table editedRow] == -1 && [table editedColumn] == -1);
+    CHECK(source->edits == 0);
+}
+
+// Documented, not a QUIRK: a table without a double action edits the cell on a double click (see the page of
+// doubleAction above). Not probed on macOS 26.1.
+static void test_double_click_without_a_double_action_edits(void)
+{
+    Source *source = setup();
+    SEL none = 0;
+    [table setDoubleAction:none];
+    NSPoint cell = NSMakePoint(50, NSMidY([table rectOfRow:1]));
+    click(cell, 1);
+    click(cell, 2);
+    CHECK(source->doubleActions == 0);
+    CHECK([table editedRow] == 1 && [table editedColumn] == 0);
+    [table abortEditing];
+}
+
 int main(void)
 {
     @autoreleasepool
@@ -238,6 +274,8 @@ int main(void)
         test_a_click_below_the_rows_sends_the_action();
         test_a_click_below_the_rows_beside_the_columns_sends_the_action();
         test_the_selection_notification_of_a_click_below_the_rows_sees_no_clicked_cell();
+        test_double_click_with_a_double_action_starts_no_edit();
+        test_double_click_without_a_double_action_edits();
     }
     if (failures)
         return 1;
