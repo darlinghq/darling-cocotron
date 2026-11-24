@@ -320,6 +320,7 @@ static inline BOOL isScrollFixedDelta(CGEventField f) { return f >= kCGScrollWhe
 	free(_unicodeString);
 	_unicodeString = copy;
 	_unicodeLength = (uint16_t) stringLength;
+	_unicodeDerived = NO;
 }
 
 -(void) _fillFromEventRecord
@@ -463,6 +464,7 @@ static inline BOOL isScrollFixedDelta(CGEventField f) { return f >= kCGScrollWhe
 	rv->_locationValid = _locationValid;
 	memcpy(rv->_fields, _fields, sizeof(_fields));
 	[rv setUnicodeString: _unicodeString length: _unicodeLength];
+	rv->_unicodeDerived = _unicodeDerived;
 
 	if (_eventRecord)
 	{
