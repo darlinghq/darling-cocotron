@@ -69,6 +69,10 @@ K 150 39:0
 sleep 0.3
 K 150 40:1 40:0
 sleep 0.3
+K 150 23:1 23:0
+sleep 0.3
+K 150 50:1 23:1 23:0 50:0
+sleep 0.3
 # Shift goes down while the other client has the focus, and up after the application has it back
 focus "$foreign"
 K 150 50:1
