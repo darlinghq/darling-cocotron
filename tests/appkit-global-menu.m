@@ -135,6 +135,13 @@ static void note(const char *format, ...) {
 }
 - (void) setFileMenu: (NSMenu *) menu {
     _fileMenu = menu;
+    [menu setDelegate: self];
+}
+// The File menu reports when it opens and closes and which item is highlighted, for the
+// menu bar tracking tests (run-bar-tracking.py).
+- (void) menu: (NSMenu *) menu willHighlightItem: (NSMenuItem *) item {
+    if (menu == _fileMenu)
+        note("highlight File %s", item == nil ? "(none)" : [[item title] UTF8String]);
 }
 // The application menu is filled again with new items; the quit item is the usual terminate:.
 - (void) refillRebuilt {
@@ -173,10 +180,14 @@ static void note(const char *format, ...) {
     }
     if (menu == _dynamic)
         note("willOpen Dynamic");
+    if (menu == _fileMenu)
+        note("willOpen File");
 }
 - (void) menuDidClose: (NSMenu *) menu {
     if (menu == _dynamic)
         note("didClose Dynamic");
+    if (menu == _fileMenu)
+        note("didClose File");
 }
 - (void) observeValueForKeyPath: (NSString *) path ofObject: (id) object change: (NSDictionary *) change
                         context: (void *) context {
