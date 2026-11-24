@@ -86,9 +86,21 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
     return NS_EXTRA(NSSharingService, self)->_handler != nil;
 }
 
+// The delegate hears willShareItems: before the handler runs and didShareItems:
+// after it, for an empty array too. A handler cannot report a failure, so
+// didFailToShareItems:error: is never sent. GUESS: the calls are made before
+// this returns; the reference does not say whether they may come later.
 - (void) performWithItems: (NSArray *) items {
-    if (NS_EXTRA(NSSharingService, self)->_handler != nil)
-        NS_EXTRA(NSSharingService, self)->_handler();
+    void (^handler)(void) = NS_EXTRA(NSSharingService, self)->_handler;
+    id <NSSharingServiceDelegate> delegate = NS_EXTRA(NSSharingService, self)->_delegate;
+
+    if (handler == nil)
+        return;
+    if ([delegate respondsToSelector: @selector(sharingService:willShareItems:)])
+        [delegate sharingService: self willShareItems: items];
+    handler();
+    if ([delegate respondsToSelector: @selector(sharingService:didShareItems:)])
+        [delegate sharingService: self didShareItems: items];
 }
 
 @end

@@ -91,6 +91,11 @@ typedef NS_ENUM(NSInteger, NSSharingContentScope) {
 
 @protocol NSSharingServiceDelegate <NSObject>
 
+@optional
+- (void) sharingService: (NSSharingService *) sharingService willShareItems: (NSArray *) items;
+- (void) sharingService: (NSSharingService *) sharingService didFailToShareItems: (NSArray *) items error: (NSError *) error;
+- (void) sharingService: (NSSharingService *) sharingService didShareItems: (NSArray *) items;
+
 @end
 
 @protocol NSSharingServicePickerDelegate <NSObject>

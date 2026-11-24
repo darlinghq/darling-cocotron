@@ -8,6 +8,10 @@
 //  - when a service is chosen the picker tells the delegate, and the service receives the items
 //    after that call returns;
 //  - the delegate can give the chosen service its own delegate;
+//  - NSSharingServiceDelegate: when a service performs, its delegate is sent
+//    sharingService:willShareItems: before the service shares and
+//    sharingService:didShareItems: after it (public NSSharingService.h; a probe on macOS 26.1
+//    saw will, handler, did, also for an empty array);
 // Darling has no system services, so the proposed list is empty and the services here are
 // custom ones made with a handler. The menu of services is read through -menu, which is not in
 // the reference. Showing the picker runs a menu and is not tested.
@@ -75,6 +79,37 @@ static void test_delegate_services_and_choice(void) {
     CHECK([log_ isEqual: expected]);
 }
 
+@interface RecordingServiceDelegate : NSObject <NSSharingServiceDelegate>
+@end
+@implementation RecordingServiceDelegate
+- (void) sharingService: (NSSharingService *) service willShareItems: (NSArray *) items {
+    [log_ addObject: [NSString stringWithFormat: @"will%lu", (unsigned long) [items count]]];
+}
+- (void) sharingService: (NSSharingService *) service didShareItems: (NSArray *) items {
+    [log_ addObject: [NSString stringWithFormat: @"did%lu", (unsigned long) [items count]]];
+}
+@end
+
+static void test_perform_notifies_the_service_delegate(void) {
+    RecordingServiceDelegate *delegate = [[RecordingServiceDelegate new] autorelease];
+    NSSharingService *service = [[[NSSharingService alloc] initWithTitle: @"Custom" image: nil alternateImage: nil
+                                                                 handler: ^{ [log_ addObject: @"handler"]; }] autorelease];
+    NSArray *one = [NSArray arrayWithObject: @"item"];
+
+    log_ = [NSMutableArray array];
+    [service performWithItems: one];
+    CHECK([log_ isEqual: [NSArray arrayWithObject: @"handler"]]); // no delegate
+
+    [service setDelegate: delegate];
+    log_ = [NSMutableArray array];
+    [service performWithItems: one];
+    CHECK([log_ isEqual: ([NSArray arrayWithObjects: @"will1", @"handler", @"did1", nil])]);
+
+    log_ = [NSMutableArray array];
+    [service performWithItems: [NSArray array]];
+    CHECK([log_ isEqual: ([NSArray arrayWithObjects: @"will0", @"handler", @"did0", nil])]);
+}
+
 static void test_no_delegate(void) {
     NSSharingServicePicker *picker = [[[NSSharingServicePicker alloc] initWithItems: [NSArray arrayWithObject: @"x"]] autorelease];
 
@@ -117,6 +152,7 @@ int main(void) {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
     [NSApplication sharedApplication];
     RUN(test_delegate_services_and_choice());
+    RUN(test_perform_notifies_the_service_delegate());
     RUN(test_no_delegate());
     RUN(test_picker_released_by_the_delegate());
     if (failures == 0)
