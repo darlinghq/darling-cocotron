@@ -1422,10 +1422,10 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	[_pointer windowDestroyed: (Window) (uintptr_t) object];
 }
 
-// The blank cursor is made once; the windows go back to their parent's cursor when it is not wanted.
--(void) _setBlankCursorOnWindows:(BOOL)blank
+// The blank cursor is made once.
+-(Cursor) _blankCursorMade
 {
-	if (blank && _blankCursor == None)
+	if (_blankCursor == None)
 	{
 		char zero = 0;
 		XColor black = {0};
@@ -1433,6 +1433,14 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 		_blankCursor = XCreatePixmapCursor(_display, pixmap, pixmap, &black, &black, 0, 0);
 		XFreePixmap(_display, pixmap);
 	}
+	return _blankCursor;
+}
+
+// The windows go back to their parent's cursor when the blank one is not wanted.
+-(void) _setBlankCursorOnWindows:(BOOL)blank
+{
+	Cursor cursor = blank ? [self _blankCursorMade] : None;
+
 	@synchronized (_windows)
 	{
 		for (NSNumber* key in _windows)
@@ -1442,7 +1450,7 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 			if (![window isKindOfClass: [CGSWindowX11 class]])
 				continue;
 			if (blank)
-				XDefineCursor(_display, ((CGSWindowX11*) window)->_window, _blankCursor);
+				XDefineCursor(_display, ((CGSWindowX11*) window)->_window, cursor);
 			else
 				XUndefineCursor(_display, ((CGSWindowX11*) window)->_window);
 		}
@@ -1464,6 +1472,12 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	@synchronized (_windows)
 	{
 		[_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
+	}
+	// A window made while the cursor is hidden shows the blank cursor like the others
+	if (![self cursorIsVisible])
+	{
+		XDefineCursor(_display, window->_window, [self _blankCursorMade]);
+		XFlush(_display);
 	}
 	[window release];
 	return window;

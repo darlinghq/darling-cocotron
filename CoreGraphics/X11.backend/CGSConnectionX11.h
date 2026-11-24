@@ -90,6 +90,8 @@
 -(void) _getRootX:(int*)x y:(int*)y forPoint:(CGPoint)point;
 // Shows a blank cursor on the windows of this connection, or the cursor they had (the process' cursor is hidden).
 -(void) _setBlankCursorOnWindows:(BOOL)blank;
+// The blank cursor, made on first use.
+-(Cursor) _blankCursorMade;
 -(NSArray<NSDictionary*>*) copyWindowDescriptions;
 
 +(BOOL) isAvailable;

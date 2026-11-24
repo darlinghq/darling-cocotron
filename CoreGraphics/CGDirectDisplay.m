@@ -570,12 +570,26 @@ static CGDisplayGeometryRect desktopBounds(NSArray<CGSScreen *> *screens) {
     return desktop;
 }
 
+// QUIRK: a coordinate that is not a finite number (NaN, +infinity, -infinity) is taken as 0, on its own axis, and the
+// warp succeeds: the cursor goes to 0 on that axis (and where it was asked to on the other one), it is not clamped to
+// the far edge for +infinity and no error is returned. Not documented. Evidence (tier 2, black-box): the return code
+// and the cursor position CGEventCreate(NULL) reports after CGWarpMouseCursorPosition and CGDisplayMoveCursorToPoint
+// with NaN, +infinity and -infinity as x, y or both on macOS 26.7.3 and 10.14.4 (x86_64, main display at the origin):
+// success every time, the position 0 on every non-finite axis. Probe: vd-upstream/mac-probes/937-b2c-warp-nonfinite.c.
+// Test: coregraphics-warp-mouse-glue (non-finite coordinates).
+static CGPoint warpTargetWithFiniteCoordinates(CGPoint point) {
+    if (!isfinite(point.x))
+        point.x = 0;
+    if (!isfinite(point.y))
+        point.y = 0;
+    return point;
+}
+
 // The one place CoreGraphics' global point meets the window system's: clip it to the
 // desktop and hand it on, in the same global space (the space CGEventGetLocation()
 // reports). The rules are written down in CGDisplayGeometry.h.
 static CGError warpToGlobalPoint(CGPoint point) {
-    if (!isfinite(point.x) || !isfinite(point.y))
-        return kCGErrorIllegalArgument;
+    point = warpTargetWithFiniteCoordinates(point);
 
     BOOL connected;
     NSArray<CGSScreen *> *screens = activeScreens(&connected);
