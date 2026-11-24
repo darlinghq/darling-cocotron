@@ -78,9 +78,10 @@ int main(void) {
         }
         CHECK(10, CGWarpMouseCursorPosition(CGPointMake(INFINITY, 0)) == kCGErrorIllegalArgument);
 
-        // The X11 connection keeps the pointer state itself and does not use a controller (the hide count, the
-        // association, the deltas and the warp are covered by coregraphics-x11-relative-mouse).
-        if (x11) {
+        // The X11 and Wayland connections keep the pointer state themselves and do not use a controller (the hide
+        // count, the association, the deltas and the warp are covered by coregraphics-x11-relative-mouse and
+        // appkit-wayland-relative-mouse).
+        if (x11 || getenv("WAYLAND_DISPLAY") != NULL) {
             CHECK(28, !appKitLoaded());
             printf("PASS\n");
             return 0;
