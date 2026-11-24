@@ -78,6 +78,14 @@ int main(void) {
         }
         CHECK(10, CGWarpMouseCursorPosition(CGPointMake(INFINITY, 0)) == kCGErrorIllegalArgument);
 
+        // The X11 connection keeps the pointer state itself and does not use a controller (the hide count, the
+        // association, the deltas and the warp are covered by coregraphics-x11-relative-mouse).
+        if (x11) {
+            CHECK(28, !appKitLoaded());
+            printf("PASS\n");
+            return 0;
+        }
+
         // With a controller.
         Controller *controller = [[Controller alloc] init];
         _CGSSetPointerController(controller);
