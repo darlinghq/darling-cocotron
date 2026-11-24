@@ -190,6 +190,10 @@ static NSArray *NSApplicationDocumentsInArguments(NSArray *arguments) {
 - (void) applicationIconImageChanged;
 @end
 
+@interface NSRunningApplication (NSApplicationBundleless)
+- (BOOL) _isOutsideApplicationBundle;
+@end
+
 @implementation NSApplication
 
 NS_EXTRA_DEALLOC(NSApplication)
@@ -876,9 +880,11 @@ static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
     if ([self isActive])
         return;
 
-    // A regular application that activates owns the menu bar and is the front application,
-    // even if none of its windows can have the focus.
-    if ([self activationPolicy] == NSApplicationActivationPolicyRegular) {
+    // An application that activates is the front application, even if none of its windows can have
+    // the focus, and a regular one owns the menu bar then. A prohibited one (see -[NSRunningApplication
+    // activationPolicy]) is neither: its windows have the focus, but it is not what the system calls
+    // the front application.
+    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited) {
         _CGSSetFrontProcess(getpid());
         [self _publishActivation];
     }
@@ -1270,6 +1276,12 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
         return NO;
     NS_EXTRA(NSApplication, self)->_activationPolicy = activationPolicy;
     NS_EXTRA(NSApplication, self)->_activationPolicySet = YES;
+    // A program that was prohibited and is active takes up the part of the front application now.
+    if (activationPolicy != NSApplicationActivationPolicyProhibited &&
+        NS_EXTRA(NSApplication, self)->_isActive) {
+        _CGSSetFrontProcess(getpid());
+        [self _publishActivation];
+    }
     return YES;
 }
 
@@ -1759,8 +1771,12 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
         return;
     }
 
+    // (A program outside an application bundle is prohibited until it sets a policy, but has always
+    // ended with its last window.)
     if (closedByUser && terminateAfterLastWindowClosedSetting() &&
-        [self activationPolicy] == NSApplicationActivationPolicyRegular &&
+        ([self activationPolicy] == NSApplicationActivationPolicyRegular ||
+         (!NS_EXTRA(NSApplication, self)->_activationPolicySet &&
+          [[NSRunningApplication currentApplication] _isOutsideApplicationBundle])) &&
         ![NSStatusBar _hasStatusItems])
         [self terminate: self];
 }
@@ -2775,8 +2791,10 @@ static BOOL resignForced;
     // A window of this process has the input focus, which is what makes it the front process.
     // CoreGraphics keeps it for the display servers that cannot be asked who has the focus and
     // tells the other processes (NSWorkspace's frontmostApplication follows it).
-    _CGSSetFrontProcess(getpid());
-    [self _publishActivation];
+    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited) {
+        _CGSSetFrontProcess(getpid());
+        [self _publishActivation];
+    }
     if (!NS_EXTRA(NSApplication, self)->_isActive) {
         NS_EXTRA(NSApplication, self)->_isActive = YES;
         [[NSNotificationCenter defaultCenter]

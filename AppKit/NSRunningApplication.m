@@ -124,15 +124,27 @@ static BOOL processExists(pid_t pid) {
 }
 
 // The policy comes from the bundle's declarations (LSUIElement: accessory, LSBackgroundOnly:
-// prohibited); an application without a bundle is a regular one.
+// prohibited). A program that is not in an application bundle is prohibited until it sets another
+// policy: it cannot become the front application or own the menu bar, however it activates itself.
+// Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2): an AppKit executable outside
+// a bundle, run from Terminal and started by a regular application, has policy 2, and neither
+// activateIgnoringOtherApps: nor the other activation call made it active, the front application
+// or the menu bar owner; the regular application that started it stayed all three.
+// Test: tests/appkit-global-menu/run-bar-tracking.py (the parent case).
 - (NSApplicationActivationPolicy) activationPolicy {
     NSBundle *bundle = [self _applicationBundle];
 
+    if (bundle == nil)
+        return NSApplicationActivationPolicyProhibited;
     if ([[bundle objectForInfoDictionaryKey: @"LSBackgroundOnly"] boolValue])
         return NSApplicationActivationPolicyProhibited;
     if ([[bundle objectForInfoDictionaryKey: @"LSUIElement"] boolValue])
         return NSApplicationActivationPolicyAccessory;
     return NSApplicationActivationPolicyRegular;
+}
+
+- (BOOL) _isOutsideApplicationBundle {
+    return [self _applicationBundle] == nil;
 }
 
 - (BOOL) isHidden {
