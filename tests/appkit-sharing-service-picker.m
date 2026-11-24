@@ -189,7 +189,7 @@ static void test_main_queue_runs_while_picker_is_up(void) {
     PickerDelegate *delegate = [[PickerDelegate new] autorelease];
     delegate->custom = [[[NSSharingService alloc] initWithTitle: @"Custom" image: nil alternateImage: nil handler: ^{}] autorelease];
     NSSharingServicePicker *picker = [[[NSSharingServicePicker alloc] initWithItems: [NSArray arrayWithObject: @"item"]] autorelease];
-    __block BOOL posted = NO, ran = NO, finished = NO;
+    __block BOOL posted = NO, ran = NO, ranWhileUp = NO, finished = NO;
     __block int ticks = 0;
 
     [picker setDelegate: delegate];
@@ -204,6 +204,7 @@ static void test_main_queue_runs_while_picker_is_up(void) {
         // Give the posted block time to run while the menu is still up, then dismiss it.
         if (ran || ++ticks > 50) {
             finished = YES;
+            ranWhileUp = ran;
             [t invalidate];
             [picker close];
         }
@@ -212,7 +213,7 @@ static void test_main_queue_runs_while_picker_is_up(void) {
     spin(5.0, ^BOOL { return finished; });
     [timer invalidate];
     CHECK(finished);
-    CHECK(ran);
+    CHECK(ranWhileUp);
     spin(0.3, nil);
     [host close];
 }

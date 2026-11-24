@@ -104,8 +104,8 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
     handler();
     if ([delegate respondsToSelector: @selector(sharingService:didShareItems:)])
         [delegate sharingService: self didShareItems: items];
-    [delegate release];
-    [self release];
+    [delegate autorelease];
+    [self autorelease];
 }
 
 @end
@@ -251,6 +251,10 @@ static NSPoint locationBesideEdge(NSRect rect, NSSize size, NSRectEdge edge, BOO
     // the picker is an ordinary window and the application keeps running while it is up.
     CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
         if (generation != NS_EXTRA(NSSharingServicePicker, self)->_showGeneration)
+            return;
+        // The picker is already up (this block can run inside its tracking loop): a nested
+        // pop-up would hide it from -close. GUESS: a show while it is up does nothing.
+        if (NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu != nil)
             return;
         // The view left its window before the picker could be placed: nowhere to anchor it.
         if (view != nil && [view window] == nil)
