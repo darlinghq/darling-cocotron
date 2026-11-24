@@ -154,6 +154,15 @@
 // uses its native display.
 +(id) nativeObserver;
 +(void) setNativeObserver:(id)observer;
+// Keyboard state for the frameworks that read the window system's input from the event stream: the
+// object with the keyboard focus, the modifier flags with the device bits, the end of the focus
+// on a destroyed object and the keyboard layout group in effect. The defaults know nothing.
+-(void*) keyboardFocus;
+-(uint64_t) modifierFlags;
+-(void) nativeObjectDestroyed:(void*)object;
+-(void) flushPendingKeyboardEvents;
+-(int) keyboardLayoutGroup;
+-(NSString*) keyboardLayoutName;
 // Reads what the window system has sent and handles it: this is what the run loop calls when the
 // connection's socket is readable. The default implementation does nothing.
 -(void) processPendingEvents;

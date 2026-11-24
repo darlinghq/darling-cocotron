@@ -494,6 +494,36 @@ void _CGSProcessNativeConnectionEvents(void)
 	[nativeConnection() processPendingEvents];
 }
 
+void* _CGSNativeConnectionKeyboardFocus(void)
+{
+	return [nativeConnection() keyboardFocus];
+}
+
+uint64_t _CGSNativeConnectionModifierFlags(void)
+{
+	return [nativeConnection() modifierFlags];
+}
+
+void _CGSNativeConnectionObjectDestroyed(void* object)
+{
+	[nativeConnection() nativeObjectDestroyed: object];
+}
+
+void _CGSNativeConnectionFlushPendingKeyboardEvents(void)
+{
+	[nativeConnection() flushPendingKeyboardEvents];
+}
+
+int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef* name)
+{
+	CGSConnection* connection = nativeConnection();
+	int group = [connection keyboardLayoutGroup];
+
+	if (name != NULL)
+		*name = group >= 0 ? (CFStringRef) [[connection keyboardLayoutName] retain] : NULL;
+	return group;
+}
+
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId)
 {
 	CGSConnection* conn = _CGSConnectionForID(connId);

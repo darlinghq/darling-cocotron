@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "CGSConnectionWayland.h"
+#import "CGSWaylandKeyboard.h"
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
@@ -112,6 +113,10 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                                                                      proxy: proxy
                                                                  arguments: args];
                 break;
+            case CGSWaylandObjectKeyboardSync:
+                if (opcode == WP_CALLBACK_EV_DONE)
+                    [(CGSWaylandKeyboard *) object modifierSyncDone: (struct wl_proxy *) proxy];
+                break;
             case CGSWaylandObjectSeat:
             case CGSWaylandObjectKeyboard:
             default:
@@ -173,6 +178,8 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     _outputs = [NSMutableArray new];
     // The keyboard layout is described from the system default until the compositor's keymap arrives.
     _keymap = [[CGSWaylandKeymap alloc] init];
+    if (_keymap != nil)
+        _keyboardDecoder = [[CGSWaylandKeyboard alloc] initWithConnection: self keymap: _keymap];
 
     _wlDisplay = WL.wl_display_connect(NULL);
     if (_wlDisplay == NULL) {
@@ -273,6 +280,7 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 
     [_outputManager release];
     [self releaseKeyboard];
+    [_keyboardDecoder release];
     if (_seat != NULL)
         WL.wl_proxy_destroy(_seat);
     [_keymap release];
@@ -693,6 +701,7 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 }
 
 - (void) releaseKeyboard {
+    [(CGSWaylandKeyboard *) _keyboardDecoder stop];
     if (_keyboard == NULL)
         return;
     // wl_keyboard.release exists from version 3.
@@ -705,22 +714,40 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     _keyboard = NULL;
 }
 
+// The events of the wl_keyboard: the keymap and the modifier state are the keymap's, the keys become
+// CGEvents (CGSWaylandKeyboard).
 - (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    switch (opcode) {
-    case WP_KEYBOARD_EV_KEYMAP:
-        // The descriptor is the connection's to close, also when there is no keymap object.
-        if (_keymap != nil)
-            [(CGSWaylandKeymap *) _keymap installKeymapWithFormat: args[0].u fd: args[1].h size: args[2].u];
-        else
-            close(args[1].h);
-        break;
-    case WP_KEYBOARD_EV_MODIFIERS:
-        [(CGSWaylandKeymap *) _keymap updateDepressed: args[1].u latched: args[2].u locked: args[3].u
-                                                group: args[4].u];
-        break;
-    default:
-        break;
+    if (_keyboardDecoder != nil) {
+        [(CGSWaylandKeyboard *) _keyboardDecoder keyboardEvent: opcode arguments: args];
+        return;
     }
+    // Without xkbcommon there is no keymap object. The descriptor is the connection's to close.
+    if (opcode == WP_KEYBOARD_EV_KEYMAP)
+        close(args[1].h);
+}
+
+- (void *) keyboardFocus {
+    return [(CGSWaylandKeyboard *) _keyboardDecoder focusSurface];
+}
+
+- (uint64_t) modifierFlags {
+    return [(CGSWaylandKeyboard *) _keyboardDecoder modifierFlags];
+}
+
+- (void) nativeObjectDestroyed: (void *) object {
+    [(CGSWaylandKeyboard *) _keyboardDecoder surfaceDestroyed: (struct wl_proxy *) object];
+}
+
+- (void) flushPendingKeyboardEvents {
+    [(CGSWaylandKeyboard *) _keyboardDecoder flushPendingModifier];
+}
+
+- (int) keyboardLayoutGroup {
+    return [(CGSWaylandKeymap *) _keymap layoutGroup];
+}
+
+- (NSString *) keyboardLayoutName {
+    return [(CGSWaylandKeymap *) _keymap layoutName];
 }
 
 // The layout of the keymap in force, which this connection's keyboard received from the compositor.

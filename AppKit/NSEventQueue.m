@@ -408,17 +408,40 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
             CGEventKeyboardGetUnicodeString(cgEvent, 256, &length, buffer);
             characters = [NSString stringWithCharacters: buffer length: MIN(length, (UniCharCount) 256)];
         }
-        // Keyboard events are for the key window
-        NSWindow *keyWindow = [NSApp keyWindow];
-        result = [[NSEvent_keyboard alloc] initWithType: (NSEventType) type
-                                               location: [keyWindow mouseLocationOutsideOfEventStream]
-                                          modifierFlags: flags
-                                                 window: keyWindow
-                                             characters: characters
-                            charactersIgnoringModifiers: characters
-                                              isARepeat: CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventAutorepeat) != 0
-                                                keyCode: (unsigned short) CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)];
-        break;
+        // The characters without the modifiers other than Shift come with the event when the window system
+        // posted it (the window system's keyboard) and no tap gave the event another key code; otherwise
+        // they are the characters.
+        NSString *unmodified = characters;
+        int64_t unmodifiedLength = CGEventGetIntegerValueField(cgEvent, kCGSKeyboardEventUnmodifiedLength);
+        if (type != kCGEventFlagsChanged && unmodifiedLength > 0 &&
+            CGEventGetIntegerValueField(cgEvent, kCGSKeyboardEventUnmodifiedKeyCode) ==
+                    CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)) {
+            UniChar units[4];
+            int64_t packed = CGEventGetIntegerValueField(cgEvent, kCGSKeyboardEventUnmodifiedUnicode);
+            if (unmodifiedLength > 4)
+                unmodifiedLength = 4;
+            for (int64_t i = 0; i < unmodifiedLength; i++)
+                units[i] = (UniChar) (packed >> (16 * i));
+            unmodified = [NSString stringWithCharacters: units length: (NSUInteger) unmodifiedLength];
+        }
+        // The display says which window the event is for
+        NSInteger windowNumber = 0;
+        NSPoint keyLocation = NSZeroPoint;
+        NSDisplay *display = [NSDisplay currentDisplay];
+        if (![display windowNumber: &windowNumber location: &keyLocation forKeyEvent: cgEvent])
+            return nil;
+        result = [NSEvent keyEventWithType: (NSEventType) type
+                                  location: keyLocation
+                             modifierFlags: flags
+                                 timestamp: timestamp
+                              windowNumber: windowNumber
+                                   context: nil
+                                characters: characters
+                charactersIgnoringModifiers: unmodified
+                                 isARepeat: CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventAutorepeat) != 0
+                                   keyCode: (unsigned short) CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)];
+        [display keyEventCreated: result fromCGEvent: cgEvent];
+        return [result retain];
     }
     case NSAppKitDefined:
     case NSSystemDefined:

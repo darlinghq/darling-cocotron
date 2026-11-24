@@ -89,6 +89,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // sends what it has buffered. Does nothing by default.
 - (void) willWaitForEvents;
 
+// The NSEvent of a key event the window system's keyboard posted as a CGEvent (see
+// -[NSApplication nextEventMatchingMask:...]): which window it is for and where the pointer is in
+// that window. NO drops the event (no window of the application can take it). The default is the key
+// window.
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          forKeyEvent: (struct __CGEvent *) event;
+// The NSEvent made for such a CGEvent, before it is handed to the application. The default does nothing.
+- (void) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent;
+
 // The events are those of HIToolbox's main event queue (NSEventQueue.m). These wait for the next one,
 // as -[NSApplication nextEventMatchingMask:...] does but with an NSAppKitSystem event when there is
 // none, and remove events, as -[NSApplication discardEventsMatchingMask:beforeEvent:] does.
