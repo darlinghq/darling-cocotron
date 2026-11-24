@@ -13,6 +13,7 @@
 //   Control + a                control character, characters ignoring the modifiers
 //   s held for a second        key repeat
 //   d                          the tap turns it into e
+//   Shift + Tab                the NSEvent's characters are U+0019 (NSBackTabCharacter), see appkit-nsevent-backtab
 //   q                          the end
 // Usage: appkit-keyboard-cgevents (no arguments)
 // Prints PASS or FAIL lines, then ALL PASSED or FAILED n.
@@ -252,6 +253,14 @@ int main(void) {
         expect(findKey(nsSeen, nsCount, 0, kCGEventKeyDown, 'd') < 0, @"AppKit got no d");
         expect(nsE >= 0 && nsSeen[nsE].hidFlagsState == 'e',
                @"and its characters ignoring the modifiers follow the changed key code");
+        // Shift + Tab: the NSEvent's characters are the back tab character (the virtual keyboard's key code is not
+        // the Tab key's, so the key is found by its characters: the layout's tab character reaches the tap)
+        int tapTab = findKey(tapSeen, tapCount, 0, kCGEventKeyDown, '\t');
+        expect(tapTab >= 0 && (tapSeen[tapTab].flags & kCGEventFlagMaskShift), @"Shift + Tab: the tap sees the layout's tab character U+0009 with the Shift flag");
+        int nsTab = findKey(nsSeen, nsCount, 0, kCGEventKeyDown, NSBackTabCharacter);
+        expect(nsTab >= 0 && (nsSeen[nsTab].flags & NSEventModifierFlagShift) && nsSeen[nsTab].hidFlagsState == NSBackTabCharacter,
+               @"Shift + Tab: AppKit's characters and charactersIgnoringModifiers are U+0019 (NSBackTabCharacter)");
+        expect(findKey(nsSeen, nsCount, 0, kCGEventKeyDown, '\t') < 0, @"Shift + Tab: AppKit gets no U+0009");
         expect(nsCGEventMatches, @"every NSEvent's CGEvent is the one the tap passed on (key code)");
         expect(nsHasWindow, @"the key events are for a window");
     }
