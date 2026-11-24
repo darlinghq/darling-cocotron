@@ -10,11 +10,11 @@
 // Guest fixture for clipboard-keyboard-removed.sh: every "c" key down puts a new string,
 // "fresh-<n>" for the n-th key, on the general pasteboard, as a Copy command does; "q" quits.
 // Keys are taken in -sendEvent:, so the copy happens while the key event is being handled.
-@interface FreshCopyApplication : NSApplication
-@end
-@implementation FreshCopyApplication {
+@interface FreshCopyApplication : NSApplication {
     int _copies;
 }
+@end
+@implementation FreshCopyApplication
 - (void)sendEvent:(NSEvent *)event {
     if ([event type] != NSKeyDown) { [super sendEvent:event]; return; }
     NSString *key = [event charactersIgnoringModifiers];

@@ -8,6 +8,8 @@
 # against a private headless sway and types each "c" with wtype, whose virtual keyboard is removed
 # from the seat when it exits, a few milliseconds after the key. After every key the clipboard, read
 # with wl-paste, must hold the new string within CLIPBOARD_BUDGET_MS (200 by default); 20 rounds.
+# wtype is given 200 ms (-s) after it creates its keyboard, so that the client has bound it before the key; without it
+# the key can be gone before the client has a keyboard, and the guest never sees it.
 # Needs sway, swaymsg, wtype and wl-paste (wl-clipboard). wtype writes its keymap to /tmp, so /tmp must
 # have room. Nothing of the running desktop is used. A manual fixture, not run by CI.
 #
@@ -69,7 +71,7 @@ ms() { echo $(( $(date +%s%N) / 1000000 )); }
 failures=0
 for n in $(seq "$rounds"); do
     want="fresh-$n"
-    wtype c
+    wtype -s 200 c
     start=$(ms)
     got=
     while :; do
@@ -86,6 +88,6 @@ for n in $(seq "$rounds"); do
         failures=$((failures + 1))
     fi
 done
-wtype q
+wtype -s 200 q
 [ "$failures" = 0 ] && echo "PASS: $rounds copies reached the clipboard in time" || echo "FAIL: $failures of $rounds copies were late"
 [ "$failures" = 0 ]
