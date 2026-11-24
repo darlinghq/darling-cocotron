@@ -546,11 +546,14 @@ CGPoint CGEventGetUnflippedLocation(CGEventRef event)
 	// Implementaton should cache this for fast access
 	NSArray<CGSScreen*>* screens = [conn createScreens];
 
-	if (!screens)
+	if ([screens count] == 0)
+	{
+		[screens release];
 		return CGPointMake(-1, -1);
+	}
 
-	// And currentModeHeight is also cached to speed this up
-	pt.y = [screens[0] currentModeHeight] - pt.y;
+	// The connection caches the displays to speed this up
+	pt.y = [screens[0] bounds].size.height - pt.y;
 	[screens release];
 
 	return pt;

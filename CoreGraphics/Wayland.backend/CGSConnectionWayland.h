@@ -59,12 +59,18 @@ typedef enum {
     CGSWaylandObjectWmBase,
     CGSWaylandObjectXdgSurface,
     CGSWaylandObjectToplevel,
+    CGSWaylandObjectLogicalOutput,
+    CGSWaylandObjectOutputManager,
+    CGSWaylandObjectOutputHead,
+    CGSWaylandObjectOutputHeadMode,
+    CGSWaylandObjectOutputConfiguration,
 } CGSWaylandObjectKind;
 
-// -setMode:forScreen: is deliberately not overridden, so it raises through
-// NSInvalidAbstractInvocation(): mode setting is the compositor's alone, and nothing in tree
-// calls it. -createKeyboardLayout is not overridden either: the keymap belongs to the client
-// that owns the wl_keyboard, which registers its layout with _CGSSetProvidedKeyboardLayout().
+// Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
+// layout) and, where the compositor offers it, wlr-output-management, which also lets
+// -setMode:forScreen: change a mode. -createKeyboardLayout is not overridden: the keymap belongs to
+// the client that owns the wl_keyboard, which registers its layout with
+// _CGSSetProvidedKeyboardLayout().
 @interface CGSConnectionWayland : CGSConnection {
 @public
     struct wl_display *_wlDisplay;
@@ -77,7 +83,13 @@ typedef enum {
     CFSocketRef _cfSocket;
     CFRunLoopSourceRef _source;
     NSMutableArray *_outputs;
-    NSArray<CGSScreen *> *_screens; // Rebuilt when an output changes.
+    struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
+    uint32_t _logicalOutputManagerName;
+    id _outputManager;
+    uint32_t _outputManagerName;
+    // Set when the setup roundtrips are over; an output that is described before that is
+    // part of the displays the first look finds, not a change.
+    BOOL _setupDone;
 }
 
 - (void) flush;
@@ -89,6 +101,11 @@ typedef enum {
                          arguments: (union wl_argument *) args
                               kind: (CGSWaylandObjectKind) kind
                             object: (id) object;
+
+// Installs the connection's dispatcher on a proxy the compositor created with an event.
+- (void) attachDispatcherTo: (struct wl_proxy *) proxy
+                       kind: (CGSWaylandObjectKind) kind
+                     object: (id) object;
 
 - (void) handleEvent: (uint32_t) opcode
                 kind: (CGSWaylandObjectKind) kind

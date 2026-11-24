@@ -64,6 +64,7 @@ static NSString *monitorNameFromEDID(NSData *edid) {
 }
 
 - (void) dealloc {
+    [NS_EXTRA(NSScreen, self)->_outputName release];
     if (NS_EXTRA(NSScreen, self)->_edid)
         [NS_EXTRA(NSScreen, self)->_edid release];
     NS_EXTRA_FREE(NSScreen, self);
@@ -99,10 +100,11 @@ static NSString *monitorNameFromEDID(NSData *edid) {
     return 1.0;
 }
 
-// Backends whose displays have more than one device pixel per point (the X11
-// backend, with a configured scale) override this.
+// The device pixels per point of the display this screen is made from.
 - (CGFloat) backingScaleFactor {
-    return 1.0;
+    CGFloat scale = NS_EXTRA(NSScreen, self)->_backingScale;
+
+    return scale >= 1.0 ? scale : 1.0;
 }
 
 // Whether the screen can show the gamut. Screens are described as sRGB (see -colorSpace), so only
@@ -140,13 +142,16 @@ static NSString *monitorNameFromEDID(NSData *edid) {
     return [NSColorSpace sRGBColorSpace];
 }
 
-// The name the monitor reports in its EDID when the backend has read one, else a generic name with the display ID.
+// The name the monitor reports in its EDID when the display has one. Without an EDID the name the window
+// system gives the output (a description or connector name), else a generic name with the display ID.
 - (NSString *) localizedName {
     NSData *edid = NS_EXTRA(NSScreen, self)->_edid;
     NSString *name = edid != nil ? monitorNameFromEDID(edid) : nil;
 
     if (name != nil)
         return name;
+    if (edid == nil && NS_EXTRA(NSScreen, self)->_outputName != nil)
+        return NS_EXTRA(NSScreen, self)->_outputName;
     return [NSString stringWithFormat: @"Display %u",
                                        (unsigned) [self cgDirectDisplayID]];
 }
@@ -184,13 +189,12 @@ static NSString *monitorNameFromEDID(NSData *edid) {
 // 60 Hz when it reports none. Displays have a fixed rate here, so the minimum
 // and maximum intervals are the same.
 - (NSTimeInterval) _refreshInterval {
-    NSDisplay *display = [NSDisplay currentDisplay];
+    CGDisplayModeRef mode = CGDisplayCopyDisplayMode([self cgDirectDisplayID]);
     double rate = 0;
 
-    if ([display respondsToSelector: @selector(currentModeForScreen:)]) {
-        NSDictionary *mode = [display
-                currentModeForScreen: (int) [self cgDirectDisplayID] - 1];
-        rate = [[mode objectForKey: @"RefreshRate"] doubleValue];
+    if (mode != NULL) {
+        rate = CGDisplayModeGetRefreshRate(mode);
+        CGDisplayModeRelease(mode);
     }
     if (!(rate > 0))
         rate = 60.0;
@@ -260,6 +264,17 @@ static NSString *monitorNameFromEDID(NSData *edid) {
 
 - (void) setCgDirectDisplayID: (CGDirectDisplayID) displayID {
     NS_EXTRA(NSScreen, self)->_directDisplayID = displayID;
+}
+
+- (void) _setBackingScaleFactor: (CGFloat) scale {
+    NS_EXTRA(NSScreen, self)->_backingScale = scale;
+}
+
+- (void) _setOutputName: (NSString *) name {
+    NSString *old = NS_EXTRA(NSScreen, self)->_outputName;
+
+    NS_EXTRA(NSScreen, self)->_outputName = [name copy];
+    [old release];
 }
 
 @end

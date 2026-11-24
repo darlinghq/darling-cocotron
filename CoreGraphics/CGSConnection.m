@@ -22,6 +22,9 @@
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSRaise.h>
+#import <CoreGraphics/CGSScreen.h>
+#import <CoreGraphics/CGDisplayConfiguration.h>
+#import "CGDisplayReconfiguration.h"
 
 @implementation CGSConnection
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId
@@ -50,6 +53,8 @@
 
 -(void) dealloc
 {
+	[_screens release];
+	[_reportedScreens release];
 	[_windows release];
 	[super dealloc];
 }
@@ -140,19 +145,159 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 	_CGSPostHotKeyEvent(_connectionId, uid, pressed, flags, location, time);
 }
 
--(NSArray *) modesForScreen:(int)screenIndex
-{
-	NSInvalidAbstractInvocation();
-}
-
 -(BOOL) setMode:(NSDictionary *)mode forScreen:(int)screenIndex
 {
+	return NO;
+}
+
+-(NSArray<CGSScreen*>*) buildScreens
+{
 	NSInvalidAbstractInvocation();
 }
 
--(NSDictionary*) currentModeForScreen:(int)screenIndex
+-(NSArray<CGSScreen*>*) createScreens
 {
-	NSInvalidAbstractInvocation();
+	@synchronized (self)
+	{
+		if (_screens == nil)
+		{
+			_screens = [[self buildScreens] retain];
+			// The first look at the displays is what later changes are measured against.
+			if (_reportedScreens == nil && _screens != nil)
+				_reportedScreens = [_screens retain];
+		}
+		return [_screens retain];
+	}
+}
+
+-(void) invalidateScreens
+{
+	@synchronized (self)
+	{
+		[_screens release];
+		_screens = nil;
+	}
+}
+
+-(CGError) warpPointerToPoint:(CGPoint)point
+{
+	return kCGErrorCannotComplete;
+}
+
+static CGSScreen* screenWithID(NSArray<CGSScreen*>* screens, CGDirectDisplayID displayID)
+{
+	for (CGSScreen* screen in screens)
+	{
+		if (screen.displayID == displayID)
+			return screen;
+	}
+	return nil;
+}
+
+// What a display's change is called to the reconfiguration callbacks; 0 when it stayed as it was.
+// A nil side is a display that was not there.
+static CGDisplayChangeSummaryFlags changeFlags(CGSScreen* before, CGSScreen* after, BOOL becameMain)
+{
+	if (before == nil)
+		return kCGDisplayAddFlag | (becameMain ? kCGDisplaySetMainFlag : 0);
+	if (after == nil)
+		return kCGDisplayRemoveFlag;
+
+	CGDisplayChangeSummaryFlags flags = 0;
+	if (!CGPointEqualToPoint(before.bounds.origin, after.bounds.origin))
+		flags |= kCGDisplayMovedFlag;
+	if (!CGSizeEqualToSize(before.bounds.size, after.bounds.size) || before.backingScale != after.backingScale ||
+		![before.currentModeDictionary isEqual: after.currentModeDictionary])
+		flags |= kCGDisplaySetModeFlag | kCGDisplayDesktopShapeChangedFlag;
+	if (becameMain)
+		flags |= kCGDisplaySetMainFlag;
+	return flags;
+}
+
+-(BOOL) changeMode:(NSDictionary *)mode forScreen:(int)screenIndex
+{
+	_suppressLayoutReports++;
+	BOOL changed = [self setMode: mode forScreen: screenIndex];
+	if (changed)
+		[self acceptDisplayLayout];
+	_suppressLayoutReports--;
+	return changed;
+}
+
+-(void) displayLayoutChanged
+{
+	NSArray<CGSScreen*>* before;
+	NSArray<CGSScreen*>* after;
+
+	if (_suppressLayoutReports > 0)
+	{
+		[self invalidateScreens];
+		return;
+	}
+
+	@synchronized (self)
+	{
+		[self invalidateScreens];
+		before = [_reportedScreens retain];
+		after = [self createScreens];
+		// A change before the displays were first read has nothing to be compared with.
+		if (before != nil)
+		{
+			[_reportedScreens release];
+			_reportedScreens = [after retain];
+		}
+	}
+
+	if (before != nil)
+	{
+		CGDirectDisplayID oldMain = [before count] > 0 ? before[0].displayID : kCGNullDirectDisplay;
+		CGDirectDisplayID newMain = [after count] > 0 ? after[0].displayID : kCGNullDirectDisplay;
+		NSMutableArray<NSNumber*>* ids = [NSMutableArray array];
+		NSMutableArray<NSNumber*>* flagsList = [NSMutableArray array];
+
+		for (CGSScreen* screen in before)
+			[ids addObject: @(screen.displayID)];
+		for (CGSScreen* screen in after)
+		{
+			if (screenWithID(before, screen.displayID) == nil)
+				[ids addObject: @(screen.displayID)];
+		}
+		for (NSNumber* number in ids)
+		{
+			CGDirectDisplayID displayID = [number unsignedIntValue];
+			BOOL becameMain = displayID == newMain && displayID != oldMain;
+			[flagsList addObject: @(changeFlags(screenWithID(before, displayID), screenWithID(after, displayID), becameMain))];
+		}
+		// Every changed display gets the begin notification, then all of them the summary.
+		for (NSUInteger i = 0; i < [ids count]; i++)
+		{
+			if ([flagsList[i] unsignedIntValue] != 0)
+				CGDisplayPostReconfiguration([ids[i] unsignedIntValue], kCGDisplayBeginConfigurationFlag);
+		}
+		for (NSUInteger i = 0; i < [ids count]; i++)
+		{
+			if ([flagsList[i] unsignedIntValue] != 0)
+				CGDisplayPostReconfiguration([ids[i] unsignedIntValue], [flagsList[i] unsignedIntValue]);
+		}
+	}
+	[before release];
+	[after release];
+}
+
+-(void) acceptDisplayLayout
+{
+	@synchronized (self)
+	{
+		[self invalidateScreens];
+		NSArray<CGSScreen*>* now = [self createScreens];
+		[_reportedScreens release];
+		_reportedScreens = now;
+	}
+}
+
+-(void) refreshDisplayLayout
+{
+	[self invalidateScreens];
 }
 
 -(CGSWindow*) newWindow:(CGSRegionRef)region
