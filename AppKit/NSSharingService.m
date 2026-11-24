@@ -182,15 +182,30 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
     [self release];
 }
 
-// Pops the list up beside the named edge of the rectangle and returns once the
-// menu is dismissed. GUESS: the reference does not say where on the edge the
-// menu opens (the middle is used) or what happens with no services (nothing is
-// shown).
+// Asks the delegate for the services now and pops the list up beside the named
+// edge of the rectangle from the main queue, so this returns before the picker
+// is on screen and does not wait for it to be dismissed.
+// QUIRK: that return is not documented. Evidence: black-box observation on macOS
+// 26.1 arm64 (tier 2): 15 of 15 cases returned after 122 to 291 ms with no
+// window of the process on screen yet ("returned after 291.1 ms with 0
+// window(s) already on screen", probe 643 case 0). The probe cannot say whether
+// a second show while the picker is up also returns at once.
+// Test: tests/appkit-sharing-service-picker.m (test_show_returns_before_presenting)
+// GUESS: the reference does not say where on the edge the menu opens (the middle
+// is used) or what happens with no services (nothing is shown).
 - (void) showRelativeToRect: (NSRect) rect ofView: (NSView *) view preferredEdge: (NSRectEdge) preferredEdge {
     NSArray *services = [self _servicesToList];
-    NSPoint anchor;
+    NSUInteger generation = ++NS_EXTRA(NSSharingServicePicker, self)->_showGeneration;
 
-    if ([services count] > 0) {
+    if ([services count] == 0)
+        return;
+
+    // The block keeps the picker, the view and the services alive until it has run.
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSPoint anchor;
+
+        if (generation != NS_EXTRA(NSSharingServicePicker, self)->_showGeneration)
+            return;
         if (preferredEdge == NSMinXEdge)
             anchor = NSMakePoint(NSMinX(rect), NSMidY(rect));
         else if (preferredEdge == NSMaxXEdge)
@@ -200,16 +215,17 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
         else
             anchor = NSMakePoint(NSMidX(rect), NSMaxY(rect));
 
-        [self retain];
         NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu = [[self _menuListing: services] retain];
         [NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu popUpMenuPositioningItem: nil atLocation: anchor inView: view];
         [NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu release];
         NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu = nil;
-        [self release];
-    }
+    });
 }
 
+// Dismisses the picker if it is up; a show that has not presented yet does not
+// present afterwards.
 - (void) close {
+    NS_EXTRA(NSSharingServicePicker, self)->_showGeneration++;
     [NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu cancelTracking];
 }
 

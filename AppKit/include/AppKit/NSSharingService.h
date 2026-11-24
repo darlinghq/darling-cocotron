@@ -77,6 +77,7 @@ typedef NS_ENUM(NSInteger, NSSharingContentScope) {
     NSArray *_items;
     id <NSSharingServicePickerDelegate> _delegate;
     NSMenu *_presentedMenu;
+    NSUInteger _showGeneration;
     NS_EXTRA_IVARS_END(NSSharingServicePicker)
 }
 
