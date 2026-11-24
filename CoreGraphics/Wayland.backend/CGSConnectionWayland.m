@@ -827,19 +827,23 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 
 #pragma mark - Pointer state
 
-- (BOOL) ownsPointerState {
+- (BOOL) managesPointer {
+    return YES;
+}
+
+- (BOOL) cancelsHiddenUntilMouseMoves {
     return YES;
 }
 
 // Wayland requests are made on the main thread, where the connection is read.
-- (void) cursorHiddenDidChange: (BOOL) hidden {
+- (void) cursorHiddenStateChanged: (BOOL) hidden {
     if ([NSThread isMainThread])
         [(CGSWaylandPointer *) _pointerDecoder cursorHiddenChanged];
     else
         [_pointerDecoder performSelectorOnMainThread: @selector(cursorHiddenChanged) withObject: nil waitUntilDone: NO];
 }
 
-- (void) mouseAssociationDidChange {
+- (void) mouseAssociationChanged: (BOOL) associated {
     if ([NSThread isMainThread])
         [(CGSWaylandPointer *) _pointerDecoder updatePointerLock];
     else

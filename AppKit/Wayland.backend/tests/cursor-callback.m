@@ -4,6 +4,7 @@
  Licensed under the MIT license, the same as the rest of this project.
 */
 #import <AppKit/AppKit.h>
+#import <ApplicationServices/ApplicationServices.h>
 #import <objc/runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +14,6 @@ union CursorArgument {int32_t i;uint32_t u;void *o;};
 + (id)currentDisplay;
 - (id)cursorWithImage:(NSImage *)image hotSpot:(NSPoint)point;
 - (void)setCursor:(id)cursor;
-- (void)hideCursor;
 - (void)pointerEvent:(uint32_t)opcode arguments:(union CursorArgument *)args;
 - (void)seatCapabilities:(uint32_t)capabilities seat:(void *)seat;
 @end
@@ -46,7 +46,7 @@ static uint32_t serial(void) {
             if(!strcmp(mode,"release")){id old=first;first=nil;[old release];[display setCursor:second];}
             else if(!strcmp(mode,"switch"))[display setCursor:second];
             else if(!strcmp(mode,"same"))[display setCursor:first];
-            else if(!strcmp(mode,"blank"))[display hideCursor];
+            else if(!strcmp(mode,"blank"))CGDisplayHideCursor(CGMainDisplayID());
             else if(!strcmp(mode,"hide"))[window orderOut:nil];
             else if(!strcmp(mode,"leave")){union CursorArgument a[2]={{.u=1},{.o=NULL}};[pointerDecoder() pointerEvent:1 arguments:a];}
             else if(!strcmp(mode,"capability"))[pointerDecoder() seatCapabilities:0 seat:NULL];

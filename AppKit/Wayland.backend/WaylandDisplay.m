@@ -875,6 +875,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 }
 
 - (void) nativeConnectionPointerEntered: (void *) surface serial: (uint32_t) serial x: (double) x y: (double) y {
+    // The seat may have given CoreGraphics the pointer before this display was an observer: an enter says it exists.
+    if (_pointer == NULL)
+        _pointer = (struct wl_proxy *) _CGSNativeConnectionPointer();
     _pointerEnterSerial = serial;
     _pointerWindow = [self windowForSurface: (struct wl_proxy *) surface];
     _pointerSurfacePoint = CGPointMake(x, y);

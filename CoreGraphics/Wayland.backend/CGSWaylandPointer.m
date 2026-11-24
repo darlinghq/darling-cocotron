@@ -286,7 +286,7 @@ static unsigned maskForCode(uint32_t code) {
         _remainderX = _remainderY = 0;
         // The cursor of a process that hid it stays hidden over its surfaces (the compositor starts a new
         // surface with no cursor image of ours).
-        if ([_connection cursorHidden])
+        if (![_connection cursorIsVisible])
             [self sendHiddenCursor];
         if ([observer respondsToSelector: @selector(nativeConnectionPointerEntered:serial:x:y:)])
             [observer nativeConnectionPointerEntered: _focus serial: _enterSerial x: _point.x y: _point.y];
@@ -380,6 +380,10 @@ static unsigned maskForCode(uint32_t code) {
         [_connection pointerDidMove];
     }
 
+    // After a warp with the mouse connected to the cursor the local motion is dropped for the suppression
+    // interval (it still counted for CGGetLastMouseDelta() above).
+    if ([_connection localMouseMotionSuppressed])
+        return;
     int64_t button = 0;
     CGEventType type = [self motionEventTypeWithButton: &button];
     [self postMouseEventType: type button: button clickState: -1 deltaX: deltaX deltaY: deltaY serial: 0];
@@ -496,7 +500,7 @@ static const double kNothing = 0;
 // Makes the lock objects match the connection's mouse association: with the mouse disconnected from the
 // cursor the pointer is locked to a surface of the process and the relative pointer delivers the motion.
 - (void) updatePointerLock {
-    BOOL wanted = ![_connection mouseAssociatedWithCursor];
+    BOOL wanted = ![_connection mouseAssociated];
     struct wl_proxy *constraints = [_connection pointerConstraints];
     struct wl_proxy *manager = [_connection relativePointerManager];
     BOOL possible = _pointer != NULL && constraints != NULL && manager != NULL;
@@ -647,6 +651,7 @@ static const double kNothing = 0;
         [observer nativeConnectionPointerWarpedToX: target.x y: target.y];
     if (_lock != NULL)
         return kCGErrorSuccess;
+    [_connection noteMouseWarp];
 
     _warpPoint = target;
     if (_warpLock == NULL) {
@@ -675,8 +680,13 @@ static const double kNothing = 0;
 }
 
 - (void) cursorHiddenChanged {
-    BOOL hidden = [_connection cursorHidden];
+    BOOL hidden = ![_connection cursorIsVisible];
     id<CGSNativeConnectionObserver> observer = [self observer];
+
+    // Each hide calls the hook; only a change between hidden and visible is a change here.
+    if (hidden == _cursorHiddenApplied)
+        return;
+    _cursorHiddenApplied = hidden;
 
     if (hidden)
         [self sendHiddenCursor];

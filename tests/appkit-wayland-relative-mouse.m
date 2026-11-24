@@ -43,6 +43,23 @@ static CGEventRef tapCallback(CGEventTapProxy proxy, CGEventType type, CGEventRe
     return event;
 }
 
+@interface NSObject (RelativeMouseFixture)
++ (id) currentDisplay;
+- (id) cursorWithImage: (NSImage *) image hotSpot: (NSPoint) point;
+- (void) setCursor: (id) cursor;
+@end
+
+// An image that draws itself flat: a cursor made of it needs no cursor theme.
+@interface FlatCursorImage : NSImage
+@end
+@implementation FlatCursorImage
+- (void) drawInRect: (NSRect) rect fromRect: (NSRect) source operation: (NSCompositingOperation) operation
+           fraction: (CGFloat) fraction {
+    [[NSColor cyanColor] setFill];
+    NSRectFill(rect);
+}
+@end
+
 @interface RelApplication : NSApplication
 @end
 @implementation RelApplication
@@ -150,13 +167,11 @@ int main(void) {
         [app finishLaunching];
         // A cursor of the application's own (an image, so that it needs no cursor theme): hiding the cursor and
         // showing it again must bring it back.
-        NSImage *image = [[NSImage alloc] initWithSize: NSMakeSize(16, 16)];
-        [image lockFocus];
-        [[NSColor redColor] set];
-        NSRectFill(NSMakeRect(0, 0, 16, 16));
-        [image unlockFocus];
-        NSCursor *cursor = [[NSCursor alloc] initWithImage: image hotSpot: NSMakePoint(8, 8)];
-        [cursor push];
+        NSImage *image = [[FlatCursorImage alloc] initWithSize: NSMakeSize(16, 16)];
+        // The display's own cursor call, as the cursor-scale fixture does: the window cursor machinery is not what
+        // is tested here.
+        id display = [NSClassFromString(@"NSDisplay") currentDisplay];
+        [display setCursor: [display cursorWithImage: image hotSpot: NSMakePoint(8, 8)]];
         pump(0.5);
         fprintf(stderr, "READY\n");
 

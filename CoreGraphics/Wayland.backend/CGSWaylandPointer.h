@@ -99,6 +99,7 @@ struct wl_proxy;
     // and the point.
     struct wl_proxy *_warpLock, *_warpSurface;
     CGPoint _warpPoint;
+    BOOL _cursorHiddenApplied;
 }
 
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection;
