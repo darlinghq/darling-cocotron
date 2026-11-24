@@ -182,6 +182,28 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
     [self release];
 }
 
+// The pop-up location (the menu's top left corner, in the view's coordinates)
+// that puts a menu of `size` beside `edge` of `rect`, touching it and centred
+// on the middle of that edge. Beside means on that edge's side in the view's
+// own coordinates, so in a flipped view the minY edge is visually the top.
+static NSPoint locationBesideEdge(NSRect rect, NSSize size, NSRectEdge edge, BOOL flipped) {
+    NSPoint low;
+
+    if (edge == NSMinXEdge)
+        low.x = NSMinX(rect) - size.width;
+    else if (edge == NSMaxXEdge)
+        low.x = NSMaxX(rect);
+    else
+        low.x = NSMidX(rect) - size.width / 2;
+    if (edge == NSMinYEdge)
+        low.y = NSMinY(rect) - size.height;
+    else if (edge == NSMaxYEdge)
+        low.y = NSMaxY(rect);
+    else
+        low.y = NSMidY(rect) - size.height / 2;
+    return NSMakePoint(low.x, flipped ? low.y : low.y + size.height);
+}
+
 // Asks the delegate for the services now and pops the list up beside the named
 // edge of the rectangle from the main queue, so this returns before the picker
 // is on screen and does not wait for it to be dismissed.
@@ -191,8 +213,16 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
 // window(s) already on screen", probe 643 case 0). The probe cannot say whether
 // a second show while the picker is up also returns at once.
 // Test: tests/appkit-sharing-service-picker.m (test_show_returns_before_presenting)
-// GUESS: the reference does not say where on the edge the menu opens (the middle
-// is used) or what happens with no services (nothing is shown).
+// QUIRK: the placement is not documented. Evidence: macOS 26.1 arm64 (tier 2), 8
+// of 8 edge cases with room on all sides: the picker window touches the named
+// edge (gap 0) and is centred on the middle of that edge (offset 0, at most 0.5
+// point), for two different window heights ("frame={{767,574},{266,288}} ...
+// dx=(-103,0,103) dy=(30,159,288)" for maxY on an anchor {{870,544},{60,30}}).
+// Only that structure is copied, not the window size. A flipped view is not
+// covered by the probe: GUESS: the edge is read in the view's own coordinates.
+// Test: tests/appkit-sharing-service-picker.m (test_placement)
+// GUESS: the reference does not say what happens with no services (nothing is
+// shown).
 - (void) showRelativeToRect: (NSRect) rect ofView: (NSView *) view preferredEdge: (NSRectEdge) preferredEdge {
     NSArray *services = [self _servicesToList];
     NSUInteger generation = ++NS_EXTRA(NSSharingServicePicker, self)->_showGeneration;
@@ -202,23 +232,16 @@ NSString *const NSSharingServiceParametersDefaultRecipientsKey = @"NSSharingServ
 
     // The block keeps the picker, the view and the services alive until it has run.
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSPoint anchor;
-
         if (generation != NS_EXTRA(NSSharingServicePicker, self)->_showGeneration)
             return;
-        if (preferredEdge == NSMinXEdge)
-            anchor = NSMakePoint(NSMinX(rect), NSMidY(rect));
-        else if (preferredEdge == NSMaxXEdge)
-            anchor = NSMakePoint(NSMaxX(rect), NSMidY(rect));
-        else if (preferredEdge == NSMinYEdge)
-            anchor = NSMakePoint(NSMidX(rect), NSMinY(rect));
-        else
-            anchor = NSMakePoint(NSMidX(rect), NSMaxY(rect));
 
-        NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu = [[self _menuListing: services] retain];
-        [NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu popUpMenuPositioningItem: nil atLocation: anchor inView: view];
-        [NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu release];
+        NSMenu *menu = [[self _menuListing: services] retain];
+        NSPoint location = locationBesideEdge(rect, [menu size], preferredEdge, [view isFlipped]);
+
+        NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu = menu;
+        [menu popUpMenuPositioningItem: nil atLocation: location inView: view];
         NS_EXTRA(NSSharingServicePicker, self)->_presentedMenu = nil;
+        [menu release];
     });
 }
 

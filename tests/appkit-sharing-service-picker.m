@@ -14,7 +14,10 @@
 //    saw will, handler, did, also for an empty array);
 //  - QUIRK (not documented; macOS 26.1 arm64 probe, 15 of 15 cases): showRelativeToRect:ofView:preferredEdge:
 //    returns before the picker is on screen, and the delegate is asked for the services inside the call;
-//    -close before the picker is on screen means it never appears.
+//    -close before the picker is on screen means it never appears;
+//  - QUIRK (same probe, 8 of 8 edge cases): the picker touches the named edge of the rectangle (gap 0) and is
+//    centred on the middle of that edge, whatever its size. The tests measure the size, they do not assume one.
+//    A flipped view was not probed: GUESS that the edge is read in the view's own coordinates.
 // Darling has no system services, so the proposed list is empty and the services here are
 // custom ones made with a handler. The menu of services is read through -menu, which is not in
 // the reference. Showing the picker runs a menu: those tests need a window server.
@@ -210,6 +213,80 @@ static void test_show_returns_before_presenting(void) {
     [host close];
 }
 
+@interface FlippedView : NSView
+@end
+@implementation FlippedView
+- (BOOL) isFlipped { return YES; }
+@end
+
+static NSRect screenRect(NSView *view, NSRect rect) {
+    NSPoint low = [[view window] convertBaseToScreen: [view convertPoint: NSMakePoint(NSMinX(rect), NSMinY(rect)) toView: nil]];
+    NSPoint high = [[view window] convertBaseToScreen: [view convertPoint: NSMakePoint(NSMaxX(rect), NSMaxY(rect)) toView: nil]];
+
+    return NSMakeRect(MIN(low.x, high.x), MIN(low.y, high.y), fabs(high.x - low.x), fabs(high.y - low.y));
+}
+
+// Shows the picker beside `edge` of a rectangle in `view` and returns the frame of its window.
+static NSRect pickerFrame(NSView *view, NSRect rect, NSRectEdge edge) {
+    PickerDelegate *delegate = [[PickerDelegate new] autorelease];
+    delegate->custom = [[[NSSharingService alloc] initWithTitle: @"Custom" image: nil alternateImage: nil handler: ^{}] autorelease];
+    NSSharingServicePicker *picker = [[[NSSharingServicePicker alloc] initWithItems: [NSArray arrayWithObject: @"item"]] autorelease];
+    __block NSRect frame = NSZeroRect;
+
+    [picker setDelegate: delegate];
+    poll(^(NSTimer *timer) {
+        NSWindow *window = openMenuWindow();
+
+        if (window == nil)
+            return;
+        frame = [window frame];
+        [timer invalidate];
+        [picker close];
+    });
+    [picker showRelativeToRect: rect ofView: view preferredEdge: edge];
+    spin(3.0, ^BOOL { return !NSIsEmptyRect(frame); });
+    spin(0.3, nil);
+    return frame;
+}
+
+static BOOL near(CGFloat a, CGFloat b) { return fabs(a - b) <= 1.0; }
+
+// The window lies on the edge's side with no gap and is centred on the middle of the edge. `visual` says on
+// which side of the rectangle on screen: 0 left, 1 right, 2 below, 3 above.
+static void checkPlacement(NSRect frame, NSRect anchor, int visual, const char *what) {
+    CHECK(!NSIsEmptyRect(frame));
+    switch (visual) {
+    case 0: CHECK(near(NSMaxX(frame), NSMinX(anchor)) && near(NSMidY(frame), NSMidY(anchor))); break;
+    case 1: CHECK(near(NSMinX(frame), NSMaxX(anchor)) && near(NSMidY(frame), NSMidY(anchor))); break;
+    case 2: CHECK(near(NSMaxY(frame), NSMinY(anchor)) && near(NSMidX(frame), NSMidX(anchor))); break;
+    default: CHECK(near(NSMinY(frame), NSMaxY(anchor)) && near(NSMidX(frame), NSMidX(anchor))); break;
+    }
+    if (failures)
+        fprintf(stderr, "  placement case: %s, frame %s, anchor %s\n", what, [NSStringFromRect(frame) UTF8String], [NSStringFromRect(anchor) UTF8String]);
+}
+
+static void test_placement(void) {
+    NSWindow *host = makeHost();
+    NSRect rect = NSMakeRect(200, 150, 60, 30);
+    NSView *plain = [host contentView];
+    NSRect anchor = screenRect(plain, rect);
+
+    // y up: minY is below the rectangle, maxY above.
+    checkPlacement(pickerFrame(plain, rect, NSMinXEdge), anchor, 0, "minX");
+    checkPlacement(pickerFrame(plain, rect, NSMaxXEdge), anchor, 1, "maxX");
+    checkPlacement(pickerFrame(plain, rect, NSMinYEdge), anchor, 2, "minY");
+    checkPlacement(pickerFrame(plain, rect, NSMaxYEdge), anchor, 3, "maxY");
+
+    // GUESS: in a flipped view minY is visually the top.
+    FlippedView *flipped = [[[FlippedView alloc] initWithFrame: [plain bounds]] autorelease];
+    [plain addSubview: flipped];
+    anchor = screenRect(flipped, rect);
+    checkPlacement(pickerFrame(flipped, rect, NSMinYEdge), anchor, 3, "flipped minY");
+    checkPlacement(pickerFrame(flipped, rect, NSMaxYEdge), anchor, 2, "flipped maxY");
+    checkPlacement(pickerFrame(flipped, rect, NSMinXEdge), anchor, 0, "flipped minX");
+    [host close];
+}
+
 // -close before the picker is on screen cancels the pending presentation.
 static void test_close_before_presenting(void) {
     NSWindow *host = makeHost();
@@ -245,6 +322,7 @@ int main(void) {
     [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
     RUN(test_show_returns_before_presenting());
     RUN(test_close_before_presenting());
+    RUN(test_placement());
     if (failures == 0)
         printf("PASS appkit-sharing-service-picker\n");
     [pool release];
