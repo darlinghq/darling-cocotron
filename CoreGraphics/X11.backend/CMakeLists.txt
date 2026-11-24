@@ -1,6 +1,7 @@
 add_backend(X11
 	SOURCES
 		CGSConnectionX11.m
+		CGSX11Keyboard.m
 		CGSWindowX11.m
 		CGSSurfaceX11.m
 	INFO_PLIST

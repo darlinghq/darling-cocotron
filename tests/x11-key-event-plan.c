@@ -1,11 +1,11 @@
-// Host test for X11KeyEventPlanFor() in AppKit/X11.backend/X11KeyEvent.h, and the event pump's use of it against a
+// Host test for X11KeyEventPlanFor() in CoreGraphics/X11.backend/X11KeyEvent.h, and the event pump's use of it against a
 // real XIM server. Two modes (build: cc x11-key-event-plan.c -lX11):
 //   table            the decision table and a model of the Shift flag, no X server needed.
 //   pump new|old SECS  a window with an input context on a display whose XMODIFIERS name an XIM server; reads
 //                    events for SECS seconds the way the X11 backend does, with the filter first for every key
 //                    ("new") or with a modifier handled ahead of the filter ("old", the previous behaviour), and
 //                    prints what it would report. Run by tests/x11-key-event-plan.sh against a private fcitx5.
-#include "../AppKit/X11.backend/X11KeyEvent.h"
+#include "../CoreGraphics/X11.backend/X11KeyEvent.h"
 #include <X11/keysym.h>
 #include <assert.h>
 #include <locale.h>

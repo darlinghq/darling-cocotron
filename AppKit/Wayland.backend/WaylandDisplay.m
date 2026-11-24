@@ -1766,10 +1766,10 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 }
 
 // The press of a key starts the input event popup grabs are tied to (see -popupGrabSerialForParent:).
-- (void) keyEventCreated: (NSEvent *) event fromCGEvent: (CGEventRef) cgEvent {
+- (NSEvent *) keyEventCreated: (NSEvent *) event fromCGEvent: (CGEventRef) cgEvent {
     if ([event type] != NSKeyDown || [event isARepeat] ||
         CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) == 0)
-        return;
+        return event;
     WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
                                                             cgEvent, kCGSEventNativeWindow)];
     id keyPlatformWindow = [[NSApp keyWindow] platformWindow];
@@ -1779,6 +1779,7 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     [_inputEvent release];
     _inputEvent = [event retain];
     _inputWindow = window;
+    return event;
 }
 
 - (NSUInteger) currentModifierFlags {

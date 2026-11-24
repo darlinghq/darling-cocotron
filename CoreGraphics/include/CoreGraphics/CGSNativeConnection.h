@@ -58,6 +58,12 @@ typedef enum {
 // Called before CoreGraphics posts the events a keyboard event of the window system makes, so that
 // the observer can send what it holds back from earlier input first (the order of the events).
 - (void) nativeConnectionWillPostKeyboardEvent;
+// X11: the text a key press (an XKeyEvent*) makes after the input method of the window it is for has
+// composed it. The input contexts belong to the framework that owns the windows (the input method
+// stays in the application); nil when the observer has no input context for the window, which makes
+// CoreGraphics look the key up in the keymap. The keysym is set when the lookup gives one (NoSymbol,
+// 0, otherwise).
+- (NSString *) nativeConnectionComposedTextForKeyEvent: (void *) event keySym: (unsigned long *) keySym;
 @end
 
 // The kind of the process' connection to the window system, opening it if needed.

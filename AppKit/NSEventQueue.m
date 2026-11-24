@@ -440,8 +440,7 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
                 charactersIgnoringModifiers: unmodified
                                  isARepeat: CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventAutorepeat) != 0
                                    keyCode: (unsigned short) CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)];
-        [display keyEventCreated: result fromCGEvent: cgEvent];
-        return [result retain];
+        return [[display keyEventCreated: result fromCGEvent: cgEvent] retain];
     }
     case NSAppKitDefined:
     case NSSystemDefined:
