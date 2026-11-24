@@ -25,6 +25,8 @@
 #import <CoreGraphics/CGEvent.h>
 #import <CoreGraphics/CGEventSource.h>
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
+#import <CoreGraphics/CGSKeyboardLayout.h>
+#import "../DarlingUnicodeKeyLayout.h"
 #import <CoreGraphics/CGSNativeConnection.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Foundation/NSString.h>
@@ -324,7 +326,19 @@ static unsigned int stateAfterKeyEvent(const ModifierKey *key, unsigned int stat
         }
     }
 
+    // A key the keymap lookup has no text for, but a Mac layout gives a control code (ISO_Left_Tab, the keysym of
+    // Shift+Tab, gives U+0009): that code is its characters
+    if ([text length] == 0) {
+        uint32_t control = DarlingKeysymControlCode(keySym != NoSymbol ? (uint32_t) keySym : (uint32_t) shortcutKeySym);
+        if (control != 0) {
+            unichar controlChar = (unichar) control;
+            text = [NSString stringWithCharacters: &controlChar length: 1];
+        }
+    }
+
     uint16_t shortcutCode = (uint16_t) CGSKeySymToUnicode(shortcutKeySym);
+    if (shortcutCode == 0)
+        shortcutCode = (uint16_t) DarlingKeysymControlCode((uint32_t) shortcutKeySym);
     NSString *unmodified = shortcutCode != 0 ? [NSString stringWithCharacters: &shortcutCode length: 1] : @"";
 
     // Applications that use the constants of HIToolbox/Events.h (kVK_ANSI_A) get the key code of the key.

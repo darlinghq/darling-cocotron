@@ -441,6 +441,20 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
                 units[i] = (UniChar) (packed >> (16 * i));
             unmodified = [NSString stringWithCharacters: units length: (NSUInteger) unmodifiedLength];
         }
+        // QUIRK: a key event with Shift in its flags whose string is the tab character U+0009 gives the characters
+        // U+0019 (NSBackTabCharacter), both characters and charactersIgnoringModifiers. The key code does not
+        // matter (it is U+0009 as the layout's result for the Tab key, as UCKeyTranslate gives it, that Shift
+        // turns into the back tab character). Any other Shift or Tab combination keeps the string.
+        // Evidence (tier 2, black-box): NSEvent +eventWithCGEvent: of key down and key up events made with
+        // CGEventCreateKeyboardEvent on macOS 26.7.3 and 10.14.4 (x86_64): Shift, Shift+Command, Shift+Control
+        // and Shift+Option with the Tab key and the string U+0009 give U+0019 while the CGEvent's own string
+        // stays U+0009; the same string with the A key or the Escape key and Shift gives U+0019 too; without
+        // Shift, with Control, Option, Command or Caps Lock alone it stays U+0009, and a string U+0019 stays.
+        // Probe: vd-upstream/mac-probes/937-b2b1-backtab-layer.m.
+        // Test: appkit-nsevent-backtab (and the typed Shift+Tab in appkit-keyboard-cgevents).
+        if (type != kCGEventFlagsChanged && (flags & NSEventModifierFlagShift) && [characters length] == 1 &&
+            [characters characterAtIndex: 0] == '\t')
+            characters = unmodified = [NSString stringWithCharacters: (const unichar[]) { NSBackTabCharacter } length: 1];
         // The display says which window the event is for
         NSInteger windowNumber = 0;
         NSPoint keyLocation = NSZeroPoint;
