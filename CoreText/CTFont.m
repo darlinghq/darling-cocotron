@@ -334,6 +334,10 @@ static const CTFontSymbolicTraits sameFamilyStyleTraits =
 // equal the original's would find nothing across families.
 static const CTFontSymbolicTraits crossFamilyStyleTraits = kCTFontTraitItalic | kCTFontTraitBold;
 
+// The NSFontWeight values of the nine OS/2 weight classes, 100 to 900.
+static const CGFloat weightClassWeights[] = { -0.8, -0.6, -0.4, 0, 0.23, 0.3, 0.4, 0.56, 0.62 };
+static const unsigned int boldWeightClassIndex = 6;
+
 static CGFloat weightOfFont(CTFontRef font) {
     CGFloat weight = 0;
     CFDictionaryRef traits = CTFontCopyTraits(font);
@@ -441,11 +445,23 @@ CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
     // replace the original's traits; the original's other bits stay.
     CTFontSymbolicTraits original = CTFontGetSymbolicTraits(font);
     CTFontSymbolicTraits wanted = (original & ~symTraitMask) | (symTraitValue & symTraitMask);
-    // GUESS: a request that clears the bold trait aims at the regular weight (0.0 on the scale
-    // of kCTFontWeightTrait). Aiming at the original's weight would turn a Black face into the
-    // heaviest face that is not bold, a Semibold one. Otherwise the original's weight is kept.
-    CGFloat targetWeight = ((original & kCTFontTraitBold) && !(wanted & kCTFontTraitBold))
-            ? 0 : weightOfFont(font);
+    // The documentation does not say which of several faces with the wanted traits is returned.
+    // QUIRK: a request that sets the bold trait on a face without it aims at the weight of the Bold
+    // weight class (700, 0.4 in the table above), not at the original's weight, so a regular face
+    // goes to Bold even when a Semibold or Demibold face is nearer to 0.0. A request that clears
+    // the bold trait aims at the regular weight (0.0), so a Black or Heavy face does not become the
+    // heaviest face that is not bold. Otherwise the original's weight is kept. Evidence: black-box
+    // observation of CTFontCreateCopyWithSymbolicTraits on macOS 26.1 (arm64): AvenirNext-Regular and
+    // GillSans give AvenirNext-Bold and GillSans-Bold (weight 0.4) though a face of weight 0.3 exists
+    // (probe 639.E.bold-on), and AvenirNext-Heavy gives AvenirNext-Regular when bold is cleared. The
+    // probe does not pin 0.4 itself: any target from about 0.35 to 0.48 gives the same faces there.
+    // It needs the faces of weight 0.3 to have the bold trait (see fontTraits). Test:
+    // coretext-font-copy-with-traits-and-family.
+    CGFloat targetWeight = weightOfFont(font);
+    if ((wanted & kCTFontTraitBold) && !(original & kCTFontTraitBold))
+        targetWeight = weightClassWeights[boldWeightClassIndex];
+    else if ((original & kCTFontTraitBold) && !(wanted & kCTFontTraitBold))
+        targetWeight = 0;
     CFStringRef family = CTFontCopyFamilyName(font);
     CTFontRef result = copyFontInFamily(font, size, matrix, YES, family, wanted,
                                         sameFamilyStyleTraits, targetWeight, symTraitMask == 0);
@@ -651,9 +667,6 @@ static uint16_t readUInt16(const UInt8 *bytes) {
 static CTFontSymbolicTraits fontTraits(CTFontRef font, CGFloat *weight,
                                        CGFloat *width, CGFloat *slant)
 {
-    // The NSFontWeight values of the nine OS/2 weight classes.
-    static const CGFloat weights[] = { -0.8, -0.6, -0.4, 0, 0.23, 0.3, 0.4,
-                                       0.56, 0.62 };
     unsigned int weightClass = 400, widthClass = 5;
     CTFontSymbolicTraits traits = 0;
     double italicAngle = 0;
@@ -689,10 +702,20 @@ static CTFontSymbolicTraits fontTraits(CTFontRef font, CGFloat *weight,
     if (weightClass > 900)
         weightClass = 900;
     unsigned int index = weightClass / 100 - 1;
-    *weight = weights[index];
+    *weight = weightClassWeights[index];
     if (index < 8)
-        *weight += (weights[index + 1] - weights[index]) * (weightClass % 100) / 100.0;
-    if (weightClass >= 700)
+        *weight += (weightClassWeights[index + 1] - weightClassWeights[index]) * (weightClass % 100) / 100.0;
+    // QUIRK: a face of weight class 600 (Semibold, Demibold: weight trait 0.3) and above has the
+    // bold trait, not only from class 700. The documentation says only that the trait has more
+    // detail in kCTFontWeightTrait. Evidence: black-box observation of the symbolic and weight traits
+    // on macOS 26.1 (arm64), 98 faces printed by probe 639: every face reporting weight 0.3,
+    // 0.4, 0.56 or 0.62 has the bold bit (AvenirNext-DemiBold and GillSans-SemiBold, both 0.3, report
+    // 80000002) and every face at 0.23 or less lacks it. Which fonts those are is machine specific;
+    // only the threshold is taken from it. The probe only brackets the macOS
+    // threshold above 0.23 and at or below 0.3, so class 600 is a GUESS at that boundary (classes 500
+    // to 599 were never observed). A face's own bold flag in the OS/2 table still counts.
+    // Test: coretext-font-copy-with-traits-and-family.
+    if (weightClass >= 600)
         traits |= kCTFontTraitBold;
 
     if (widthClass < 1 || widthClass > 9)
