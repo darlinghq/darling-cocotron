@@ -101,6 +101,52 @@ static void test_quirk_uniform_shrink_passes_the_shortfall_on(void)
            @"uniform: the others shrink by more than the plain share");
 }
 
+// QUIRK (macOS 26.7.3 and 10.14.4, probe p790): the whole points of a uniform resize. Columns start at the given
+// widths and fill the clip view exactly; the clip view then changes by delta.
+static void checkUniformWidths(const char *what, const CGFloat *start, int count, CGFloat maxWidth, CGFloat delta, const CGFloat *expected)
+{
+    NSScrollView *scroll = [[[NSScrollView alloc] initWithFrame:NSMakeRect(0, 0, 400, 200)] autorelease];
+    NSTableView *table = [[[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, 400, 200)] autorelease];
+    CGFloat filled = 0;
+    [table setIntercellSpacing:NSMakeSize(0, 0)];
+    for (int i = 0; i < count; i++)
+    {
+        NSTableColumn *column = [[[NSTableColumn alloc] initWithIdentifier:[NSString stringWithFormat:@"w%d", i]] autorelease];
+        [column setMinWidth:20];
+        [column setMaxWidth:maxWidth];
+        [column setWidth:start[i]];
+        [table addTableColumn:column];
+        filled += start[i];
+    }
+    [table setColumnAutoresizingStyle:NSTableViewUniformColumnAutoresizingStyle];
+    [scroll setHasVerticalScroller:NO];
+    [scroll setDocumentView:table];
+    [scroll setFrameSize:NSMakeSize(filled, 200)];
+    [scroll layoutSubtreeIfNeeded];
+    [scroll setFrameSize:NSMakeSize(filled + delta, 200)];
+    [scroll layoutSubtreeIfNeeded];
+    BOOL ok = YES;
+    for (int i = 0; i < count; i++)
+        if (!same(width(table, i), expected[i]))
+            ok = NO;
+    expect(ok, [NSString stringWithFormat:@"uniform whole points: %s", what]);
+}
+
+static void test_quirk_uniform_whole_points(void)
+{
+    const CGFloat five[5] = {50, 60, 70, 80, 240}, up[5] = {50, 60, 70, 80, 90};
+    const CGFloat a[5] = {20, 20, 26, 37, 197}, b[5] = {20, 20, 25, 36, 196}, c[5] = {30, 40, 50, 60, 220};
+    const CGFloat d[5] = {20, 20, 20, 20, 113}, e[5] = {75, 84, 94, 100, 100}, f[5] = {71, 81, 91, 101, 109};
+    const CGFloat g[5] = {39, 49, 59, 69, 81};
+    checkUniformWidths("200 narrower, columns reach the minimum", five, 5, 1000, -200, a);
+    checkUniformWidths("203 narrower", five, 5, 1000, -203, b);
+    checkUniformWidths("100 narrower", five, 5, 1000, -100, c);
+    checkUniformWidths("307 narrower", five, 5, 1000, -307, d);
+    checkUniformWidths("103 wider, maximum width 100", up, 5, 100, 103, e);
+    checkUniformWidths("103 wider, no limit", up, 5, 1000, 103, f);
+    checkUniformWidths("53 narrower, no limit reached", up, 5, 1000, -53, g);
+}
+
 int main(void)
 {
     @autoreleasepool
@@ -170,6 +216,7 @@ int main(void)
         expect(same(before[1], after[1]) && same(before[2], after[2]) && same(after[0], 50), @"first only: stops at the minimum width");
 
         test_quirk_uniform_shrink_passes_the_shortfall_on();
+        test_quirk_uniform_whole_points();
 
         // Growing is left out: macOS 26 spreads the extra width as the style says, but a
         // table that does not already fill the clip view (Mojave) keeps its widths.

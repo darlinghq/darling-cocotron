@@ -2041,35 +2041,36 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
-// Spreads delta over the columns in equal whole points, the points left over going one each to the first columns.
-// QUIRK: a column that reaches its minimum or maximum width takes no more of delta, and the part it could not
-// take is spread over the columns that still can, until delta is used up, so the widths change by exactly delta
-// as long as some column has room. The documentation of NSTableViewUniformColumnAutoresizingStyle gives the
-// equal distribution of the space among all columns and nothing about limits. Observed on macOS 26.1 (arm64), 5 columns of 50, 60,
-// 70, 80 and 240 points, minimum width 20, the clip view 200 points narrower: probe 657.6 "hidden=none
-// (control), style Uniform ... size 600 -> 400 ... after=[20,20,26.5,36.5,197]" (a total shrink of 200),
-// "hidden=first ... after=[50h,20,20,25,252]". Only this structure is taken from it: the widths of that
-// probe are in half points, which depend on the display's scale and the table style's spacing.
-// GUESS: with whole points, the points left over after the equal share go to the first columns in the
-// direction of delta, so the earlier columns shrink more than the later ones, as the half points of the
-// observation show (43.5, 43.5 and 43 points taken from the last three); growing by delta is treated the
-// same way, with the maximum widths as the limits, and was not observed. Rejected: floor(delta / count) with
-// the leftover points added, which shrinks the later columns more.
+// Spreads delta over the shown columns in whole points. A round gives each column in turn the share delta / count
+// rounded to the nearest point (a column takes no more than what is left of delta), the last columns getting
+// less, and a column that reaches its minimum or maximum width takes no more in the next rounds; the part it
+// could not take is spread the same way over the columns that did take their share, until delta is used up, so
+// the widths change by exactly delta as long as some column has room. When the share rounds to nothing the
+// points left go one each to the first columns.
+// QUIRK: the documentation of NSTableViewUniformColumnAutoresizingStyle gives the equal distribution of the
+// space among all columns and nothing about limits or whole points. Evidence: black-box observation on macOS
+// 26.7.3 and 10.14.4 (tier 2, x86_64 and i386, mac-probes p790; the contributor's probe on 26.1 gave the same
+// structure): five columns of 50, 60, 70, 80 and 240 points (minimum width 20), the clip view 200 narrower:
+// 20 20 26 37 197; 203 narrower: 20 20 25 36 196; 100 narrower: 30 40 50 60 220; 307 narrower: 20 20 20 20 113;
+// five columns of 50 to 90 (maximum width 100) 103 wider: 75 84 94 100 100, with maximum width 1000:
+// 71 81 91 101 109; 53 narrower: 39 49 59 69 81.
 // Test: tests/appkit-table-column-autoresizing.m
 - (void) _resizeColumnsUniformlyBy: (CGFloat) delta {
     NSMutableArray *columns = [[[self _shownTableColumns] mutableCopy] autorelease];
 
     while ([columns count] > 0 && fabs(delta) >= 1) {
-        NSInteger count = [columns count], i;
-        CGFloat share = delta > 0 ? floor(delta / count) : ceil(delta / count);
-        NSInteger extra = (NSInteger) (delta - share * count);
-        CGFloat point = delta > 0 ? 1 : -1;
-        NSMutableArray *remaining = [NSMutableArray arrayWithCapacity: count];
+        CGFloat sign = delta > 0 ? 1 : -1;
+        CGFloat share = round(delta / [columns count]);
+        NSMutableArray *remaining = [NSMutableArray arrayWithCapacity: [columns count]];
 
-        for (i = 0; i < count; ++i) {
-            NSTableColumn *column = [columns objectAtIndex: i];
+        if (share == 0)
+            share = sign;
+        for (NSTableColumn *column in columns) {
+            if (fabs(delta) < 1)
+                break;
+
             CGFloat before = [column width];
-            CGFloat wanted = before + share + (i < labs(extra) ? point : 0);
+            CGFloat wanted = before + (fabs(share) < fabs(delta) ? share : delta);
 
             [column setWidth: wanted];
             delta -= [column width] - before;
