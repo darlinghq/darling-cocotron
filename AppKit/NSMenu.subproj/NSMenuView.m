@@ -401,6 +401,12 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
 
                     MENUDEBUG(@"found an item index: %u", itemIndex);
 
+                    // The menu bar keeps its open menu while the pointer is over a part of
+                    // the bar that has no title: only another title switches menus.
+                    if (itemIndex == NSNotFound && [checkView _isMenuBar] &&
+                        [checkView selectedItemIndex] != NSNotFound)
+                        break;
+
                     // If it's not the currently selected item
                     if (itemIndex != [checkView selectedItemIndex]) {
 
