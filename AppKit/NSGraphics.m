@@ -730,3 +730,53 @@ void _NSFocusRingAfterPaintingPath(CGContextRef context, CGPathRef path) {
     focusRingBand(context, path, YES, ![current _focusRingOuterOnly]);
     CGContextRestoreGState(context);
 }
+
+// The two frames below are measured from the observable behaviour of the functions on macOS 26.7.3 and 10.14.4
+// (black-box: the pixels they draw into a bitmap context, identical on both): a frame inside the rect, the inside
+// untouched, darker at the top than at the sides and the bottom, lighter when disabled. Probe:
+// vd-upstream/mac-probes/gog-blockers/appkit-carbon-theme.m. Test: appkit-carbon-theme-draw.
+
+typedef struct {
+    CGFloat top, side, bottom, topCorner, bottomCorner;
+} ThemeRing;
+
+static void themeFillGray(NSRect rect, CGFloat gray) {
+    [[NSColor colorWithDeviceWhite: gray alpha: 1.0] set];
+    NSRectFill(rect);
+}
+
+// One frame ring of `rect`, one point wide. The top row is the one at the largest y unless the context is flipped.
+static void themeDrawRing(NSRect rect, BOOL flipped, ThemeRing ring) {
+    if (rect.size.width < 2 || rect.size.height < 2)
+        return;
+    CGFloat topY = flipped ? NSMinY(rect) : NSMaxY(rect) - 1;
+    CGFloat bottomY = flipped ? NSMaxY(rect) - 1 : NSMinY(rect);
+    CGFloat sideMinY = MIN(topY, bottomY) + 1, sideHeight = rect.size.height - 2;
+
+    themeFillGray(NSMakeRect(NSMinX(rect), topY, rect.size.width, 1), ring.top);
+    themeFillGray(NSMakeRect(NSMinX(rect), bottomY, rect.size.width, 1), ring.bottom);
+    if (sideHeight > 0) {
+        themeFillGray(NSMakeRect(NSMinX(rect), sideMinY, 1, sideHeight), ring.side);
+        themeFillGray(NSMakeRect(NSMaxX(rect) - 1, sideMinY, 1, sideHeight), ring.side);
+    }
+    themeFillGray(NSMakeRect(NSMinX(rect), topY, 1, 1), ring.topCorner);
+    themeFillGray(NSMakeRect(NSMaxX(rect) - 1, topY, 1, 1), ring.topCorner);
+    themeFillGray(NSMakeRect(NSMinX(rect), bottomY, 1, 1), ring.bottomCorner);
+    themeFillGray(NSMakeRect(NSMaxX(rect) - 1, bottomY, 1, 1), ring.bottomCorner);
+}
+
+void _NSDrawCarbonThemeBezel(NSRect rect, BOOL enabled, BOOL flipped) {
+    static const ThemeRing enabledOuter = {0x7c / 255.0, 0xc3 / 255.0, 0xdd / 255.0, 0x69 / 255.0, 0xb9 / 255.0};
+    static const ThemeRing enabledInner = {0xc3 / 255.0, 0xf0 / 255.0, 0xfe / 255.0, 0xb9 / 255.0, 0xf0 / 255.0};
+    static const ThemeRing disabledOuter = {0xbe / 255.0, 0xe1 / 255.0, 0xee / 255.0, 0xb4 / 255.0, 0xdc / 255.0};
+    static const ThemeRing disabledInner = {0xe1 / 255.0, 0xf8 / 255.0, 1.0, 0xdc / 255.0, 0xf8 / 255.0};
+    themeDrawRing(rect, flipped, enabled ? enabledOuter : disabledOuter);
+    themeDrawRing(NSInsetRect(rect, 1, 1), flipped, enabled ? enabledInner : disabledInner);
+}
+
+void _NSDrawCarbonThemeListBox(NSRect rect, BOOL enabled, BOOL flipped, BOOL active) {
+    static const ThemeRing activeRing = {0x73 / 255.0, 0x99 / 255.0, 0x99 / 255.0, 0x73 / 255.0, 0x99 / 255.0};
+    static const ThemeRing inactiveRing = {0x8e / 255.0, 0xbe / 255.0, 0xbe / 255.0, 0x8e / 255.0, 0xbe / 255.0};
+    static const ThemeRing disabledRing = {0x99 / 255.0, 0xac / 255.0, 0xac / 255.0, 0x99 / 255.0, 0xac / 255.0};
+    themeDrawRing(rect, flipped, !enabled ? disabledRing : (active ? activeRing : inactiveRing));
+}

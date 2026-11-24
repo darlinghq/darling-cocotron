@@ -994,7 +994,10 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
         double maximum = [[axis objectForKey: @"maximum"] doubleValue];
         if (number != number)
             continue;
-        number = number < minimum ? minimum : (number > maximum ? maximum : number);
+        // The setting keeps the value that was asked for (CGFontCopyVariations reports it); the face is
+        // given the value inside the axis range, below.
+        (void) minimum;
+        (void) maximum;
         [settings setObject: [NSNumber numberWithDouble: number] forKey: tag];
     }
 
@@ -1023,7 +1026,11 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
         NSNumber *value = [settings objectForKey: [axis objectForKey: @"tag"]];
         if (value == nil)
             value = [axis objectForKey: @"default"];
-        coordinates[i] = (FT_Fixed) llround([value doubleValue] * 65536.0);
+        double number = [value doubleValue];
+        double minimum = [[axis objectForKey: @"minimum"] doubleValue];
+        double maximum = [[axis objectForKey: @"maximum"] doubleValue];
+        number = number < minimum ? minimum : (number > maximum ? maximum : number);
+        coordinates[i] = (FT_Fixed) llround(number * 65536.0);
     }
     FT_Error error = FT_Set_Var_Design_Coordinates(face, (FT_UInt) [axes count], coordinates);
     free(coordinates);

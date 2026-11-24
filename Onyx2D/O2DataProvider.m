@@ -98,6 +98,47 @@ O2DataProviderCreateWithData(void *info, const void *data, size_t size,
     return provider;
 }
 
+O2DataProviderRef O2DataProviderCreateSequential(void *info, const O2DataProviderSequentialCallbacks *callbacks) {
+    if (callbacks == NULL || callbacks->version != 0 || callbacks->getBytes == NULL)
+        return NULL;
+    O2DataProvider *provider = [[O2DataProvider alloc] init];
+    provider->_sequential = YES;
+    provider->_sequentialInfo = info;
+    provider->_sequentialCallbacks = *callbacks;
+    return provider;
+}
+
+// Reads the whole content through the callbacks: rewind, read until a call gives no bytes, rewind again.
+- (NSData *) _copySequentialContent {
+    if (_sequentialCallbacks.rewind != NULL)
+        _sequentialCallbacks.rewind(_sequentialInfo);
+    NSMutableData *content = [[NSMutableData alloc] init];
+    unsigned char buffer[8192];
+    for (;;) {
+        size_t count = _sequentialCallbacks.getBytes(_sequentialInfo, buffer, sizeof(buffer));
+        if (count == 0)
+            break;
+        if (count > sizeof(buffer))
+            count = sizeof(buffer);
+        [content appendBytes: buffer length: count];
+    }
+    if (_sequentialCallbacks.rewind != NULL)
+        _sequentialCallbacks.rewind(_sequentialInfo);
+    return content;
+}
+
+// Direct access to the content of a sequential provider: it is read once, on first use.
+- (void) _materialize {
+    if (!_sequential || _data != nil)
+        return;
+    _data = [self _copySequentialContent];
+    _inputStream = [[NSInputStream alloc] initWithData: _data];
+    [_inputStream open];
+    _isDirectAccess = YES;
+    _bytes = [_data bytes];
+    _length = [_data length];
+}
+
 O2DataProviderRef O2DataProviderCreateWithCFData(CFDataRef data) {
     return [[O2DataProvider alloc] initWithData: (NSData *) data];
 }
@@ -123,6 +164,9 @@ CFDataRef O2DataProviderCopyData(O2DataProviderRef self) {
     // CGDataProviderCopyData returns NULL for a NULL provider.
     if (self == NULL)
         return NULL;
+    // Every copy of a sequential provider's data is a fresh pass over the callbacks.
+    if (self->_sequential)
+        return (CFDataRef) [self _copySequentialContent];
     if (self->_data != nil)
         return (CFDataRef) [[NSData alloc] initWithBytes: [self->_data bytes]
                                                 length: [self->_data length]];
@@ -137,6 +181,8 @@ CFDataRef O2DataProviderCopyData(O2DataProviderRef self) {
     [_path release];
     if (_releaseCallback != NULL)
         _releaseCallback(_releaseInfo, _releaseData, _releaseSize);
+    if (_sequential && _sequentialCallbacks.releaseInfo != NULL)
+        _sequentialCallbacks.releaseInfo(_sequentialInfo);
     [super dealloc];
 }
 
@@ -145,26 +191,32 @@ CFDataRef O2DataProviderCopyData(O2DataProviderRef self) {
 }
 
 - (NSInputStream *) inputStream {
+    [self _materialize];
     return _inputStream;
 }
 
 - (BOOL) isDirectAccess {
+    [self _materialize];
     return _isDirectAccess;
 }
 
 - (NSData *) data {
+    [self _materialize];
     return _data;
 }
 
 - (const void *) bytes {
+    [self _materialize];
     return _bytes;
 }
 
 - (size_t) length {
+    [self _materialize];
     return _length;
 }
 
 - (void) rewind {
+    [self _materialize];
     NSNumber *number = [[NSNumber alloc] initWithInt: 0];
 
     [_inputStream setProperty: number forKey: NSStreamFileCurrentOffsetKey];
@@ -173,6 +225,7 @@ CFDataRef O2DataProviderCopyData(O2DataProviderRef self) {
 }
 
 - (NSInteger) getBytes: (void *) bytes range: (NSRange) range {
+    [self _materialize];
     if (_data != nil) {
         NSUInteger length = [_data length];
 

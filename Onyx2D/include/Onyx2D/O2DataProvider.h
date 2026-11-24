@@ -30,6 +30,15 @@ typedef O2DataProvider *O2DataProviderRef;
 typedef void (*O2DataProviderReleaseDataCallback)(void *info, const void *data,
                                                   size_t size);
 
+// The callbacks of a provider that is read front to back (the layout of CGDataProviderSequentialCallbacks).
+typedef struct O2DataProviderSequentialCallbacks {
+    unsigned int version;
+    size_t (*getBytes)(void *info, void *buffer, size_t count);
+    off_t (*skipForward)(void *info, off_t count);
+    void (*rewind)(void *info);
+    void (*releaseInfo)(void *info);
+} O2DataProviderSequentialCallbacks;
+
 @interface O2DataProvider : NSObject {
     NSInputStream *_inputStream;
     NSData *_data;
@@ -41,6 +50,10 @@ typedef void (*O2DataProviderReleaseDataCallback)(void *info, const void *data,
     const void *_releaseData;
     size_t _releaseSize;
     O2DataProviderReleaseDataCallback _releaseCallback;
+    // A sequential provider: the callbacks are copied, the content is read when something needs it.
+    BOOL _sequential;
+    void *_sequentialInfo;
+    O2DataProviderSequentialCallbacks _sequentialCallbacks;
 }
 
 - initWithURL: (NSURL *) url;
@@ -50,6 +63,8 @@ O2DataProviderRef
 O2DataProviderCreateWithData(void *info, const void *data, size_t size,
                              O2DataProviderReleaseDataCallback releaseCallback);
 O2DataProviderRef O2DataProviderCreateWithCFData(CFDataRef data);
+// NULL for NULL callbacks, a version other than 0 or no getBytes callback.
+O2DataProviderRef O2DataProviderCreateSequential(void *info, const O2DataProviderSequentialCallbacks *callbacks);
 O2DataProviderRef O2DataProviderCreateWithURL(NSURL *url);
 O2DataProviderRef O2DataProviderCreateWithFilename(const char *pathCString);
 O2DataProviderRef O2DataProviderRetain(O2DataProviderRef self);

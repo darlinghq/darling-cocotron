@@ -71,6 +71,15 @@ COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisMinValue;
 COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisDefaultValue;
 COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisMaxValue;
 
+/* The variation axes of a variable font: an array of dictionaries with the kCGFontVariationAxis keys above (the
+ * name, and the minimum, default and maximum values as numbers). NULL for a font without variation axes. */
+COREGRAPHICS_EXPORT CFArrayRef CGFontCopyVariationAxes(CGFontRef font);
+/* The current variation settings: a dictionary from axis name to value; NULL for a font without variation axes. */
+COREGRAPHICS_EXPORT CFDictionaryRef CGFontCopyVariations(CGFontRef font);
+/* A font with the given axis values (a dictionary from axis name to number; unknown names are ignored). The font
+ * itself is returned (retained) when there is nothing to apply. */
+COREGRAPHICS_EXPORT CGFontRef CGFontCreateCopyWithVariations(CGFontRef font, CFDictionaryRef variations);
+
 CF_IMPLICIT_BRIDGING_DISABLED
 
 #endif /* CGFONT_H */
