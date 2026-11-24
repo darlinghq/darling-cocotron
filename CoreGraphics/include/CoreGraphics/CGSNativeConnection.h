@@ -104,6 +104,16 @@ typedef enum {
 // The seat gained or lost its pointer. The compositor objects that need it (cursor, locked pointer)
 // are reached through _CGSNativeConnectionPointer().
 - (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available;
+// X11: the process' cursor became hidden or shown (CGDisplayHideCursor() and the calls that undo it). The
+// windows the observer created show a blank cursor while it is hidden. Main thread.
+- (void) nativeConnectionCursorHiddenChanged: (BOOL) hidden;
+// X11: the window (an X window) the pointer is to be grabbed for when the mouse is disassociated from the
+// cursor (CGAssociateMouseAndMouseCursorPosition(false)): the one the observer prefers (a display overlay, the
+// key window). 0 for none, which leaves the choice to CoreGraphics (the window of the connection with the focus).
+- (unsigned long) nativeConnectionRelativeMouseWindow;
+// X11: the pointer grab of the disassociated mouse was taken (active) on a window, with the frozen cursor in
+// root pixels, or released. The observer forgets the pointer position it knew.
+- (void) nativeConnectionRelativeMouseGrabChanged: (BOOL) active window: (unsigned long) window rootX: (int) x rootY: (int) y;
 @end
 
 // The kind of the process' connection to the window system, opening it if needed.
@@ -125,6 +135,15 @@ extern void _CGSNativeConnectionObjectDestroyed(void *object);
 // Posts what the keyboard decoder holds back until the compositor confirms it (a modifier key that is
 // not yet known to have changed the flags), so that a later event of another device follows it.
 extern void _CGSNativeConnectionFlushPendingKeyboardEvents(void);
+// X11: whether the mouse is disassociated from the cursor and the pointer grab that implements it is held;
+// then *frozenRoot is the frozen cursor in root pixels. *requested says whether the application wants it
+// (the grab is held only while the focus is). Either may be NULL.
+extern BOOL _CGSNativeConnectionRelativeMouseState(BOOL *requested, CGPoint *frozenRoot);
+// X11: the windows the pointer can be grabbed for changed (a display overlay appeared or went): a wanted
+// grab that is not held is retried.
+extern void _CGSNativeConnectionPointerWindowsChanged(void);
+// X11: mouse motion the framework made events for itself (a display overlay) that CGGetLastMouseDelta() reports too.
+extern void _CGSNativeConnectionAccumulateMouseDelta(double dx, double dy);
 // The index and name of the keyboard layout group in effect. -1 and NULL when there is none.
 extern int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef *name);
 

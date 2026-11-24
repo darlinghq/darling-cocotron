@@ -208,6 +208,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // position is in CoreGraphics' global space (origin at the main screen's top-left
 // corner, y down), as CGWarpMouseCursorPosition() takes it.
 - (void) warpMouse: (NSPoint) position;
+// NO for a backend whose window system connection in CoreGraphics keeps the pointer's state itself (the cursor
+// hide count, warping, the disassociated mouse, the deltas): CoreGraphics' pointer functions do not reach the display.
+- (BOOL) usesPointerController;
+- (BOOL) cursorIsVisible;
 // YES disassociates the mouse from the cursor, as
 // CGAssociateMouseAndMouseCursorPosition(false) does: the cursor stays where it
 // is and mouse motion only produces event deltas. NO restores normal operation.

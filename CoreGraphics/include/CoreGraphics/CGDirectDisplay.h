@@ -136,6 +136,7 @@ COREGRAPHICS_EXPORT CGError CGDisplayRelease(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID display, CGPoint point);
 COREGRAPHICS_EXPORT CGError CGDisplayHideCursor(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CGError CGDisplayShowCursor(CGDirectDisplayID display);
+COREGRAPHICS_EXPORT boolean_t CGCursorIsVisible(void);
 COREGRAPHICS_EXPORT CFArrayRef CGDisplayAvailableModes(CGDirectDisplayID display);
 COREGRAPHICS_EXPORT CFArrayRef
 CGDisplayCopyAllDisplayModes(CGDirectDisplayID display, CFDictionaryRef options);
