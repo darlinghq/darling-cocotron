@@ -224,17 +224,20 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 - (NSComparisonResult) compareKeyViewPosition: (_NSKeyViewPosition *) other {
-
-    // Sort by larger Y (cartesian coordinates)
-    if (NSMaxY(_rect) < NSMaxY(other->_rect))
-        return NSOrderedDescending;
-    else {
-        // Then sort by smaller X
-        if (NSMinX(_rect) < NSMinX(other->_rect))
+    // Higher views first (cartesian coordinates), then the leftmost ones.
+    if (NSMaxY(_rect) != NSMaxY(other->_rect))
+        return NSMaxY(_rect) > NSMaxY(other->_rect) ? NSOrderedAscending : NSOrderedDescending;
+    if (NSMinX(_rect) != NSMinX(other->_rect))
+        return NSMinX(_rect) < NSMinX(other->_rect) ? NSOrderedAscending : NSOrderedDescending;
+    // The same corner (a child flush with the top left of its parent): the
+    // ancestor goes first, so the loop does not skip the child.
+    if (_view != other->_view) {
+        if ([other->_view isDescendantOf: _view])
             return NSOrderedAscending;
-        else
+        if ([_view isDescendantOf: other->_view])
             return NSOrderedDescending;
     }
+    return NSOrderedSame;
 }
 
 @end
@@ -2677,8 +2680,11 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if ([self initialFirstResponder] != nil) {
         [self makeFirstResponder: [self initialFirstResponder]];
     } else {
-        // Otherwise calculate one and set the first responder.
-        if ([self autorecalculatesKeyViewLoop]) {
+        // Otherwise calculate one and set the first responder. A window that
+        // does not recalculate its loop automatically still gets one when it
+        // has none (documented for -recalculateKeyViewLoop).
+        if ([self autorecalculatesKeyViewLoop] ||
+            ![self _hasEstablishedKeyViewLoop]) {
             [self recalculateKeyViewLoop];
         }
         if ([self firstResponder] == self) {
@@ -2744,20 +2750,51 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return 0.20;
 }
 
-- (void) selectNextKeyView: sender {
-    if ([_firstResponder isKindOfClass: [NSView class]]) {
-        NSView *view = (NSView *) _firstResponder;
+// The key view that holds the focus: the first responder, or the control that
+// a field editor being the first responder is editing (the field editor itself
+// is not part of the key view loop).
+- (NSView *) _keyViewOfFirstResponder {
+    if ([_firstResponder isKindOfClass: [NSText class]] && [(NSText *) _firstResponder isFieldEditor]) {
+        id delegate = [(NSText *) _firstResponder delegate];
 
-        [self selectKeyViewFollowingView: view];
+        if ([delegate isKindOfClass: [NSView class]])
+            return delegate;
     }
+    return [_firstResponder isKindOfClass: [NSView class]] ? (NSView *) _firstResponder : nil;
+}
+
+// The candidates, in the documented order: the next (previous) valid key view
+// of the current first responder, the initial first responder when it accepts
+// first responder status, and otherwise the next (previous) valid key view of
+// the initial first responder. With none of them nothing changes.
+- (void) selectNextKeyView: sender {
+    NSView *view = [self _keyViewOfFirstResponder];
+
+    if ([view nextValidKeyView] != nil) {
+        [self selectKeyViewFollowingView: view];
+        return;
+    }
+
+    NSView *initial = [self initialFirstResponder];
+    NSView *candidate = [initial acceptsFirstResponder] ? initial : [initial nextValidKeyView];
+
+    if (candidate != nil)
+        [self _makeFirstResponder: candidate selecting: NSSelectingNext];
 }
 
 - (void) selectPreviousKeyView: sender {
-    if ([_firstResponder isKindOfClass: [NSView class]]) {
-        NSView *view = (NSView *) _firstResponder;
+    NSView *view = [self _keyViewOfFirstResponder];
 
+    if ([view previousValidKeyView] != nil) {
         [self selectKeyViewPrecedingView: view];
+        return;
     }
+
+    NSView *initial = [self initialFirstResponder];
+    NSView *candidate = [initial acceptsFirstResponder] ? initial : [initial previousValidKeyView];
+
+    if (candidate != nil)
+        [self _makeFirstResponder: candidate selecting: NSSelectingPrevious];
 }
 
 // While the new key view is made first responder, -keyViewSelectionDirection
@@ -2782,6 +2819,27 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
 - (void) selectKeyViewPrecedingView: (NSView *) view {
     [self _makeFirstResponder: [view previousValidKeyView] selecting: NSSelectingPrevious];
+}
+
+// YES when some view of the window can hand the key focus on to another one,
+// that is when somebody has set up a key view loop. A manual chain whose next
+// views are all hidden or refuse first responder status counts as no loop. The
+// check runs once, when the window first becomes key, so views added later
+// get no links from it.
+- (BOOL) _hasEstablishedKeyViewLoop {
+    NSMutableArray *pending = [NSMutableArray array];
+
+    if (_contentView != nil)
+        [pending addObject: _contentView];
+    while ([pending count] > 0) {
+        NSView *view = [pending lastObject];
+
+        [pending removeLastObject];
+        if ([view canBecomeKeyView] && [view nextValidKeyView] != nil)
+            return YES;
+        [pending addObjectsFromArray: [view subviews]];
+    }
+    return NO;
 }
 
 - (void) recalculateKeyViewLoopIfNeeded {
