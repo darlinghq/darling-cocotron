@@ -342,50 +342,49 @@ static int frontProcessToken(void)
 	return token;
 }
 
-// Whether each process has the input focus is kept by the process itself, under a libnotify name
-// of its own pid (state: its start time while it has the focus, 0 once it resigned), so that no
-// two processes ever write the same state; the front process name only says who reported last.
-static BOOL focusName(pid_t pid, char* name, size_t size)
+// Per-process flags (the input focus, the menu bar ownership) are kept by the process itself, under
+// a libnotify name of its own pid (state: its start time while the flag is set, 0 once cleared), so
+// that no two processes ever write the same state.
+static BOOL processFlagName(const char* prefix, pid_t pid, char* name, size_t size)
 {
-	return snprintf(name, size, "org.darlinghq.process-focus.%d", (int) pid) < (int) size;
+	return snprintf(name, size, "%s%d", prefix, (int) pid) < (int) size;
 }
 
-static CGError setProcessFocus(pid_t pid, BOOL focused)
+static CGError setProcessFlag(const char* prefix, int* token, pid_t* token_pid, pid_t pid, BOOL value)
 {
-	static pid_t token_pid;
-	static int token = -1;
 	char name[64];
 
 	@synchronized([CGSConnection class])
 	{
-		if (token < 0 || token_pid != pid)
+		if (*token < 0 || *token_pid != pid)
 		{
 			// The names of other processes' pids are only set on their behalf; the token of the
 			// previous pid is not needed any more.
-			if (token >= 0)
-				notify_cancel(token);
-			token = -1;
-			if (!focusName(pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+			if (*token >= 0)
+				notify_cancel(*token);
+			*token = -1;
+			if (!processFlagName(prefix, pid, name, sizeof(name)) ||
+				notify_register_check(name, token) != NOTIFY_STATUS_OK)
 			{
-				token = -1;
+				*token = -1;
 				return kCGErrorCannotComplete;
 			}
-			token_pid = pid;
+			*token_pid = pid;
 		}
 		uint64_t start = processStartTime(pid);
-		if (notify_set_state(token, focused ? (start != 0 ? start : 1) : 0) != NOTIFY_STATUS_OK)
+		if (notify_set_state(*token, value ? (start != 0 ? start : 1) : 0) != NOTIFY_STATUS_OK)
 			return kCGErrorCannotComplete;
 	}
 	return kCGErrorSuccess;
 }
 
-static BOOL processHasFocus(pid_t pid)
+static BOOL processFlag(const char* prefix, pid_t pid)
 {
 	char name[64];
 	int token;
 	uint64_t state = 0;
 
-	if (!focusName(pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
+	if (!processFlagName(prefix, pid, name, sizeof(name)) || notify_register_check(name, &token) != NOTIFY_STATUS_OK)
 		return NO;
 	if (notify_get_state(token, &state) != NOTIFY_STATUS_OK)
 		state = 0;
@@ -394,6 +393,35 @@ static BOOL processHasFocus(pid_t pid)
 		return NO;
 	uint64_t start = processStartTime(pid);
 	return start == 0 ? state == 1 : state == start;
+}
+
+#define kCGSProcessFocusPrefix "org.darlinghq.process-focus."
+#define kCGSProcessMenuBarPrefix "org.darlinghq.process-menubar."
+
+static CGError setProcessFocus(pid_t pid, BOOL focused)
+{
+	static pid_t token_pid;
+	static int token = -1;
+	return setProcessFlag(kCGSProcessFocusPrefix, &token, &token_pid, pid, focused);
+}
+
+static BOOL processHasFocus(pid_t pid)
+{
+	return processFlag(kCGSProcessFocusPrefix, pid);
+}
+
+// The process that reported last that it has the focus, as long as it has not resigned since; this
+// is all the processes themselves know, whichever display server there is.
+static CGError reportedFrontProcess(pid_t* pid)
+{
+	int token = frontProcessToken();
+	uint64_t state = 0;
+	if (token < 0 || notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
+	if (state == 0 || state > INT32_MAX || !processHasFocus((pid_t) state))
+		return kCGErrorNoneAvailable;
+	*pid = (pid_t) state;
+	return kCGErrorSuccess;
 }
 
 CGError _CGSGetFrontProcess(pid_t* pid)
@@ -415,14 +443,7 @@ CGError _CGSGetFrontProcess(pid_t* pid)
 			return err;
 	}
 
-	int token = frontProcessToken();
-	uint64_t state = 0;
-	if (token < 0 || notify_get_state(token, &state) != NOTIFY_STATUS_OK)
-		return kCGErrorCannotComplete;
-	if (state == 0 || state > INT32_MAX || !processHasFocus((pid_t) state))
-		return kCGErrorNoneAvailable;
-	*pid = (pid_t) state;
-	return kCGErrorSuccess;
+	return reportedFrontProcess(pid);
 }
 
 CGError _CGSSetFrontProcess(pid_t pid)
@@ -450,6 +471,60 @@ CGError _CGSResignFrontProcess(pid_t pid)
 	if (err != kCGErrorSuccess)
 		return err;
 	notify_post(kCGSFrontProcessNotificationName);
+	return kCGErrorSuccess;
+}
+
+// The process that owns the menu bar: a libnotify name holds its pid, and the process has marked
+// itself (the start time again protects against a reused pid).
+static int menuBarOwnerToken(void)
+{
+	static dispatch_once_t once;
+	static int token = -1;
+	dispatch_once(&once, ^{
+		if (notify_register_check(kCGSMenuBarOwnerNotificationName, &token) != NOTIFY_STATUS_OK)
+			token = -1;
+	});
+	return token;
+}
+
+CGError _CGSSetMenuBarOwnerProcess(pid_t pid)
+{
+	static pid_t token_pid;
+	static int token = -1;
+
+	if (pid <= 0)
+		return kCGErrorIllegalArgument;
+
+	int owner = menuBarOwnerToken();
+	CGError err = setProcessFlag(kCGSProcessMenuBarPrefix, &token, &token_pid, pid, YES);
+	if (err != kCGErrorSuccess)
+		return err;
+	if (owner < 0 || notify_set_state(owner, (uint64_t) pid) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
+	// The processes that follow the front process follow the menu bar owner too.
+	notify_post(kCGSFrontProcessNotificationName);
+	return kCGErrorSuccess;
+}
+
+CGError _CGSGetMenuBarOwnerProcess(pid_t* pid)
+{
+	if (pid == NULL)
+		return kCGErrorIllegalArgument;
+
+	int token = menuBarOwnerToken();
+	uint64_t state = 0;
+	if (token < 0 || notify_get_state(token, &state) != NOTIFY_STATUS_OK)
+		return kCGErrorCannotComplete;
+	if (state == 0 || state > INT32_MAX || !processFlag(kCGSProcessMenuBarPrefix, (pid_t) state))
+		return kCGErrorNoneAvailable;
+
+	// The processes that have the focus report it (and their resigning). Once the last process that
+	// reported has resigned, another client of the display server has the focus, and no process
+	// owns the menu bar then.
+	pid_t front = 0;
+	if (reportedFrontProcess(&front) != kCGErrorSuccess)
+		return kCGErrorNoneAvailable;
+	*pid = (pid_t) state;
 	return kCGErrorSuccess;
 }
 
@@ -582,10 +657,117 @@ void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId)
 	return [[conn windowForId: winId] nativeWindow];
 }
 
+// The surfaces of application windows (see _CGSAddWindowSurface). They are not CGSSurface
+// objects: there is no CGS window behind an application window, only a native drawable, so
+// the registry keeps what the window server calls need: the ids, the drawable and its size.
+typedef struct WindowSurface
+{
+	CGSSurfaceID surfaceId;
+	CGSWindowID windowId;
+	void* nativeWindow;
+	CGSize size;
+	struct WindowSurface* next;
+} WindowSurface;
+
+static WindowSurface* g_windowSurfaces = NULL;
+static pthread_mutex_t g_windowSurfacesMutex = PTHREAD_MUTEX_INITIALIZER;
+// Surface ids of application windows start apart from the ones of CGS windows, which count
+// up from 1 on each window.
+static CGSSurfaceID g_nextWindowSurfaceId = 0x1000;
+
+CGSSurfaceID _CGSAddWindowSurface(CGSWindowID winId, void* nativeWindow, CGSize size)
+{
+	WindowSurface* surface = (WindowSurface*) calloc(1, sizeof(WindowSurface));
+	if (!surface)
+		return 0;
+	surface->windowId = winId;
+	surface->nativeWindow = nativeWindow;
+	surface->size = size;
+
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	surface->surfaceId = g_nextWindowSurfaceId++;
+	surface->next = g_windowSurfaces;
+	g_windowSurfaces = surface;
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+	return surface->surfaceId;
+}
+
+void _CGSSetWindowSurfaceSize(CGSSurfaceID surfaceId, CGSize size)
+{
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	for (WindowSurface* s = g_windowSurfaces; s != NULL; s = s->next)
+	{
+		if (s->surfaceId == surfaceId)
+		{
+			s->size = size;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+}
+
+void _CGSRemoveWindowSurface(CGSSurfaceID surfaceId)
+{
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	for (WindowSurface** link = &g_windowSurfaces; *link != NULL; link = &(*link)->next)
+	{
+		if ((*link)->surfaceId == surfaceId)
+		{
+			WindowSurface* gone = *link;
+			*link = gone->next;
+			free(gone);
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+}
+
+bool _CGSWindowSurfaceForNativeWindow(void* nativeWindow, CGSConnectionID* connId,
+                                      CGSWindowID* winId, CGSSurfaceID* surfaceId)
+{
+	bool found = false;
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	for (WindowSurface* s = g_windowSurfaces; s != NULL; s = s->next)
+	{
+		if (s->nativeWindow == nativeWindow)
+		{
+			*connId = _CGSDefaultConnection();
+			*winId = s->windowId;
+			*surfaceId = s->surfaceId;
+			found = true;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+	return found;
+}
+
+// The registered surface of an application window, copied out.
+static bool windowSurfaceForIDs(CGSWindowID winId, CGSSurfaceID surfaceId, WindowSurface* out)
+{
+	bool found = false;
+	pthread_mutex_lock(&g_windowSurfacesMutex);
+	for (WindowSurface* s = g_windowSurfaces; s != NULL; s = s->next)
+	{
+		if (s->windowId == winId && s->surfaceId == surfaceId)
+		{
+			*out = *s;
+			found = true;
+			break;
+		}
+	}
+	pthread_mutex_unlock(&g_windowSurfacesMutex);
+	return found;
+}
+
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId)
 {
 	CGSConnection* conn = _CGSConnectionForID(connId);
-	return [[[conn windowForId: winId] surfaceForId: surfaceId] nativeWindow];
+	void* native = [[[conn windowForId: winId] surfaceForId: surfaceId] nativeWindow];
+	WindowSurface surface;
+	if (native == NULL && conn != nil && windowSurfaceForIDs(winId, surfaceId, &surface))
+		native = surface.nativeWindow;
+	return native;
 }
 
 CGError _CGSCreateDisplayOverlayWindow(CGSConnectionID connId, CGRect bounds,
@@ -939,6 +1121,24 @@ CGError CGSSetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID s
 	return [surface setBounds: rect];
 }
 
+// The bounds of one of the application's own windows, by window number, in global display
+// coordinates (origin at the top left of the main display). An AppKit window is not a CGS
+// window, but its number is a window id like any other, so the window server calls that take
+// one see its frame, including the title bar.
+static bool applicationWindowBounds(CGSWindowID wid, CGRect* outBounds)
+{
+	CGWindow* window = platformWindowForID(wid);
+	if (!window)
+		return false;
+	CGRect frame = [window frame];
+	if (CGRectIsNull(frame))
+		return false;
+	// The frame is in AppKit's global space, with the origin at the bottom left of the main display.
+	frame.origin.y = CGDisplayBounds(CGMainDisplayID()).size.height - CGRectGetMaxY(frame);
+	*outBounds = frame;
+	return true;
+}
+
 // QUIRK: a failed CGSGetWindowBounds() reports kCGErrorFailure for a window
 // that does not exist, and sets the result to CGRectNull. Not documented.
 // Evidence: black-box observation on macOS 26.7.3 (tier 2).
@@ -952,6 +1152,8 @@ CGError CGSGetWindowBounds(CGSConnectionID cid, CGSWindowID wid, CGRect *outBoun
 	CGError err = getWindow(cid, wid, &window);
 
 	if (err == kCGErrorIllegalArgument) {
+		if (applicationWindowBounds(wid, outBounds))
+			return kCGSErrorSuccess;
 		*outBounds = CGRectNull;
 		return kCGErrorFailure;
 	}
@@ -972,6 +1174,16 @@ CGError CGSGetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID s
 	CGSSurface* surface;
 	CGError err = getSurface(cid, wid, sid, &surface);
 
+	if (err == kCGErrorIllegalArgument)
+	{
+		// A drawable of an application window: it covers its own area, from its origin.
+		WindowSurface windowSurface;
+		if (windowSurfaceForIDs(wid, sid, &windowSurface))
+		{
+			*outBounds = CGRectMake(0, 0, windowSurface.size.width, windowSurface.size.height);
+			return kCGSErrorSuccess;
+		}
+	}
 	if (err != kCGSErrorSuccess)
 		return err;
 

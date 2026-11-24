@@ -65,6 +65,13 @@ STATES = [
     ("default-options-again", True),
 ]
 
+def guest_defaults(*args):
+    subprocess.run(["timeout", "-s", "KILL", "60", "darling", "shell", "defaults"] + list(args),
+                   stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+# The window of the program is titled, which carries the menu strip by default: ask for the menu bar.
+guest_defaults("write", "org.darlinghq.AppKit", "DarlingMenuBarStyle", "screen")
 bus = type("NoBus", (), {"address": "unix:path=/nonexistent/bus"})()
 log = os.path.join(work, "hiding.log")
 guest = start_guest(bus, work, binary, log, "hiding", lifetime=0)
@@ -79,5 +86,6 @@ try:
 finally:
     if guest.poll() is None:
         guest.kill()
+    guest_defaults("delete", "org.darlinghq.AppKit", "DarlingMenuBarStyle")
 print("logs in", work)
 sys.exit(finish())

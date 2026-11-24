@@ -118,6 +118,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     WaylandToplevelIcons *_toplevelIcons;
     // The exported main menu; nil while the menu is drawn inside the windows.
     WaylandAppMenu *_appMenu;
+    BOOL _desktopMenuProbed, _desktopMenuPresent;
     BOOL _eglAvailable;
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;
@@ -168,6 +169,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     WaylandWindow *_dragPressWindow; // Nonretained; invalidated on unmap.
     uint32_t _dragPressSerial, _dragPressButton;
     WaylandDraggingManager *_draggingManager;
+
+    // The window the keyboard focus last went to, as CoreGraphics reported it; not retained, cleared when
+    // the window is unmapped.
+    WaylandWindow *_keyboardFocusWindow;
+    // The keyboard focus was in a window of the application that was unmapped; its leave event has not arrived.
+    BOOL _keyboardWindowUnmapped;
 
     struct wl_cursor_theme *_cursorTheme;
     uint32_t _cursorThemeScale120;

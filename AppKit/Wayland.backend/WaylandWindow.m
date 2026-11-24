@@ -677,8 +677,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _configureUpdatePending = NO;
     _configured = NO;
     // The compositor moves the focus away from a window that is unmapped without telling the client,
-    // so the window tells its application, which stops being active when no other window of it has
-    // the focus (as the X11 backend learns from the focus-out event).
+    // so the window tells its application, which stops being active when another window of it is
+    // still shown and none has the focus (as the X11 backend learns from the focus-out event). That
+    // the focus went elsewhere is not known: the application whose last window is unmapped stays
+    // active, as on macOS, until a window system event shows another client has the focus.
     BOOL wasActivated = _activated;
     _activated = NO;
     if (wasActivated) {
@@ -687,7 +689,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             if (self->_invalidated || self->_activated || delegate == nil || ![delegate _isActive])
                 return;
             [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
-            [self->_display applicationFocusMayHaveLeft];
         }];
     }
     _pendingSuspended = _suspended = NO;

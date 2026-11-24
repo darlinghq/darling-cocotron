@@ -195,6 +195,70 @@ static void checkEmptyMaskKeepsTheFace(const FaceInfo *infos, CFIndex count)
 		expect(wrong == 0, "QUIRK: an empty mask returns the original face among faces equal in traits and weight");
 }
 
+// QUIRK (macOS 26.1, probe 639): every installed face whose weight trait is 0.3 or more has the bold
+// trait (a Semibold or Demibold face has it). SKIP when no installed face weighs between 0.3 and 0.4,
+// the faces this threshold decides.
+static void checkBoldThreshold(const FaceInfo *infos, CFIndex count)
+{
+	int semibold = 0, wrong = 0;
+	for (CFIndex i = 0; i < count; i++) {
+		if (infos[i].font == NULL || infos[i].weight < 0.3 - 1e-6)
+			continue;
+		if (infos[i].weight < 0.4 - 1e-6)
+			semibold++;
+		if (!(infos[i].traits & kCTFontTraitBold))
+			wrong++;
+	}
+	if (semibold == 0)
+		printf("SKIP no installed face has a weight between 0.3 and 0.4\n");
+	else
+		expect(wrong == 0, "QUIRK: faces of weight 0.3 and more have the bold trait");
+}
+
+// QUIRK (macOS 26.1, probe 639.E): turning the bold trait on from a face without it picks, among the
+// family's faces with the resulting traits, the one whose weight is nearest 0.4 (the Bold weight class),
+// not the one nearest the original's weight; turning it off aims at weight 0.0. Checked for every
+// installed face; SKIP unless some family makes the two rules differ (a family with Semibold, weight 0.3,
+// and Bold, 0.4, faces, which needs the bold threshold above).
+static void checkBoldWeightTarget(const FaceInfo *infos, CFIndex count, int turnOn)
+{
+	const CGFloat target = turnOn ? 0.4 : 0;
+	int discriminating = 0, wrong = 0;
+	for (CFIndex i = 0; i < count; i++) {
+		const FaceInfo *f = &infos[i];
+		if (f->font == NULL || ((f->traits & kCTFontTraitBold) != 0) != !turnOn)
+			continue;
+		CTFontRef copy = CTFontCreateCopyWithSymbolicTraits(f->font, 0, NULL, turnOn ? kCTFontTraitBold : 0,
+				kCTFontTraitBold);
+		if (copy == NULL)
+			continue;
+		CTFontSymbolicTraits wanted = CTFontGetSymbolicTraits(copy) & comparedBits;
+		CGFloat best = 9, nearOriginal = 9, weightNearOriginal = 0;
+		for (CFIndex j = 0; j < count; j++) {
+			const FaceInfo *g = &infos[j];
+			if (g->font == NULL || !sameFamilyInfo(f, g) || (g->traits & comparedBits) != wanted)
+				continue;
+			if (fabs(g->weight - target) < best)
+				best = fabs(g->weight - target);
+			if (fabs(g->weight - f->weight) < nearOriginal) {
+				nearOriginal = fabs(g->weight - f->weight);
+				weightNearOriginal = g->weight;
+			}
+		}
+		if (fabs(fabs(weightOf(copy) - target) - best) > 1e-6)
+			wrong++;
+		if (fabs(fabs(weightNearOriginal - target) - best) > 1e-6)
+			discriminating++;
+		CFRelease(copy);
+	}
+	const char *what = turnOn ? "QUIRK: setting bold aims at weight 0.4, not the original's weight"
+			: "QUIRK: clearing bold aims at weight 0.0, not the original's weight";
+	if (discriminating == 0)
+		printf("SKIP no installed family tells the weight rules apart (%s)\n", what);
+	else
+		expect(wrong == 0, what);
+}
+
 int main(void)
 {
 	CTFontCollectionRef collection = CTFontCollectionCreateFromAvailableFonts(NULL);
@@ -424,6 +488,9 @@ int main(void)
 
 	FaceInfo *infos = collectFaces(faces, count);
 	checkEmptyMaskKeepsTheFace(infos, count);
+	checkBoldThreshold(infos, count);
+	checkBoldWeightTarget(infos, count, 1);
+	checkBoldWeightTarget(infos, count, 0);
 
 	// QUIRK (macOS 26.7.3, 10.14.4 and 26.1, probe 639.F.family): a family without a face of the original's boldness
 	// still gives a face; only a family that does not exist gives NULL. The structure is checked, not

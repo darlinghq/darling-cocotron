@@ -27,6 +27,7 @@
     // Shows the main menu outside the windows (see X11AppMenu), nil until the
     // application has one or when the menu is drawn inside the windows.
     X11AppMenu *_appMenu;
+    BOOL _desktopMenuProbed, _desktopMenuPresent;
 
     id lastFocusedWindow;
     // The click counts per button are in DarlingDisplay.
