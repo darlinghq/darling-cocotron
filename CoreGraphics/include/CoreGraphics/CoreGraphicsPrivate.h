@@ -266,6 +266,29 @@ CGError _CGSGetProcessActivationPolicy(pid_t pid, int* policy);
 #define kCGSRequestFrontProcessFrontWindowOnly 1
 #define kCGSRequestFrontProcessMenuBarOwner 2
 CGError _CGSRequestFrontProcess(pid_t pid, uint32_t options);
+// The request SetFrontProcess() makes for an application: _CGSRequestFrontProcess() with the menu bar
+// owner chosen from the activation policy the process published (a regular application becomes the
+// owner, an agent does not). kCGErrorInvalidOperation for a process that published the prohibited
+// policy (it cannot be the front process, and nothing changes); a process that published none is
+// not refused. Only kCGSRequestFrontProcessFrontWindowOnly is accepted in options
+// (kCGErrorIllegalArgument otherwise); a pid that is not positive is kCGErrorIllegalArgument too.
+CGError _CGSRequestFrontApplication(pid_t pid, uint32_t options);
+// The CPS calls, the window system's per-process calls that the Process Manager is built on. A serial
+// number is (0, pid); the Process Manager's special values are accepted (1: the system
+// process, accepted and left alone by CPSSetFrontProcess; 2: the calling process). They return 0 on
+// success and a nonzero error otherwise: 1003 for a NULL serial number, else a CGError.
+typedef struct CPSProcessSerNum
+{
+	uint32_t hi;
+	uint32_t lo;
+} CPSProcessSerNum;
+int CPSGetCurrentProcess(CPSProcessSerNum* psn);
+// Makes the calling process a regular application of the window system (it publishes that activation
+// policy). kCGErrorCannotComplete for another process, whose policy only it can publish.
+int CPSEnableForegroundOperation(CPSProcessSerNum* psn, uint32_t flags1, uint32_t flags2, uint32_t flags3, uint32_t flags4);
+// _CGSRequestFrontApplication() for the process: its errors, kCGErrorNoneAvailable for a serial
+// number that names no live process.
+int CPSSetFrontProcess(CPSProcessSerNum* psn);
 // Called in this process when the front process changed (by any process), on the main thread, and
 // at once in the thread that reported or requested the change when it was this process. previous
 // and current are pids, 0 for none known (the focus is in another client of the window system).
