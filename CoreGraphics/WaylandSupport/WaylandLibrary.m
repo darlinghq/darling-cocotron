@@ -125,6 +125,14 @@ bool WaylandLibraryLoad(void) {
     XKBCOMMON_FUNCTIONS(WAYLAND_RESOLVE)
 #undef WAYLAND_RESOLVE
 
+    // Optional: without it dead keys and compose sequences are not interpreted.
+    WL.hasCompose = true;
+#define WAYLAND_RESOLVE_COMPOSE(name)                                          \
+    if (WL.hasCompose && !resolve(handle, #name, (void **) &WL.name))          \
+        WL.hasCompose = false;
+    XKBCOMPOSE_FUNCTIONS(WAYLAND_RESOLVE_COMPOSE)
+#undef WAYLAND_RESOLVE_COMPOSE
+
     // Optional: without it the pointer keeps whatever cursor the compositor shows.
     handle = openLibrary("libwayland-cursor.so.0");
     WL.hasCursor = handle != NULL;

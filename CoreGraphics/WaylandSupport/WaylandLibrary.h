@@ -28,6 +28,7 @@
 #include <wayland-cursor.h>
 #include <wayland-egl-core.h>
 #include <xkbcommon/xkbcommon.h>
+#include <xkbcommon/xkbcommon-compose.h>
 
 // libwayland-client, libwayland-cursor and libxkbcommon are Linux libraries. They are
 // loaded with dlopen() when the Wayland backend is selected, so the bundle has no
@@ -78,6 +79,17 @@
     X(xkb_state_serialize_layout)                                              \
     X(xkb_keysym_to_utf32)
 
+// The compose (dead key) API of libxkbcommon, from version 0.5. Optional: without it keys are not composed.
+#define XKBCOMPOSE_FUNCTIONS(X)                                                \
+    X(xkb_compose_table_new_from_locale)                                       \
+    X(xkb_compose_table_unref)                                                 \
+    X(xkb_compose_state_new)                                                   \
+    X(xkb_compose_state_unref)                                                 \
+    X(xkb_compose_state_feed)                                                  \
+    X(xkb_compose_state_reset)                                                 \
+    X(xkb_compose_state_get_status)                                            \
+    X(xkb_compose_state_get_utf8)
+
 #define WAYLAND_CURSOR_FUNCTIONS(X)                                            \
     X(wl_cursor_theme_load)                                                    \
     X(wl_cursor_theme_destroy)                                                 \
@@ -95,12 +107,15 @@ struct WaylandLibrary {
 #define WAYLAND_FUNCTION_POINTER(name) __typeof__(name) *name;
     WAYLAND_CLIENT_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
     XKBCOMMON_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
+    XKBCOMPOSE_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
     WAYLAND_CURSOR_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
     WAYLAND_EGL_FUNCTIONS(WAYLAND_FUNCTION_POINTER)
 #undef WAYLAND_FUNCTION_POINTER
     // From the native C library, NULL when unavailable.
     int (*memfd_create)(const char *name, unsigned int flags);
     // NO when libwayland-cursor couldn't be loaded; cursors are then left to the compositor.
+    // NO when the installed libxkbcommon has no compose API.
+    bool hasCompose;
     bool hasCursor;
     bool hasEGL;
 };

@@ -64,6 +64,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     _repeatDelay = 600;
     _heldKeyIdentities = [NSMutableDictionary new];
     _heldHotKeys = [NSMutableDictionary new];
+    _composingKeys = [NSMutableSet new];
     // The keyboard is hardware: the events it posts change the state the hardware state functions report.
     _source = (void *) CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
     return self;
@@ -75,6 +76,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     [self stop];
     [_heldKeyIdentities release];
     [_heldHotKeys release];
+    [_composingKeys release];
     if (_source != NULL)
         CFRelease((CFTypeRef) _source);
     [super dealloc];
@@ -120,7 +122,14 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     [_heldKeyIdentities removeAllObjects];
     _syncModifierFlags = NO;
     _classifyHeldKeys = NO;
+    [self resetComposition];
     [_keymap resetModifiers];
+}
+
+// A sequence in progress ends: its keys are not delivered, and the next key starts afresh.
+- (void) resetComposition {
+    [_composingKeys removeAllObjects];
+    [_keymap resetCompose];
 }
 
 #pragma mark - Posting
@@ -183,13 +192,19 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
                    serial: 0];
 }
 
-- (void) postKeyEventForKeycode: (uint32_t) keycode pressed: (BOOL) pressed repeat: (BOOL) repeat serial: (uint32_t) serial {
+// text is what a dead key or compose sequence produced, nil for the key's own characters.
+- (void) postKeyEventForKeycode: (uint32_t) keycode
+                        pressed: (BOOL) pressed
+                         repeat: (BOOL) repeat
+                         serial: (uint32_t) serial
+                           text: (NSString *) text
+{
     if (_focus == NULL)
         return;
     [self postEventOfType: pressed ? kCGEventKeyDown : kCGEventKeyUp
                   keyCode: keycode < 256 ? x11ToCarbon[keycode] : 0
                     flags: [self modifierFlags]
-               characters: [_keymap charactersForKeycode: keycode]
+               characters: text ?: [_keymap charactersForKeycode: keycode]
      unmodifiedCharacters: [_keymap unmodifiedCharactersForKeycode: keycode]
                    repeat: repeat
                    serial: serial];
@@ -263,7 +278,8 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 - (void) repeatKey {
     if (![_keymap isUsable] || _repeatKeycode == 0)
         return;
-    [self postKeyEventForKeycode: _repeatKeycode pressed: YES repeat: YES serial: 0];
+    // A repeat is the key typed again, not a step of a sequence.
+    [self postKeyEventForKeycode: _repeatKeycode pressed: YES repeat: YES serial: 0 text: nil];
 }
 
 #pragma mark - Events
@@ -344,7 +360,20 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
         }
         if ([self takeKeyAsHotKey: keycode pressed: pressed])
             break;
-        [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO serial: pressed ? serial : 0];
+
+        // A dead key or the Compose key is not delivered: what the sequence produces is, as the characters of
+        // the key that completes it, and the release of a key that was not delivered is not either.
+        NSString *composed = nil;
+        if (pressed) {
+            if ([_keymap composeKeycode: keycode text: &composed] == CGSWaylandComposeConsumed) {
+                [_composingKeys addObject: @(keycode)];
+                break;
+            }
+        } else if ([_composingKeys containsObject: @(keycode)]) {
+            [_composingKeys removeObject: @(keycode)];
+            break;
+        }
+        [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO serial: pressed ? serial : 0 text: composed];
         if (pressed && _repeatRate > 0 && [_keymap keyRepeats: keycode])
             [self startKeyRepeat: keycode];
         else if (!pressed && keycode == _repeatKeycode)
@@ -392,6 +421,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 - (void) stop {
     [self releaseHeldHotKeys];
     [self stopKeyRepeat];
+    [self resetComposition];
     [self cancelPendingModifier];
     _focus = NULL;
 }

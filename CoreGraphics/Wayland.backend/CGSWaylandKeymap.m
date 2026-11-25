@@ -28,9 +28,12 @@
 // The table of virtual key codes and the keycodes of the keymap, shared with the X11 backend.
 #import "../X11.backend/CarbonKeys.h"
 #import <CoreGraphics/CGEventTypes.h>
+#import <Foundation/NSArray.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSValue.h>
 
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -94,6 +97,11 @@ static uint32_t keyLayoutCodepoint(void *context, uint32_t keysym) {
     if (_context != NULL)
         WL.xkb_context_unref(_context);
     [_layout release];
+    if (_compose != NULL)
+        WL.xkb_compose_state_unref(_compose);
+    if (_composeTable != NULL)
+        WL.xkb_compose_table_unref(_composeTable);
+    [_composeSequence release];
     [super dealloc];
 }
 
@@ -147,6 +155,7 @@ static uint32_t keyLayoutCodepoint(void *context, uint32_t keysym) {
         _state = state;
         [_layout release];
         _layout = nil;
+        [self resetComposeLocked];
     }
     return YES;
 }
@@ -343,6 +352,149 @@ static int modifierKeyCodeOfKeysym(xkb_keysym_t sym) {
         // Every modifier is ignored except Shift.
         xkb_level_index_t level = [self modifierActive: XKB_MOD_NAME_SHIFT] ? 1 : 0;
         return stringWithCodepoint([self codepointForKeysym: [self keysymForKeycode: keycode level: level]]);
+    }
+}
+
+#pragma mark - Dead keys and compose sequences
+
+// The locale of the character data: LC_ALL, LC_CTYPE, LANG, in the order setlocale() resolves them.
+static const char *composeLocale(void) {
+    static const char *const names[] = {"LC_ALL", "LC_CTYPE", "LANG"};
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); i++) {
+        const char *value = getenv(names[i]);
+        if (value != NULL && *value != '\0')
+            return value;
+    }
+    return "C";
+}
+
+// Called with the lock held.
+- (void) loadCompose {
+    _composeLoaded = YES;
+    if (!WL.hasCompose)
+        return;
+    const char *locale = composeLocale();
+    _composeTable = WL.xkb_compose_table_new_from_locale(_context, locale, XKB_COMPOSE_COMPILE_NO_FLAGS);
+    // A locale the table lookup does not know (a name without a character set, say) gets the C locale's.
+    if (_composeTable == NULL && strcmp(locale, "C") != 0)
+        _composeTable = WL.xkb_compose_table_new_from_locale(_context, "C", XKB_COMPOSE_COMPILE_NO_FLAGS);
+    if (_composeTable != NULL)
+        _compose = WL.xkb_compose_state_new(_composeTable, XKB_COMPOSE_STATE_NO_FLAGS);
+    _composeSequence = [NSMutableArray new];
+}
+
+// Called with the lock held.
+- (void) resetComposeLocked {
+    if (_compose != NULL)
+        WL.xkb_compose_state_reset(_compose);
+    [_composeSequence removeAllObjects];
+}
+
+- (void) resetCompose {
+    @synchronized (self) {
+        [self resetComposeLocked];
+    }
+}
+
+// The text of a completed sequence ("" when there is none). Called with the lock held.
+- (NSString *) composedText {
+    char buffer[64];
+    int length = WL.xkb_compose_state_get_utf8(_compose, buffer, sizeof(buffer));
+    if (length <= 0 || length >= (int) sizeof(buffer))
+        return @"";
+    return [NSString stringWithUTF8String: buffer] ?: @"";
+}
+
+static BOOL isDeadKeysym(xkb_keysym_t keysym) {
+    return keysym >= XKB_KEY_dead_grave && keysym <= XKB_KEY_dead_greek;
+}
+
+// The text a key of an abandoned sequence stands for: the character of an ordinary key, the spacing form of
+// a dead key (what the dead key followed by Space composes), nothing for the Compose key itself. Called with
+// the lock held; leaves the compose state reset.
+- (NSString *) spacingTextForKeysym: (xkb_keysym_t) keysym {
+    NSString *text = @"";
+    if (isDeadKeysym(keysym)) {
+        WL.xkb_compose_state_reset(_compose);
+        WL.xkb_compose_state_feed(_compose, keysym);
+        WL.xkb_compose_state_feed(_compose, XKB_KEY_space);
+        if (WL.xkb_compose_state_get_status(_compose) == XKB_COMPOSE_COMPOSED)
+            text = [self composedText];
+        WL.xkb_compose_state_reset(_compose);
+    } else if (keysym != XKB_KEY_Multi_key) {
+        text = stringWithCodepoint(WL.xkb_keysym_to_utf32(keysym));
+    }
+    return text;
+}
+
+// Whether a key can be part of a sequence: a character, a dead key or the Compose key. An editing or
+// function key (an arrow, Backspace, Return) acts on its own and ends the sequence without completing it.
+static BOOL keysymMaySequence(xkb_keysym_t keysym) {
+    if (keysym == XKB_KEY_Multi_key || isDeadKeysym(keysym))
+        return YES;
+    uint32_t codepoint = WL.xkb_keysym_to_utf32(keysym);
+    return codepoint >= 0x20 && codepoint != 0x7F;
+}
+
+- (CGSWaylandComposeResult) composeKeycode: (uint32_t) keycode text: (NSString **) text {
+    *text = nil;
+    @synchronized (self) {
+        if (_state == NULL)
+            return CGSWaylandComposeNone;
+        if (!_composeLoaded)
+            [self loadCompose];
+        if (_compose == NULL)
+            return CGSWaylandComposeNone;
+
+        xkb_keysym_t keysym = WL.xkb_state_key_get_one_sym(_state, keycode);
+        // A shortcut is not text: a key with Control or Command is no part of a sequence and ends one.
+        BOOL shortcut = [self modifierActive: XKB_MOD_NAME_CTRL] || [self modifierActive: XKB_MOD_NAME_LOGO];
+        if (keysym == XKB_KEY_NoSymbol || shortcut || !keysymMaySequence(keysym)) {
+            [self resetComposeLocked];
+            return CGSWaylandComposeNone;
+        }
+
+        WL.xkb_compose_state_feed(_compose, keysym);
+        switch (WL.xkb_compose_state_get_status(_compose)) {
+        case XKB_COMPOSE_COMPOSING:
+            [_composeSequence addObject: @(keysym)];
+            return CGSWaylandComposeConsumed;
+
+        case XKB_COMPOSE_COMPOSED: {
+            NSString *composed = [self composedText];
+            [self resetComposeLocked];
+            if ([composed length] == 0)
+                return CGSWaylandComposeNone;
+            *text = composed;
+            return CGSWaylandComposeCommitted;
+        }
+
+        case XKB_COMPOSE_CANCELLED: {
+            // No entry continues the sequence: the text is what was typed, the keys one after the other.
+            NSMutableString *typed = [NSMutableString string];
+            for (NSNumber *key in _composeSequence)
+                [typed appendString: [self spacingTextForKeysym: (xkb_keysym_t) [key unsignedIntValue]]];
+            [self resetComposeLocked];
+            // The key that broke the sequence may start another one.
+            WL.xkb_compose_state_feed(_compose, keysym);
+            enum xkb_compose_status status = WL.xkb_compose_state_get_status(_compose);
+            if (status == XKB_COMPOSE_COMPOSING) {
+                [_composeSequence addObject: @(keysym)];
+                if ([typed length] == 0)
+                    return CGSWaylandComposeConsumed;
+            } else {
+                [typed appendString: status == XKB_COMPOSE_COMPOSED ? [self composedText]
+                                                                    : [self spacingTextForKeysym: keysym]];
+                [self resetComposeLocked];
+            }
+            *text = typed;
+            return CGSWaylandComposeCommitted;
+        }
+
+        case XKB_COMPOSE_NOTHING:
+        default:
+            return CGSWaylandComposeNone;
+        }
     }
 }
 
