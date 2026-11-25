@@ -1771,6 +1771,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     }
 
     if ([dataCell respondsToSelector: @selector(setTextColor:)]) {
+        // A selected row keeps the normal text colour while its highlight is the grey, secondary one
+        // (selectedTextColor is the colour of selected text in a text view, not of a selected row).
         if ([self isRowSelected: row] ||
             [self isColumnSelected: columnNumber]) {
             [(NSTextFieldCell *) dataCell
@@ -1782,7 +1784,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                                            NSTableViewSelectionHighlightStyleNone &&
                                    [self _selectionIsEmphasized])
                                           ? [NSColor alternateSelectedControlTextColor]
-                                          : [NSColor selectedTextColor]];
+                                          : [NSColor textColor]];
         } else
             [(NSTextFieldCell *) dataCell setTextColor: [NSColor textColor]];
     }
