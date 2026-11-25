@@ -64,13 +64,14 @@ typedef enum {
     CGSWaylandObjectOutputHead,
     CGSWaylandObjectOutputHeadMode,
     CGSWaylandObjectOutputConfiguration,
+    CGSWaylandObjectSeat,
+    CGSWaylandObjectKeyboard,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
 // layout) and, where the compositor offers it, wlr-output-management, which also lets
-// -setMode:forScreen: change a mode. -createKeyboardLayout is not overridden: the keymap belongs to
-// the client that owns the wl_keyboard, which registers its layout with
-// _CGSSetProvidedKeyboardLayout().
+// -setMode:forScreen: change a mode. The keyboard layout is made from the keymap the compositor sends
+// to this connection's own wl_keyboard (see CGSWaylandKeymap).
 @interface CGSConnectionWayland : CGSConnection {
 @public
     struct wl_display *_wlDisplay;
@@ -87,6 +88,10 @@ typedef enum {
     uint32_t _logicalOutputManagerName;
     id _outputManager;
     uint32_t _outputManagerName;
+    // The seat, only for the keyboard's keymap (the keyboard layout is the connection's, see
+    // -createKeyboardLayout); the input of the windows is read by the framework that owns them.
+    struct wl_proxy *_seat, *_keyboard;
+    id _keymap;
     // Set when the setup roundtrips are over; an output that is described before that is
     // part of the displays the first look finds, not a change.
     BOOL _setupDone;

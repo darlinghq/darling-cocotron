@@ -394,10 +394,6 @@ extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef _Nullable source, C
 extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
 extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
 
-// Registers the 'uchr' keyboard layout (a UCKeyboardLayout blob of `length` bytes, copied) of the
-// window system's current keymap, for a backend that cannot read the keymap itself. The Text Input
-// Sources API returns it. NULL or a zero length removes it.
-extern void _CGSSetProvidedKeyboardLayout(const void* uchr, uint32_t length, CFStringRef name, CFStringRef fullName);
 
 // What a key code types, from the current keyboard layout and the keys that give the same on every layout.
 // kCGKeyCharactersDefault is the Unicode string CGEventCreateKeyboardEvent() gives an event (no modifiers),
