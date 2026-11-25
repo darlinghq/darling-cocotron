@@ -66,6 +66,11 @@ typedef enum {
 // CoreGraphics look the key up in the keymap. The keysym is set when the lookup gives one (NoSymbol,
 // 0, otherwise).
 - (NSString *) nativeConnectionComposedTextForKeyEvent: (void *) event keySym: (unsigned long *) keySym;
+// X11: whether an input method of the application (XMODIFIERS names one) composes dead keys and Compose
+// sequences, filtering the key events (XFilterEvent) and returning the text. Without one (the observer does not
+// answer, or answers NO; Xlib's built-in input method only composes) CoreGraphics composes them itself, and does
+// not pass the key events to Xlib's compose filter, which drops a sequence that no table entry continues.
+- (BOOL) nativeConnectionInputMethodComposes;
 // X11: whether the observer makes the events of a pointer event (an XEvent*: button, motion) itself, so
 // that CoreGraphics posts nothing for it. The observer holds the pointer for itself (relative mouse
 // mode) or the window the event is for is one CoreGraphics does not decode input for (a display overlay).
