@@ -824,6 +824,52 @@ static const CGFloat NSFontDefaultScreenIntegerAdvancementsLimit = 16;
     return result;
 }
 
+// Font substitution for text, as AppKit offers it to browser engines (not declared in the SDK headers):
+// the font that shows the text in place of `font`, which is `font` itself when it covers the text, or nil
+// when no font does. The language argument is not used. Behaviour from black-box observation on macOS
+// 26.7.3 and 10.14.4; test: tests/appkit-font-find-font-like.m.
++ (NSFont *) findFontLike: (NSFont *) font
+                forString: (NSString *) string
+                withRange: (NSRange) range
+               inLanguage: (id) language
+{
+    if (font == nil || string == nil || range.location > [string length] ||
+        range.length > [string length] - range.location || range.length == 0)
+        return nil;
+
+    CTFontRef base = (CTFontRef) font; // toll-free bridged
+    CTFontRef substitute = CTFontCreateForString(base, (CFStringRef) string,
+                                                 CFRangeMake(range.location, range.length));
+    if (substitute == NULL)
+        return nil;
+
+    NSFont *result = nil;
+    if (substitute == base || CFEqual(substitute, base)) {
+        result = font;
+    } else {
+        CGFloat size = [font pointSize];
+        NSString *name = (NSString *) CTFontCopyPostScriptName(substitute);
+        result = (name != nil) ? [NSFont fontWithName: name size: size] : nil;
+        [name release];
+        if (result == nil) {
+            name = (NSString *) CTFontCopyFullName(substitute);
+            result = (name != nil) ? [NSFont fontWithName: name size: size] : nil;
+            [name release];
+        }
+    }
+    CFRelease(substitute);
+    return result;
+}
+
++ (NSFont *) findFontLike: (NSFont *) font
+             forCharacter: (unichar) character
+               inLanguage: (id) language
+{
+    NSString *string = [NSString stringWithCharacters: &character length: 1];
+    return [self findFontLike: font forString: string
+                    withRange: NSMakeRange(0, 1) inLanguage: language];
+}
+
 // The CTFont behind this font, for CoreText functions given an NSFont.
 - (CTFontRef) _coreTextFont {
     return NS_EXTRA(NSFont, self)->_ctFont;

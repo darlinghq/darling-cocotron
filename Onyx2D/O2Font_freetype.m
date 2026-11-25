@@ -508,6 +508,20 @@ NSString *O2FontCopyInstalledFamilyForStandardFamily(NSString *family) {
     return [result retain];
 }
 
+// The names of the families macOS ships (Times, Helvetica, ...) that have no installed family of that
+// name but an installed stand-in, as -availableMembersOfFontFamily: resolves them.
+NSArray *O2FontCopyStandardFamilyNamesWithStandIn(void) {
+    NSMutableArray *names = [[NSMutableArray alloc] init];
+    for (size_t i = 0; i < sizeof(standardFamilies) / sizeof(standardFamilies[0]); i++) {
+        NSString *candidate = [NSString stringWithUTF8String: standardFamilies[i].family];
+        NSString *installed = O2FontCopyInstalledFamilyForStandardFamily(candidate);
+        if (installed != nil)
+            [names addObject: candidate];
+        [installed release];
+    }
+    return names;
+}
+
 /* fontconfig ranks bitmap faces (the X11 .pcf fonts) above outline fonts for some generic
  * families, and a bitmap face has units_per_EM == 0, so every metric derived from it divides
  * by zero. Return the first scalable face of the sorted set, or the first face if none is. */
