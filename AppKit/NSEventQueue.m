@@ -365,7 +365,7 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
         // the window it belongs to, and where the pointer was in it.
         NSPoint windowLocation = NSZeroPoint;
         BOOL hasWindowLocation = NO;
-        if (type != kCGEventScrollWheel && CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0) {
+        if (CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0) {
             NSInteger nativeNumber = 0;
             if ([[NSDisplay currentDisplay] windowNumber: &nativeNumber
                                                 location: &windowLocation
@@ -387,8 +387,20 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
                                           modifierFlags: flags
                                                  window: window
                                                  deltaY: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1)];
-            [mouse _setDeltaX: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis2)
-                       deltaY: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1)];
+            double lineDeltaX = CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis2);
+            double lineDeltaY = CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1);
+            // QUIRK: with Shift held, the NSEvent of a wheel of whole lines (not a continuous scroll) moves
+            // the vertical delta to the horizontal axis (the horizontal delta when there is no vertical one)
+            // and has no vertical delta, so that Shift and the wheel scroll sideways. The CGEvent keeps the
+            // deltas it was made with, and a continuous scroll is not converted. Not documented. Evidence:
+            // black-box observation of CGEventCreateScrollWheelEvent2 + NSEvent eventWithCGEvent: on
+            // macOS 26.7.3 (tier 2): line (3,0), (3,2) and (0,3) with Shift give deltaX 3, deltaY 0; pixel
+            // (25,10) with Shift gives the unchanged (1, 2.5). Test: appkit-scroll-cgevents-x11
+            if ((flags & NSShiftKeyMask) && !CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventIsContinuous)) {
+                lineDeltaX = lineDeltaY != 0 ? lineDeltaY : lineDeltaX;
+                lineDeltaY = 0;
+            }
+            [mouse _setDeltaX: lineDeltaX deltaY: lineDeltaY];
             if (CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventIsContinuous))
                 [mouse _setPreciseScrollingDeltaX: CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventPointDeltaAxis2)
                                            deltaY: CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventPointDeltaAxis1)

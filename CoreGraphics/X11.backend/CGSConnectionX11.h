@@ -87,6 +87,9 @@
 -(NSArray<NSDictionary*>*) copyWindowDescriptions;
 
 +(BOOL) isAvailable;
+// The pointer of the process' connection, nil without one. Not retained for the caller (a test of the pointer's
+// decoding uses it to give the decoder an event of its own).
++(CGSX11Pointer*) _processPointer;
 
 @end
 
