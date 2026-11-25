@@ -290,7 +290,8 @@ void O2PathAddArc(O2MutablePathRef self, const O2AffineTransform *matrix,
     O2Point points[4 * ((int) ceil(remainder / delta) + 1)];
     size_t pointsIndex = 0;
 
-    for (; remainder > 0; startRadian += delta, remainder -= delta) {
+    // (a rounding error left over from a whole number of quarter turns is no segment)
+    for (; remainder > 1e-9; startRadian += delta, remainder -= delta) {
         double sweepangle = (remainder > delta) ? delta : remainder;
         double XY[8];
         double B = sin(sweepangle / 2);
