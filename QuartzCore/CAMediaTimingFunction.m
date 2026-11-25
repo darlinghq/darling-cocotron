@@ -29,7 +29,7 @@ NS_EXTRA_DEALLOC(CAMediaTimingFunction)
     return self;
 }
 
-+ functionWithControlPoints: (float)
++ (instancetype) functionWithControlPoints: (float)
                         c1x: (float) c1y
                            :(float) c2x
                            :(float) c2y

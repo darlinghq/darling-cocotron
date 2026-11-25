@@ -75,3 +75,22 @@ void CGPDFContextBeginPage(CGContextRef self, CFDictionaryRef pageInfo) {
 void CGPDFContextEndPage(CGContextRef self) {
     O2ContextEndPage((O2ContextRef)self);
 }
+
+// the PDF context that context is, or nil: the link functions do nothing on
+// other contexts
+static O2PDFContext *pdfContext(CGContextRef context) {
+    id object = (id)context;
+    return [object isKindOfClass:[O2PDFContext class]] ? object : nil;
+}
+
+void CGPDFContextSetURLForRect(CGContextRef context, CFURLRef url, CGRect rect) {
+    [pdfContext(context) setURL:(NSURL *)url forRect:rect];
+}
+
+void CGPDFContextAddDestinationAtPoint(CGContextRef context, CFStringRef name, CGPoint point) {
+    [pdfContext(context) addDestinationWithName:(NSString *)name atPoint:point];
+}
+
+void CGPDFContextSetDestinationForRect(CGContextRef context, CFStringRef name, CGRect rect) {
+    [pdfContext(context) setDestinationWithName:(NSString *)name forRect:rect];
+}

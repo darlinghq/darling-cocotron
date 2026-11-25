@@ -14,6 +14,20 @@
 // Headers written against a recent macOS SDK annotate CoreGraphics pointer parameters with
 // cg_nullable. Without it they do not parse. The qualifier goes after the '*'
 // (float * cg_nullable p); before it, clang rejects it as applying to the pointee.
+// The declaration macros of the macOS SDK's CGBase.h: CG_EXTERN declares a
+// function or variable of CoreGraphics with C linkage, CG_LOCAL one that is not
+// exported.
+#ifdef __cplusplus
+#define CG_EXTERN_C_BEGIN extern "C" {
+#define CG_EXTERN_C_END }
+#define CG_EXTERN extern "C" __attribute__((visibility("default")))
+#else
+#define CG_EXTERN_C_BEGIN
+#define CG_EXTERN_C_END
+#define CG_EXTERN extern __attribute__((visibility("default")))
+#endif
+#define CG_LOCAL __attribute__((visibility("hidden")))
+
 #if __has_feature(nullability)
 #define cg_nullable __nullable
 #else

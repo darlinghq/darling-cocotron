@@ -21,8 +21,15 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGAffineTransform.h>
 #import <CoreGraphics/CGGeometry.h>
+#import <CoreGraphics/CGPDFDictionary.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2PDFPage *CGPDFPageRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGPDFPage *CGPDFPageRef;
+#endif
 
 typedef enum {
     kCGPDFMediaBox = 0,
@@ -38,6 +45,7 @@ COREGRAPHICS_EXPORT CGPDFPageRef CGPDFPageRetain(CGPDFPageRef self);
 COREGRAPHICS_EXPORT void CGPDFPageRelease(CGPDFPageRef self);
 COREGRAPHICS_EXPORT int CGPDFPageGetRotationAngle(CGPDFPageRef self);
 COREGRAPHICS_EXPORT size_t CGPDFPageGetPageNumber(CGPDFPageRef self);
+COREGRAPHICS_EXPORT CGPDFDictionaryRef CGPDFPageGetDictionary(CGPDFPageRef self);
 COREGRAPHICS_EXPORT CGRect CGPDFPageGetBoxRect(CGPDFPageRef self, CGPDFBox box);
 COREGRAPHICS_EXPORT CGAffineTransform
 CGPDFPageGetDrawingTransform(CGPDFPageRef self, CGPDFBox box, CGRect rect,

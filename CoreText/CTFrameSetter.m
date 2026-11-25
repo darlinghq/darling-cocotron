@@ -1,6 +1,7 @@
 #import <CoreText/CTFrameSetter.h>
 #import <CoreText/CTFrame.h>
 #import "KTFrameInternal.h"
+#import "CTLineSPI.h"
 #include <CoreFoundation/CFRuntime.h>
 #include <pthread.h>
 #include <math.h>
@@ -58,18 +59,45 @@ static bool normalizeRange(CTFramesetterRef framesetter, CFRange *range) {
     return true;
 }
 
-static CGSize layout(CTFramesetterRef framesetter, CFRange range, CGSize constraints,
+// The frame attributes the layout supports: kCTFrameMaximumNumberOfLinesAttributeName, a
+// non-negative CFNumber (0 for no limit). False for any other attribute, which the layout does
+// not implement, and for a value of the wrong kind.
+static bool frameAttributes(CFDictionaryRef attributes, CFIndex *maximumLines) {
+    *maximumLines = 0;
+    if (!attributes) return true;
+    CFIndex count = CFDictionaryGetCount(attributes);
+    CFTypeRef value = CFDictionaryGetValue(attributes, kCTFrameMaximumNumberOfLinesAttributeName);
+    if (count == 0) return true;
+    if (count != 1 || !value || CFGetTypeID(value) != CFNumberGetTypeID()) return false;
+    double lines;
+    if (!CFNumberGetValue((CFNumberRef)value, kCFNumberDoubleType, &lines) || !(lines >= 0)) return false;
+    *maximumLines = lines >= (double)LONG_MAX ? LONG_MAX : (CFIndex)lines;
+    return true;
+}
+
+static CGSize layout(CTFramesetterRef framesetter, CFRange range, CGSize constraints, CFIndex maximumLines,
                       CFMutableArrayRef lines, CFMutableDataRef origins, CFRange *fit, bool *valid) {
     *valid = true;
     CFIndex cursor = range.location, end = range.location + range.length;
     CGFloat usedHeight = 0, usedWidth = 0;
+    CFIndex lineCount = 0;
     CTTypesetterRef typesetter = CTFramesetterGetTypesetter(framesetter);
-    while (cursor < end && constraints.width > 0 && constraints.height > 0) {
+    while (cursor < end && constraints.width > 0 && constraints.height > 0 &&
+           (maximumLines == 0 || lineCount < maximumLines)) {
         CFIndex count = CTTypesetterSuggestLineBreak(typesetter, cursor, constraints.width);
         count = MIN(count, end - cursor);
         if (count <= 0) break;
+        // The last line a line limit allows holds the rest of the text, cut at its end to fit:
+        // observed on macOS 26.7.3 (black-box; the frame's visible range and the fit range then
+        // cover all the text). Test: tests/coretext-spi-lines.c
+        bool lastAllowed = maximumLines != 0 && lineCount == maximumLines - 1;
+        if (lastAllowed) count = end - cursor;
         CTLineRef line = CTTypesetterCreateLine(typesetter, CFRangeMake(cursor, count));
         if (!line) { *valid = false; return CGSizeZero; }
+        if (lastAllowed) {
+            CTLineRef truncated = CTLineCreateTruncatedLine(line, constraints.width, kCTLineTruncationEnd, NULL);
+            if (truncated) { CFRelease(line); line = truncated; }
+        }
         CGFloat ascent, descent, leading;
         CGFloat width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
         CGFloat height = ascent + descent + leading;
@@ -87,6 +115,7 @@ static CGSize layout(CTFramesetterRef framesetter, CFRange range, CGSize constra
         usedWidth = MAX(usedWidth, width);
         usedHeight += height;
         cursor += count;
+        lineCount++;
     }
     if (fit) *fit = CFRangeMake(range.location, cursor - range.location);
     return CGSizeMake(usedWidth, usedHeight);
@@ -95,8 +124,9 @@ static CGSize layout(CTFramesetterRef framesetter, CFRange range, CGSize constra
 CTFrameRef CTFramesetterCreateFrame(CTFramesetterRef framesetter, CFRange range,
                                      CGPathRef path, CFDictionaryRef attributes) {
     CGRect bounds;
+    CFIndex maximumLines;
     if (!normalizeRange(framesetter, &range) || !path || !CGPathIsRect(path, &bounds) ||
-        (attributes && CFDictionaryGetCount(attributes))) return NULL;
+        !frameAttributes(attributes, &maximumLines)) return NULL;
     if (!isfinite(bounds.origin.x) || !isfinite(bounds.origin.y) ||
         !isfinite(bounds.size.width) || !isfinite(bounds.size.height) ||
         bounds.size.width < 0 || bounds.size.height < 0) return NULL;
@@ -113,7 +143,7 @@ CTFrameRef CTFramesetterCreateFrame(CTFramesetterRef framesetter, CFRange range,
         (attributes && !attributesCopy)) goto cleanup;
     CFRange visible;
     bool valid;
-    layout(framesetter, range, bounds.size, lines, origins, &visible, &valid);
+    layout(framesetter, range, bounds.size, maximumLines, lines, origins, &visible, &valid);
     if (!valid) goto cleanup;
     visibleData = CFDataCreate(NULL, (const UInt8 *)&visible, sizeof(visible));
     if (!visibleData) goto cleanup;
@@ -137,14 +167,15 @@ cleanup:
 
 CGSize CTFramesetterSuggestFrameSizeWithConstraints(CTFramesetterRef framesetter,
         CFRange range, CFDictionaryRef attributes, CGSize constraints, CFRange *fit) {
-    if (!normalizeRange(framesetter, &range) || (attributes && CFDictionaryGetCount(attributes)) ||
+    CFIndex maximumLines;
+    if (!normalizeRange(framesetter, &range) || !frameAttributes(attributes, &maximumLines) ||
         !isfinite(constraints.width) || !isfinite(constraints.height) ||
         constraints.width < 0 || constraints.height < 0) {
         if (fit) *fit = CFRangeMake(0, 0);
         return CGSizeZero;
     }
     bool valid;
-    CGSize size = layout(framesetter, range, constraints, NULL, NULL, fit, &valid);
+    CGSize size = layout(framesetter, range, constraints, maximumLines, NULL, NULL, fit, &valid);
     if (!valid && fit) *fit = CFRangeMake(0, 0);
     return size;
 }

@@ -33,6 +33,11 @@ size_t CGPDFPageGetPageNumber(CGPDFPageRef self) {
     return self ? (size_t)[self pageNumber] + 1 : 0;
 }
 
+// the page object itself, which the page keeps alive
+CGPDFDictionaryRef CGPDFPageGetDictionary(CGPDFPageRef self) {
+    return self ? (CGPDFDictionaryRef)[self dictionary] : NULL;
+}
+
 CGRect CGPDFPageGetBoxRect(CGPDFPageRef self, CGPDFBox box) {
     CGRect result;
 

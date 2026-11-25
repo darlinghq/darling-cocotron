@@ -16,6 +16,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
+#import "../NSDraggingSession-Private.h"
 #import "WaylandDropSession.h"
 #import "WaylandPasteboard.h"
 #import "NSPasteboardAliases.h"
@@ -272,7 +273,8 @@
 - (NSImage *) draggedImage { return nil; }
 - (NSPoint) draggedImageLocation { return _point; }
 - (id) draggingSource { return _localSource; }
-- (int) draggingSequenceNumber { return _sequence; }
+- (NSInteger) draggingSequenceNumber { return _sequence; }
+NS_DRAGGING_INFO_SHARED_METHODS
 - (void) slideDraggedImageTo: (NSPoint) point {}
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination { return nil; }
 @end

@@ -252,33 +252,33 @@ NSMutableArray *NSCurrentFocusStack() {
 
 - (void) setCompositingOperation: (NSCompositingOperation) value {
     switch ((int)value) {
-    case NSCompositeClear:
+    case NSCompositingOperationClear:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeClear); break;
-    case NSCompositeCopy:
+    case NSCompositingOperationCopy:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeCopy); break;
-    case NSCompositeSourceOver:
+    case NSCompositingOperationSourceOver:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeNormal); break;
-    case NSCompositeSourceIn:
+    case NSCompositingOperationSourceIn:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeSourceIn); break;
-    case NSCompositeSourceOut:
+    case NSCompositingOperationSourceOut:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeSourceOut); break;
-    case NSCompositeSourceAtop:
+    case NSCompositingOperationSourceAtop:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeSourceAtop); break;
-    case NSCompositeDestinationOver:
+    case NSCompositingOperationDestinationOver:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDestinationOver); break;
-    case NSCompositeDestinationIn:
+    case NSCompositingOperationDestinationIn:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDestinationIn); break;
-    case NSCompositeDestinationOut:
+    case NSCompositingOperationDestinationOut:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDestinationOut); break;
-    case NSCompositeDestinationAtop:
+    case NSCompositingOperationDestinationAtop:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeDestinationAtop); break;
-    case NSCompositeXOR:
+    case NSCompositingOperationXOR:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeXOR); break;
-    case NSCompositePlusDarker:
+    case NSCompositingOperationPlusDarker:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModePlusDarker); break;
-    case NSCompositeHighlight:
+    case NSCompositingOperationHighlight:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeNormal); break;
-    case NSCompositePlusLighter:
+    case NSCompositingOperationPlusLighter:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModePlusLighter); break;
     case NSCompositingOperationMultiply:
         CGContextSetBlendMode(NS_EXTRA(NSGraphicsContext, self)->_graphicsPort, kCGBlendModeMultiply); break;

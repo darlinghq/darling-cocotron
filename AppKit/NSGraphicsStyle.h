@@ -34,6 +34,9 @@ typedef struct _Margins {
     NSView *_view;
 }
 
+/* The style of a view; nil for drawing that belongs to no view. */
+- initWithView: (NSView *) view;
+
 @end
 
 @interface NSGraphicsStyle (NSMenu)
@@ -205,6 +208,8 @@ typedef struct _Margins {
                     bezeledNotLine: (BOOL) bezeledNotLine;
 /* The square bezel of a text field: a white rectangle and a one point outline, lighter when disabled. */
 - (void) drawTextFieldBorderInRect: (NSRect) rect bezeledNotLine: (BOOL) bezeledNotLine enabled: (BOOL) enabled;
+/* The frame of a list box (a multi-line text area): the outline of the text field bezel, without filling the inside. */
+- (void) drawListBoxBorderInRect: (NSRect) rect enabled: (BOOL) enabled;
 - (void) drawTextViewInsertionPointInRect: (NSRect) rect
                                     color: (NSColor *) color;
 @end

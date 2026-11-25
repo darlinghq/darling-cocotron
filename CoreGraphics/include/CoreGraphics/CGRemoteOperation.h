@@ -62,20 +62,20 @@ typedef void (*CGScreenRefreshCallback)(uint32_t count, const CGRect *rects, voi
 #define kCGEventFilterMaskPermitAllEvents (kCGEventFilterMaskPermitLocalMouseEvents | kCGEventFilterMaskPermitLocalKeyboardEvents | kCGEventFilterMaskPermitSystemDefinedEvents)
 
 // TODO: All those deprecated functions
-extern CGError CGScreenRegisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
-extern void CGScreenUnregisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
+COREGRAPHICS_EXPORT CGError CGScreenRegisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
+COREGRAPHICS_EXPORT void CGScreenUnregisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
 
 COREGRAPHICS_EXPORT CGError CGRegisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *userInfo);
 COREGRAPHICS_EXPORT void CGUnregisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *userInfo);
-CGError CGWaitForScreenRefreshRects(CGRect * _Nullable *rects, uint32_t *count);
-void CGReleaseScreenRefreshRects(CGRect *rects);
-CGError CGWaitForScreenUpdateRects(CGScreenUpdateOperation requestedOperations, CGScreenUpdateOperation *currentOperation, CGRect * _Nullable *rects, size_t *rectCount, CGScreenUpdateMoveDelta *delta);
+COREGRAPHICS_EXPORT CGError CGWaitForScreenRefreshRects(CGRect * _Nullable *rects, uint32_t *count);
+COREGRAPHICS_EXPORT void CGReleaseScreenRefreshRects(CGRect *rects);
+COREGRAPHICS_EXPORT CGError CGWaitForScreenUpdateRects(CGScreenUpdateOperation requestedOperations, CGScreenUpdateOperation *currentOperation, CGRect * _Nullable *rects, size_t *rectCount, CGScreenUpdateMoveDelta *delta);
 
 COREGRAPHICS_EXPORT boolean_t CGCursorIsDrawnInFramebuffer(void);
 
-CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
-CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
+COREGRAPHICS_EXPORT CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
+COREGRAPHICS_EXPORT CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
 // The mouse motion since the last call, in the global display space's units (pixels, y down).
-void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY);
+COREGRAPHICS_EXPORT void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY);
 
 #endif

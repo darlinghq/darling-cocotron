@@ -262,3 +262,33 @@ CGImageRef __nullable CGWindowListCreateImage(CGRect screenBounds,
     return nil;
 }
 
+
+// The window's bounds in global display coordinates, origin at the top left, as
+// CGWindowListCopyWindowInfo() reports them. kCGErrorFailure and the null rect for a window that
+// does not exist, as observed on macOS 26.7.3.
+CGError CGSGetScreenRectForWindow(CGSConnectionID cid, CGSWindowID wid, CGRect *outRect)
+{
+    CGRect bounds = CGRectNull;
+    BOOL found = NO;
+    NSArray<NSDictionary *> *all = copyAllWindowDescriptions();
+
+    for (NSDictionary *window in all) {
+        if (windowNumberOf(window) == wid) {
+            CFDictionaryRef dictionary = (CFDictionaryRef) [window objectForKey: (NSString *) kCGWindowBounds];
+            found = dictionary != NULL && CGRectMakeWithDictionaryRepresentation(dictionary, &bounds);
+            break;
+        }
+    }
+    [all release];
+
+    if (outRect != NULL)
+        *outRect = found ? bounds : CGRectNull;
+    return found ? kCGErrorSuccess : kCGErrorFailure;
+}
+
+// Window contents cannot be read back (there is no screen capture backend), so no images are
+// given, as on macOS when the capture is not permitted.
+CFArrayRef CGSHWCaptureWindowList(CGSConnectionID cid, CGSWindowID *windowList, uint32_t windowCount, uint32_t options)
+{
+    return NULL;
+}

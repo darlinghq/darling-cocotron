@@ -30,6 +30,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSInteger _buttonNumber;
     NSInteger _eventNumber;
     NSInteger _keyStateOnArrival;
+    float _pressure;
 }
 
 - (void) _setTrackingArea: (NSTrackingArea *) area;

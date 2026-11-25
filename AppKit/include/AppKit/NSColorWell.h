@@ -33,6 +33,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     unsigned _isBordered : 1;
     unsigned _isActive : 1;
     unsigned _notifyingColorPanel : 1;
+    unsigned _doesNotSupportAlpha : 1; // inverted, so that a zeroed well supports alpha
 }
 
 - (NSColor *) color;
@@ -48,5 +49,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) drawWellInside: (NSRect) rect;
 
 - (void) takeColorFrom: sender;
+
+// Whether the color panel offers opacity while the well is active (default YES).
+@property BOOL supportsAlpha;
 
 @end

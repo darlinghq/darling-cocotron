@@ -13,7 +13,13 @@
 #import <CoreFoundation/CFURL.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2DataConsumer *CGDataConsumerRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGDataConsumer *CGDataConsumerRef;
+#endif
 
 CF_IMPLICIT_BRIDGING_ENABLED
 

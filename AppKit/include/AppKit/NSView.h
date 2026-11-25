@@ -34,7 +34,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
 #import <AppKit/NSAccessibilityProtocols.h>
 
-@class NSLayoutConstraint, NSViewController;
+@class NSLayoutConstraint, NSViewController, NSDraggingItem, NSDraggingSession;
+@protocol NSDraggingSource;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -182,6 +183,10 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         BOOL _prefersCompactControlSizeMetrics;
         // Set by -invalidateRestorableState; such a view with an identifier is saved with its window.
         BOOL _restorableStateInvalidated;
+        // Set by -_setDrawsOwnDescendants:.
+        BOOL _drawsOwnDescendants;
+        // Set by -_setSemanticContext:.
+        NSInteger _semanticContext;
         NSEdgeInsets _additionalSafeAreaInsets;
         // Not retained: the controller whose -view this is, set by its -setView:
         NSViewController *_viewController;
@@ -683,3 +688,11 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
 @end
 
 NS_ASSUME_NONNULL_END
+
+@interface NSView (NSDrag)
+// Starts a drag of the items, whose frames are in this view's coordinates.
+// The drag runs once the caller returns to the run loop.
+- (NSDraggingSession *) beginDraggingSessionWithItems: (NSArray<NSDraggingItem *> *) items
+                                                event: (NSEvent *) event
+                                               source: (id<NSDraggingSource>) source;
+@end

@@ -39,6 +39,50 @@ CTTypesetterRef CTTypesetterCreateWithAttributedStringAndOptions(CFAttributedStr
     return (CTTypesetterRef)ts;
 }
 
+CFAttributedStringRef KTCoreTextCreateAttributedStringWithProvider(CTUniCharProviderCallback provider,
+                                                                  CTUniCharDisposeCallback dispose,
+                                                                  void *refCon) {
+    if (!provider) return NULL;
+    CFMutableAttributedStringRef text = CFAttributedStringCreateMutable(kCFAllocatorDefault, 0);
+    if (!text) return NULL;
+    CFDictionaryRef none = CFDictionaryCreate(kCFAllocatorDefault, NULL, NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    bool failed = none == NULL;
+    CFAttributedStringBeginEditing(text);
+    // Pieces are asked for from the end of the text so far until the provider has no more.
+    for (CFIndex index = 0; !failed;) {
+        CFIndex count = 0;
+        CFDictionaryRef attributes = NULL;
+        const UniChar *characters = provider(index, &count, &attributes, refCon);
+        if (characters == NULL) break;
+        CFStringRef piece = count > 0 && count <= LONG_MAX - index
+                ? CFStringCreateWithCharacters(kCFAllocatorDefault, characters, count) : NULL;
+        if (dispose) dispose(characters, refCon);
+        if (count <= 0) break;
+        if (!piece) { failed = true; break; }
+        CFAttributedStringReplaceString(text, CFRangeMake(index, 0), piece);
+        CFRelease(piece);
+        // Inserted text would take on the attributes before it; each piece has only its own.
+        CFAttributedStringSetAttributes(text, CFRangeMake(index, count), attributes ? attributes : none, true);
+        index += count;
+    }
+    CFAttributedStringEndEditing(text);
+    if (none) CFRelease(none);
+    CFAttributedStringRef result = failed ? NULL : CFAttributedStringCreateCopy(kCFAllocatorDefault, text);
+    CFRelease(text);
+    return result;
+}
+
+CTTypesetterRef CTTypesetterCreateWithUniCharProviderAndOptions(CTUniCharProviderCallback provider,
+                                                                CTUniCharDisposeCallback dispose,
+                                                                void *refCon, CFDictionaryRef options) {
+    CFAttributedStringRef text = KTCoreTextCreateAttributedStringWithProvider(provider, dispose, refCon);
+    if (!text) return NULL;
+    CTTypesetterRef typesetter = CTTypesetterCreateWithAttributedStringAndOptions(text, options);
+    CFRelease(text);
+    return typesetter;
+}
+
 CTLineRef CTTypesetterCreateLine(CTTypesetterRef typesetter, CFRange stringRange) {
     _CTTypesetter *ts = (_CTTypesetter *)typesetter;
     if (!ts || !ts->_string) {

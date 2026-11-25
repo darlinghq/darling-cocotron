@@ -16,6 +16,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
+#import "../NSDraggingSession-Private.h"
 #import "WaylandDraggingManager.h"
 #import "WaylandDragOperations.h"
 #import "WaylandLibrary.h"
@@ -145,12 +146,8 @@ static BOOL monotonicSeconds(double *seconds) {
     BOOL began = NO;
     NSDragOperation result = NSDragOperationNone;
     @try {
-        NSDragOperation allowed = NSDragOperationCopy;
-        _localOperations = NSDragOperationCopy;
-        if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)]) {
-            allowed = [source draggingSourceOperationMaskForLocal: NO];
-            _localOperations = [source draggingSourceOperationMaskForLocal: YES];
-        }
+        NSDragOperation allowed = [NSDraggingSession _operationMaskOfSource: source local: NO defaultMask: NSDragOperationCopy];
+        _localOperations = [NSDraggingSession _operationMaskOfSource: source local: YES defaultMask: NSDragOperationCopy];
         NSMutableDictionary *snapshot = [NSMutableDictionary dictionary];
         NSUInteger bytes = 0;
         _offeredActions = WaylandActionsFromOperations(allowed);
@@ -219,8 +216,7 @@ static BOOL monotonicSeconds(double *seconds) {
             _nativeStarted = YES;
             [_icon show];
             [_display flush]; began = YES;
-            if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
-                [source draggedImage: heldImage beganAt: location];
+            [NSDraggingSession _source: source beganWithImage: heldImage at: location];
             while (!_finished && _display != nil) {
                 @autoreleasepool {
                     [_display processPendingEvents];
@@ -260,8 +256,8 @@ static BOOL monotonicSeconds(double *seconds) {
         @try {
             // Core Wayland supplies no global drop coordinates; retain the
             // documented virtual starting location rather than invent one.
-            if (began && [finishedSource respondsToSelector: @selector(draggedImage:endedAt:operation:)])
-                [finishedSource draggedImage: heldImage endedAt: location operation: result];
+            if (began)
+                [NSDraggingSession _source: finishedSource endedWithImage: heldImage at: location operation: result];
         } @finally { [finishedSource release]; [heldImage release]; [self release]; }
     }
 }

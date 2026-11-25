@@ -21,7 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/Foundation.h>
 
-@class NSLayoutManager, NSFont;
+@class NSLayoutManager, NSFont, NSColor;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -66,7 +66,10 @@ APPKIT_EXPORT NSString *const NSTextStorageDidProcessEditingNotification;
                  range: (NSRange) range
         changeInLength: (NSInteger) delta;
 
-- (void) setFont: (nullable NSFont *) font;
+// The first character's font and color (scripting properties); setting one
+// gives it to every character.
+@property(nullable, copy) NSFont *font;
+@property(nullable, copy) NSColor *foregroundColor;
 
 @end
 

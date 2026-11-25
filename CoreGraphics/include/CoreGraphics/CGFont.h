@@ -26,7 +26,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <CoreFoundation/CoreFoundation.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2Font *CGFontRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGFont *CGFontRef;
+#endif
 
 typedef uint16_t CGFontIndex;
 typedef CGFontIndex CGGlyph;

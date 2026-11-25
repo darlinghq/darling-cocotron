@@ -18,6 +18,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
+#import "../NSDraggingSession-Private.h"
 #import "X11DropSession.h"
 #import "DarlingFileURIList.h"
 #import "NSPasteboardAliases.h"
@@ -240,9 +241,11 @@
     return nil; // XDND sources live in other clients.
 }
 
-- (int) draggingSequenceNumber {
+- (NSInteger) draggingSequenceNumber {
     return _sequence;
 }
+
+NS_DRAGGING_INFO_SHARED_METHODS
 
 - (void) slideDraggedImageTo: (NSPoint) point {
 }

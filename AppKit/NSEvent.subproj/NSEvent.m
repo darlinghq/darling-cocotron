@@ -364,6 +364,32 @@ static BOOL _mouseCoalescingEnabled = YES;
     return 0;
 }
 
+// Darling has no pressure-sensitive input, so no event carries pressure stages
+// and only mouse events (NSEvent_mouse) have a pressure.
+- (float) pressure {
+    return 0;
+}
+
+- (NSInteger) stage {
+    return 0;
+}
+
+- (CGFloat) stageTransition {
+    return 0;
+}
+
+// Darling's events do not come from the Carbon Event Manager, and none is made
+// on request, so there is no corresponding Carbon event: NULL, which the
+// reference allows when the event cannot be converted.
+- (const void *) eventRef {
+    return NULL;
+}
+
+// The private spelling, which returns the same event.
+- (void *) _eventRef {
+    return (void *) [self eventRef];
+}
+
 - (float) rotation {
     return 0;
 }

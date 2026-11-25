@@ -11,5 +11,9 @@ CORETEXT_EXPORT const CFStringRef kCTRunDelegateAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTTrackingAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTKernAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTHorizontalInVerticalFormsAttributeName;
+// CFBoolean: whether the text uses vertical glyph forms
+CORETEXT_EXPORT const CFStringRef kCTVerticalFormsAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTStrokeColorAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTStrokeWidthAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTLanguageAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTWritingDirectionAttributeName;

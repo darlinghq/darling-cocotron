@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGShading.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Onyx2D/O2Shading.h>
 
 CGShadingRef CGShadingRetain(CGShadingRef self) {
@@ -45,4 +46,13 @@ CGShadingRef CGShadingCreateRadial(CGColorSpaceRef colorSpace,
 {
     return (CGShadingRef)O2ShadingCreateRadial((O2ColorSpaceRef)colorSpace, startPoint, startRadius, endPoint,
                                  endRadius, (O2FunctionRef)function, extendStart, extendEnd);
+}
+
+CGShadingRef CGShadingCreateConic(CGColorSpaceRef colorSpace, CGPoint center,
+                                  CGFloat angle, CGFunctionRef function)
+{
+    if (colorSpace == NULL || function == NULL)
+        return NULL;
+    return (CGShadingRef)O2ShadingCreateConic((O2ColorSpaceRef)colorSpace, center, angle,
+                                              (O2FunctionRef)function);
 }

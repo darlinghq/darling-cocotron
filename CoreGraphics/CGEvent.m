@@ -340,3 +340,11 @@ uint32_t CGEventGetEventRecordSize(CGEventRef event)
 	CGEvent* e = (CGEvent*) event;
 	return e.eventRecordLength;
 }
+
+// The IOHIDEvent an event was made from. Events reach Darling from the display server rather
+// than from IOHIDFamily, and created events have none either (as observed on macOS 26.7.3), so
+// there is never one.
+CFTypeRef CGEventCopyIOHIDEvent(CGEventRef event)
+{
+    return NULL;
+}

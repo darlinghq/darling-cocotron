@@ -21,6 +21,7 @@
 #define O2_COLOR_ICC_H
 
 #include <CoreFoundation/CFData.h>
+#include <CoreFoundation/CFString.h>
 #include <stdbool.h>
 #include <Onyx2D/O2ColorConversion.h>
 
@@ -34,5 +35,11 @@
 // caller releases.
 CFDataRef O2ColorProfileCopyICCData(const O2ColorProfile *profile,
                                     const char *description);
+
+// The profile description (the 'desc' tag, of textDescriptionType,
+// multiLocalizedUnicodeType or textType, ICC.1) of an ICC profile; for a
+// multi-localized description the English one, or else the first. NULL when
+// the profile is malformed or has no description. The caller releases it.
+CFStringRef O2ICCProfileCopyDescription(CFDataRef profile);
 
 #endif

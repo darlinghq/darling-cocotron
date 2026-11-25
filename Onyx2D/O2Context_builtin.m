@@ -29,6 +29,7 @@
 #import <Onyx2D/O2Image.h>
 #import <Onyx2D/O2MutablePath.h>
 #import <Onyx2D/O2Paint_axialGradient.h>
+#import <Onyx2D/O2Paint_conicGradient.h>
 #import <Onyx2D/O2Paint_color.h>
 #import <Onyx2D/O2Paint_image.h>
 #import <Onyx2D/O2Paint_pattern.h>
@@ -648,7 +649,14 @@ static BOOL copyBitsPixel(O2Float value, long *pixel) {
     O2RasterizerSetShouldAntialias(self, gState->_shouldAntialias,
                                    gState->_antialiasingQuality);
 
-    if ([shading isAxial])
+    if ([shading isConic]) {
+        paint = [[O2Paint_conicGradient alloc]
+                initWithShading: shading
+                deviceTransform: gState->_deviceSpaceTransform];
+        // a colour space the ramp cannot turn into colours draws nothing
+        if (paint == nil)
+            return;
+    } else if ([shading isAxial])
         paint = [[O2Paint_axialGradient alloc]
                 initWithShading: shading
                 deviceTransform: gState->_deviceSpaceTransform];

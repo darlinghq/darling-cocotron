@@ -18,6 +18,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
+#import "../NSDraggingSession-Private.h"
 #import "X11DraggingManager.h"
 #import "X11DropSession.h"
 #import "X11Display.h"
@@ -70,6 +71,23 @@ static BOOL X11HasProperty(Display *xdpy, Window w, Atom prop, Atom type) {
     if (data)
         XFree(data);
     return present;
+}
+
+// The window the XdndProxy property of w names (the property's value, not its
+// type), or None if w has no such property.
+static Window X11ProxyOfWindow(Display *xdpy, Window w, Atom proxyAtom) {
+    Atom actualType;
+    int format;
+    unsigned long count, remaining;
+    unsigned char *data = NULL;
+    Window proxy = None;
+    if (XGetWindowProperty(xdpy, w, proxyAtom, 0, 1, False, XA_WINDOW, &actualType,
+                           &format, &count, &remaining, &data) == Success &&
+        actualType == XA_WINDOW && format == 32 && count >= 1)
+        proxy = (Window) ((unsigned long *) data)[0];
+    if (data)
+        XFree(data);
+    return proxy;
 }
 
 // The selection a drag publishes is served from the pasteboard the application
@@ -130,8 +148,10 @@ static X11DraggingManager *X11SharedManager;
     // Under a reparenting window manager the pointer sits over the frame, which
     // belongs to the window manager and carries no XdndAware, so this is the only
     // way a source can find the window that is listening. The specification also
-    // requires the proxy to point at itself.
-    XChangeProperty(_xdpy, parent, _atom.proxy, XA_ATOM, 32, PropModeReplace,
+    // requires the proxy to point at itself, and types the property as WINDOW.
+    XChangeProperty(_xdpy, parent, _atom.proxy, XA_WINDOW, 32, PropModeReplace,
+                    (unsigned char *) &handle, 1);
+    XChangeProperty(_xdpy, handle, _atom.proxy, XA_WINDOW, 32, PropModeReplace,
                     (unsigned char *) &handle, 1);
 }
 
@@ -211,9 +231,7 @@ static X11DraggingManager *X11SharedManager;
 
     // Only the three actions XDND has atoms for can be offered: a target names the
     // one it wants, and the rest could not be named on the wire.
-    NSDragOperation operations = NSDragOperationCopy;
-    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)])
-        operations = [source draggingSourceOperationMaskForLocal: NO];
+    NSDragOperation operations = [NSDraggingSession _operationMaskOfSource: source local: NO defaultMask: NSDragOperationCopy];
     operations &= NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink;
 
     NSArray<NSString *> *names = [self selectionTargetsForPasteboard: pasteboard];
@@ -292,8 +310,7 @@ static X11DraggingManager *X11SharedManager;
         X11PointerInRoot(_xdpy, &rootX, &rootY);
         [self sendPositionAtRootX: rootX rootY: rootY];
         began = YES;
-        if ([heldSource respondsToSelector: @selector(draggedImage:beganAt:)])
-            [heldSource draggedImage: heldImage beganAt: location];
+        [NSDraggingSession _source: heldSource beganWithImage: heldImage at: location];
 
         int lastX = rootX, lastY = rootY;
         while (!_dropFinished) {
@@ -302,14 +319,15 @@ static X11DraggingManager *X11SharedManager;
                               untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.01]
                                  inMode: NSDefaultRunLoopMode
                                 dequeue: YES];
-            if (next != nil) {
-                // The release is the drag's end. Any other event that reaches here
-                // is the pointer the drag is holding; the application's own events
-                // are not in the mask and stay queued for when it is over.
-                if (next.type == NSLeftMouseUp)
-                    break;
-                continue;
-            }
+            // The release is the drag's end. Any other event that reaches here is
+            // the pointer the drag is holding, which needs nothing beyond the
+            // position below; the application's own events are not in the mask and
+            // stay queued for when it is over. NSDisplay answers an empty queue
+            // with an NSAppKitSystem event rather than nil, and neither may skip
+            // the position: a pointer that keeps moving would otherwise never be
+            // reported to the window it moved into.
+            if (next != nil && next.type == NSLeftMouseUp)
+                break;
             // One position at a time. The answer to a position says which action
             // the target would take there, so a drag that outran its target would
             // be deciding on an answer to a place the pointer has left.
@@ -349,9 +367,8 @@ static X11DraggingManager *X11SharedManager;
         XSync(_xdpy, False);
         [self releaseDragState];
         @try {
-            if (began && [heldSource respondsToSelector:
-                                  @selector(draggedImage:endedAt:operation:)])
-                [heldSource draggedImage: heldImage endedAt: location operation: result];
+            if (began)
+                [NSDraggingSession _source: heldSource endedWithImage: heldImage at: location operation: result];
         } @finally {
             [heldSource release];
             [heldImage release];
@@ -479,7 +496,18 @@ static X11DraggingManager *X11SharedManager;
     Window target = [self xdndAwareWindowAtRootX: rootX rootY: rootY];
     if (target != _enteredWindow) {
         [self sendLeaveTo: _enteredWindow];
+        _enteredWindow = None;
         [self sendEnterTo: target];
+    }
+    if (target == None) {
+        // Nothing under the pointer can take the drop, and nothing will answer a
+        // position: waiting for an answer would stop the positions that find the
+        // next target, and an earlier target's acceptance no longer applies.
+        _targetWindow = None;
+        _targetAccepts = NO;
+        _chosenOperations = NSDragOperationNone;
+        _suppressionRect = NSZeroRect;
+        return;
     }
     // The position is the root-relative pointer location packed into two 16-bit
     // halves of one word, the x coordinate in the high half and y in the low half.
@@ -551,32 +579,22 @@ static X11DraggingManager *X11SharedManager;
     // A target answers with the window the pointer is in, which under a
     // reparenting window manager is the frame rather than the window inside it.
     _pointerWindow = child;
+    // Over the root window itself there is no window to drop on.
+    if (child == None)
+        return None;
     if (X11HasProperty(_xdpy, child, _atom.aware, XA_ATOM))
         return child;
 
     // The pointer is over the frame a reparenting window manager put around the
     // window, so the frame's XdndProxy is where the drop is really going.
-    Atom proxy;
-    int format;
-    unsigned long count, remaining;
-    unsigned char *data = NULL;
-    if (XGetWindowProperty(_xdpy, child, _atom.proxy, 0, 1, False, XA_ATOM, &proxy,
-                           &format, &count, &remaining, &data) != Success ||
-        proxy == None) {
-        if (data)
-            XFree(data);
+    Window proxy = X11ProxyOfWindow(_xdpy, child, _atom.proxy);
+    if (proxy == None)
         return None;
-    }
-    if (data)
-        XFree(data);
     // The specification says to ignore an XdndProxy left behind by a crashed
-    // client: it has to point at itself, and the window it names has to still
-    // exist. An XID that has since been reused would otherwise hand the whole drag
-    // to an unrelated client.
-    if (!X11HasProperty(_xdpy, proxy, _atom.proxy, XA_ATOM))
-        return None;
-    XWindowAttributes attributes;
-    if (!XGetWindowAttributes(_xdpy, proxy, &attributes))
+    // client: the window it names has to still exist and its own XdndProxy has
+    // to name itself. An XID that has since been reused would otherwise hand the
+    // whole drag to an unrelated client.
+    if (X11ProxyOfWindow(_xdpy, proxy, _atom.proxy) != proxy)
         return None;
     return X11HasProperty(_xdpy, proxy, _atom.aware, XA_ATOM) ? proxy : None;
 }

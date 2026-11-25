@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "NSPoofAnimation.h"
 #import "NSGraphics-Private.h"
+#import <AppKit/NSGraphicsStyle.h>
 
 const CGFloat NSBlack = 0;
 const CGFloat NSDarkGray = 0.333;
@@ -550,6 +551,78 @@ void NSDrawGroove(NSRect rect, NSRect clipRect) {
 void NSDrawWindowBackground(NSRect rect) {
     [[NSColor windowBackgroundColor] setFill];
     NSRectFill(rect);
+}
+
+// Private: paints the background of a menu, its background colour, over the
+// bounds (limited to clipRect unless that is empty). The menu window's frame
+// line is not part of it. The flags (pop-up menu or not) do not change the
+// colour in Darling.
+void NSDrawMenuBackground(NSRect bounds, NSRect clipRect, NSUInteger flags) {
+    NSRect rect = NSIsEmptyRect(clipRect) ? bounds : NSIntersectionRect(bounds, clipRect);
+
+    if (NSIsEmptyRect(rect))
+        return;
+    [[NSColor menuBackgroundColor] setFill];
+    NSRectFill(rect);
+}
+
+// Private: the frame of a list box (a multi-line text area) around rect, drawn
+// over what is there; the inside is left alone. flipped and textured do not
+// change it.
+void _NSDrawCarbonThemeListBox(NSRect rect, BOOL enabled, BOOL flipped, BOOL textured) {
+    NSGraphicsStyle *style = [[NSGraphicsStyle alloc] initWithView: nil];
+
+    [style drawListBoxBorderInRect: rect enabled: enabled];
+    [style release];
+}
+
+// Private: the parameters CoreGraphics takes for a focus ring style
+// (CGStyleCreateFocusRingWithColor). Field layout as WebKit declares it, in
+// its BSD-licensed PAL headers (pal/spi/cg/CoreGraphicsSPI.h).
+struct _NSCGFocusRingStyle {
+    unsigned int version;
+    int32_t tint;     // 0 blue, 1 graphite
+    int32_t ordering; // 0 ring only, 1 below the shape, 2 above it
+    CGFloat alpha;
+    CGFloat radius;
+    CGFloat threshold;
+    CGRect bounds;
+    int accumulate;
+};
+
+// Private: fills in the focus ring style for a placement at a time into the
+// ring's appearance animation, and returns whether the animation is still
+// running. Observed on macOS 26.7.3 and 10.14.4 (black-box, the same on both):
+// the ring settles 0.25 s in at alpha 0.5, radius 3.00438541 and threshold
+// 0.15; before that it grows in from radius 28 and alpha 0, and the call
+// returns YES. Version, tint (whatever the control tint), bounds and
+// accumulation are 0; the ordering is the placement's.
+// Darling's focus rings do not animate, so every time gets the settled style,
+// and the call returns NO.
+// Test: tests/appkit-webkit-private-functions.m
+BOOL NSInitializeCGFocusRingStyleForTime(NSFocusRingPlacement placement, void *style, NSTimeInterval time) {
+    struct _NSCGFocusRingStyle *ring = style;
+
+    if (ring == NULL)
+        return NO;
+
+    memset(ring, 0, sizeof(*ring));
+    switch (placement) {
+    case NSFocusRingBelow:
+        ring->ordering = 1;
+        break;
+    case NSFocusRingAbove:
+        ring->ordering = 2;
+        break;
+    default:
+        ring->ordering = 0;
+        break;
+    }
+    ring->alpha = 0.5;
+    ring->radius = 3.00438541;
+    ring->threshold = 0.15;
+    ring->bounds = CGRectZero;
+    return NO;
 }
 
 NSRect NSDrawTiledRects(NSRect bounds, NSRect clip, const NSRectEdge *sides,

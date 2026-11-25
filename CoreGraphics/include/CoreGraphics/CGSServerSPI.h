@@ -24,6 +24,8 @@
 #include <stdint.h>
 #include <CoreGraphics/CGError.h>
 #include <CoreGraphics/CGGeometry.h>
+#include <CoreFoundation/CFArray.h>
+#include <stdbool.h>
 #include <CoreGraphics/CoreGraphicsExport.h>
 
 typedef uint32_t CGSConnectionID;
@@ -33,5 +35,19 @@ COREGRAPHICS_EXPORT CGSConnectionID CGSMainConnectionID(void);
 // Pointer location in global display coordinates, origin at the top left.
 COREGRAPHICS_EXPORT CGPoint CGSCurrentInputPointerPosition(void);
 COREGRAPHICS_EXPORT CGError CGSSetWindowAlpha(CGSConnectionID, CGSWindowID, float alpha);
+
+// Properties of a connection, set and read by the connection that owns them. A property that was
+// never set reads as NULL; setting NULL removes it.
+COREGRAPHICS_EXPORT CGError CGSSetConnectionProperty(CGSConnectionID cid, CGSConnectionID ownerCid, CFStringRef key, CFTypeRef value);
+COREGRAPHICS_EXPORT CGError CGSCopyConnectionProperty(CGSConnectionID cid, CGSConnectionID ownerCid, CFStringRef key, CFTypeRef *value);
+
+// Notifications the window server sends to a connection about its windows.
+typedef void (*CGSNotifyConnectionProcPtr)(uint32_t type, void *data, uint32_t dataLength, void *arg, CGSConnectionID cid);
+COREGRAPHICS_EXPORT CGError CGSRegisterConnectionNotifyProc(CGSConnectionID cid, CGSNotifyConnectionProcPtr proc, uint32_t type, void *arg);
+COREGRAPHICS_EXPORT CGError CGSPackagesEnableConnectionOcclusionNotifications(CGSConnectionID cid, bool enable, bool *outCurrentVisibilityState);
+COREGRAPHICS_EXPORT CGError CGSPackagesEnableConnectionWindowModificationNotifications(CGSConnectionID cid, bool enable, bool *outConnectionIsCurrentlyIdle);
+
+// Images of the windows' contents, one per window, or NULL when they cannot be captured.
+COREGRAPHICS_EXPORT CFArrayRef CGSHWCaptureWindowList(CGSConnectionID cid, CGSWindowID *windowList, uint32_t windowCount, uint32_t options);
 
 #endif

@@ -116,6 +116,16 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, truncatesLastVisibleLine, _truncatesLastVisib
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, allowsUndo, _allowsUndo, BOOL, allowsUndo, setAllowsUndo:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, userInterfaceLayoutDirection, _userInterfaceLayoutDirection, NSUserInterfaceLayoutDirection, userInterfaceLayoutDirection, setUserInterfaceLayoutDirection:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, controlTint, setControlTint:)
+// SPI. The semantic context (see -[NSView _semanticContext]) the cell draws
+// for when its control view doesn't give one. New and unarchived cells have 1;
+// the value isn't archived, and a copy keeps it.
+- (NSInteger) _fallbackSemanticContext {
+    return NS_EXTRA(NSCell, self)->_fallbackSemanticContext;
+}
+
+- (void) _setFallbackSemanticContext: (NSInteger) context {
+    NS_EXTRA(NSCell, self)->_fallbackSemanticContext = context;
+}
 
 #pragma mark -
 #pragma mark Class Methods
@@ -279,6 +289,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
 
 - initWithCoder: (NSCoder *) coder {
     unsigned int flags = 0, flags2 = 0;
+    NS_EXTRA(NSCell, self)->_fallbackSemanticContext = 1;
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
         flags = [keyed decodeIntForKey: @"NSCellFlags"];
@@ -403,6 +414,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     NS_EXTRA(NSCell, self)->_refusesFirstResponder = NO;
     NS_EXTRA(NSCell, self)->_lineBreakMode = NSLineBreakByWordWrapping;
     NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
+    NS_EXTRA(NSCell, self)->_fallbackSemanticContext = 1;
     return self;
 }
 
@@ -424,6 +436,7 @@ static void initImageCellState(NSCell *self, NSImage *image) {
     NS_EXTRA(NSCell, self)->_refusesFirstResponder = NO;
     NS_EXTRA(NSCell, self)->_lineBreakMode = NSLineBreakByWordWrapping;
     NS_EXTRA(NSCell, self)->_hasValidObjectValue = YES;
+    NS_EXTRA(NSCell, self)->_fallbackSemanticContext = 1;
 }
 
 - initImageCell: (NSImage *) image {

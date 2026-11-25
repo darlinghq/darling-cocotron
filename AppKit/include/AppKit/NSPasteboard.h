@@ -159,10 +159,12 @@ typedef NS_OPTIONS(NSUInteger, NSPasteboardReadingOptions) {
 - (nullable NSString *) stringForType: (NSPasteboardType) type;
 - (nullable id) propertyListForType: (NSPasteboardType) type;
 
+// The owner is any object; it is sent the NSPasteboardTypeOwner messages it
+// responds to.
 - (NSInteger) declareTypes: (NSArray<NSPasteboardType> *) types
-                     owner: (null_unspecified id<NSPasteboardTypeOwner>) owner;
+                     owner: (nullable id) owner;
 - (NSInteger) addTypes: (NSArray<NSPasteboardType> *) types
-                 owner: (null_unspecified id<NSPasteboardTypeOwner>) owner;
+                 owner: (nullable id) owner;
 
 - (BOOL) setData: (nullable NSData *) data forType: (NSPasteboardType) type;
 - (BOOL) setString: (NSString *) string forType: (NSPasteboardType) type;

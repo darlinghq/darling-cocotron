@@ -314,10 +314,16 @@ int main(void) {
         EXPECT(NSAccessibilityLayoutChangedNotification, "AXLayoutChanged");
         EXPECT(NSAccessibilityUIElementsKey, "AXUIElementsKey");
         EXPECT(NSAccessibilityToggleSubrole, "AXToggle");
+        // not read on macOS: named like the toggle subrole
+        EXPECT(NSAccessibilitySwitchSubrole, "AXSwitch");
         EXPECT(NSAccessibilityFullScreenButtonSubrole, "AXFullScreenButton");
         EXPECT(NSAccessibilityAnnouncementKey, "AXAnnouncementKey");
         EXPECT(NSAccessibilityAnnouncementRequestedNotification, "AXAnnouncementRequested");
         EXPECT(NSAccessibilityPriorityKey, "AXPriorityKey");
+        if (NSAccessibilityPriorityLow != 10 || NSAccessibilityPriorityMedium != 50 || NSAccessibilityPriorityHigh != 90) {
+            printf("FAIL: NSAccessibilityPriorityLevel values are not 10, 50 and 90\n");
+            failures++;
+        }
     }
     printf(failures ? "FAILED\n" : "PASSED\n");
     return failures ? 1 : 0;

@@ -73,7 +73,10 @@ enum {
     NSScaleNone = NSImageScaleNone,
 };
 
-typedef NS_ENUM(NSInteger, NSControlStateValue) {
+// An integer, not an enumeration: any integer is a state (a BOOL converts to
+// off and on), and the values below are the standard ones.
+typedef NSInteger NSControlStateValue NS_TYPED_EXTENSIBLE_ENUM;
+enum {
     NSControlStateValueMixed = -1,
     NSControlStateValueOff = 0,
     NSControlStateValueOn = 1,
@@ -168,6 +171,8 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
         NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
         NSMenu *_cellMenu;
         NSControlTint _controlTint;
+        // Set by -_setFallbackSemanticContext:; 1 in a new cell.
+        NSInteger _fallbackSemanticContext;
     NS_EXTRA_IVARS_END(NSCell)
 }
 

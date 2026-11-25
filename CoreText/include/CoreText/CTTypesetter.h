@@ -7,6 +7,9 @@ CF_IMPLICIT_BRIDGING_ENABLED
 typedef struct __CTTypesetter* CTTypesetterRef;
 
 CORETEXT_EXPORT CFTypeID CTTypesetterGetTypeID(void);
+// CFNumber: the embedding level (0 left to right, 1 right to left) that
+// overrides the Unicode bidirectional algorithm
+CORETEXT_EXPORT const CFStringRef kCTTypesetterOptionForcedEmbeddingLevel;
 
 CORETEXT_EXPORT CTTypesetterRef CTTypesetterCreateWithAttributedString(CFAttributedStringRef string);
 CORETEXT_EXPORT CTTypesetterRef CTTypesetterCreateWithAttributedStringAndOptions(CFAttributedStringRef string, CFDictionaryRef options);

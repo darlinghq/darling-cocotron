@@ -18,6 +18,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSDraggingSession-Private.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSButtonCell.h>
@@ -103,6 +104,11 @@ const NSNotificationName NSWindowDidAnimateNotification =
 
 const NSNotificationName NSWindowDidChangeBackingPropertiesNotification =
         @"NSWindowDidChangeBackingPropertiesNotification";
+// Not in the macOS SDK: posted when the window's contents move into or out
+// of a layer surface. Windows here are never hosted in one, so it is never
+// posted. The name is the one macOS 26.7.3 gives it.
+const NSNotificationName _NSWindowDidChangeContentsHostedInLayerSurfaceNotification =
+        @"_NSWindowDidChangeContentsHostedInLayerSurfaceNotification";
 const NSNotificationName NSWindowDidChangeScreenProfileNotification =
         @"NSWindowDidChangeScreenProfileNotification";
 NSString *const NSBackingPropertyOldScaleFactorKey =
@@ -121,6 +127,11 @@ const NSNotificationName NSWindowDidOrderOffScreenNotification =
         @"NSWindowDidOrderOffScreenNotification";
 const NSNotificationName NSWindowDidOrderOnScreenNotification =
         @"_NSWindowDidBecomeVisible";
+// Not in the macOS SDK either. The names are the ones macOS 26.7.3 and
+// Mac OS X 10.14.4 give them; the first does not match its symbol.
+const NSNotificationName NSWindowWillOrderOnScreenNotification = @"_NSWindowWillBecomeVisible";
+const NSNotificationName NSWindowWillOrderOffScreenNotification =
+        @"NSWindowWillOrderOffScreenNotification";
 const NSNotificationName NSWindowWillEnterFullScreenNotification =
         @"NSWindowWillEnterFullScreenNotification";
 const NSNotificationName NSWindowWillExitFullScreenNotification =
@@ -168,6 +179,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (NSRect) zoomedFrame;
 - (void) _updateOcclusionState;
 - (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible;
+- (void) _willOrderOnScreen: (BOOL) visible;
 
 @end
 
@@ -332,9 +344,11 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (void) slideDraggedImageTo: (NSPoint) point {
 }
 
-- (int) draggingSequenceNumber {
+- (NSInteger) draggingSequenceNumber {
     return 0;
 }
+
+NS_DRAGGING_INFO_SHARED_METHODS
 
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination {
     return nil;
@@ -418,6 +432,12 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
     return [NSStandardWindowButtonCell class];
 }
 
+@end
+
+// The SPI protocol of views that register with -registerScrollViewSeparatorTrackingAdapter:.
+@protocol NSScrollViewSeparatorTrackingAdapter
+- (NSRect) scrollViewFrame;
+- (BOOL) hasScrolledContentsUnderTitlebar;
 @end
 
 @implementation NSWindow
@@ -815,6 +835,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [NS_EXTRA(NSWindow, self)->_animations release];
     [NS_EXTRA(NSWindow, self)->_tabGroup _windowWillDeallocate];
     [NS_EXTRA(NSWindow, self)->_tabGroup release];
+    [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters release];
     [NS_EXTRA(NSWindow, self)->_tabbingIdentifier release];
     [NS_EXTRA(NSWindow, self)->_subtitle release];
     [NS_EXTRA(NSWindow, self)->_childWindows release];
@@ -3094,6 +3115,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     switch (place) {
     case NSWindowAbove:
+        [self _willOrderOnScreen: YES];
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
@@ -3120,6 +3142,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
 
     case NSWindowBelow:
+        [self _willOrderOnScreen: YES];
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
@@ -3156,6 +3179,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [[self retain] autorelease];
             [NS_EXTRA(NSWindow, self)->_parentWindow _detachChildWindow: self];
         }
+        [self _willOrderOnScreen: NO];
         appearance = [self _willChangeViewAppearanceForVisible: NO];
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
@@ -3673,9 +3697,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     info->_pasteboard = pasteboard;
     info->_image = image;
     info->_source = source;
-    info->_sourceMask = NSDragOperationEvery;
-    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)])
-        info->_sourceMask = [source draggingSourceOperationMaskForLocal: YES];
+    info->_sourceMask = [NSDraggingSession _operationMaskOfSource: source local: YES defaultMask: NSDragOperationEvery];
 
     NSPoint screenPoint;
     if ([event window] != nil)
@@ -3710,8 +3732,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [imageWindow orderFront: nil];
     }
 
-    if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
-        [source draggedImage: image beganAt: imageOrigin];
+    [NSDraggingSession _source: source beganWithImage: image at: imageOrigin];
 
     NSArray *types = [pasteboard types];
     id destination = nil;
@@ -3744,8 +3765,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             }
             [imageWindow setFrameOrigin: NSMakePoint(screenPoint.x - imageOffset.x,
                                                      screenPoint.y - imageOffset.y)];
-            if ([source respondsToSelector: @selector(draggedImage:movedTo:)])
-                [source draggedImage: image movedTo: screenPoint];
+            [NSDraggingSession _source: source movedWithImage: image to: screenPoint];
             runPendingSourcesDuringDrag(0.008);
         }
         if (dropped)
@@ -3801,8 +3821,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if ([destination respondsToSelector: @selector(draggingEnded:)])
         [destination draggingEnded: info];
 
-    if ([source respondsToSelector: @selector(draggedImage:endedAt:operation:)])
-        [source draggedImage: image endedAt: screenPoint operation: operation];
+    [NSDraggingSession _source: source endedWithImage: image at: screenPoint operation: operation];
     [destination release];
     [info release];
 }
@@ -3867,6 +3886,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NS_EXTRA(NSWindow, self)->_isVisible == visible) {
         return;
     }
+    [self _willOrderOnScreen: visible];
     NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     if (visible) {
@@ -4339,6 +4359,17 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                                                              rootHidden: NO];
     [NSViewController _willPerformAppearanceTransitions: appearance];
     return appearance;
+}
+
+// Ordering a hidden window in, or a visible one out, is announced before the
+// window changes, with the window as the object and no user info; ordering a
+// window where it already is announces nothing (observed on macOS 26.7.3 and
+// Mac OS X 10.14.4, test appkit-window-will-order-notifications.m).
+- (void) _willOrderOnScreen: (BOOL) visible {
+    if (NS_EXTRA(NSWindow, self)->_isVisible == visible)
+        return;
+    [self postNotificationName: visible ? NSWindowWillOrderOnScreenNotification
+                                        : NSWindowWillOrderOffScreenNotification];
 }
 
 // Called wherever something -occlusionState depends on may have changed: posts the notification
@@ -5178,6 +5209,27 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     if (bottom)
         return left ? 5 : right ? 7 : 6;
     return left ? 4 : 0;
+}
+
+// SPI. A view whose contents scroll under the title bar registers with its window, which asks
+// it for its frame (-scrollViewFrame) and whether contents are scrolled under the title bar
+// (-hasScrolledContentsUnderTitlebar) to decide whether to draw the title bar separator.
+// Observed on macOS 26.7.3: registering asks the adapter for its frame at once (an object
+// without -scrollViewFrame raises), keeps it in a set (nil raises), and returns YES, also for a
+// repeated registration or a view in another window; unregistering an adapter that is not
+// registered does nothing. Darling's title bars have no separator, so the window only keeps the
+// set. Test: tests/appkit-scroll-view-separator-tracking.m.
+- (BOOL) registerScrollViewSeparatorTrackingAdapter: (id<NSScrollViewSeparatorTrackingAdapter>) adapter {
+    [adapter scrollViewFrame];
+    if (NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters == nil)
+        NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters = [[NSMutableSet alloc] init];
+    [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters addObject: adapter];
+    return YES;
+}
+
+- (void) unregisterScrollViewSeparatorTrackingAdapter: (id<NSScrollViewSeparatorTrackingAdapter>) adapter {
+    if (adapter != nil)
+        [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters removeObject: adapter];
 }
 
 // The part of the content area that is not under the title bar or the

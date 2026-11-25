@@ -21,6 +21,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
+#import <AppKit/NSUserInterfaceLayoutDirection.h>
 
 @class NSScreen, NSMenu, NSMenuItem, NSWindow, NSEvent, NSView;
 
@@ -65,10 +66,15 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
         id<NSMenuDelegate> _delegate;
         BOOL _showsStateColumn;
         NSUserInterfaceItemIdentifier _identifier;
+        BOOL _hasExplicitUserInterfaceLayoutDirection;
+        NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
     NS_EXTRA_IVARS_END(NSMenu)
 }
 
 @property BOOL showsStateColumn;
+// the direction the menu's items are laid out in; unless set, the
+// application's
+@property NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
 
 + (void) popUpContextMenu: (NSMenu*) menu
                 withEvent: (NSEvent*) event
@@ -91,7 +97,8 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 @property(nullable, nonatomic, retain) NSMenu *supermenu;
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, readonly) NSInteger numberOfItems;
-- (NSArray<NSMenuItem *> *) itemArray;
+// Setting it replaces every item; an item may not be in another menu.
+@property(copy) NSArray<NSMenuItem *> *itemArray;
 @property(nonatomic) BOOL autoenablesItems;
 
 - (nullable NSMenuItem *) itemAtIndex: (NSInteger) index;

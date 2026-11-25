@@ -23,6 +23,8 @@ extern void _NSPrependToKillRing(NSString *text);
 extern void _NSNewKillRingSequence(void);
 // Marks the last operation as a yank, so the next append starts a new entry.
 extern void _NSSetKillRingToYankedState(void);
+// Forgets the direction of the previous kill; the yanked state stays.
+extern void _NSResetKillRingOperationFlag(void);
 // The current entry (empty when nothing was killed); does not cycle.
 extern NSString *_Nullable _NSYankFromKillRing(void);
 
