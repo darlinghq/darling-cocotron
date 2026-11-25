@@ -1,22 +1,32 @@
 // CFLAGS: -framework Foundation -framework AppKit
 // Copyright (C) 2026 Lubos Dolezel
 //
-// Dead keys and compose sequences reach a text view as the text they make. Driven by
+// Dead keys and compose sequences reach a text view as the text they make, the same on both backends. Driven by
 // appkit-keyboard-dead-keys.py on the Wayland backend and on X11 (a private KWin and its Xwayland), which type
-// with the layout "us" variant "intl" (the apostrophe key is the dead acute accent) and the Compose key on the
-// right Alt key. The program prints READY, then reads events until the text view has six lines or 25 seconds
-// have passed, and checks what the harness typed, each ending with Return:
+// with the layout "us" variant "intl" (the apostrophe, grave and shifted 6 keys are dead keys) and the Compose
+// key on the right Alt key. The program prints READY, then reads events until the text view has every line or 25
+// seconds have passed, and checks what the harness typed, each ending with Return:
 //   e                          plain key: e
 //   dead acute, e              the dead key and the key after it make one character: e acute
-//   dead acute, space          the Compose table's text for it: an apostrophe (the table of the C locale; macOS
-//                              makes the spacing acute U+00B4 here)
-//   dead acute, q              no accented q exists, an invalid sequence: macOS commits both the accent and q
+//   dead acute, space          the Compose table's text for it: an apostrophe
+//   dead acute, q              no accented q exists, an invalid sequence: the accent and q are both committed
 //   Compose, s, s              a compose sequence: the sharp s
-//   Compose, z, q              an invalid compose sequence
+//   Compose, z, q              an invalid compose sequence: the keys as typed
+//   dead diaeresis, space      the Compose table's text: a quotation mark
+//   dead diaeresis, e          e diaeresis
+//   dead grave, space          a grave accent character
+//   dead tilde, space          a tilde character
+//   dead circumflex, space     a circumflex character
 // The dead key and the Compose key are not delivered as key events of their own, nor are the keys that continue
-// a sequence: the key that completes it has the text as its characters. A dead key is not shown as marked text.
-// An invalid sequence is where the backends differ: Wayland commits the characters typed (the macOS result for a
-// dead key), while Xlib's compose handling on X11 drops the whole sequence.
+// a sequence: the key that completes it has the text as its characters and its own key code. A dead key is not
+// shown as marked text.
+// What macOS does (black-box observation with UCKeyTranslate on the US International-PC layout, whose dead keys
+// are the ones typed here; macOS 26.7.3 and 10.14.4, vd-upstream/mac-probes/dead-keys): a dead key followed by
+// Space gives the layout's own character for the key (apostrophe, quotation mark, grave accent, tilde,
+// circumflex), by an unrelated letter the same character and the letter, by a vowel it combines with the
+// accented vowel. The Compose table gives the same texts. (Layouts whose dead keys are Option keys, such as
+// the ABC layout, give the spacing accents U+00B4 and U+00A8; which of the two a layout gives is the layout's
+// own data and there is no such data in a Linux keymap.)
 // Usage: appkit-keyboard-dead-keys (no arguments; DARLING_APPKIT_BACKEND names the backend, which the driver sets)
 // Prints INFO lines (what the text view was asked, in order), then PASS or FAIL lines, then ALL PASSED or
 // FAILED n.
@@ -26,7 +36,7 @@
 #include <string.h>
 
 static NSMutableArray *callLog;
-static int failures, markedCalls, emptyKeyDowns;
+static int failures, markedCalls, emptyKeyDowns, sharpSKeyCode = -1;
 
 static void expect(BOOL condition, NSString *what) {
     printf("%s %s\n", condition ? "PASS" : "FAIL", [what UTF8String]);
@@ -41,6 +51,8 @@ static void expect(BOOL condition, NSString *what) {
 - (void) keyDown: (NSEvent *) event {
     if ([[event characters] length] == 0)
         emptyKeyDowns++;
+    if ([[event characters] isEqualToString: @"\u00df"])
+        sharpSKeyCode = (int) [event keyCode];
     [callLog addObject: [NSString stringWithFormat: @"keyDown %@ (key %d)", [event characters], (int) [event keyCode]]];
     [super keyDown: event];
 }
@@ -77,6 +89,8 @@ int main(void) {
         printf("READY\n");
         fflush(stdout);
 
+        NSArray *expected = @[@"e", @"\u00e9", @"'", @"'q", @"\u00df", @"zq",
+                              @"\"", @"\u00eb", @"`", @"~", @"^", @""];
         NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow: 25];
         while ([deadline timeIntervalSinceNow] > 0) {
             NSEvent *event = [app nextEventMatchingMask: NSEventMaskAny
@@ -85,7 +99,7 @@ int main(void) {
                                                 dequeue: YES];
             if (event != nil)
                 [app sendEvent: event];
-            if ([[[view string] componentsSeparatedByString: @"\n"] count] > 6)
+            if ([[[view string] componentsSeparatedByString: @"\n"] count] >= [expected count])
                 break;
         }
 
@@ -94,16 +108,17 @@ int main(void) {
         printf("INFO marked text calls: %d\n", markedCalls);
 
         NSArray *lines = [[view string] componentsSeparatedByString: @"\n"];
-        const char *backend = getenv("DARLING_APPKIT_BACKEND");
-        BOOL x11 = backend != NULL && strcmp(backend, "x11") == 0;
-        NSArray *expected = x11 ? @[@"e", @"é", @"'", @"", @"ß", @"", @""]
-                                : @[@"e", @"é", @"'", @"'q", @"ß", @"zq", @""];
         NSArray *what = @[@"a plain key is its character",
                           @"dead acute and e make e acute",
-                          @"dead acute and space make the Compose table's text",
-                          @"dead acute and q, an invalid sequence, make what the backend does with it",
+                          @"dead acute and space make an apostrophe",
+                          @"dead acute and q, an invalid sequence, make the accent and q",
                           @"the Compose key and s, s make the sharp s",
-                          @"an invalid Compose sequence makes what the backend does with it",
+                          @"the keys of an invalid Compose sequence are typed as they are",
+                          @"dead diaeresis and space make a quotation mark",
+                          @"dead diaeresis and e make e diaeresis",
+                          @"dead grave and space make a grave accent character",
+                          @"dead tilde and space make a tilde character",
+                          @"dead circumflex and space make a circumflex character",
                           @"nothing follows the last line"];
         expect([lines count] == [expected count], [NSString stringWithFormat: @"%d lines typed", (int) [expected count] - 1]);
         for (NSUInteger i = 0; i < [expected count]; i++) {
@@ -111,6 +126,7 @@ int main(void) {
             BOOL ok = [got isEqualToString: [expected objectAtIndex: i]];
             expect(ok, [NSString stringWithFormat: @"%@ (got %@)", [what objectAtIndex: i], got]);
         }
+        expect(sharpSKeyCode == 1, [NSString stringWithFormat: @"the sharp s is the key down of the S key, kVK_ANSI_S (got %d)", sharpSKeyCode]);
         expect(emptyKeyDowns == 0, @"a dead key or the Compose key is not delivered as a key event without characters");
         printf(failures == 0 ? "ALL PASSED\n" : "FAILED %d\n", failures);
         return failures == 0 ? 0 : 1;
