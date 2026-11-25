@@ -263,7 +263,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 // QUIRK: the 15 ms tick is not documented. Evidence: widely reported (tier 4), for example
 // `defaults write -g KeyRepeat -int 2` giving the fastest repeat the pane offers (30 ms) in the
 // "Optimising key repeat speed" write-ups of macOS developers' dotfiles.
-// Test: AppKit/Wayland.backend/tests/key-repeat-preferences.m (quirk_tick_is_15_ms)
+// Test: CoreGraphics/Wayland.backend/tests/key-repeat-preferences.m (quirk_tick_is_15_ms)
 static double repeatPreferenceMilliseconds(CFStringRef key) {
     CFPropertyListRef value = CFPreferencesCopyValue(key, kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
     double milliseconds = -1;
