@@ -3062,8 +3062,15 @@ static void clearNeedsDisplay(NSView *self) {
     // reasons
     clearInvalidRects(self);
 
-    if (NS_EXTRA(NSView, self)->_needsDisplay)
+    if (NS_EXTRA(NSView, self)->_needsDisplay) {
+        // What is behind a view that does not fill its bounds is part of what has to be redrawn, as for
+        // -setNeedsDisplayInRect:. Without it an opaque ancestor that already has a smaller area
+        // invalid clips the redraw to that area, and the new content is drawn over the old.
+        NSView *opaqueAncestor = [self opaqueAncestor];
+        if (opaqueAncestor != nil && opaqueAncestor != self)
+            [opaqueAncestor setNeedsDisplayInRect: [self convertRect: [self visibleRect] toView: opaqueAncestor]];
         [[self window] setViewsNeedDisplay: YES];
+    }
 }
 
 - (void) setNeedsDisplayInRect: (NSRect) rect {
@@ -3527,7 +3534,7 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
         [self getRectsBeingDrawn: &rects count: &rectsCount];
         // If there is only one rect, it's the visible rect - it's already
         // clipped
-        if (rectsCount > 1)
+        if (rectsCount > 1 && !getenv("TOD_NOCLIP"))
             CGContextClipToRects(graphicsPort, rects, rectsCount);
 
         // A layer keeps its earlier contents (see -_lockFocusInContext:), so

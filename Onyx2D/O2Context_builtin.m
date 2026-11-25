@@ -324,8 +324,10 @@ ONYX2D_STATIC void O2ContextClipToPathShape(O2Context_builtin *self,
     memset(O2SurfaceGetPixelBytes(coverage), 0,
            O2SurfaceGetBytesPerRow(coverage) * boxHeight);
 
+    // The path is in device space, which is what the coverage surface is in as
+    // well: its context must not flip it a second time.
     O2Context_builtin *context = [[[self class] alloc] initWithSurface: coverage
-                                                               flipped: NO];
+                                                               flipped: YES];
     O2MutablePathRef moved = O2PathCreateMutableCopy(path);
 
     O2PathApplyTransform(moved, O2AffineTransformMakeTranslation(-x0, -y0));
