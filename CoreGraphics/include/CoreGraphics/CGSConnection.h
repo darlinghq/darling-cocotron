@@ -56,6 +56,8 @@
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
 -(void) dealloc;
 -(CGSWindow*) windowForId:(CGSWindowID)winId;
+// A snapshot of the connection's windows (the caller releases it)
+-(NSArray<CGSWindow*>*) copyAllWindows;
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
 
 // Activates the windows of another process directly through the display server (see
