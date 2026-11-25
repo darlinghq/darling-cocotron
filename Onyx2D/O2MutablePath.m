@@ -263,6 +263,10 @@ void O2PathAddArc(O2MutablePathRef self, const O2AffineTransform *matrix,
                   O2Float x, O2Float y, O2Float radius, O2Float startRadian,
                   O2Float endRadian, BOOL clockwise)
 {
+    // A sweep of a full circle or more adds the whole circle; the angles are reduced to one turn below,
+    // which would make such an arc empty.
+    BOOL fullCircle = ABS(endRadian - startRadian) >= M_PI * 2;
+
     startRadian = fmod(startRadian, M_PI * 2);
     endRadian = fmod(endRadian, M_PI * 2);
 
@@ -274,6 +278,9 @@ void O2PathAddArc(O2MutablePathRef self, const O2AffineTransform *matrix,
 
     if (endRadian < startRadian) {
         endRadian += M_PI * 2;
+    }
+    if (fullCircle) {
+        endRadian = startRadian + M_PI * 2;
     }
 
     O2Float radiusx = radius, radiusy = radius;
