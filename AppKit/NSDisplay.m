@@ -63,6 +63,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) takeMouseDeltaX: (int32_t *) dx y: (int32_t *) dy {
     [_display takeMouseDeltaX: dx y: dy];
 }
+- (BOOL) cursorIsVisible {
+    return [_display cursorIsVisible];
+}
 @end
 
 static NSDisplay *processDisplay = nil;
@@ -130,9 +133,12 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
 
         static dispatch_once_t once;
         dispatch_once(&once, ^{
-            static _NSDisplayPointerController *controller;
-            controller = [[_NSDisplayPointerController alloc] initWithDisplay: self];
-            _CGSSetPointerController(controller);
+            // A backend whose connection decodes the pointer itself (X11) keeps that state in CoreGraphics.
+            if ([self usesPointerController]) {
+                static _NSDisplayPointerController *controller;
+                controller = [[_NSDisplayPointerController alloc] initWithDisplay: self];
+                _CGSSetPointerController(controller);
+            }
             CGDisplayRegisterReconfigurationCallback(displaysReconfigured, NULL);
         });
         return self;
@@ -333,6 +339,16 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
 // do so override this; the default reports that nothing was activated.
 - (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
     return NO;
+}
+
+// Whether the pointer functions of CoreGraphics reach this display (see CGSPointerController.h).
+- (BOOL) usesPointerController {
+    return YES;
+}
+
+// Whether no hide is pending.
+- (BOOL) cursorIsVisible {
+    return _cursorHideCount == 0;
 }
 
 - (void) hideCursor {

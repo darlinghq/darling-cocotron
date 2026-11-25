@@ -636,6 +636,11 @@ static double windowOpacity(Display* display, Window window)
 
 -(CGPoint) mouseLocation
 {
+	// While the cursor is frozen (the mouse is not associated with it) that is where the cursor is.
+	CGPoint frozen;
+	if ([_pointer relativeMouseRequested: NULL frozenRoot: &frozen])
+		return [self _cgPointFromRoot: frozen];
+
 	Window child, root = DefaultRootWindow(_display);
 
     int root_x, root_y;
@@ -701,6 +706,7 @@ static double windowOpacity(Display* display, Window window)
 // on to the observer.
 -(BOOL) processXEvent:(XEvent*) event
 {
+	[_pointer willHandleEvent: event];
 	switch (event->type)
 	{
 		case KeyPress:
@@ -753,14 +759,21 @@ static double windowOpacity(Display* display, Window window)
 				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
 				event->xfocus.detail != NotifyInferior)
 				[_keyboard focusGainedInWindow: event->xfocus.window];
+			[_pointer focusEvent: event];
 			break;
 		case FocusOut:
+			[_pointer focusEvent: event];
 			break;
 		case KeymapNotify:
 			break;
 		case Expose:
 			break;
 		case ConfigureNotify:
+		case UnmapNotify:
+			[_pointer windowEvent: event];
+			break;
+		case DestroyNotify:
+			[_pointer windowDestroyed: event->xdestroywindow.window];
 			break;
 		case ClientMessage:
 		{
@@ -1042,6 +1055,7 @@ static double windowOpacity(Display* display, Window window)
 		_layoutChanged = NO;
 		// Reports the change to the display reconfiguration callbacks.
 		[self displayLayoutChanged];
+		[_pointer displayLayoutChanged];
 		if ([observer respondsToSelector: @selector(nativeConnectionDisplayLayoutChanged)])
 			[observer nativeConnectionDisplayLayoutChanged];
 	}
@@ -1363,16 +1377,87 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	return ok;
 }
 
-// Moves the pointer on the X server, to a point in CoreGraphics' global space (points).
+// Moves the pointer on the X server, to a point in CoreGraphics' global space (points). The pointer
+// decoder knows what a warp means for the events that follow (see CGSX11Pointer.h).
 -(CGError) warpPointerToPoint:(CGPoint)point
+{
+	return [_pointer warpToPoint: point];
+}
+
+-(void) _getRootX:(int*)x y:(int*)y forPoint:(CGPoint)point
 {
 	X11Frame primary = [self _primaryRoot];
 	CGFloat scale = _primaryScale;
 	X11Point root = X11CGPointToRoot((X11Frame){primary.x / scale, primary.y / scale, primary.width / scale, primary.height / scale},
 		(X11Point){point.x, point.y});
-	XWarpPointer(_display, None, DefaultRootWindow(_display), 0, 0, 0, 0, (int) round(root.x * scale), (int) round(root.y * scale));
-	XSync(_display, False);
-	return kCGErrorSuccess;
+	*x = (int) round(root.x * scale);
+	*y = (int) round(root.y * scale);
+}
+
+-(BOOL) managesPointer
+{
+	return YES;
+}
+
+-(void) cursorHiddenStateChanged:(BOOL)hidden
+{
+	[_pointer cursorHiddenChanged];
+}
+
+-(void) mouseAssociationChanged:(BOOL)associated
+{
+	[_pointer setMouseAssociatedWithCursor: associated];
+}
+
+-(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot
+{
+	return [_pointer relativeMouseRequested: requested frozenRoot: frozenRoot];
+}
+
+-(void) pointerWindowsChanged
+{
+	[_pointer windowsChanged];
+}
+
+-(void) nativeObjectDestroyed:(void*)object
+{
+	[_pointer windowDestroyed: (Window) (uintptr_t) object];
+}
+
+// The blank cursor is made once.
+-(Cursor) _blankCursorMade
+{
+	if (_blankCursor == None)
+	{
+		char zero = 0;
+		XColor black = {0};
+		Pixmap pixmap = XCreateBitmapFromData(_display, DefaultRootWindow(_display), &zero, 1, 1);
+		_blankCursor = XCreatePixmapCursor(_display, pixmap, pixmap, &black, &black, 0, 0);
+		XFreePixmap(_display, pixmap);
+	}
+	return _blankCursor;
+}
+
+// The windows go back to their parent's cursor when the blank one is not wanted.
+-(void) _setBlankCursorOnWindows:(BOOL)blank
+{
+	Cursor cursor = blank ? [self _blankCursorMade] : None;
+
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if (![window isKindOfClass: [CGSWindowX11 class]])
+				continue;
+			if (blank)
+				XDefineCursor(_display, ((CGSWindowX11*) window)->_window, cursor);
+			else
+				XUndefineCursor(_display, ((CGSWindowX11*) window)->_window);
+		}
+	}
+	XFlush(_display);
 }
 
 -(CGSWindow*) newWindow:(CGSRegionRef)region
@@ -1389,6 +1474,12 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	@synchronized (_windows)
 	{
 		[_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
+	}
+	// A window made while the cursor is hidden shows the blank cursor like the others
+	if (![self cursorIsVisible])
+	{
+		XDefineCursor(_display, window->_window, [self _blankCursorMade]);
+		XFlush(_display);
 	}
 	[window release];
 	return window;

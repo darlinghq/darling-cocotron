@@ -39,6 +39,13 @@
 	// The displays as -buildScreens described them, until the layout changes. Guarded by
 	// @synchronized(self).
 	NSArray<CGSScreen*>* _screens;
+	// The pointer's bookkeeping shared by the backends (guarded by @synchronized(self)): the hide count, whether the
+	// mouse is connected to the cursor, the motion not yet taken by CGGetLastMouseDelta() and when the
+	// suppression of the local mouse motion after a warp ends (CFAbsoluteTime, 0 for none).
+	int _pointerHideCount;
+	BOOL _pointerDisassociated;
+	double _pointerDeltaX, _pointerDeltaY;
+	double _pointerSuppressUntil;
 	// The displays the reconfiguration callbacks were last told about (nil until the displays
 	// have been read once). Guarded by @synchronized(self).
 	NSArray<CGSScreen*>* _reportedScreens;
@@ -134,6 +141,38 @@
 // Moves the pointer to a point in CoreGraphics' global space (inside the desktop). The default
 // implementation does nothing and returns kCGErrorCannotComplete.
 -(CGError) warpPointerToPoint:(CGPoint)point;
+
+// The pointer state of the process (CGDisplayHideCursor(), CGAssociateMouseAndMouseCursorPosition(),
+// CGGetLastMouseDelta() and the warp above). A connection that keeps it answers YES here and implements
+// the methods below; with NO the functions go to the controller a framework registered (see
+// CGSPointerController.h). The methods can be called from any thread.
+-(BOOL) managesPointer;
+// Each call hides the cursor once more, -unhideCursor undoes one (nothing hidden: nothing happens),
+// -forceShowCursor forgets every pending hide.
+-(void) hideCursor;
+-(void) unhideCursor;
+-(void) forceShowCursor;
+-(BOOL) cursorIsVisible;
+// NO disconnects the mouse from the cursor: the cursor stays where it is and the mouse only makes deltas.
+-(void) setMouseAssociatedWithCursor:(BOOL)associated;
+// The mouse motion since the previous call in whole points, and the way for a framework that makes mouse events
+// of its own for the window system (a display overlay) to add the motion it saw.
+-(void) takeMouseDeltaX:(int32_t*)dx y:(int32_t*)dy;
+-(void) accumulateMouseDeltaX:(double)dx y:(double)dy;
+// The shared bookkeeping (hide count, deltas, suppression after a warp) is implemented here, so that every
+// backend that keeps the pointer behaves the same. A backend tells a warp with -noteMouseWarp, asks
+// -localMouseMotionSuppressed for each local motion it decodes, and reacts to a change in the hooks below
+// (called on the thread that changed the state, outside the lock).
+-(void) cursorHiddenStateChanged:(BOOL)hidden;
+-(void) mouseAssociationChanged:(BOOL)associated;
+-(void) noteMouseWarp;
+-(BOOL) localMouseMotionSuppressed;
+-(BOOL) mouseAssociated;
+// Whether the mouse is disassociated from the cursor with the cursor held (the frozen position in
+// *frozenRoot, window system pixels), and whether the application wants that; for the framework above.
+-(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot;
+// The windows the pointer could be confined to changed.
+-(void) pointerWindowsChanged;
 
 // Implementations should also emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 // if layout changes.

@@ -333,6 +333,21 @@ CGEventFlags CGEventSourceFlagsState(CGEventSourceStateID stateID) {
     return flags;
 }
 
+// The time the local mouse events are suppressed after CGWarpMouseCursorPosition(), for the whole session
+// (documented default 0.25 seconds). A negative one is refused (observed on macOS 26.7.3 and Mojave).
+static double gLocalEventsSuppressionInterval = 0.25;
+
+CGError CGSetLocalEventsSuppressionInterval(CFTimeInterval seconds) {
+    if (!(seconds >= 0))
+        return kCGErrorRangeCheck;
+    __atomic_store_n(&gLocalEventsSuppressionInterval, seconds, __ATOMIC_RELAXED);
+    return kCGErrorSuccess;
+}
+
+double _CGSLocalEventsSuppressionInterval(void) {
+    return __atomic_load_n(&gLocalEventsSuppressionInterval, __ATOMIC_RELAXED);
+}
+
 void CGEventSourceSetLocalEventsSuppressionInterval(CGEventSourceRef source, CFTimeInterval seconds) {
     CGEventSource *src = (CGEventSource *) source;
 

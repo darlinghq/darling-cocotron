@@ -31,12 +31,6 @@ __attribute__((constructor)) static void initme(void) {
     verbose = getenv("STUB_VERBOSE") != NULL;
 }
 
-boolean_t CGCursorIsVisible(void) {
-    if(verbose)
-        puts("STUB: CGCursorIsVisible called");
-    return false;
-}
-
 void CGDisplayRestoreColorSyncSettings(void) {
     if(verbose)
         puts("STUB: CGDisplayRestoreColorSyncSettings called");
@@ -63,12 +57,6 @@ CGError CGSetDisplayTransferByFormula(CGDirectDisplayID a, CGGammaValue b, CGGam
 CGError CGSetDisplayTransferByTable(CGDirectDisplayID a, uint32_t b, const CGGammaValue *c, const CGGammaValue *d, const CGGammaValue *e) {
     if(verbose)
         puts("STUB: CGSetDisplayTransferByTable called");
-    return (CGError)0;
-}
-
-CGError CGSetLocalEventsSuppressionInterval(CFTimeInterval a) {
-    if(verbose)
-        puts("STUB: CGSetLocalEventsSuppressionInterval called");
     return (CGError)0;
 }
 

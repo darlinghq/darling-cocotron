@@ -431,6 +431,8 @@ enum {
 // The double-click interval of the user in seconds: the time within which a second press of a button
 // counts as a double click.
 extern double _CGSDoubleClickInterval(void);
+// The time local mouse motion is dropped after CGWarpMouseCursorPosition() (CGSetLocalEventsSuppressionInterval()).
+extern double _CGSLocalEventsSuppressionInterval(void);
 
 extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
 extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);

@@ -1,12 +1,12 @@
 /* The Xlib side of macOS-style relative mouse mode: the pointer grab, the pointer warps and the handling of a
- * MotionNotify, on top of the decision model in X11RelativeMouse.h.
+ * MotionNotify, on top of the decision model in CGSX11RelativeMouse.h.
  *
  * Only Xlib, no Objective-C, so tests/x11-relative-mouse-x11.c can drive the same code the backend runs against a
  * real server (Xvfb, with XTest supplying the physical motion). */
 #ifndef X11_RELATIVE_MOUSE_GRAB_H
 #define X11_RELATIVE_MOUSE_GRAB_H
 
-#include "X11RelativeMouse.h"
+#include "CGSX11RelativeMouse.h"
 #include <X11/Xlib.h>
 
 #define X11_RELATIVE_MOUSE_NOT_FOCUSED (-1)

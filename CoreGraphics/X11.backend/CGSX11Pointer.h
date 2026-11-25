@@ -43,11 +43,13 @@
 #ifndef CGSX11POINTER_H
 #define CGSX11POINTER_H
 
-#import <Foundation/NSObject.h>
+#import <Foundation/Foundation.h>
+#include <CoreGraphics/CGError.h>
 #include <CoreGraphics/CGGeometry.h>
 #include <X11/Xlib.h>
 #include <X11/extensions/XInput2.h>
 #include <stdint.h>
+#include "CGSX11RelativeMouseGrab.h"
 
 @class CGSConnectionX11;
 
@@ -89,6 +91,26 @@ typedef struct {
     double _scrollRemainderX, _scrollRemainderY;
     Time _scrolledTimes[16];
     int _scrolledNext;
+    // The cursor: how many times it was hidden (guarded by @synchronized(self)) and whether the observer was told
+    // that it is hidden; the blank cursor the connection's own windows show while it is.
+    BOOL _hiddenReported;
+    BOOL _isXwayland;
+    // After a warp: the request that made it, the number of events that were queued behind it (the one with the
+    // request's serial is the warp's own motion, which is no mouse motion), and the time local mouse motion is
+    // dropped until (CFAbsoluteTime).
+    unsigned long _echoSerial;
+    unsigned _echoRemaining;
+    // Relative mouse mode (CGAssociateMouseAndMouseCursorPosition(false)); main thread only. _relativeRequested
+    // stays set while the application wants it, _relative.active only while the pointer grab on _relativeWindow
+    // is held, which losing the focus releases and regaining it retakes.
+    BOOL _relativeRequested;
+    int _relativeRetriesLeft;
+    // Where the frozen cursor was when the grab was released for a reason other than the application asking,
+    // so that the next grab puts it back instead of restarting it at the pointer.
+    BOOL _resumeValid;
+    double _resumeX, _resumeY;
+    Window _relativeWindow;
+    X11RelativeMouse _relative;
 }
 
 - (instancetype) initWithConnection: (CGSConnectionX11 *) connection;
@@ -106,6 +128,23 @@ typedef struct {
 // server sends it. The connection feeds these from XInput2; they are also the entry points a test of the
 // decoding uses with an event it made itself, as an X server that has a smooth scrolling device cannot be
 // started everywhere.
+// The connection's pointer state changed (see -[CGSConnection cursorHiddenStateChanged:]), and the mouse was
+// associated with the cursor or disconnected from it. Any thread.
+- (void) cursorHiddenChanged;
+- (void) setMouseAssociatedWithCursor: (BOOL) associated;
+// Moves the pointer to a point of CoreGraphics' global space.
+- (CGError) warpToPoint: (CGPoint) point;
+// Called for every event of the connection before it is handled, and for the focus, the windows and the display layout.
+- (void) willHandleEvent: (XEvent *) event;
+- (void) focusEvent: (XEvent *) event;
+- (void) windowEvent: (XEvent *) event;
+- (void) windowDestroyed: (Window) window;
+- (void) displayLayoutChanged;
+// The windows the application could confine the pointer to changed (an overlay appeared): retakes a wanted grab.
+- (void) windowsChanged;
+// Relative mode: whether it is wanted, and the frozen cursor in root pixels when the grab is held.
+- (BOOL) relativeMouseRequested: (BOOL *) requested frozenRoot: (CGPoint *) root;
+
 - (void) setScrollAxes: (const CGSX11ScrollAxis *) axes count: (int) count;
 - (void) rawMotionEvent: (const XIRawEvent *) event;
 

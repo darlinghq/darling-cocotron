@@ -8,7 +8,6 @@
 
 #import "../private-include/AppKit/DarlingDisplay.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
-#import "X11RelativeMouseGrab.h"
 #import <X11/Xlib.h>
 #import <X11/Xresource.h>
 #import <X11/Xlocale.h>
@@ -37,25 +36,12 @@
     XID _lastClickWindow;
     NSPoint _lastClickPoint;   // Logical points, so the radius is scale-independent.
     X11Cursor *_blankCursor, *_defaultCursor;
-    // Relative mouse mode (CGAssociateMouseAndMouseCursorPosition(false)).
-    // _relativeRequested stays set while the application wants it;
-    // _relativeMouse.active only while the pointer grab on _relativeWindow is
-    // held, which losing the focus releases and regaining it retakes.
-    BOOL _relativeRequested;
-    int _relativeRetriesLeft;
-    // Where the frozen cursor was when the grab was released for a reason other
-    // than the application asking (focus loss, reconfiguration), so the next
-    // grab puts it back instead of restarting it at the pointer.
-    BOOL _relativeResumeValid;
-    double _relativeResumeX, _relativeResumeY;
-    Window _relativeWindow;
     // A pinch gesture in progress (see X11Gesture.h): its window, the scale it last
     // reported, and where and with which modifiers its last event was.
     Window _pinchWindow;
     CGFloat _pinchScale;
     NSPoint _pinchLocation;
     NSEventModifierFlags _pinchModifiers;
-    X11RelativeMouse _relativeMouse;
     // ConfinePointerToFullscreenWindows (org.darlinghq.AppKit): keep the
     // pointer inside the focused fullscreen window, through a pointer grab on
     // _confinedWindow while one is held.

@@ -24,6 +24,7 @@
 #import <CoreGraphics/CGEventSource.h>
 #import <CoreGraphics/CGSNativeConnection.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
+#include <limits.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,6 +58,11 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     if (self == nil)
         return nil;
     _connection = connection;
+    {
+        int opcode, event, error;
+        _isXwayland = connection->_display != NULL &&
+                      XQueryExtension(connection->_display, "XWAYLAND", &opcode, &event, &error);
+    }
     // The pointer is hardware: the events it posts change the state the hardware state functions report.
     _source = (void *) CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
     [self setUpInputExtension];
@@ -64,6 +70,8 @@ static int64_t buttonNumberForX(unsigned int xButton) {
 }
 
 - (void) dealloc {
+    [NSObject cancelPreviousPerformRequestsWithTarget: self];
+    X11RelativeMouseEnd(&_relative);
     free(_scrollAxes);
     if (_source != NULL)
         CFRelease((CFTypeRef) _source);
@@ -169,11 +177,46 @@ static int64_t buttonNumberForX(unsigned int xButton) {
         return;
     }
 
+    // The motion a warp made is not mouse motion: the pointer is where the application put it.
+    if (ev->type == MotionNotify && _echoRemaining > 0 && !_relative.active) {
+        if (ev->xmotion.serial == _echoSerial) {
+            _echoRemaining = 0;
+            _lastRoot = CGPointMake(rootX, rootY);
+            _located = YES;
+            return;
+        }
+    }
+
     [self setPointerInProcessWindow: YES];
+    // While the cursor is frozen the events are where it is, and the motion is the physical pointer's.
+    BOOL frozen = _relative.active;
+    X11RelativeMouseMotion relativeMotion = {false, false, 0.0, 0.0, false, 0, 0};
+    if (frozen) {
+        if (ev->type == MotionNotify) {
+            bool recorded;
+            relativeMotion = X11RelativeMouseMotionEvent(_connection->_display, &_relative, &ev->xmotion,
+                                                         [self warpsHonoured], &recorded);
+            // An echo that could not be recorded would be taken for input.
+            if (!recorded) {
+                [self suspendRelativeMouse];
+                return;
+            }
+            if (!relativeMotion.post)
+                return;
+        }
+        // The window's origin in root coordinates is (x_root - x, y_root - y).
+        winX = (int) _relative.virtualX - (rootX - winX);
+        winY = (int) _relative.virtualY - (rootY - winY);
+        rootX = (int) _relative.virtualX;
+        rootY = (int) _relative.virtualY;
+    }
     CGPoint root = CGPointMake(rootX, rootY);
     CGPoint global = [_connection _cgPointFromRoot: root];
     int64_t deltaX = 0, deltaY = 0;
 
+    if (ev->type == MotionNotify && frozen) {
+        [self takeDeltaOfRootDistance: CGPointMake(relativeMotion.deltaX, relativeMotion.deltaY) x: &deltaX y: &deltaY];
+    }
     if (ev->type == MotionNotify) {
         // X numbers the right button 3 (Button3Mask) and Button2Mask is the middle button, whose drags
         // are other-mouse drags.
@@ -190,7 +233,8 @@ static int64_t buttonNumberForX(unsigned int xButton) {
             type = kCGEventMouseMoved;
             button = 0;
         }
-        [self takeDeltaForRoot: root x: &deltaX y: &deltaY];
+        if (!frozen)
+            [self takeDeltaForRoot: root x: &deltaX y: &deltaY];
     } else {
         BOOL pressed = ev->type == ButtonPress;
         switch (xButton) {
@@ -211,8 +255,10 @@ static int64_t buttonNumberForX(unsigned int xButton) {
                 _downClickState[button] = 0;
         }
         // The pointer does not move with a button; where it is now is where the next motion starts from.
-        _lastRoot = root;
-        _located = YES;
+        if (!frozen) {
+            _lastRoot = root;
+            _located = YES;
+        }
     }
 
     CGEventRef event = CGEventCreateMouseEvent((CGEventSourceRef) _source, type, global, (CGMouseButton) button);
@@ -238,6 +284,17 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     CGEventSetIntegerValueField(event, kCGSEventPostedLocationX, llround(global.x * 1024));
     CGEventSetIntegerValueField(event, kCGSEventPostedLocationY, llround(global.y * 1024));
 
+    BOOL motion = ev->type == MotionNotify;
+    if (motion) {
+        // The deltas are what CGGetLastMouseDelta() reports, whether or not the event is posted.
+        [_connection accumulateMouseDeltaX: (double) deltaX y: (double) deltaY];
+        // For a while after a warp the local mouse motion is dropped (CGSetLocalEventsSuppressionInterval()).
+        // The events of the frozen cursor are not the cursor's motion, and so are not suppressed.
+        if (!frozen && [_connection localMouseMotionSuppressed]) {
+            CFRelease(event);
+            return;
+        }
+    }
     if ([observer respondsToSelector: @selector(nativeConnectionWillPostPointerEvent:forXEvent:)] &&
         ![observer nativeConnectionWillPostPointerEvent: (struct __CGEvent *) event forXEvent: ev])
         CGEventSetIntegerValueField(event, kCGSEventTapsOnly, 1);
@@ -277,6 +334,13 @@ static int64_t buttonNumberForX(unsigned int xButton) {
             return;
     }
 
+    // While the cursor is frozen the wheel scrolls where the cursor is.
+    if (_relative.active) {
+        winX = (int) _relative.virtualX - ((int) root.x - winX);
+        winY = (int) _relative.virtualY - ((int) root.y - winY);
+        root = CGPointMake(_relative.virtualX, _relative.virtualY);
+        window = _relativeWindow;
+    }
     CGEventRef event = CGEventCreateScrollWheelEvent2((CGEventSourceRef) _source,
                                                       continuous ? kCGScrollEventUnitPixel : kCGScrollEventUnitLine, 2,
                                                       vertical, horizontal, 0);
@@ -410,9 +474,309 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     int winX = 0, winY = 0;
     CGPoint root = CGPointZero;
     unsigned int state = 0;
-    if (![self windowUnderPointer: &window x: &winX y: &winY root: &root state: &state])
-        return;
+    if (![self windowUnderPointer: &window x: &winX y: &winY root: &root state: &state]) {
+        // The grab confines the pointer to a window of the process, whatever the hit test finds there.
+        if (!_relative.active)
+            return;
+        window = _relativeWindow;
+        winX = winY = 0;
+        root = CGPointMake(_relative.virtualX, _relative.virtualY);
+    }
     [self postScrollContinuous: continuous vertical: v horizontal: h window: window winX: winX winY: winY root: root state: state];
+}
+
+
+#pragma mark - Cursor
+
+// Applies what the hide count says: the connection's own windows show a blank cursor while it is not zero, and
+// the observer (the framework that has windows of its own) is told, on the main thread, where Xlib is used.
+- (void) reportCursorHidden {
+    BOOL hidden = ![_connection cursorIsVisible];
+    if (hidden == _hiddenReported)
+        return;
+    _hiddenReported = hidden;
+    [_connection _setBlankCursorOnWindows: hidden];
+    id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionCursorHiddenChanged:)])
+        [observer nativeConnectionCursorHiddenChanged: hidden];
+    // On Xwayland a warp is only honoured while the cursor is hidden, and the grab depends on it.
+    if (_relativeRequested && !_relative.active)
+        [self beginRelativeMouse];
+}
+
+- (void) cursorHiddenChanged {
+    if ([NSThread isMainThread])
+        [self reportCursorHidden];
+    else
+        [self performSelectorOnMainThread: @selector(reportCursorHidden) withObject: nil waitUntilDone: NO];
+}
+
+#pragma mark - Mouse deltas
+
+// The motion of the physical pointer, a distance in root pixels, in whole points (the rest is carried).
+- (void) takeDeltaOfRootDistance: (CGPoint) distance x: (int64_t *) dx y: (int64_t *) dy {
+    CGPoint origin = [_connection _cgPointFromRoot: CGPointZero];
+    CGPoint moved = [_connection _cgPointFromRoot: distance];
+    double x = moved.x - origin.x + _remainderX;
+    double y = moved.y - origin.y + _remainderY;
+    double wholeX = x < 0 ? ceil(x) : floor(x);
+    double wholeY = y < 0 ? ceil(y) : floor(y);
+    _remainderX = x - wholeX;
+    _remainderY = y - wholeY;
+    *dx = (int64_t) wholeX;
+    *dy = (int64_t) wholeY;
+}
+
+#pragma mark - Warp
+
+// Whether the server moves the pointer for a warp. On Xwayland a warp only reaches the compositor while the
+// cursor is hidden.
+- (BOOL) warpsHonoured {
+    return !_isXwayland || ![_connection cursorIsVisible];
+}
+
+- (CGError) warpToPoint: (CGPoint) point {
+    if (![NSThread isMainThread]) {
+        // The relative mouse state and Xlib are used from the main thread. The warp makes no delta, so the
+        // caller need not wait.
+        [self performSelectorOnMainThread: @selector(warpOnMainThread:)
+                               withObject: [NSValue valueWithBytes: &point objCType: @encode(CGPoint)]
+                            waitUntilDone: NO];
+        return kCGErrorSuccess;
+    }
+    [self warpOnMainThread: [NSValue valueWithBytes: &point objCType: @encode(CGPoint)]];
+    return kCGErrorSuccess;
+}
+
+- (void) warpOnMainThread: (NSValue *) value {
+    CGPoint point;
+    [value getValue: &point];
+    Display *display = _connection->_display;
+    int rootX, rootY;
+    [_connection _getRootX: &rootX y: &rootY forPoint: point];
+
+    if (_relative.active) {
+        // The frozen cursor moves, with no delta; the warp's echo is dropped.
+        if (!X11RelativeMouseApplicationWarp(display, &_relative, rootX, rootY, [self warpsHonoured]))
+            [self suspendRelativeMouse];
+        return;
+    }
+    unsigned long serial;
+    unsigned queued = X11RelativeMouseWarpPointer(display, rootX, rootY, &serial);
+    // The motion the warp makes comes with the request's serial and is no mouse motion.
+    _echoSerial = serial;
+    _echoRemaining = queued;
+    _lastRoot = CGPointMake(rootX, rootY);
+    _located = YES;
+    // Local mouse motion is suppressed for a while (the pointer itself is the server's, so the events are what
+    // can be held back).
+    [_connection noteMouseWarp];
+    if (_relativeRequested) {
+        // Suspended (focus lost, retry pending): the next grab must resume at the application's target.
+        _resumeValid = YES;
+        _resumeX = rootX;
+        _resumeY = rootY;
+    }
+}
+
+#pragma mark - Relative mouse
+
+- (void) setMouseAssociatedWithCursor: (BOOL) associated {
+    if (![NSThread isMainThread]) {
+        [self performSelectorOnMainThread: @selector(setAssociatedOnMainThread:)
+                               withObject: [NSNumber numberWithBool: associated]
+                            waitUntilDone: NO];
+        return;
+    }
+    [self setAssociatedOnMainThread: [NSNumber numberWithBool: associated]];
+}
+
+- (void) setAssociatedOnMainThread: (NSNumber *) wanted {
+    if (![wanted boolValue]) {
+        _relativeRequested = YES;
+        [self beginRelativeMouse];
+        // A failed first grab (AlreadyGrabbed while a window manager holds the pointer) is retried for a
+        // while, like one after a reconfiguration.
+        if (!_relative.active)
+            [self scheduleRelativeMouseRetry];
+    } else {
+        _relativeRequested = NO;
+        double x = _relative.virtualX, y = _relative.virtualY;
+        BOOL wasActive = _relative.active;
+        [self suspendRelativeMouse];
+        _resumeValid = NO;
+        // The cursor shows where it froze.
+        if (wasActive && [self warpsHonoured]) {
+            unsigned long serial;
+            unsigned queued = X11RelativeMouseWarpPointer(_connection->_display, (int) x, (int) y, &serial);
+            _echoSerial = serial;
+            _echoRemaining = queued;
+        }
+        _lastRoot = CGPointMake(x, y);
+        _located = wasActive;
+    }
+    XSync(_connection->_display, False);
+}
+
+// The window the pointer is grabbed for: the framework's choice (a display overlay, the key window), else the
+// window of the connection that holds the keyboard focus.
+- (Window) relativeMouseWindowChoice {
+    id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionRelativeMouseWindow)]) {
+        Window window = (Window) [observer nativeConnectionRelativeMouseWindow];
+        if (window != None)
+            return window;
+    }
+    Window focus;
+    int revert;
+    XGetInputFocus(_connection->_display, &focus, &revert);
+    return focus != None && focus != PointerRoot && [_connection _windowIDForNativeWindow: focus] != 0 ? focus : None;
+}
+
+// Takes the pointer grab, starting the frozen cursor at the current pointer position. Without the keyboard
+// focus nothing is grabbed (a grab would take the pointer from whichever client has it); FocusIn retries the
+// preserved request.
+- (void) beginRelativeMouse {
+    Display *display = _connection->_display;
+    Window window = [self relativeMouseWindowChoice];
+    if (window == None)
+        return;
+    if (_relative.active && _relativeWindow == window)
+        return;
+    [self suspendRelativeMouse];
+
+    int result = X11RelativeMouseGrab(display, &_relative, window, [self warpsHonoured]);
+    if (result != GrabSuccess)
+        return;
+    _relativeWindow = window;
+    _located = NO;
+    if (_resumeValid) {
+        // The cursor stays where it froze, not where the pointer is now.
+        X11RelativeMouseRestoreCursor(&_relative, _resumeX, _resumeY);
+        _resumeValid = NO;
+    }
+    [self reportRelativeMouseGrab];
+}
+
+- (void) reportRelativeMouseGrab {
+    id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionRelativeMouseGrabChanged:window:rootX:rootY:)])
+        [observer nativeConnectionRelativeMouseGrabChanged: _relative.active
+                                                    window: _relativeWindow
+                                                      rootX: (int) _relative.virtualX
+                                                      rootY: (int) _relative.virtualY];
+}
+
+// Releases the grab without cancelling the request (focus loss, window gone).
+- (void) suspendRelativeMouse {
+    if (!_relative.active)
+        return;
+    _resumeValid = YES;
+    _resumeX = _relative.virtualX;
+    _resumeY = _relative.virtualY;
+    X11RelativeMouseRelease(_connection->_display, &_relative);
+    _relativeWindow = None;
+    [self reportRelativeMouseGrab];
+}
+
+// A reconfiguration (the grab window moved or resized, the screen layout changed) can move a confined pointer
+// by itself and changes where it can go: take a new snapshot. The new grab can fail while the window manager
+// is mid-operation, so a failure is retried for a while.
+- (void) resnapshotRelativeMouse {
+    if (!_relative.active)
+        return;
+    // Most RandR events change nothing the grab depends on: skip the new grab unless the reachable rectangle moved.
+    X11RelativeMouseBounds bounds;
+    if (X11RelativeMouseWindowBounds(_connection->_display, _relativeWindow, &bounds) &&
+        bounds.minX == _relative.minX && bounds.minY == _relative.minY &&
+        bounds.maxX == _relative.maxX && bounds.maxY == _relative.maxY)
+        return;
+    [self suspendRelativeMouse];
+    [self beginRelativeMouse];
+    if (_relativeRequested && !_relative.active)
+        [self scheduleRelativeMouseRetry];
+}
+
+- (void) scheduleRelativeMouseRetry {
+    _relativeRetriesLeft = 10;
+    [NSObject cancelPreviousPerformRequestsWithTarget: self selector: @selector(retryRelativeMouse) object: nil];
+    [self performSelector: @selector(retryRelativeMouse) withObject: nil afterDelay: 0.1];
+}
+
+- (void) retryRelativeMouse {
+    if (!_relativeRequested || _relative.active)
+        return;
+    [self beginRelativeMouse];
+    if (_relativeRequested && !_relative.active && --_relativeRetriesLeft > 0)
+        [self performSelector: @selector(retryRelativeMouse) withObject: nil afterDelay: 0.1];
+}
+
+- (void) windowsChanged {
+    if (_relativeRequested && !_relative.active)
+        [self beginRelativeMouse];
+}
+
+- (BOOL) relativeMouseRequested: (BOOL *) requested frozenRoot: (CGPoint *) root {
+    if (requested != NULL)
+        *requested = _relativeRequested;
+    if (root != NULL && _relative.active)
+        *root = CGPointMake(_relative.virtualX, _relative.virtualY);
+    return _relative.active;
+}
+
+// Every event of the connection: a warp's expected echoes age with the events handled (the motion ages them
+// itself).
+- (void) willHandleEvent: (XEvent *) event {
+    if (_relative.active && event->type != MotionNotify)
+        X11RelativeMouseTick(&_relative);
+    if (_echoRemaining > 0 && event->type != MotionNotify)
+        _echoRemaining--;
+}
+
+- (void) focusEvent: (XEvent *) event {
+    // Focus changes caused by a grab, or by the pointer entering the window or one of its children, do not
+    // move the keyboard focus.
+    if (event->xfocus.mode == NotifyGrab || event->xfocus.mode == NotifyUngrab ||
+        event->xfocus.detail == NotifyPointer || event->xfocus.detail == NotifyPointerRoot ||
+        event->xfocus.detail == NotifyInferior)
+        return;
+    if (event->type == FocusIn) {
+        // Losing the focus released the pointer grab; the application still wants relative mode.
+        if (_relativeRequested && !_relative.active)
+            [self beginRelativeMouse];
+    } else {
+        // Give the pointer back to other clients; relative mode stays requested and resumes on FocusIn.
+        [self suspendRelativeMouse];
+    }
+}
+
+- (void) windowEvent: (XEvent *) event {
+    if (!_relative.active)
+        return;
+    switch (event->type) {
+    case ConfigureNotify:
+        if (event->xconfigure.window == _relativeWindow)
+            [self resnapshotRelativeMouse];
+        break;
+    case UnmapNotify:
+        // The server released a grab on a window that became unviewable.
+        if (event->xunmap.window == _relativeWindow)
+            [self suspendRelativeMouse];
+        break;
+    default:
+        break;
+    }
+}
+
+- (void) windowDestroyed: (Window) window {
+    if (_relative.active && _relativeWindow == window)
+        [self suspendRelativeMouse];
+}
+
+- (void) displayLayoutChanged {
+    // The root may have shrunk or a monitor gone: the pointer's reachable area, and with it the grab's bounds, changed.
+    [self resnapshotRelativeMouse];
+    _located = NO;
 }
 
 #pragma mark - XInput2

@@ -1,5 +1,5 @@
 #ifndef X11_RELATIVE_MOUSE_HEADER
-#define X11_RELATIVE_MOUSE_HEADER "../AppKit/X11.backend/X11RelativeMouse.h"
+#define X11_RELATIVE_MOUSE_HEADER "../CoreGraphics/X11.backend/CGSX11RelativeMouse.h"
 #endif
 #include X11_RELATIVE_MOUSE_HEADER
 #undef NDEBUG /* the checks are asserts */
