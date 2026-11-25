@@ -130,10 +130,6 @@
 -(void) displayLayoutChanged;
 // Makes the current layout the one that was reported, for a change CoreGraphics itself reported.
 -(void) acceptDisplayLayout;
-// A request to bring the layout up to date with what the window system has sent already (it
-// reads events that are waiting) without waiting for the run loop. The default implementation
-// only invalidates. Backends override it to read their events, which reports the changes found.
--(void) refreshDisplayLayout;
 
 // Moves the pointer to a point in CoreGraphics' global space (inside the desktop). The default
 // implementation does nothing and returns kCGErrorCannotComplete.
@@ -150,6 +146,20 @@
 
 // For CGL
 -(void*) nativeDisplay;
+
+// The connection to the window system is shared with the framework that builds windows on its native
+// objects (see CGSNativeConnection.h). The kind of this backend's connection; the default is none.
++(int) nativeConnectionKind;
+// The framework's observer, if any. A connection with an observer must outlive it: the observer
+// uses its native display.
++(id) nativeObserver;
++(void) setNativeObserver:(id)observer;
+// Reads what the window system has sent and handles it: this is what the run loop calls when the
+// connection's socket is readable. The default implementation does nothing.
+-(void) processPendingEvents;
+// The windows of this process were asked (by another process) to be activated, and the window
+// system has no request for it: the observer is told. Backends call it on the main thread.
+-(void) activationRequested;
 @end
 
 #endif

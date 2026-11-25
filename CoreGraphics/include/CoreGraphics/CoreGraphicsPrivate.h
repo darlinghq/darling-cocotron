@@ -210,10 +210,6 @@ extern CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display);
 // The name the window system gives the display's output (a description or a connector name), or NULL; the
 // caller releases it.
 extern CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display);
-// A caller that learns from its own connection to the window system that the displays changed asks
-// CoreGraphics to read what its connection has been sent, which reports the change to the display
-// reconfiguration callbacks, and to forget what it has cached about the displays.
-extern void _CGSRefreshDisplayLayout(void);
 
 // Darling extras, e.g. for CGL
 // Asks the window system to give the windows of a process the input focus and raise them,

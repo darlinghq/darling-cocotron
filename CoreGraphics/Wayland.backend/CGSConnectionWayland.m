@@ -23,6 +23,8 @@
 #import "CGSWindowWayland.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import <CoreGraphics/CGSNativeConnection.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 
 #import <CoreGraphics/CGSScreen.h>
 #import <Foundation/NSArray.h>
@@ -30,7 +32,9 @@
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
 
+#include <dispatch/dispatch.h>
 #include <math.h>
+#include <notify.h>
 #include <poll.h>
 #include <stdlib.h>
 #include <string.h>
@@ -160,7 +164,6 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         return nil;
 
     _outputs = [NSMutableArray new];
-
     _wlDisplay = WL.wl_display_connect(NULL);
     if (_wlDisplay == NULL) {
         const char *name = getenv("WAYLAND_DISPLAY");
@@ -219,6 +222,21 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     }
     CFRunLoopAddSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
 
+    // Another process asks for the activation of this one's windows with a libnotify notification named
+    // after this process (see _CGSActivateProcess). Only the process can ask the compositor for it, with
+    // a token its windows' input gives it, so the observer that owns the windows is told, on the main
+    // queue, which the run loop serves.
+    char notificationName[64];
+    snprintf(notificationName, sizeof(notificationName),
+             kCGSProcessActivationNotificationPrefix "%d", (int) getpid());
+    // The block does not keep the connection alive (a __block variable is not retained); the token is
+    // cancelled before the connection goes.
+    __block CGSConnectionWayland *connection = self;
+    _activationRegistered = notify_register_dispatch(notificationName, &_activationNotifyToken,
+                                                     dispatch_get_main_queue(),
+                                                     ^(int ignored) { [connection activationRequested]; }) ==
+                            NOTIFY_STATUS_OK;
+
     _setupDone = YES;
     [self flush];
     return self;
@@ -232,6 +250,8 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         [_windows removeAllObjects];
     }
 
+    if (_activationRegistered)
+        notify_cancel(_activationNotifyToken);
     if (_source != NULL) {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
         CFRelease(_source);
@@ -344,7 +364,24 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
         [self connectionFailed];
 
+    // What the framework with the windows lives on the same connection: every listener of every
+    // object on it has run, so the observer sends what it queued meanwhile. A change of the displays
+    // is reported once the objects of both have seen it (a client's wl_output objects all get their
+    // events from the same read).
+    id observer = [CGSConnection nativeObserver];
+    if (_layoutChangedForObserver) {
+        _layoutChangedForObserver = NO;
+        if ([observer respondsToSelector: @selector(nativeConnectionDisplayLayoutChanged)])
+            [observer nativeConnectionDisplayLayoutChanged];
+    }
+    if ([observer respondsToSelector: @selector(nativeConnectionDidProcessEvents)])
+        [observer nativeConnectionDidProcessEvents];
+
     WL.wl_display_flush(_wlDisplay);
+}
+
++ (int) nativeConnectionKind {
+    return CGSNativeConnectionKindWayland;
 }
 
 #pragma mark - Events
@@ -468,9 +505,10 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 
 // What changed in the outputs is a change of the displays, for the callbacks once the setup is over.
 - (void) outputsChanged {
-    if (_setupDone)
+    if (_setupDone) {
         [self displayLayoutChanged];
-    else
+        _layoutChangedForObserver = YES;
+    } else
         [self invalidateScreens];
 }
 
@@ -740,12 +778,6 @@ static NSDictionary *modeDictionary(int32_t width, int32_t height, double refres
         x += bounds.size.width;
     }
     return [[screens copy] autorelease];
-}
-
-// Brings the layout up to date with what the compositor has sent.
-- (void) refreshDisplayLayout {
-    [self processPendingEvents];
-    [self invalidateScreens];
 }
 
 // Modes can be changed only through wlr-output-management; a compositor without it keeps its

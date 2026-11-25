@@ -120,6 +120,8 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: driver <helper> x11|wayland\n");
         return 2;
     }
+    // The harness reads REQUESTED from a file or pipe while the driver still holds the windows.
+    setvbuf(stdout, NULL, _IOLBF, 0);
     int wayland = strcmp(argv[2], "wayland") == 0;
     struct Helper a, b;
     if (startHelper(&a, argv[1], "process-activation-A", "100") != 0 ||
@@ -135,6 +137,10 @@ int main(int argc, char **argv) {
     expect(SetFrontProcess(&none) == procNotFound, "SetFrontProcess of a missing process is procNotFound");
 
     if (wayland) {
+        // The harness checks that A has neither the focus nor the urgent hint before it is asked for (it may
+        // give the focus to B first).
+        printf("BEFORE A\n");
+        sleep(3);
         expect(front(a.pid, 0) == noErr, "SetFrontProcess(A) succeeds");
         printf("REQUESTED A\n");
         sleep(8);

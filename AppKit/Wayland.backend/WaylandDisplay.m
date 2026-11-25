@@ -82,6 +82,8 @@ typedef struct { int32_t width, height, refresh, scale; } WaylandOutputState;
 
 @interface WaylandDisplay (Private)
 - (void) processPendingEvents;
+- (void) scheduleOutputsDidChange;
+- (void) outputsDidChange;
 - (void) handleEvent: (uint32_t) opcode
                 kind: (WaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy
@@ -174,22 +176,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     return created;
 }
 
-static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
-                           CFDataRef address, const void *data, void *info)
-{
-    [(WaylandDisplay *) info processPendingEvents];
-}
-
-// A process asked (CGS, _CGSActivateProcess) that this one activate its windows.
-static void activationRequestedCallback(CFNotificationCenterRef center, void *observer,
-                                        CFNotificationName name, const void *object,
-                                        CFDictionaryRef userInfo)
-{
-    [(WaylandDisplay *) observer performSelectorOnMainThread: @selector(requestActivation)
-                                                  withObject: nil
-                                               waitUntilDone: NO];
-}
-
 static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     [(WaylandDisplay *) info performSelector: @selector(repeatKey)];
 }
@@ -234,12 +220,16 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _repeatRate = 25;
     _repeatDelay = 600;
 
-    _wlDisplay = WL.wl_display_connect(NULL);
+    // The process has one connection to the compositor and CoreGraphics owns it: it reads its socket and
+    // dispatches the events of every object on it, this display's included, then tells the observer
+    // registered at the end of this method.
+    if (_CGSNativeConnectionKind() != CGSNativeConnectionKindWayland) {
+        [self release];
+        return nil;
+    }
+    _wlDisplay = (struct wl_display *) _CGSNativeConnectionDisplay();
     if (_wlDisplay == NULL) {
-        const char *name = getenv("WAYLAND_DISPLAY");
-        NSLog(@"Wayland backend: cannot connect to the compositor "
-              @"(WAYLAND_DISPLAY=%s), trying the next backend",
-              name ? name : "unset");
+        NSLog(@"Wayland backend: no connection to the compositor, trying the next backend");
         [self release];
         return nil;
     }
@@ -314,38 +304,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
     _cursorFractionalScale = [self newFractionalScaleForSurface: _cursorSurface owner: (id)self];
 
-    CFSocketContext context = {.version = 0, .info = self};
-    _wlSocket = CFSocketCreateWithNative(NULL, WL.wl_display_get_fd(_wlDisplay),
-                                         kCFSocketReadCallBack, socketCallback,
-                                         &context);
-    if (_wlSocket != NULL) {
-        // The descriptor belongs to libwayland.
-        CFSocketSetSocketFlags(_wlSocket, CFSocketGetSocketFlags(_wlSocket) &
-                                                  ~kCFSocketCloseOnInvalidate);
-        _wlSource = CFSocketCreateRunLoopSource(NULL, _wlSocket, 0);
-    }
-    if (_wlSource == NULL) {
-        NSLog(@"Wayland backend: cannot watch the compositor connection, trying "
-              @"the next backend");
-        [self release];
-        return nil;
-    }
-    CFRunLoopAddSource(CFRunLoopGetMain(), _wlSource, kCFRunLoopCommonModes);
-
-    // Another process asks for the activation of this one's windows with a Darwin
-    // notification named after this process (see _CGSActivateProcess).
-    char notificationName[64];
-    snprintf(notificationName, sizeof(notificationName),
-             kCGSProcessActivationNotificationPrefix "%d", (int) getpid());
-    CFStringRef notification = CFStringCreateWithCString(NULL, notificationName,
-                                                         kCFStringEncodingUTF8);
-    if (notification != NULL) {
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), self,
-                                        activationRequestedCallback, notification, NULL,
-                                        CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFRelease(notification);
-    }
-
     // Windows ordered in while the application was not active are mapped once it is.
     [[NSNotificationCenter defaultCenter] addObserver: self
                                              selector: @selector(applicationBecameActive:)
@@ -358,6 +316,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     // The general pasteboard and the compositor's clipboard show the same contents.
     NSPasteboardRegisterHostClipboard(_generalPasteboard);
 
+    _setupDone = YES;
+    _CGSSetNativeConnectionObserver(self);
     return self;
 }
 
@@ -372,18 +332,9 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [self cancelPendingModifier];
     [_heldKeyIdentities release];
 
-    CFNotificationCenterRemoveEveryObserver(CFNotificationCenterGetDarwinNotifyCenter(), self);
+    _CGSSetNativeConnectionObserver(nil);
     [self cancelActivationRequest];
 
-    if (_wlSource != NULL) {
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), _wlSource,
-                              kCFRunLoopCommonModes);
-        CFRelease(_wlSource);
-    }
-    if (_wlSocket != NULL) {
-        CFSocketInvalidate(_wlSocket);
-        CFRelease(_wlSocket);
-    }
     if (_xkbState != NULL)
         WL.xkb_state_unref(_xkbState);
     if (_xkbKeymap != NULL)
@@ -408,7 +359,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                 WL.wl_proxy_destroy(proxies[i]);
         for (WaylandOutput *output in _outputs)
             WL.wl_proxy_destroy(output->_proxy);
-        WL.wl_display_disconnect(_wlDisplay);
+        // The connection is CoreGraphics'; it stays open.
     }
 
     [_cursor release];
@@ -438,12 +389,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 - (void) applicationIconImageChanged {
     [super applicationIconImageChanged];
     [_toplevelIcons applicationIconChanged];
-}
-
-- (void) connectionFailed {
-    NSLog(@"Wayland backend: lost the connection to the compositor (error %d)",
-          WL.wl_display_get_error(_wlDisplay));
-    exit(1);
 }
 
 - (void) performAfterDispatch: (void (^)(void)) block {
@@ -492,30 +437,27 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     CFRunLoopWakeUp(loop);
 }
 
+// Reads and dispatches what the compositor has sent, now. CoreGraphics does it for the whole connection
+// and calls back -nativeConnectionDidProcessEvents.
 - (void) processPendingEvents {
-    if (_wlDisplay == NULL)
-        return;
+    _CGSProcessNativeConnectionEvents();
+}
 
-    while (WL.wl_display_prepare_read(_wlDisplay) != 0) {
-        if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
-            [self connectionFailed];
-    }
-    WL.wl_display_flush(_wlDisplay);
-
-    struct pollfd pfd = {.fd = WL.wl_display_get_fd(_wlDisplay),
-                         .events = POLLIN};
-    if (poll(&pfd, 1, 0) > 0) {
-        if (WL.wl_display_read_events(_wlDisplay) < 0)
-            [self connectionFailed];
-    } else {
-        WL.wl_display_cancel_read(_wlDisplay);
-    }
-
-    if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
-        [self connectionFailed];
-
+// Every listener on the connection has run: this display's queued work follows.
+- (void) nativeConnectionDidProcessEvents {
     [self runAfterDispatchBlocks];
-    WL.wl_display_flush(_wlDisplay);
+    [self flush];
+}
+
+// CoreGraphics read the new layout of the outputs and reported it. The windows learn of it once, with the
+// outputs of this display as they are after the same pass (see -publishOutput:).
+- (void) nativeConnectionDisplayLayoutChanged {
+    [self outputsDidChange];
+}
+
+// Another process asked for the activation of this one's windows (see _CGSActivateProcess).
+- (void) nativeConnectionActivationRequested {
+    [self requestActivation];
 }
 
 // Sends the requests made since the last wait, and handles the events libwayland has already
@@ -762,9 +704,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             [_draggingManager outputRemoved: output->_proxy];
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
-            [self _refreshDisplays];
-            for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-                [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputsChanged];
+            [self scheduleOutputsDidChange];
             break;
         }
     }
@@ -789,14 +729,31 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self applyCursor];
 }
 
-// An output changed. The displays are CoreGraphics', which learns from its own connection; it is
-// brought up to date first (this reports the change to the display reconfiguration callbacks, which is
-// what posts NSApplicationDidChangeScreenParametersNotification), then the windows learn of it.
+// An output changed. The displays are CoreGraphics', which learns of it on the same connection: its
+// objects and these ones get the events of one change in the same pass, so the windows are told when the
+// pass is over and both agree on the outputs (-outputsDidChange).
 - (void) publishOutput: (WaylandOutput *) output {
     output->_current = output->_pending;
     // Not while the connection is being set up: the displays are read when they are first needed.
-    if (_wlSource != NULL)
-        [self _refreshDisplays];
+    if (_setupDone)
+        [self scheduleOutputsDidChange];
+}
+
+- (void) scheduleOutputsDidChange {
+    if (_outputsChangePending)
+        return;
+    _outputsChangePending = YES;
+    [self performAfterDispatch: ^{
+        // CoreGraphics' report of the same change may have been handled meanwhile.
+        if (self->_outputsChangePending)
+            [self outputsDidChange];
+    }];
+}
+
+// The outputs changed: what depends on them is brought up to date once per pass.
+- (void) outputsDidChange {
+    _outputsChangePending = NO;
+    [self _invalidateScreens];
     [_draggingManager outputsChanged];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);

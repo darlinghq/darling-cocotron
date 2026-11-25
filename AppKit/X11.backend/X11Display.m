@@ -65,6 +65,7 @@
 #import "../../CoreGraphics/X11.backend/X11RandR.h"
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <CoreGraphics/CGSNativeConnection.h>
 #import <X11/keysym.h>
 #import <fcntl.h>
 #import <fontconfig/fontconfig.h>
@@ -87,85 +88,24 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     return [(X11Display *) [X11Display currentDisplay] handleError: errorEvent];
 }
 
-#ifdef DARLING
-static void socketCallback(CFSocketRef s, CFSocketCallBackType type,
-                           CFDataRef address, const void *data, void *info)
-{
-    X11Display *self = info;
-    [self processPendingEvents];
-}
-
-// Xlib reads events into its own queue whenever it waits for a reply, so
-// events can be pending in Xlib while the connection has nothing left to read
-// and the socket source never fires. Requests may also still sit in Xlib's
-// output buffer. Flush and drain both before the main run loop goes to sleep;
-// posting an event wakes the run loop again.
-static void beforeWaitingCallback(CFRunLoopObserverRef observer,
-                                  CFRunLoopActivity activity, void *info)
-{
-    X11Display *self = info;
-    [self processPendingEvents];
-}
-#endif
-
 - init {
     if (self = [super init]) {
-        // EGL also uses this Display from compositor threads, so Xlib has
-        // to be made thread-safe before the first Xlib call.
-        if (!XInitThreads()) {
-            NSLog(@"X11Display: XInitThreads() failed");
+        // The process has one connection to the X server and CoreGraphics owns it: it reads its
+        // socket, handles the events that are its own (hot keys, keymap, the displays) and gives the
+        // rest to this display through the observer registered at the end. EGL also uses this Display
+        // from compositor threads; CoreGraphics made Xlib thread-safe before opening it.
+        if (_CGSNativeConnectionKind() != CGSNativeConnectionKindX11) {
             [self release];
             return nil;
         }
-
-        // The server named by DISPLAY; with DISPLAY unset there is none.
-        _display = XOpenDisplay(NULL);
-
+        _display = (Display *) _CGSNativeConnectionDisplay();
         if (_display == NULL) {
-            // Failed to connect.
             [self release];
             return nil;
         }
-
-        if (NSDebugEnabled)
-            XSynchronize(_display, True);
 
         XSetErrorHandler(errorHandler);
-
-        _fileDescriptor = ConnectionNumber(_display);
-#ifndef DARLING
-        _inputSource = [[NSSelectInputSource
-                socketInputSourceWithSocket:
-                        [NSSocket_bsd socketWithDescriptor: _fileDescriptor]]
-                retain];
-        [_inputSource setDelegate: self];
-        [_inputSource setSelectEventMask: NSSelectReadEvent];
-#else
-        // There's no need to retain/release the display,
-        // because the display is guaranteed to outlive
-        // the socket.
-        CFSocketContext context = {.version = 0,
-                                   .info = self,
-                                   .retain = NULL,
-                                   .release = NULL,
-                                   .copyDescription = NULL};
-        _cfSocket = CFSocketCreateWithNative(
-                kCFAllocatorDefault, _fileDescriptor, kCFSocketReadCallBack,
-                socketCallback, &context);
-        _source =
-                CFSocketCreateRunLoopSource(kCFAllocatorDefault, _cfSocket, 0);
-        CFRunLoopAddSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
-
-        CFRunLoopObserverContext observerContext = {.version = 0,
-                                                    .info = self};
-        _beforeWaitingObserver = CFRunLoopObserverCreate(
-                kCFAllocatorDefault, kCFRunLoopBeforeWaiting, true, 0,
-                beforeWaitingCallback, &observerContext);
-        CFRunLoopAddObserver(CFRunLoopGetMain(), _beforeWaitingObserver,
-                             kCFRunLoopCommonModes);
-
         CGLRegisterNativeDisplay(_display);
-#endif
 
         _windowsByID = [NSMutableDictionary new];
         [self _enableDetectableAutoRepeat];
@@ -186,10 +126,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
             _xim = XOpenIM(_display, NULL, NULL, NULL);
         }
 
-        int errorBase;
-        if (XRRQueryExtension(_display, &_rrEventBase, &errorBase)) {
-            XRRSelectInput(_display, DefaultRootWindow(_display), X11_RANDR_EVENT_MASK);
-        }
+        // RandR events are CoreGraphics', which reports the new layout (see -nativeConnectionDisplayLayoutChanged).
         // The window manager publishes the focused window and the stacking order on the root window.
         XSelectInput(_display, DefaultRootWindow(_display), PropertyChangeMask);
         _occlusionDirty = YES;
@@ -207,6 +144,9 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
 
         // The general pasteboard and the CLIPBOARD selection show the same contents.
         NSPasteboardRegisterHostClipboard([X11Pasteboard hostClipboardOfDisplay: self]);
+
+        // From here on CoreGraphics hands this display the events of the connection.
+        _CGSSetNativeConnectionObserver(self);
     }
     return self;
 }
@@ -255,32 +195,16 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
 
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
+    _CGSSetNativeConnectionObserver(nil);
     [_overlayWindows release];
-#ifdef DARLING
-    // The observer uses the connection, so it goes before XCloseDisplay().
-    if (_beforeWaitingObserver != NULL) {
-        CFRunLoopObserverInvalidate(_beforeWaitingObserver);
-        CFRelease(_beforeWaitingObserver);
-    }
-#endif
     X11RelativeMouseEnd(&_relativeMouse);
     [_blankCursor release];
     [_defaultCursor release];
 
-    // -init releases self when it cannot connect to the X server, so none of these may exist yet.
+    // -init releases self when it cannot use the connection, so none of these may exist yet.
+    // The connection itself is CoreGraphics'; it stays open.
     if (_xim)
         XCloseIM(_xim);
-
-    if (_display)
-        XCloseDisplay(_display);
-#ifdef DARLING
-    if (_source != NULL) {
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
-        CFRelease(_source);
-    }
-    if (_cfSocket != NULL)
-        CFRelease(_cfSocket);
-#endif
 
     [_appMenu release];
     [_windowsByID release];
@@ -318,13 +242,12 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer,
     XkbSetDetectableAutoRepeat(_display, TRUE, &supported);
 }
 
-// The layout of the monitors changed. The displays are CoreGraphics', which reads RandR on its own connection:
-// it is brought up to date first (this reports the change to the display reconfiguration callbacks, which is
-// what posts NSApplicationDidChangeScreenParametersNotification), then what this connection derives from
-// the layout is dropped.
-- (void) _invalidateRRCache {
+// The layout of the monitors changed. The displays are CoreGraphics', which reads RandR on the shared
+// connection: it has brought them up to date (and reported the change to the display reconfiguration
+// callbacks, which is what posts NSApplicationDidChangeScreenParametersNotification) before it says so
+// here, so what this display derives from the layout is dropped now.
+- (void) nativeConnectionDisplayLayoutChanged {
     _pointerKnown = NO;
-    [self _refreshDisplays];
     // The root may have shrunk or a monitor gone: the pointer's reachable
     // area, and with it a relative-mode grab's bounds, changed.
     [self resnapshotRelativeMouse];
@@ -2059,38 +1982,32 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     default:
-        // RandR reports layout changes as plain extension events (see X11RandR.h).
-        if (X11RandRHandleLayoutChange(ev, _rrEventBase)) {
-            [self _invalidateRRCache];
-            break;
-        }
         NSLog(@"Unknown X11 event type %i", ev->type);
         break;
     }
 }
 
-#ifndef DARLING
-- (void) selectInputSource: (NSSelectInputSource *) inputSource
-               selectEvent: (NSUInteger) selectEvent
-{
-#else
-- (void) processPendingEvents {
-#endif
-    int numEvents;
+// CoreGraphics reads the connection and gives this display each event it did not handle itself (see
+// CGSNativeConnection.h); an event that was only read into Xlib's queue while a request waited for its
+// reply is still delivered, since CoreGraphics also reads before the run loop sleeps.
+- (void) nativeConnectionEvent: (void *) event {
+    XEvent *e = event;
 
-    while ((numEvents = XPending(_display)) > 0) {
-        XEvent e;
-        int error;
+    // An input method's reply (Xlib: every event goes through XFilterEvent()); key events are filtered in
+    // -postXEvent:, where the input method's decision is used.
+    if (e->type != KeyPress && e->type != KeyRelease && XFilterEvent(e, None))
+        return;
+    [self postXEvent: e];
+}
 
-        if ((error = XNextEvent(_display, &e)) != 0)
-            NSLog(@"XNextEvent returned %d", error);
-        else if (e.type != KeyPress && e.type != KeyRelease && XFilterEvent(&e, None))
-            continue; // An input method's reply (Xlib: every event goes through XFilterEvent()).
-        else
-            [self postXEvent: &e];
-    }
+- (void) nativeConnectionDidProcessEvents {
     if (_occlusionDirty)
         [self updateOcclusion];
+}
+
+// Reads what the server has sent, now (CoreGraphics' pump; the events come back through the methods above).
+- (void) processPendingEvents {
+    _CGSProcessNativeConnectionEvents();
 }
 
 - (int) handleError: (XErrorEvent *) errorEvent {

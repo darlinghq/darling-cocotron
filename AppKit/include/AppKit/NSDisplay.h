@@ -50,10 +50,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // -screens reads them again. CoreGraphics reports a change to its reconfiguration callbacks, which
 // call this.
 - (void) _invalidateScreens;
-// A backend that learns of a change of the displays from its own connection calls this: it has
-// CoreGraphics read what its connection to the window system has been sent about the displays (which
-// reports the change to the reconfiguration callbacks), then drops the screens.
-- (void) _refreshDisplays;
 // Queues NSApplicationDidChangeScreenParametersNotification (merged per run loop pass).
 - (void) _postScreenParametersChanged;
 

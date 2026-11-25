@@ -366,10 +366,6 @@ CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display) {
     return (CFStringRef) [[screen name] retain];
 }
 
-void _CGSRefreshDisplayLayout(void) {
-    [displayConnection() refreshDisplayLayout];
-}
-
 static NSData *edidForDisplay(CGDirectDisplayID displayId) {
     CGSScreen *screen = screenForDisplayID(activeScreens(NULL), displayId);
     if (!screen)

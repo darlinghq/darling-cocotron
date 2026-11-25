@@ -25,6 +25,7 @@
 #import <CoreGraphics/CGSWindow.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGSSurface.h>
+#import <CoreGraphics/CGSNativeConnection.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <CoreFoundation/CFNotificationCenter.h>
@@ -72,6 +73,9 @@ extern void _CGSResetMainConnection(void);
 
 void CGSShutdownServerConnections(void)
 {
+	// The framework with the windows draws on the process' native connection, so it stays.
+	if ([CGSConnection nativeObserver] != nil)
+		return;
 	@synchronized(g_connections)
 	{
 		[g_connections removeAllObjects];
@@ -250,15 +254,12 @@ CGError _CGSActivateProcess(pid_t pid, uint32_t options)
 		[g_backendClass activateWindowsOfProcess: pid options: options] == kCGErrorSuccess)
 		return kCGErrorSuccess;
 
+	// libnotify, as the other requests to a process (see _CGSSendProcessCommand): the Darwin center of
+	// CFNotificationCenter does not reach other processes. The target's connection to the window system
+	// receives it.
 	char name[64];
 	snprintf(name, sizeof(name), kCGSProcessActivationNotificationPrefix "%d", (int) pid);
-	CFStringRef notification = CFStringCreateWithCString(NULL, name, kCFStringEncodingUTF8);
-	if (notification == NULL)
-		return kCGErrorCannotComplete;
-	CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-		notification, NULL, NULL, true);
-	CFRelease(notification);
-	return kCGErrorSuccess;
+	return notify_post(name) == NOTIFY_STATUS_OK ? kCGErrorSuccess : kCGErrorCannotComplete;
 }
 
 #define kCGSProcessHiddenNotificationPrefix "org.darlinghq.process-hidden."
@@ -752,6 +753,34 @@ void* _CGSNativeDisplay(CGSConnectionID connId)
 	return [_CGSConnectionForID(connId) nativeDisplay];
 }
 
+static CGSConnection* nativeConnection(void)
+{
+	CGSConnectionID connId = CGSMainConnectionID();
+	return connId != 0 ? _CGSConnectionForID(connId) : nil;
+}
+
+CGSNativeConnectionKind _CGSNativeConnectionKind(void)
+{
+	CGSConnection* connection = nativeConnection();
+	return connection != nil ? (CGSNativeConnectionKind) [[connection class] nativeConnectionKind] : CGSNativeConnectionKindNone;
+}
+
+void* _CGSNativeConnectionDisplay(void)
+{
+	CGSConnection* connection = nativeConnection();
+	return connection != nil ? [connection nativeDisplay] : NULL;
+}
+
+void _CGSSetNativeConnectionObserver(id<CGSNativeConnectionObserver> observer)
+{
+	[CGSConnection setNativeObserver: observer];
+}
+
+void _CGSProcessNativeConnectionEvents(void)
+{
+	[nativeConnection() processPendingEvents];
+}
+
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId)
 {
 	CGSConnection* conn = _CGSConnectionForID(connId);
@@ -969,6 +998,10 @@ CGError CGSSetGlobalHotKeyOperatingMode(CGSConnectionID connId, int mode)
 CGError CGSReleaseConnection(CGSConnectionID connId)
 {
 	NSNumber* num = [NSNumber numberWithInt:connId];
+
+	// The process' main connection is the one the observer's windows live on.
+	if ([CGSConnection nativeObserver] != nil && connId == CGSMainConnectionID())
+		return kCGSErrorSuccess;
 
 	@synchronized(g_connections)
 	{

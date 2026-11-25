@@ -31,6 +31,7 @@
 // synchronized subsurfaces. Outgoing drags are a follow-on.
 
 #import "../private-include/AppKit/DarlingDisplay.h"
+#import <CoreGraphics/CGSNativeConnection.h>
 #include <stdint.h>
 #include <wayland-util.h>
 #include "WaylandFullscreen.h"
@@ -92,7 +93,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                      union wl_argument *args,
                                      WaylandObjectKind kind, id object);
 
-@interface WaylandDisplay : DarlingDisplay {
+@interface WaylandDisplay : DarlingDisplay <CGSNativeConnectionObserver> {
 @public
     struct wl_display *_wlDisplay;
     struct wl_proxy *_registry;
@@ -161,8 +162,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_touch;
     // Finger id -> WaylandWindow it went down on (up and motion name no surface).
     NSMutableDictionary *_touchWindows;
-    CFSocketRef _wlSocket;
-    CFRunLoopSourceRef _wlSource;
+    // The outputs and the rest of the connection are set up; changes of the outputs are passed on.
+    BOOL _setupDone;
+    // A change of the outputs waits for the end of the pass over the events.
+    BOOL _outputsChangePending;
     NSMutableArray *_outputs;
     // WaylandWindows, not retained, most recently activated first.
     CFMutableArrayRef _windows;
