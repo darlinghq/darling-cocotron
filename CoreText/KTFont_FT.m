@@ -119,9 +119,11 @@ static BOOL KTUIFontSpecForType(CTFontUIFontType type, KTUIFontSpec *spec) {
         [kCTFontUIFontSmallToolbar] = { 10, NO },
         [23] = { 13, NO },
         [24] = { 11, NO },
+        [kCTFontUIFontToolTip] = { 11, NO },
+        [kCTFontUIFontControlContent] = { 12, NO },
     };
 
-    if (type > 24)
+    if (type > kCTFontUIFontControlContent)
         return NO;
     spec->size = sizes[type].size;
     spec->bold = sizes[type].bold;
