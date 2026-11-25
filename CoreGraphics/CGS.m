@@ -816,6 +816,16 @@ void _CGSNativeConnectionFlushPendingKeyboardEvents(void)
 	[nativeConnection() flushPendingKeyboardEvents];
 }
 
+void* _CGSNativeConnectionPointer(void)
+{
+	return [nativeConnection() nativePointer];
+}
+
+void _CGSNativeConnectionSetPointerSurfacePoint(double x, double y)
+{
+	[nativeConnection() setPointerSurfacePointX: x y: y];
+}
+
 int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef* name)
 {
 	CGSConnection* connection = nativeConnection();

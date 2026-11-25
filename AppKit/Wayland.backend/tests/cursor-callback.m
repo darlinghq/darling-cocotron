@@ -15,8 +15,14 @@ union CursorArgument {int32_t i;uint32_t u;void *o;};
 - (void)setCursor:(id)cursor;
 - (void)hideCursor;
 - (void)pointerEvent:(uint32_t)opcode arguments:(union CursorArgument *)args;
-- (void)seatCapabilities:(uint32_t)capabilities;
+- (void)seatCapabilities:(uint32_t)capabilities seat:(void *)seat;
 @end
+// The pointer is CoreGraphics': its decoder takes the protocol events and tells the display
+static id pointerDecoder(void) {
+    id connection=_CGSConnectionForID(CGSMainConnectionID());
+    Ivar iv=class_getInstanceVariable(object_getClass(connection),"_pointerDecoder");
+    return iv?object_getIvar(connection,iv):nil;
+}
 static id display,first,second;
 static NSWindow *window;
 static const char *mode;
@@ -42,8 +48,8 @@ static uint32_t serial(void) {
             else if(!strcmp(mode,"same"))[display setCursor:first];
             else if(!strcmp(mode,"blank"))[display hideCursor];
             else if(!strcmp(mode,"hide"))[window orderOut:nil];
-            else if(!strcmp(mode,"leave")){union CursorArgument a[2]={{.u=1},{.o=NULL}};[display pointerEvent:1 arguments:a];}
-            else if(!strcmp(mode,"capability"))[display seatCapabilities:0];
+            else if(!strcmp(mode,"leave")){union CursorArgument a[2]={{.u=1},{.o=NULL}};[pointerDecoder() pointerEvent:1 arguments:a];}
+            else if(!strcmp(mode,"capability"))[pointerDecoder() seatCapabilities:0 seat:NULL];
             else if(!strcmp(mode,"resize"))[window setContentSize:NSMakeSize(40,40)];
             printf("CALLBACK mode=%s serial=%u\n",mode,serial());fflush(stdout);
         }

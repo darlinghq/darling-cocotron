@@ -34,6 +34,10 @@
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
+#include <time.h>
+
+// The public modifier flags: the device-dependent bits in the low half are not part of a hot key event.
+static const uint64_t kHotKeyEventFlagsMask = 0xFFFF0000;
 
 static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     @autoreleasepool {
@@ -59,14 +63,18 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     _repeatRate = 25;
     _repeatDelay = 600;
     _heldKeyIdentities = [NSMutableDictionary new];
+    _heldHotKeys = [NSMutableDictionary new];
     // The keyboard is hardware: the events it posts change the state the hardware state functions report.
     _source = (void *) CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
     return self;
 }
 
 - (void) dealloc {
+    // The connection may be going away too: no hot key events from here.
+    [_heldHotKeys removeAllObjects];
     [self stop];
     [_heldKeyIdentities release];
+    [_heldHotKeys release];
     if (_source != NULL)
         CFRelease((CFTypeRef) _source);
     [super dealloc];
@@ -187,6 +195,50 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
                    serial: serial];
 }
 
+#pragma mark - Hot keys
+
+- (void) postHotKeyEventForUIDs: (NSArray *) uids pressed: (BOOL) pressed {
+    // The pointer is not known to a Wayland client outside its own surfaces (see -[CGSConnectionWayland
+    // mouseLocation]), so the event has no useful location.
+    for (NSNumber *uid in uids)
+        [_connection postHotKeyEventForUID: [uid intValue]
+                                   pressed: pressed
+                                     flags: (CGEventFlags) ([self modifierFlags] & kHotKeyEventFlagsMask)
+                                  location: CGPointZero
+                                      time: clock_gettime_nsec_np(CLOCK_UPTIME_RAW)];
+}
+
+// A key that selected hot keys when it went down is not delivered as a key: its release is reported to
+// those hot keys, and its repeats are not started. Returns whether the event was taken.
+- (BOOL) takeKeyAsHotKey: (uint32_t) keycode pressed: (BOOL) pressed {
+    NSNumber *key = @(keycode);
+    if (pressed) {
+        if (keycode >= 256)
+            return NO;
+        NSArray *uids = [_connection activeHotKeyUIDsForKeyCode: x11ToCarbon[keycode] flags: [self modifierFlags]];
+        if ([uids count] == 0)
+            return NO;
+        [_heldHotKeys setObject: uids forKey: key];
+        [self postHotKeyEventForUIDs: uids pressed: YES];
+        return YES;
+    }
+    // Removing the entry releases it: keep the list alive until the event is posted.
+    NSArray *uids = [[[_heldHotKeys objectForKey: key] retain] autorelease];
+    if (uids == nil)
+        return NO;
+    [_heldHotKeys removeObjectForKey: key];
+    [self postHotKeyEventForUIDs: uids pressed: NO];
+    return YES;
+}
+
+// The keyboard focus is gone, so the releases will not be seen: the held hot keys end now.
+- (void) releaseHeldHotKeys {
+    NSArray *held = [_heldHotKeys allValues];
+    [_heldHotKeys removeAllObjects];
+    for (NSArray *uids in held)
+        [self postHotKeyEventForUIDs: uids pressed: NO];
+}
+
 #pragma mark - Key repeat
 
 - (void) startKeyRepeat: (uint32_t) keycode {
@@ -218,6 +270,8 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 
 - (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
     id<CGSNativeConnectionObserver> observer = [self observer];
+    // A scroll frame that is not complete yet goes out before the key event that follows it.
+    [(CGSConnectionWayland *) _connection flushPendingPointerEvents];
     // What the observer queued about the pointer before this event must go out first.
     if ([observer respondsToSelector: @selector(nativeConnectionWillPostKeyboardEvent)])
         [observer nativeConnectionWillPostKeyboardEvent];
@@ -247,6 +301,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     }
 
     case WP_KEYBOARD_EV_LEAVE:
+        [self releaseHeldHotKeys];
         _focus = NULL;
         [self stopKeyRepeat];
         [self resetKeyboardModifiers];
@@ -286,6 +341,8 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
             [_connection flush];
             break; // Modifiers are neither text nor repeatable keys.
         }
+        if ([self takeKeyAsHotKey: keycode pressed: pressed])
+            break;
         [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO serial: pressed ? serial : 0];
         if (pressed && _repeatRate > 0 && [_keymap keyRepeats: keycode])
             [self startKeyRepeat: keycode];
@@ -332,6 +389,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 }
 
 - (void) stop {
+    [self releaseHeldHotKeys];
     [self stopKeyRepeat];
     [self cancelPendingModifier];
     _focus = NULL;
@@ -340,6 +398,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 - (void) surfaceDestroyed: (struct wl_proxy *) surface {
     if (_focus == NULL || surface != _focus)
         return;
+    [self releaseHeldHotKeys];
     _focus = NULL;
     [self stopKeyRepeat];
     [self resetKeyboardModifiers];

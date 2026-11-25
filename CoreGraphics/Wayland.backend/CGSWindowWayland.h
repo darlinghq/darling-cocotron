@@ -53,6 +53,8 @@
            arguments: (union wl_argument *) args;
 
 - (void) surfaceDestroyed: (CGSSurfaceWayland *) surface;
+// Where the window is, as far as the connection knows (the rect that was asked for).
+- (CGPoint) frameOrigin;
 
 @end
 

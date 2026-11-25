@@ -405,10 +405,11 @@ enum {
 	kCGSEventNativeWindow = 182,
 	// The window system serial of the input event (Wayland), 0 when it has none.
 	kCGSEventInputSerial = 183,
-	// X11 pointer events: where the pointer was in the window system's window the event is for
-	// (kCGSEventNativeWindow), in device pixels from the window's top-left corner, and the global
-	// location the event was posted with (in 1/1024 points). The window location only applies while
-	// the event's location is still the posted one: an event tap that moves the event invalidates it.
+	// Pointer events: where the pointer was in the window system's window the event is for
+	// (kCGSEventNativeWindow), from the window's top-left corner (X11: device pixels; Wayland: 1/1024
+	// of a surface-local point), and the global location the event was posted with (in 1/1024 points).
+	// The window location only applies while the event's location is still the posted one: an event
+	// tap that moves the event invalidates it.
 	kCGSEventNativeLocationX = 185,
 	kCGSEventNativeLocationY = 186,
 	kCGSEventPostedLocationX = 187,
@@ -419,6 +420,12 @@ enum {
 	// What the framework above the window system knew when a mouse button press arrived: 1 when the
 	// window it is for was the key window, 2 when it was not, 0 when nothing was said.
 	kCGSMouseEventWindowKeyState = 190,
+	// Pinch (magnify) and rotate gesture events: the phase (NSEventPhase bits), the change of the
+	// magnification since the previous event of the gesture and the rotation in degrees counter-clockwise
+	// since it, both in millionths. CGEvent.h has no field for them.
+	kCGSGesturePhase = 191,
+	kCGSGestureMagnification = 192,
+	kCGSGestureRotation = 193,
 };
 
 // The double-click interval of the user in seconds: the time within which a second press of a button

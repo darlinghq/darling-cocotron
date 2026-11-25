@@ -27,6 +27,23 @@ def finish():
     return 1 if failures else 0
 
 
+def require_no_lockscreen(kwin):
+    """Aborts unless this private KWin has no lock screen. Test input goes into the KWin's session, and a lock
+    screen would take it as password attempts against the host's PAM. Call it once the KWin is up, before any
+    input. Kills the KWin and exits when it was started without --no-lockscreen or has a screen locker child."""
+    def ps(*args):
+        return subprocess.run(["ps", "-o", "args="] + list(args), stdout=subprocess.PIPE, text=True).stdout
+    problem = None
+    if "--no-lockscreen" not in ps("-p", str(kwin.pid)).split():
+        problem = "was not started with --no-lockscreen"
+    elif "kscreenlocker_greet" in ps("--ppid", str(kwin.pid)):
+        problem = "has a kscreenlocker_greet child"
+    if problem:
+        kwin.kill()
+        kwin.wait()
+        sys.exit("ABORT: the private KWin " + problem + "; no input was sent")
+
+
 def gvariant(value):
     # gdbus takes an argument that starts with a minus for an option.
     if isinstance(value, int) and value < 0:
