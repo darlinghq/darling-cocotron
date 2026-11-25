@@ -16,6 +16,7 @@
  You should have received a copy of the GNU General Public License
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
+#include <pthread.h>
 #import <CoreGraphics/CGSConnection.h>
 #import <CoreGraphics/CGSWindow.h>
 #import <Foundation/NSRaise.h>
@@ -41,6 +42,7 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 }
 
 - (void) dealloc {
+    CGContextRelease(_contents);
     [_surfaces release];
     [super dealloc];
 }
@@ -100,6 +102,115 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 - (void *) nativeWindow {
     NSInvalidAbstractInvocation();
 }
+
+#pragma mark - Contents
+
+@synthesize styleFlags = _styleFlags;
+
+- (CGError) setStyle: (uint32_t) styleFlags {
+    _styleFlags = styleFlags;
+    return kCGSErrorSuccess;
+}
+
+- (void) presentRect: (CGRect) rect {
+}
+
+// A bitmap of 8 bits per component, little-endian 32-bit pixels with the alpha first (BGRA in
+// memory), premultiplied: the layout both X11 (24-bit TrueColor) and wl_shm's ARGB8888 take.
+static CGContextRef createContents(size_t width, size_t height) {
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(
+            NULL, width, height, 8, 0, space,
+            kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst);
+    CGColorSpaceRelease(space);
+    return context;
+}
+
+- (void) resizeContentsTo: (CGSize) size {
+    size_t width = (size_t) size.width, height = (size_t) size.height;
+    if (width < 1 || height < 1)
+        return;
+    @synchronized(self) {
+        if (_contents == NULL && _contentsSize.width == 0) {
+            // Nothing drawn yet: the contents are made by the first drawing
+            return;
+        }
+        if (size.width == _contentsSize.width && size.height == _contentsSize.height)
+            return;
+        CGContextRef bigger = createContents(width, height);
+        if (bigger == NULL)
+            return;
+        if (_contents != NULL) {
+            CGImageRef old = CGBitmapContextCreateImage(_contents);
+            if (old != NULL) {
+                CGContextSetBlendMode(bigger, kCGBlendModeCopy);
+                // The origin of the bitmap is its bottom left corner: keep the top left
+                CGContextDrawImage(bigger, CGRectMake(0, height - CGImageGetHeight(old),
+                        CGImageGetWidth(old), CGImageGetHeight(old)), old);
+                CGImageRelease(old);
+            }
+            CGContextRelease(_contents);
+        }
+        _contents = bigger;
+        _contentsSize = CGSizeMake(width, height);
+    }
+}
+
+- (CGError) drawImage: (CGImageRef) image atPoint: (CGPoint) origin {
+    if (image == NULL)
+        return kCGErrorIllegalArgument;
+
+    CGRect frame;
+    if ([self getRect: &frame] != kCGSErrorSuccess)
+        return kCGErrorFailure;
+    size_t width = (size_t) frame.size.width, height = (size_t) frame.size.height;
+    if (width < 1 || height < 1)
+        return kCGErrorFailure;
+
+    CGRect dirty;
+    @synchronized(self) {
+        if (_contents == NULL) {
+            _contents = createContents(width, height);
+            if (_contents == NULL)
+                return kCGErrorFailure;
+            _contentsSize = CGSizeMake(width, height);
+        } else if (_contentsSize.width != width || _contentsSize.height != height) {
+            [self resizeContentsTo: CGSizeMake(width, height)];
+        }
+
+        CGFloat imageWidth = CGImageGetWidth(image), imageHeight = CGImageGetHeight(image);
+        // Rows count from the top of the window, the bitmap's from its bottom
+        CGRect target = CGRectMake(origin.x, _contentsSize.height - origin.y - imageHeight,
+                imageWidth, imageHeight);
+        CGContextSaveGState(_contents);
+        CGContextSetBlendMode(_contents, kCGBlendModeCopy);
+        CGContextClipToRect(_contents, CGRectMake(0, 0, _contentsSize.width, _contentsSize.height));
+        CGContextDrawImage(_contents, target, image);
+        CGContextRestoreGState(_contents);
+        dirty = CGRectIntersection(CGRectMake(origin.x, origin.y, imageWidth, imageHeight),
+                CGRectMake(0, 0, _contentsSize.width, _contentsSize.height));
+    }
+    if (!CGRectIsNull(dirty))
+        [self presentRect: dirty];
+    return kCGSErrorSuccess;
+}
+
+- (CGImageRef) copyContentsImage {
+    @synchronized(self) {
+        return _contents != NULL ? CGBitmapContextCreateImage(_contents) : NULL;
+    }
+}
+
+- (BOOL) withContents: (void (^)(const void *, size_t, CGSize)) block {
+    @synchronized(self) {
+        if (_contents == NULL)
+            return NO;
+        block(CGBitmapContextGetData(_contents), CGBitmapContextGetBytesPerRow(_contents),
+              _contentsSize);
+    }
+    return YES;
+}
+
 
 @end
 
@@ -253,12 +364,113 @@ CGImageRef __nullable CGWindowListCreateImageFromArray(CGRect screenBounds,
     return image;
 }
 
+// The window of the process' default connection that the number names: the CGS window id, or the
+// id of the native window of it, which is what the window lists give for a CGS window.
+static CGSWindow *copyCGSWindowForNumber(CGWindowID number) {
+    CGSConnection *connection = _CGSConnectionForID(CGSDefaultConnection);
+    if (connection == nil || number == kCGNullWindowID)
+        return nil;
+    CGSWindow *found = [[connection windowForId: number] retain];
+    if (found != nil)
+        return found;
+    NSArray *all = [connection copyAllWindows];
+    for (CGSWindow *window in all) {
+        if ((uintptr_t) [window nativeWindow] == number) {
+            found = [window retain];
+            break;
+        }
+    }
+    [all release];
+    return found;
+}
+
 CGImageRef __nullable CGWindowListCreateImage(CGRect screenBounds,
                                               CGWindowListOption listOption,
                                               CGWindowID windowID,
                                               CGWindowImageOption imageOption)
 {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-    return nil;
+    // Only the contents of a single window of this process can be read: windows drawn into with
+    // -[CGSWindow drawImage:atPoint:] keep their pixels. Anything else has no capture backend.
+    if (!(listOption & kCGWindowListOptionIncludingWindow) ||
+        (listOption & (kCGWindowListOptionOnScreenAboveWindow | kCGWindowListOptionOnScreenBelowWindow)))
+        return NULL;
+
+    CGSWindow *window = copyCGSWindowForNumber(windowID);
+    if (window == nil)
+        return NULL;
+    CGImageRef image = [window copyContentsImage];
+    [window release];
+    if (image == NULL || CGRectIsNull(screenBounds) || CGRectIsInfinite(screenBounds))
+        return image;
+
+    // Bounds are in global coordinates: the part of the window they select
+    CGRect frame;
+    CGImageRef cropped = NULL;
+    CGSWindow *again = copyCGSWindowForNumber(windowID);
+    if (again != nil && [again getRect: &frame] == kCGSErrorSuccess) {
+        CGRect part = CGRectOffset(screenBounds, -frame.origin.x, -frame.origin.y);
+        cropped = CGImageCreateWithImageInRect(image, part);
+    }
+    [again release];
+    CGImageRelease(image);
+    return cropped;
+}
+
+CGError _CGSWindowDrawImage(CGSConnectionID cid, CGSWindowID wid, CGImageRef image, CGPoint origin)
+{
+    CGSConnection *connection = _CGSConnectionForID(cid);
+    if (connection == nil)
+        return kCGErrorInvalidConnection;
+    CGSWindow *window = [[connection windowForId: wid] retain];
+    if (window == nil)
+        return kCGErrorIllegalArgument;
+    CGError error = [window drawImage: image atPoint: origin];
+    [window release];
+    return error;
+}
+
+CGImageRef _CGSWindowCopyContents(CGSConnectionID cid, CGSWindowID wid)
+{
+    CGSConnection *connection = _CGSConnectionForID(cid);
+    CGSWindow *window = [[connection windowForId: wid] retain];
+    CGImageRef image = [window copyContentsImage];
+    [window release];
+    return image;
+}
+
+CGError _CGSWindowSetStyle(CGSConnectionID cid, CGSWindowID wid, uint32_t styleFlags)
+{
+    CGSConnection *connection = _CGSConnectionForID(cid);
+    if (connection == nil)
+        return kCGErrorInvalidConnection;
+    CGSWindow *window = [[connection windowForId: wid] retain];
+    if (window == nil)
+        return kCGErrorIllegalArgument;
+    CGError error = [window setStyle: styleFlags];
+    [window release];
+    return error;
+}
+
+static pthread_mutex_t g_windowEventLock = PTHREAD_MUTEX_INITIALIZER;
+static CGSWindowEventProc g_windowEventProc;
+static void *g_windowEventInfo;
+
+void _CGSSetWindowEventProc(CGSWindowEventProc proc, void *info)
+{
+    pthread_mutex_lock(&g_windowEventLock);
+    g_windowEventProc = proc;
+    g_windowEventInfo = info;
+    pthread_mutex_unlock(&g_windowEventLock);
+}
+
+// For the backends
+void _CGSPostWindowEvent(CGSWindowEventKind kind, CGSWindowID window, CGRect rect)
+{
+    pthread_mutex_lock(&g_windowEventLock);
+    CGSWindowEventProc proc = g_windowEventProc;
+    void *info = g_windowEventInfo;
+    pthread_mutex_unlock(&g_windowEventLock);
+    if (proc != NULL)
+        proc(kind, window, rect, info);
 }
 

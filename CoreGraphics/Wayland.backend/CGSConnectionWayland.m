@@ -98,6 +98,9 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                                                     kind: objectKind
                                                arguments: args];
                 break;
+            case CGSWaylandObjectBuffer:
+                [(CGSWindowWayland *) object bufferReleased: (struct wl_proxy *) proxy opcode: opcode];
+                break;
             case CGSWaylandObjectOutput:
             case CGSWaylandObjectLogicalOutput:
                 [((CGSWaylandOutput *) object)->_connection handleEvent: opcode
@@ -451,6 +454,10 @@ static const CGEventFlags kHotKeyModifierMask =
         _compositor = [self bindGlobal: name interface: &wl_compositor_interface
                                version: MIN(version, 4u)
                                    kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "wl_shm") == 0 && _shm == NULL) {
+        _shm = [self bindGlobal: name interface: &wl_shm_interface
+                        version: 1
+                           kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name interface: &xdg_wm_base_interface
                            version: MIN(version, 2u)

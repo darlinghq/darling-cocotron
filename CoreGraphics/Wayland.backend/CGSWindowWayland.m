@@ -27,6 +27,9 @@
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
+#import <sys/mman.h>
+#include <unistd.h>
+#include <string.h>
 
 @implementation CGSWindowWayland
 
@@ -152,14 +155,24 @@
             if (!CGSizeEqualToSize(size, _frame.size)) {
                 _frame.size = size;
                 [_surfaceObject windowResizedTo: size];
+                [self resizeContentsTo: size];
+                _CGSPostWindowEvent(kCGSWindowEventBounds, self.windowId, _frame);
             }
         }
+
+        BOOL activated = NO;
+        struct wl_array *states = args[2].a;
+        for (size_t i = 0; states != NULL && i < states->size / sizeof(uint32_t); i++) {
+            if (((uint32_t *) states->data)[i] == WP_TOPLEVEL_STATE_ACTIVATED)
+                activated = YES;
+        }
+        if (activated != _activated) {
+            _activated = activated;
+            _CGSPostWindowEvent(activated ? kCGSWindowEventActivated : kCGSWindowEventDeactivated,
+                                self.windowId, CGRectNull);
+        }
     } else if (opcode == WP_TOPLEVEL_EV_CLOSE) {
-        // CGS has no way to deliver a close request to whoever created the
-        // window, so this is reported rather than acted on.
-        NSLog(@"CoreGraphics Wayland backend: the compositor asked window %d to "
-              @"close; CGS has no close notification to deliver",
-              (int) self.windowId);
+        _CGSPostWindowEvent(kCGSWindowEventCloseRequested, self.windowId, CGRectNull);
     }
 }
 
@@ -224,8 +237,11 @@
 
     case kCGSOrderIn:
     case kCGSOrderAbove:
-        // A toplevel is mapped by its first committed buffer, so there is
-        // nothing to send here: the window appears when its surface swaps.
+        // A toplevel is mapped by its first committed buffer. A window that a program draws into
+        // shows its contents, or a blank window while it has drawn none; the others appear when
+        // their surface swaps.
+        if (_usesContents)
+            [self _showBlankContentsIfNone];
         return kCGSErrorSuccess;
 
     case kCGSOrderBelow:
@@ -291,6 +307,7 @@
     if (!CGSizeEqualToSize(rect.size, _frame.size)) {
         _frame.size = rect.size;
         [_surfaceObject windowResizedTo: rect.size];
+        [self resizeContentsTo: rect.size];
     }
     return kCGSErrorSuccess;
 }
@@ -337,6 +354,148 @@
 
 - (CGPoint) frameOrigin {
     return _frame.origin;
+}
+
+#pragma mark - Contents and style
+
+- (void) bufferReleased: (struct wl_proxy *) buffer opcode: (uint32_t) opcode {
+    if (opcode != WP_BUFFER_EV_RELEASE)
+        return;
+    WaylandMarshal(buffer, WP_BUFFER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                   (union wl_argument[1]) {{.o = NULL}});
+    [_waylandConnection flush];
+    // The reference -presentRect: took for the buffer
+    [self release];
+}
+
+// A buffer is made for each presentation, from a shared memory file the contents are copied to, and
+// destroyed once the compositor has released it.
+- (void) presentRect: (CGRect) rect {
+    if (_waylandConnection->_shm == NULL || _surface == NULL)
+        return;
+
+    [self withContents: ^(const void *bytes, size_t rowBytes, CGSize size) {
+        int width = (int) size.width, height = (int) size.height;
+        int stride = width * 4;
+        size_t length = (size_t) stride * (size_t) height;
+
+        int fd = WaylandCreateAnonymousFile(length);
+        if (fd < 0)
+            return;
+        void *data = mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+        if (data == MAP_FAILED) {
+            close(fd);
+            return;
+        }
+        for (int row = 0; row < height; row++)
+            memcpy((uint8_t *) data + (size_t) row * stride, (const uint8_t *) bytes + row * rowBytes, stride);
+        munmap(data, length);
+
+        union wl_argument poolArgs[3] = {{.o = NULL}, {.h = fd}, {.i = (int32_t) length}};
+        struct wl_proxy *pool = [_waylandConnection createObject: _waylandConnection->_shm
+                                                          opcode: WP_SHM_CREATE_POOL
+                                                       interface: &wl_shm_pool_interface
+                                                       arguments: poolArgs
+                                                            kind: CGSWaylandObjectNone
+                                                          object: nil];
+        close(fd);
+        if (pool == NULL)
+            return;
+
+        BOOL opaque = !(_styleFlags & kCGSWindowStyleTransparent);
+        union wl_argument bufferArgs[6] = {{.o = NULL}, {.i = 0}, {.i = width}, {.i = height},
+                                           {.i = stride},
+                                           {.u = opaque ? WP_SHM_FORMAT_XRGB8888 : WP_SHM_FORMAT_ARGB8888}};
+        // The window is kept alive until the compositor releases the buffer
+        struct wl_proxy *buffer = [_waylandConnection createObject: pool
+                                                            opcode: WP_SHM_POOL_CREATE_BUFFER
+                                                         interface: &wl_buffer_interface
+                                                         arguments: bufferArgs
+                                                              kind: CGSWaylandObjectBuffer
+                                                            object: [self retain]];
+        WaylandMarshal(pool, WP_SHM_POOL_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                       (union wl_argument[1]) {{.o = NULL}});
+        if (buffer == NULL) {
+            [self release];
+            return;
+        }
+
+        union wl_argument attach[3] = {{.o = (struct wl_object *) buffer}, {.i = 0}, {.i = 0}};
+        WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, attach);
+        union wl_argument damage[4] = {{.i = 0}, {.i = 0}, {.i = width}, {.i = height}};
+        WaylandMarshal(_surface, WP_SURFACE_DAMAGE, NULL, 0, damage);
+        union wl_argument none[1] = {{.o = NULL}};
+        WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
+        [_waylandConnection flush];
+    }];
+}
+
+// The window of a program that draws into it is mapped by a blank buffer: white, or transparent for a
+// window with the transparent style
+- (void) _showBlankContentsIfNone {
+    // What the window has drawn is shown again, as a window that was ordered out lost its buffer
+    if ([self withContents: ^(const void *bytes, size_t rowBytes, CGSize size) {}]) {
+        [self presentRect: CGRectMake(0, 0, _frame.size.width, _frame.size.height)];
+        return;
+    }
+
+    size_t width = (size_t) _frame.size.width, height = (size_t) _frame.size.height;
+    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+    CGContextRef blank = CGBitmapContextCreate(NULL, width, height, 8, 0, space,
+            kCGBitmapByteOrder32Little | kCGImageAlphaPremultipliedFirst);
+    CGColorSpaceRelease(space);
+    if (blank == NULL)
+        return;
+    if (!(_styleFlags & kCGSWindowStyleTransparent)) {
+        CGContextSetRGBFillColor(blank, 1, 1, 1, 1);
+        CGContextFillRect(blank, CGRectMake(0, 0, width, height));
+    }
+    CGImageRef image = CGBitmapContextCreateImage(blank);
+    CGContextRelease(blank);
+    if (image != NULL) {
+        [self drawImage: image atPoint: CGPointZero];
+        CGImageRelease(image);
+    }
+}
+
+- (CGError) setStyle: (uint32_t) styleFlags {
+    uint32_t changed = _styleFlags ^ styleFlags;
+    _usesContents = YES;
+    [super setStyle: styleFlags];
+
+    if (changed & kCGSWindowStyleIgnoresMouse) {
+        // An empty input region lets pointer input reach the surfaces below; no region restores the default.
+        struct wl_proxy *region = NULL;
+        if (styleFlags & kCGSWindowStyleIgnoresMouse) {
+            union wl_argument regionArgs[1] = {{.o = NULL}};
+            region = [_waylandConnection createObject: _waylandConnection->_compositor
+                                               opcode: WP_COMPOSITOR_CREATE_REGION
+                                            interface: &wl_region_interface
+                                            arguments: regionArgs
+                                                 kind: CGSWaylandObjectNone
+                                               object: nil];
+        }
+        union wl_argument inputArgs[1] = {{.o = (struct wl_object *) region}};
+        WaylandMarshal(_surface, WP_SURFACE_SET_INPUT_REGION, NULL, 0, inputArgs);
+        if (region != NULL)
+            WaylandMarshal(region, WP_REGION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                           (union wl_argument[1]) {{.o = NULL}});
+    }
+
+    if (changed & kCGSWindowStyleFixedSize) {
+        union wl_argument size[2] = {{.i = 0}, {.i = 0}};
+        if (styleFlags & kCGSWindowStyleFixedSize) {
+            size[0].i = (int32_t) _frame.size.width;
+            size[1].i = (int32_t) _frame.size.height;
+        }
+        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, size);
+        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, size);
+    }
+
+    // Floating (always on top), utility, borderless and unmanaged windows: a Wayland client has no
+    // say in these, the compositor decides how toplevels are stacked and framed.
+    [_waylandConnection flush];
+    return kCGSErrorSuccess;
 }
 
 @end
