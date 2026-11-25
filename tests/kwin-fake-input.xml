@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="fake_input">
+  <interface name="org_kde_kwin_fake_input" version="6">
+    <request name="authenticate">
+      <arg name="application" type="string"/>
+      <arg name="reason" type="string"/>
+    </request>
+    <request name="pointer_motion">
+      <arg name="delta_x" type="fixed"/>
+      <arg name="delta_y" type="fixed"/>
+    </request>
+    <request name="button">
+      <arg name="button" type="uint"/>
+      <arg name="state" type="uint"/>
+    </request>
+    <request name="axis">
+      <arg name="axis" type="uint"/>
+      <arg name="value" type="fixed"/>
+    </request>
+    <request name="touch_down">
+      <arg name="id" type="uint"/>
+      <arg name="x" type="fixed"/>
+      <arg name="y" type="fixed"/>
+    </request>
+    <request name="touch_motion">
+      <arg name="id" type="uint"/>
+      <arg name="x" type="fixed"/>
+      <arg name="y" type="fixed"/>
+    </request>
+    <request name="touch_up">
+      <arg name="id" type="uint"/>
+    </request>
+    <request name="touch_cancel"/>
+    <request name="touch_frame"/>
+    <request name="pointer_motion_absolute">
+      <arg name="x" type="fixed"/>
+      <arg name="y" type="fixed"/>
+    </request>
+    <request name="keyboard_key">
+      <arg name="button" type="uint"/>
+      <arg name="state" type="uint"/>
+    </request>
+  </interface>
+</protocol>
