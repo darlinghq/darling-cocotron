@@ -59,6 +59,29 @@ struct xkb_state;
 // The layout of the keymap in its current group, or nil. The caller releases it.
 - (CGSKeyboardLayout *) copyLayout;
 
+// What the keyboard decoder asks of the keymap in force and its modifier state. All of it answers
+// from the xkb state the wl_keyboard.modifiers events keep.
+
+// Whether a keymap is in force (the keyboard is ignored without one).
+- (BOOL) isUsable;
+// The wl_keyboard.keymap event, as above, but telling whether a new keymap came into force.
+- (BOOL) installKeymapAndReport: (uint32_t) format fd: (int) fd size: (uint32_t) size;
+// The modifier key the key code (an xkb key code: the evdev code plus 8) is, as a virtual key code, or -1.
+- (int) modifierKeyCodeForKeycode: (uint32_t) keycode;
+// The modifier flags (CGEventFlags bits) the xkb state has in effect, without the device-dependent bits.
+- (uint64_t) activeModifierFlags;
+// The text the key produces in the current state, with the private-use code of the function keys
+// (arrows, F keys, ...) for the keys that produce no text. Never nil.
+- (NSString *) charactersForKeycode: (uint32_t) keycode;
+// The character of the key with only Shift taken into account. Never nil.
+- (NSString *) unmodifiedCharactersForKeycode: (uint32_t) keycode;
+- (BOOL) keyRepeats: (uint32_t) keycode;
+// No modifier in effect (the focus changed).
+- (void) resetModifiers;
+// The index and name of the layout group in effect, -1 and nil without a keymap.
+- (int) layoutGroup;
+- (NSString *) layoutName;
+
 @end
 
 #endif

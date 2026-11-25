@@ -20,7 +20,6 @@
 #import <AppKit/NSTouch.h>
 #import "../private-include/AppKit/NSTouchBackend.h"
 #import "WaylandDisplay.h"
-#import "../private-include/AppKit/CarbonKeys.h"
 #import "../private-include/AppKit/NSEventTime.h"
 #import "NSEvent_gesture.h"
 #import "NSEvent_mouse.h"
@@ -40,7 +39,6 @@
 #import "WaylandToplevelIcon.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import "../DarlingWindowLevelPolicy.h"
-#import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreFoundation/CFNotificationCenter.h>
 #import <AppKit/NSApplication.h>
@@ -174,23 +172,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     return created;
 }
 
-static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
-    [(WaylandDisplay *) info performSelector: @selector(repeatKey)];
-}
-
-static NSString *stringWithCodepoint(uint32_t codepoint) {
-    if (codepoint == 0 || codepoint > 0x10FFFF)
-        return @"";
-    if (codepoint < 0x10000) {
-        unichar character = (unichar) codepoint;
-        return [NSString stringWithCharacters: &character length: 1];
-    }
-    codepoint -= 0x10000;
-    unichar pair[2] = {(unichar) (0xD800 + (codepoint >> 10)),
-                       (unichar) (0xDC00 + (codepoint & 0x3FF))};
-    return [NSString stringWithCharacters: pair length: 2];
-}
-
 @implementation WaylandDisplay
 
 - (instancetype) init {
@@ -215,8 +196,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _outputs = [NSMutableArray new];
     _afterDispatch = [NSMutableArray new];
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
-    _repeatRate = 25;
-    _repeatDelay = 600;
 
     // The process has one connection to the compositor and CoreGraphics owns it: it reads its socket and
     // dispatches the events of every object on it, this display's included, then tells the observer
@@ -271,17 +250,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _generalPasteboard = [[WaylandPasteboard alloc] initWithName: NSGeneralPboard display: self
                                                       manager: _dataDeviceManager seat: _seat];
 
-    _xkbContext = WL.xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    if (_xkbContext == NULL)
-        NSLog(@"Wayland backend: cannot create an xkbcommon context, keyboard "
-              @"input is disabled");
-    else
-        // The Text Input Sources API describes a keyboard layout whether or not the
-        // seat has a keyboard (a compositor with no input devices never sends a
-        // keymap), so start with the system default layout; the compositor's keymap
-        // replaces it when one arrives.
-        [self installKeymap: WL.xkb_keymap_new_from_names(_xkbContext, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS)];
-
     if (WL.hasCursor) {
         const char *sizeString = getenv("XCURSOR_SIZE");
         long parsed = sizeString ? strtol(sizeString, NULL, 10) : 24;
@@ -326,19 +294,10 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     [self consumeDragPress];
     [_generalPasteboard invalidate];
     [_generalPasteboard release];
-    [self stopKeyRepeat];
-    [self cancelPendingModifier];
-    [_heldKeyIdentities release];
 
     _CGSSetNativeConnectionObserver(nil);
     [self cancelActivationRequest];
 
-    if (_xkbState != NULL)
-        WL.xkb_state_unref(_xkbState);
-    if (_xkbKeymap != NULL)
-        WL.xkb_keymap_unref(_xkbKeymap);
-    if (_xkbContext != NULL)
-        WL.xkb_context_unref(_xkbContext);
     if (_cursorTheme != NULL)
         WL.wl_cursor_theme_destroy(_cursorTheme);
     [_appMenu release];
@@ -349,7 +308,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
-                                      _textInput, _textInputManager, _pinchGesture, _pointerGestures, _pointer, _keyboard,
+                                      _textInput, _textInputManager, _pinchGesture, _pointerGestures, _pointer,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
@@ -852,15 +811,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         break;
     }
 
-    case WaylandObjectKeyboardSync:
-        if (proxy == _modifierSync && opcode == WP_CALLBACK_EV_DONE)
-            [self flushPendingModifier];
-        break;
-
-    case WaylandObjectKeyboard:
-        [self keyboardEvent: opcode arguments: args];
-        break;
-
     case WaylandObjectTouch:
         [self touchEvent: opcode arguments: args];
         break;
@@ -916,18 +866,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     } else if (!(capabilities & WP_SEAT_CAPABILITY_TOUCH) && _touch != NULL) {
         [self releaseInputDevice: &_touch opcode: WP_TOUCH_RELEASE];
         [self touchCancel];
-    }
-
-    if ((capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard == NULL) {
-        args[0].o = NULL;
-        _keyboard = WaylandCreateObject(_seat, WP_SEAT_GET_KEYBOARD,
-                                        &wl_keyboard_interface, args,
-                                        WaylandObjectKeyboard, self);
-    } else if (!(capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard != NULL) {
-        [self releaseInputDevice: &_keyboard opcode: WP_KEYBOARD_RELEASE];
-        [self stopKeyRepeat];
-        _keyboardWindow = nil;
-        [self resetKeyboardModifiers];
     }
 }
 
@@ -999,7 +937,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     if (opcode != WP_POINTER_EV_AXIS && opcode != WP_POINTER_EV_FRAME &&
         opcode != WP_POINTER_EV_AXIS_SOURCE && opcode != WP_POINTER_EV_AXIS_STOP)
         [self postPendingScroll];
-    [self flushPendingModifier];
+    // A modifier key the keyboard has not yet seen the effect of comes before the pointer event it modifies.
+    _CGSNativeConnectionFlushPendingKeyboardEvents();
     switch (opcode) {
     case WP_POINTER_EV_ENTER:
         _pointerEnterSerial = args[0].u;
@@ -1778,422 +1717,99 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 
 #pragma mark - Keyboard
 
-// Physical identity is metadata only: the compositor's following modifiers
-// event is authoritative for effective flags (including locks/layout changes).
-static int modifierCarbonKeycode(xkb_keysym_t sym) {
-    switch (sym) {
-    case XKB_KEY_Shift_L: return kVK_Shift;
-    case XKB_KEY_Shift_R: return kVK_RightShift;
-    case XKB_KEY_Control_L: return kVK_Control;
-    case XKB_KEY_Control_R: return kVK_RightControl;
-    case XKB_KEY_Alt_L: return kVK_Option;
-    case XKB_KEY_Alt_R: return kVK_RightOption;
-    case XKB_KEY_Super_L: case XKB_KEY_Meta_L: return kVK_Command;
-    case XKB_KEY_Super_R: case XKB_KEY_Meta_R: return 0x36; // Right Command.
-    case XKB_KEY_Caps_Lock: return kVK_CapsLock;
-    case XKB_KEY_ISO_Level3_Shift: case XKB_KEY_Mode_switch: return kVK_Function;
-    default: return -1;
-    }
+// The keyboard is CoreGraphics': it reads the process' wl_keyboard, builds the key events from the
+// compositor's keymap and posts them as CGEvents (see CGSWaylandKeyboard). What it tells this display
+// about arrives through the connection observer.
+
+// The window that has the keyboard focus, from the surface CoreGraphics reports.
+- (WaylandWindow *) keyboardWindow {
+    return [self windowForSurface: (struct wl_proxy *) _CGSNativeConnectionKeyboardFocus()];
 }
 
-// Device-dependent NSEvent bits, defined by IOKit's IOLLEvent.h. The aggregate
-// high bits still come exclusively from the compositor's XKB modifier mask.
-static NSUInteger modifierDeviceMask(int code) {
-    switch (code) {
-    case kVK_Control: return 0x0001;
-    case kVK_Shift: return 0x0002;
-    case kVK_RightShift: return 0x0004;
-    case kVK_Command: return 0x0008;
-    case 0x36: return 0x0010;
-    case kVK_Option: return 0x0020;
-    case kVK_RightOption: return 0x0040;
-    case kVK_RightControl: return 0x2000;
-    default: return 0;
-    }
-}
-
-- (void) cancelPendingModifier {
-    if (_modifierSync != NULL) {
-        WL.wl_proxy_destroy(_modifierSync);
-        _modifierSync = NULL;
-    }
-    _hasModifierKeycode = NO;
-}
-
-- (void) postModifierKeycode: (unsigned short) code {
-    NSWindow *delegate = [_keyboardWindow delegate];
-    if (delegate == nil)
-        return;
-    NSEvent *event = [NSEvent keyEventWithType: NSFlagsChanged
-            location: [_keyboardWindow mouseLocationOutsideOfEventStream]
-            modifierFlags: [self currentModifierFlags] timestamp: NSEventCurrentTime()
-            windowNumber: [delegate windowNumber] context: nil
-            characters: @"" charactersIgnoringModifiers: @""
-            isARepeat: NO keyCode: code];
-    [self postEvent: event atStart: NO];
-}
-
-- (void) flushPendingModifier {
-    if (_hasModifierKeycode)
-        [self postModifierKeycode: _modifierKeycode];
-    [self cancelPendingModifier];
-}
-
-- (void) classifyHeldKeys {
-    for (NSNumber *key in [_heldKeyIdentities allKeys]) {
-        int identity = modifierCarbonKeycode(WL.xkb_state_key_get_one_sym(
-                _xkbState, [key unsignedIntValue]));
-        [_heldKeyIdentities setObject: @(identity) forKey: key];
-    }
-    _classifyHeldKeys = NO;
-}
-
-- (void) resetKeyboardModifiers {
-    [self cancelPendingModifier];
-    [_heldKeyIdentities removeAllObjects];
-    _syncModifierFlags = NO;
-    _classifyHeldKeys = NO;
-    if (_xkbState != NULL)
-        WL.xkb_state_update_mask(_xkbState, 0, 0, 0, 0, 0, 0);
-}
-
-- (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+- (void) nativeConnectionWillPostKeyboardEvent {
+    // A scroll frame that is not complete yet goes out before the key event that follows it.
     [self postPendingScroll];
-    switch (opcode) {
-    case WP_KEYBOARD_EV_KEYMAP:
-        [self keymapWithFormat: args[0].u fd: args[1].h size: args[2].u];
-        break;
+}
 
-    case WP_KEYBOARD_EV_ENTER: {
+- (void) nativeConnectionKeyboardFocusChanged: (void *) surface {
+    if (surface != NULL) {
         _keyboardWindowUnmapped = NO;
-        [self resetKeyboardModifiers];
-        _keyboardWindow = [self windowForSurface: (struct wl_proxy *) args[1].o];
-        if (_heldKeyIdentities == nil)
-            _heldKeyIdentities = [NSMutableDictionary new];
-        struct wl_array *keys = args[2].a;
-        for (size_t i = 0; i < keys->size / sizeof(uint32_t); i++) {
-            uint32_t raw = ((uint32_t *)keys->data)[i];
-            [_heldKeyIdentities setObject: @(-1) forKey: @(raw + 8)];
-        }
-        // Enter is followed by modifiers: classify under that current group,
-        // without inventing key presses for keys held before focus arrived.
-        _classifyHeldKeys = YES;
-        _syncModifierFlags = YES;
-        break;
-    }
-
-    case WP_KEYBOARD_EV_LEAVE: {
-        // The keyboard focus leaves a window that the application itself unmapped (the last window closed,
-        // a menu popup destroyed): that is not the focus moving to another client. The application stays
-        // active, as on macOS, where an application whose last window closes keeps the activation and
-        // the menu bar; a window that is still shown when its focus goes does resign (below).
-        // An application that only owns the menu bar, with a menu popup that the keyboard followed, is
-        // the same case.
-        BOOL ownUnmapping = _keyboardWindowUnmapped ||
-                ([_keyboardWindow isPopup] && ![_keyboardWindow isTooltip] && ![_keyboardWindow isGenericPopup]);
-        _keyboardWindowUnmapped = NO;
-        _keyboardWindow = nil;
-        [self stopKeyRepeat];
-        [self resetKeyboardModifiers];
-        if (!ownUnmapping)
-            [self applicationFocusMayHaveLeft];
-        break;
-    }
-
-    case WP_KEYBOARD_EV_KEY: {
-        if (_xkbState == NULL || _keyboardWindow == nil)
-            break;
-        [self flushPendingModifier];
-        xkb_keycode_t keycode = args[2].u + 8;
-        BOOL pressed = args[3].u == WP_KEYBOARD_KEY_STATE_PRESSED;
-        if (pressed) {
-            _inputSerial = args[0].u;
-            [_generalPasteboard inputAvailable];
-            [_inputEvent release];
-            _inputEvent = nil;
-            _inputWindow = nil;
-        }
-
-        NSNumber *held = [_heldKeyIdentities objectForKey: @(keycode)];
-        int modifier = held != nil ? [held intValue] : modifierCarbonKeycode(
-                WL.xkb_state_key_get_one_sym(_xkbState, keycode));
-        if (pressed)
-            [_heldKeyIdentities setObject: @(modifier) forKey: @(keycode)];
-        else
-            [_heldKeyIdentities removeObjectForKey: @(keycode)];
-        if (modifier >= 0) {
-            _modifierKeycode = modifier;
-            _hasModifierKeycode = YES;
-            // A mask-changing key is followed by modifiers; an overlapping
-            // modifier need not be. A sync drains the compositor's already
-            // queued events even across socket reads before the idle fallback.
-            // It is not a keyboard frame or a fence for future input events.
-            union wl_argument syncArgs[1] = {{.o = NULL}};
-            _modifierSync = WaylandCreateObject((struct wl_proxy *)_wlDisplay,
-                    WP_DISPLAY_SYNC, &wl_callback_interface, syncArgs,
-                    WaylandObjectKeyboardSync, self);
-            [self flush];
-            break; // Modifiers are neither text nor repeatable keys.
-        }
-        [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO];
-        if (pressed && _repeatRate > 0 &&
-            WL.xkb_keymap_key_repeats(_xkbKeymap, keycode))
-            [self startKeyRepeat: keycode];
-        else if (!pressed && keycode == _repeatKeycode)
-            [self stopKeyRepeat];
-        break;
-    }
-
-    case WP_KEYBOARD_EV_MODIFIERS: {
-        NSUInteger oldFlags = [self currentModifierFlags];
-        if (_xkbState != NULL) {
-            WL.xkb_state_update_mask(_xkbState, args[1].u, args[2].u, args[3].u,
-                                     0, 0, args[4].u);
-            if (_classifyHeldKeys)
-                [self classifyHeldKeys];
-        }
-        if (_hasModifierKeycode)
-            [self flushPendingModifier];
-        else if (_syncModifierFlags || [self currentModifierFlags] != oldFlags)
-            [self postModifierKeycode: 0xFFFF];
-        _syncModifierFlags = NO;
-        break;
-    }
-
-    case WP_KEYBOARD_EV_REPEAT_INFO:
-        _repeatRate = args[0].i;
-        _repeatDelay = args[1].i;
-        if (_repeatRate <= 0)
-            [self stopKeyRepeat];
-        break;
-    }
-}
-
-// A keymap the client cannot use (format no_keymap, an empty or unreadable xkb_v1 map) leaves the
-// keymap in force as it was. The wl_keyboard protocol sends no_keymap when the client has to
-// interpret raw key codes itself, and a compositor may replace the keymap at any time, so input
-// must survive both. With no keymap yet, the system default layout (the evdev rules, honouring
-// the XKB_DEFAULT_* variables) interprets the raw codes.
-- (struct xkb_keymap *) keymapFromFormat: (uint32_t) format fd: (int) fd size: (uint32_t) size {
-    struct xkb_keymap *keymap = NULL;
-
-    if (format == WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1 && size == 0) {
-        NSLog(@"Wayland backend: the compositor sent an empty keymap");
-    } else if (format == WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
-        char *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-        if (map == MAP_FAILED) {
-            NSLog(@"Wayland backend: cannot map the keymap: %s", strerror(errno));
-        } else {
-            keymap = WL.xkb_keymap_new_from_buffer(
-                    _xkbContext, map, strnlen(map, size), XKB_KEYMAP_FORMAT_TEXT_V1,
-                    XKB_KEYMAP_COMPILE_NO_FLAGS);
-            munmap(map, size);
-            if (keymap == NULL)
-                NSLog(@"Wayland backend: cannot compile the compositor's keymap");
-        }
-    } else if (format != WP_KEYBOARD_KEYMAP_FORMAT_NO_KEYMAP) {
-        NSLog(@"Wayland backend: unsupported keymap format %u", format);
-    }
-    return keymap;
-}
-
-- (void) keymapWithFormat: (uint32_t) format fd: (int) fd size: (uint32_t) size {
-    struct xkb_keymap *keymap = NULL;
-
-    if (_xkbContext != NULL) {
-        keymap = [self keymapFromFormat: format fd: fd size: size];
-        if (keymap == NULL && _xkbKeymap == NULL)
-            keymap = WL.xkb_keymap_new_from_names(_xkbContext, NULL,
-                                                  XKB_KEYMAP_COMPILE_NO_FLAGS);
-    }
-    close(fd);
-
-    [self installKeymap: keymap];
-}
-
-// Makes keymap (nil: none usable; the reference is taken over) the one that interprets key codes
-// and that the Text Input Sources API describes.
-- (void) installKeymap: (struct xkb_keymap *) keymap {
-    struct xkb_state *state = keymap != NULL ? WL.xkb_state_new(keymap) : NULL;
-    if (state == NULL) {
-        if (keymap != NULL)
-            WL.xkb_keymap_unref(keymap);
-        if (_xkbContext != NULL && _xkbKeymap == NULL)
-            NSLog(@"Wayland backend: no usable keymap, keyboard input is disabled");
+        _keyboardFocusWindow = [self windowForSurface: (struct wl_proxy *) surface];
         return;
     }
-
-    [self stopKeyRepeat];
-    if (_xkbState != NULL)
-        WL.xkb_state_unref(_xkbState);
-    if (_xkbKeymap != NULL)
-        WL.xkb_keymap_unref(_xkbKeymap);
-    _xkbKeymap = keymap;
-    _xkbState = state;
-    [self cancelPendingModifier];
-    // Preserve press-time identities through keymap changes until release.
-    // Only enter-seeded keys need classification under the current group.
-    _syncModifierFlags = _keyboardWindow != nil;
+    // The keyboard focus leaves a window that the application itself unmapped (the last window closed,
+    // a menu popup destroyed): that is not the focus moving to another client. The application stays
+    // active, as on macOS, where an application whose last window closes keeps the activation and
+    // the menu bar; a window that is still shown when its focus goes does resign.
+    // An application that only owns the menu bar, with a menu popup that the keyboard followed, is
+    // the same case.
+    BOOL ownUnmapping = _keyboardWindowUnmapped ||
+            ([_keyboardFocusWindow isPopup] && ![_keyboardFocusWindow isTooltip] && ![_keyboardFocusWindow isGenericPopup]);
+    _keyboardWindowUnmapped = NO;
+    _keyboardFocusWindow = nil;
+    if (!ownUnmapping)
+        [self applicationFocusMayHaveLeft];
 }
 
-- (BOOL) isModifierActive: (const char *) name {
-    return _xkbState != NULL &&
-           WL.xkb_state_mod_name_is_active(_xkbState, name,
-                                           XKB_STATE_MODS_EFFECTIVE) > 0;
+- (void) nativeConnectionKeyPressedWithSerial: (uint32_t) serial {
+    _inputSerial = serial;
+    [_generalPasteboard inputAvailable];
+    [_inputEvent release];
+    _inputEvent = nil;
+    _inputWindow = nil;
 }
 
-// The same mapping as the X11 backend's modifier flags for a key state.
-- (NSUInteger) currentModifierFlags {
-    NSUInteger flags = 0;
-    for (NSNumber *identity in [_heldKeyIdentities allValues])
-        flags |= modifierDeviceMask([identity intValue]);
-
-    if ([self isModifierActive: XKB_MOD_NAME_SHIFT])
-        flags |= NSShiftKeyMask;
-    if ([self isModifierActive: XKB_MOD_NAME_CTRL])
-        flags |= NSControlKeyMask;
-    if ([self isModifierActive: XKB_MOD_NAME_CAPS])
-        flags |= NSAlphaShiftKeyMask;
-    if ([self isModifierActive: XKB_MOD_NAME_LOGO])
-        flags |= NSCommandKeyMask;
-    if ([self isModifierActive: XKB_MOD_NAME_ALT])
-        flags |= NSAlternateKeyMask;
-    if ([self isModifierActive: "Mod5"]) // AltGr
-        flags |= NSFunctionKeyMask;
-
-    return flags;
-}
-
-- (uint32_t) codepointForKeysym: (xkb_keysym_t) keysym {
-    // CGSKeySymToUnicode knows AppKit's function key codes; XKB keysyms
-    // have the same values as X11 keysyms.
-    uint32_t codepoint = CGSKeySymToUnicode(keysym);
-    if (codepoint == 0)
-        codepoint = WL.xkb_keysym_to_utf32(keysym);
-    return codepoint;
-}
-
-- (xkb_keysym_t) keysymForKeycode: (xkb_keycode_t) keycode level: (xkb_level_index_t) level {
-    xkb_layout_index_t layout = WL.xkb_state_key_get_layout(_xkbState, keycode);
-    if (layout == XKB_LAYOUT_INVALID)
-        return XKB_KEY_NoSymbol;
-
-    const xkb_keysym_t *keysyms = NULL;
-    int count = WL.xkb_keymap_key_get_syms_by_level(_xkbKeymap, keycode, layout,
-                                                    level, &keysyms);
-    if (count <= 0 && level > 0)
-        count = WL.xkb_keymap_key_get_syms_by_level(_xkbKeymap, keycode, layout,
-                                                    0, &keysyms);
-    return count > 0 ? keysyms[0] : XKB_KEY_NoSymbol;
-}
-
-- (void) postKeyEventForKeycode: (xkb_keycode_t) keycode
-                        pressed: (BOOL) pressed
-                         repeat: (BOOL) repeat
-{
-    // Key events belong to the key window whichever surface of the application the compositor
-    // gave the focus to. That matters when the key window is a window with alpha 0, which is
-    // never shown and so never gets the focus. Menus and pop-ups that hold the focus keep it.
-    WaylandWindow *window = _keyboardWindow;
+// The window a key event is for, and where the pointer is in it (the NSEvent made from a CGEvent of the
+// keyboard). Key events belong to the key window whichever surface of the application the compositor gave
+// the focus to. That matters when the key window is a window with alpha 0, which is never shown and so
+// never gets the focus. Menus and pop-ups that hold the focus keep the keys.
+- (BOOL) windowNumber: (NSInteger *) windowNumber location: (NSPoint *) location forKeyEvent: (CGEventRef) event {
+    // An event the application or Carbon posted names no surface: it is for the key window.
+    if (CGEventGetIntegerValueField(event, kCGSEventNativeWindow) == 0)
+        return [super windowNumber: windowNumber location: location forKeyEvent: event];
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
+                                                            event, kCGSEventNativeWindow)];
     id keyPlatformWindow = [[NSApp keyWindow] platformWindow];
-    if ([keyPlatformWindow isKindOfClass: [WaylandWindow class]] &&
-        (window == nil || ![window isPopup]))
+    if ([keyPlatformWindow isKindOfClass: [WaylandWindow class]] && (window == nil || ![window isPopup]))
         window = keyPlatformWindow;
     NSWindow *delegate = [window delegate];
     if (delegate == nil)
+        return NO;
+    *windowNumber = [delegate windowNumber];
+    *location = [window mouseLocationOutsideOfEventStream];
+    return YES;
+}
+
+// The press of a key starts the input event popup grabs are tied to (see -popupGrabSerialForParent:).
+- (void) keyEventCreated: (NSEvent *) event fromCGEvent: (CGEventRef) cgEvent {
+    if ([event type] != NSKeyDown || [event isARepeat] ||
+        CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) == 0)
         return;
-
-    xkb_keysym_t keysym = WL.xkb_state_key_get_one_sym(_xkbState, keycode);
-    uint32_t special = CGSKeySymToUnicode(keysym);
-    NSString *characters;
-
-    if (special >= 0xF700 && special <= 0xF8FF) {
-        characters = stringWithCodepoint(special);
-    } else {
-        char buffer[64];
-        int length = WL.xkb_state_key_get_utf8(_xkbState, keycode, buffer,
-                                               sizeof(buffer));
-        if (length >= (int) sizeof(buffer)) {
-            char *larger = malloc(length + 1);
-            if (larger == NULL)
-                return;
-            WL.xkb_state_key_get_utf8(_xkbState, keycode, larger, length + 1);
-            characters = [NSString stringWithUTF8String: larger];
-            free(larger);
-        } else {
-            characters = length > 0 ? [NSString stringWithUTF8String: buffer]
-                                    : @"";
-        }
-    }
-
-    // AppKit ignores every modifier except Shift here.
-    xkb_level_index_t level = [self isModifierActive: XKB_MOD_NAME_SHIFT] ? 1 : 0;
-    NSString *charactersIgnoringModifiers = stringWithCodepoint(
-            [self codepointForKeysym: [self keysymForKeycode: keycode
-                                                       level: level]]);
-
-    NSEvent *event = [NSEvent
-                keyEventWithType: pressed ? NSKeyDown : NSKeyUp
-                        location: [window mouseLocationOutsideOfEventStream]
-                   modifierFlags: [self currentModifierFlags]
-                       timestamp: NSEventCurrentTime()
-                    windowNumber: [delegate windowNumber]
-                         context: nil
-                      characters: characters ? characters : @""
-     charactersIgnoringModifiers: charactersIgnoringModifiers
-                       isARepeat: repeat
-                         keyCode: keycode < 256 ? x11ToCarbon[keycode] : 0];
-    if (pressed && !repeat) {
-        _inputEvent = [event retain];
-        _inputWindow = window;
-    }
-    [self postEvent: event atStart: NO];
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
+                                                            cgEvent, kCGSEventNativeWindow)];
+    id keyPlatformWindow = [[NSApp keyWindow] platformWindow];
+    if ([keyPlatformWindow isKindOfClass: [WaylandWindow class]] && (window == nil || ![window isPopup]))
+        window = keyPlatformWindow;
+    _inputSerial = (uint32_t) CGEventGetIntegerValueField(cgEvent, kCGSEventInputSerial);
+    [_inputEvent release];
+    _inputEvent = [event retain];
+    _inputWindow = window;
 }
 
-- (void) startKeyRepeat: (xkb_keycode_t) keycode {
-    [self stopKeyRepeat];
-    _repeatKeycode = keycode;
-
-    CFRunLoopTimerContext context = {.version = 0, .info = self};
-    _repeatTimer = CFRunLoopTimerCreate(
-            NULL, CFAbsoluteTimeGetCurrent() + _repeatDelay / 1000.0,
-            1.0 / _repeatRate, 0, 0, repeatTimerCallback, &context);
-    CFRunLoopAddTimer(CFRunLoopGetMain(), _repeatTimer, kCFRunLoopCommonModes);
-}
-
-- (void) stopKeyRepeat {
-    if (_repeatTimer != NULL) {
-        CFRunLoopTimerInvalidate(_repeatTimer);
-        CFRelease(_repeatTimer);
-        _repeatTimer = NULL;
-    }
-    _repeatKeycode = 0;
-}
-
-- (void) repeatKey {
-    if (_xkbState == NULL || _repeatKeycode == 0)
-        return;
-    [self postKeyEventForKeycode: _repeatKeycode pressed: YES repeat: YES];
-    // A timer doesn't end -[NSRunLoop runMode:beforeDate:], so wake the event loop.
-    CFRunLoopStop(CFRunLoopGetMain());
+- (NSUInteger) currentModifierFlags {
+    return (NSUInteger) _CGSNativeConnectionModifierFlags();
 }
 
 - (int) keyboardLayoutId {
-    if (_xkbState == NULL)
-        return -1;
-    return (int) WL.xkb_state_serialize_layout(_xkbState,
-                                               XKB_STATE_LAYOUT_EFFECTIVE);
+    return _CGSNativeConnectionKeyboardLayoutGroup(NULL);
 }
 
 - (void) keyboardLayoutName: (NSString **) name fullName: (NSString **) fullName {
+    CFStringRef layout = NULL;
     NSString *layoutName = @"?";
 
-    int layout = [self keyboardLayoutId];
-    if (layout >= 0) {
-        const char *xkbName = WL.xkb_keymap_layout_get_name(_xkbKeymap, layout);
-        if (xkbName != NULL)
-            layoutName = [NSString stringWithUTF8String: xkbName];
-    }
+    if (_CGSNativeConnectionKeyboardLayoutGroup(&layout) >= 0 && layout != NULL)
+        layoutName = [(NSString *) layout autorelease];
     if (name != NULL)
         *name = layoutName;
     if (fullName != NULL)
@@ -2453,7 +2069,7 @@ static NSUInteger modifierDeviceMask(int code) {
 // means another client has it.
 - (void) applicationFocusMayHaveLeft {
     [self performAfterDispatch: ^{
-        if (self->_keyboardWindow != nil)
+        if (_CGSNativeConnectionKeyboardFocus() != NULL)
             return;
         for (CFIndex i = 0; i < CFArrayGetCount(self->_windows); i++) {
             if ([(WaylandWindow *) CFArrayGetValueAtIndex(self->_windows, i) isActivatedByCompositor])
@@ -2517,12 +2133,14 @@ static NSUInteger modifierDeviceMask(int code) {
         [_inputEvent release];
         _inputEvent = nil;
     }
-    if (_keyboardWindow == window) {
+    if (_keyboardFocusWindow == window) {
+        // The leave event that may still follow is the application unmapping its own window, not another
+        // client taking the focus.
         _keyboardWindowUnmapped = YES;
-        _keyboardWindow = nil;
-        [self stopKeyRepeat];
-        [self resetKeyboardModifiers];
+        _keyboardFocusWindow = nil;
     }
+    // The keyboard focus on the window's surface ends with it.
+    _CGSNativeConnectionObjectDestroyed([window surface]);
 }
 
 - (void) windowDestroyed: (WaylandWindow *) window {
@@ -2820,7 +2438,7 @@ static NSUInteger modifierDeviceMask(int code) {
 #pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
 - (uint32_t) clipboardSerial {
-    if (_keyboardWindow != nil)
+    if (_CGSNativeConnectionKeyboardFocus() != NULL)
         return _inputSerial;
     // A key or click still being handled entitles its writes to the selection even when the focus
     // left right after it, as when a virtual keyboard is removed a few milliseconds after its key.

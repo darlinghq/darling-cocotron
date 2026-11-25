@@ -328,6 +328,34 @@ static void* g_nativeObserver;
 {
 }
 
+-(void*) keyboardFocus
+{
+	return NULL;
+}
+
+-(uint64_t) modifierFlags
+{
+	return 0;
+}
+
+-(void) nativeObjectDestroyed:(void*)object
+{
+}
+
+-(void) flushPendingKeyboardEvents
+{
+}
+
+-(int) keyboardLayoutGroup
+{
+	return -1;
+}
+
+-(NSString*) keyboardLayoutName
+{
+	return nil;
+}
+
 -(void) activationRequested
 {
 	id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];

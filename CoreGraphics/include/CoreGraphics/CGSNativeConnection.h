@@ -50,6 +50,14 @@ typedef enum {
 // Another process asked for the windows of this one to be activated and the window system offers
 // no request for that, so only the process can do it (Wayland). Called on the main thread.
 - (void) nativeConnectionActivationRequested;
+// The keyboard focus moved to a window system object of the process (the wl_surface on Wayland), or
+// left it (NULL). The pointer is compared by value only.
+- (void) nativeConnectionKeyboardFocusChanged: (void *) surface;
+// A key was pressed with the window system's serial for the input (Wayland), before the key event is posted.
+- (void) nativeConnectionKeyPressedWithSerial: (uint32_t) serial;
+// Called before CoreGraphics posts the events a keyboard event of the window system makes, so that
+// the observer can send what it holds back from earlier input first (the order of the events).
+- (void) nativeConnectionWillPostKeyboardEvent;
 @end
 
 // The kind of the process' connection to the window system, opening it if needed.
@@ -60,5 +68,18 @@ extern void *_CGSNativeConnectionDisplay(void);
 extern void _CGSSetNativeConnectionObserver(id<CGSNativeConnectionObserver> observer);
 // Reads and dispatches what the window system has sent, now, from the calling (main) thread.
 extern void _CGSProcessNativeConnectionEvents(void);
+
+// The window system's object with the keyboard focus (the wl_surface on Wayland), NULL when none of the
+// process' objects has it or the window system does not say (X11).
+extern void *_CGSNativeConnectionKeyboardFocus(void);
+// The modifier flags in effect, with the device-dependent bits of the keys held down (CGEventFlags bits).
+extern uint64_t _CGSNativeConnectionModifierFlags(void);
+// A window system object the process created has been destroyed: the keyboard focus on it ends.
+extern void _CGSNativeConnectionObjectDestroyed(void *object);
+// Posts what the keyboard decoder holds back until the compositor confirms it (a modifier key that is
+// not yet known to have changed the flags), so that a later event of another device follows it.
+extern void _CGSNativeConnectionFlushPendingKeyboardEvents(void);
+// The index and name of the keyboard layout group in effect. -1 and NULL when there is none.
+extern int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef *name);
 
 #endif

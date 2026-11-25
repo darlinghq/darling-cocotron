@@ -431,6 +431,20 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     _NSEventQueueDiscard(mask, event);
 }
 
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          forKeyEvent: (struct __CGEvent *) event
+{
+    NSWindow *keyWindow = [NSApp keyWindow];
+
+    *windowNumber = [keyWindow windowNumber];
+    *location = [keyWindow mouseLocationOutsideOfEventStream];
+    return YES;
+}
+
+- (void) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent {
+}
+
 - (void) willWaitForEvents {
 }
 

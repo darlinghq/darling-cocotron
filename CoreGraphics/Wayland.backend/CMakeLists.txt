@@ -15,6 +15,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 	add_backend(Wayland
 		SOURCES
 			CGSConnectionWayland.m
+			CGSWaylandKeyboard.m
 			CGSWaylandKeymap.m
 			CGSWaylandOutputManager.m
 			CGSWindowWayland.m

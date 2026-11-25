@@ -391,6 +391,22 @@ extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef _Nullable source, C
 // part of the event: copies of the event do not have it, and an active event tap that changes the
 // event or replaces it with another drops it, so the reader then builds what it needs from the
 // event's fields. The event retains the object.
+// Fields of our own on the input events the window system backends post, for what a CGEvent has no
+// field for. They sit above the highest field CGEvent.h defines and belong to every event type.
+enum {
+	// The characters of a key event with the modifiers other than Shift ignored: up to four UTF-16
+	// units, the first in the lowest 16 bits, and the key code they were made for (they no longer apply
+	// when an event tap gives the event another key code).
+	kCGSKeyboardEventUnmodifiedUnicode = 180,
+	kCGSKeyboardEventUnmodifiedLength = 181,
+	kCGSKeyboardEventUnmodifiedKeyCode = 184,
+	// The window system handle of the window the event is for (the wl_surface of the keyboard focus
+	// on Wayland), compared by value only.
+	kCGSEventNativeWindow = 182,
+	// The window system serial of the input event (Wayland), 0 when it has none.
+	kCGSEventInputSerial = 183,
+};
+
 extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
 extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
 

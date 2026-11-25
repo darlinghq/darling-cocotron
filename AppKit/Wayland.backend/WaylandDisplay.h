@@ -55,7 +55,6 @@ typedef enum {
     WaylandObjectWmBase,
     WaylandObjectSeat,
     WaylandObjectPointer,
-    WaylandObjectKeyboard,
     WaylandObjectOutput,
     WaylandObjectSurface,
     WaylandObjectXdgSurface,
@@ -64,7 +63,6 @@ typedef enum {
     WaylandObjectDecoration,
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
-    WaylandObjectKeyboardSync,
     WaylandObjectPinchGesture,
     WaylandObjectTextInput,
     WaylandObjectDataDevice,
@@ -158,7 +156,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_lockedPointer, *_relativePointer;
     WaylandWindow *_lockWindow; // Nonretained; cleared on unmap.
     CGFloat _pinchScale;
-    struct wl_proxy *_keyboard;
     struct wl_proxy *_touch;
     // Finger id -> WaylandWindow it went down on (up and motion name no surface).
     NSMutableDictionary *_touchWindows;
@@ -199,23 +196,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _dragPressSerial, _dragPressButton;
     WaylandDraggingManager *_draggingManager;
 
-    struct xkb_context *_xkbContext;
-    struct xkb_keymap *_xkbKeymap;
-    struct xkb_state *_xkbState;
-    WaylandWindow *_keyboardWindow;
+    // The window the keyboard focus last went to, as CoreGraphics reported it; not retained, cleared when
+    // the window is unmapped.
+    WaylandWindow *_keyboardFocusWindow;
     // The keyboard focus was in a window of the application that was unmapped; its leave event has not arrived.
     BOOL _keyboardWindowUnmapped;
-    BOOL _syncModifierFlags;
-    BOOL _classifyHeldKeys;
-    // Raw XKB keycode -> identity at press time; -1 denotes a non-modifier.
-    NSMutableDictionary *_heldKeyIdentities;
-    struct wl_proxy *_modifierSync;
-    BOOL _hasModifierKeycode;
-    unsigned short _modifierKeycode;
-    int32_t _repeatRate;
-    int32_t _repeatDelay;
-    uint32_t _repeatKeycode;
-    CFRunLoopTimerRef _repeatTimer;
 
     struct wl_cursor_theme *_cursorTheme;
     uint32_t _cursorThemeScale120;
@@ -287,5 +272,4 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (NSString *) applicationMenuObjectPath;
 
 - (struct wl_proxy *) newFractionalScaleForSurface: (struct wl_proxy *) surface owner: (id<WaylandFractionalScaleOwner>) owner;
-- (void)publishKeyboardLayout;
 @end
