@@ -80,8 +80,9 @@ static BOOL isViewable(Display* display, Window window)
 		StructureNotifyMask);
 
 	// The window manager asks the window to close (a client message) instead of destroying it
-	Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
-	XSetWMProtocols(_display, _window, &deleteWindow, 1);
+	// and asks whether the window is alive (_NET_WM_PING), which the connection answers
+	Atom protocols[2] = { XInternAtom(_display, "WM_DELETE_WINDOW", False), XInternAtom(_display, "_NET_WM_PING", False) };
+	XSetWMProtocols(_display, _window, protocols, 2);
 
 	[self _setSizeHints];
 

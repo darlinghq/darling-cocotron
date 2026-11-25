@@ -672,8 +672,18 @@ static double windowOpacity(Display* display, Window window)
 		case ClientMessage:
 		{
 			Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
+			Atom ping = XInternAtom(_display, "_NET_WM_PING", False);
 			if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == deleteWindow)
 				_CGSPostWindowEvent(kCGSWindowEventCloseRequested, window.windowId, CGRectNull);
+			else if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == ping)
+			{
+				// The window manager asks whether the window is alive; it answers by getting the message
+				// back on the root window. A window that does not answer is reported as not responding.
+				XEvent reply = *event;
+				reply.xclient.window = DefaultRootWindow(_display);
+				XSendEvent(_display, DefaultRootWindow(_display), False, SubstructureNotifyMask | SubstructureRedirectMask, &reply);
+				XFlush(_display);
+			}
 			break;
 		}
 	}
