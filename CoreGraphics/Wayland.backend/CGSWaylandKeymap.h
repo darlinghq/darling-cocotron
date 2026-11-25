@@ -28,24 +28,12 @@
 
 #import <Foundation/NSObject.h>
 #include <stdint.h>
+#import "../CGSKeyCompose.h"
 
 @class CGSKeyboardLayout;
-@class NSMutableArray;
 struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
-struct xkb_compose_table;
-struct xkb_compose_state;
-
-// What a key press means for dead keys and compose sequences (the Compose file of the locale).
-typedef enum {
-    // The key is not part of a sequence: its characters are the ones charactersForKeycode: gives.
-    CGSWaylandComposeNone,
-    // The key started or continued a sequence: it produces no event, nor does its release.
-    CGSWaylandComposeConsumed,
-    // The key ended a sequence: its characters are the returned text.
-    CGSWaylandComposeCommitted,
-} CGSWaylandComposeResult;
 
 @interface CGSWaylandKeymap : NSObject {
     // Declared here: the i386 slice has the legacy Objective-C ABI, which has no ivars in the @implementation.
@@ -54,12 +42,9 @@ typedef enum {
     struct xkb_state *_state;
     // The layout built from the keymap and group, until either changes.
     CGSKeyboardLayout *_layout;
-    // The dead key and compose sequences of the locale, loaded when the first key needs them.
-    struct xkb_compose_table *_composeTable;
-    struct xkb_compose_state *_compose;
+    // The dead key and compose sequences of the locale (CGSKeyCompose.h), loaded when the first key needs them.
+    struct CGSKeyCompose *_compose;
     BOOL _composeLoaded;
-    // The keysyms of the sequence in progress, as NSNumbers: what an invalid sequence commits as text.
-    NSMutableArray *_composeSequence;
 }
 
 // Starts with the system default layout (the evdev rules, honouring XKB_DEFAULT_*), which describes
@@ -98,7 +83,7 @@ typedef enum {
 
 // Feeds the key press (an xkb key code) to the sequence in progress. A completed sequence returns its text; one
 // that no entry of the table continues returns the characters of its keys and of this one, as typed.
-- (CGSWaylandComposeResult) composeKeycode: (uint32_t) keycode text: (NSString **) text;
+- (CGSKeyComposeResult) composeKeycode: (uint32_t) keycode text: (NSString **) text;
 // Drops the sequence in progress (the keymap or the focus changed, or the keyboard goes away).
 - (void) resetCompose;
 // No modifier in effect (the focus changed).
