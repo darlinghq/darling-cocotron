@@ -23,7 +23,10 @@ static Ivar managerIvar;
 static id sourceView;
 static NSString *fileEnv(const char *key) { return [NSString stringWithUTF8String:getenv(key)]; }
 static NSArray *filePaths(void) { return getenv("LOCAL_FILES") ? @[@"/guest-only-not-exportable",@"/tmp/private-selection"] : @[fileEnv("FILE_ONE"),fileEnv("FILE_TWO")]; }
-static BOOL noStartExpected(void) { return getenv("INVALID_PROVIDER") || getenv("SOURCE_LINK") || getenv("FILE_BAD") || getenv("FILE_NIL"); }
+static BOOL noStartExpected(void) { return getenv("INVALID_PROVIDER") || getenv("SOURCE_LINK") || getenv("FILE_NIL"); }
+// A file list other clients cannot be given whole is offered to this application only: the drag starts, and
+// without a target of its own it ends with nothing done
+static BOOL unexportableFiles(void) { return getenv("FILE_BAD") != NULL; }
 @interface TargetView : NSView
 @end
 @implementation TargetView
@@ -181,7 +184,7 @@ static BOOL noStartExpected(void) { return getenv("INVALID_PROVIDER") || getenv(
 - (void)draggedImage:(NSImage *)image endedAt:(NSPoint)point operation:(NSDragOperation)operation {
     ended++;
     if(ticks!=attempts)failures++;
-    BOOL cancel=getenv("EXPECT_CANCEL")!=NULL || (getenv("TWO_DRAGS") && attempts==2);
+    BOOL cancel=getenv("EXPECT_CANCEL")!=NULL || unexportableFiles() || (getenv("TWO_DRAGS") && attempts==2);
     if(operation!=(cancel?NSDragOperationNone:(getenv("EXPECT_MOVE")?NSDragOperationMove:NSDragOperationCopy)))failures++;
     printf("ENDED op=%lu\n",(unsigned long)operation);fflush(stdout);
 }

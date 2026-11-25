@@ -20,15 +20,15 @@
 #import <AppKit/NSTouch.h>
 #import "../private-include/AppKit/NSTouchBackend.h"
 #import "WaylandDisplay.h"
-#import "../private-include/AppKit/CarbonKeys.h"
 #import "../private-include/AppKit/NSEventTime.h"
 #import "NSEvent_gesture.h"
 #import "NSEvent_mouse.h"
 #import "WaylandCursor.h"
 #import "WaylandScale.h"
-#import "WaylandOutputManager.h"
 #import "WaylandPasteboard.h"
 #import "WaylandDraggingManager.h"
+#import "WaylandAppMenu.h"
+#import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <OpenGL/CGLInternal.h>
 #include <dlfcn.h>
 #import "WaylandLibrary.h"
@@ -36,11 +36,9 @@
 #import "WaylandProtocol.h"
 #import "WaylandWindow.h"
 #import "WaylandAppMenu.h"
+#import "WaylandToplevelIcon.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import "../DarlingWindowLevelPolicy.h"
-#import "../../CoreGraphics/DarlingUnicodeKeyLayout.h"
-#import "../../CoreGraphics/DarlingUnicodeKeyLayoutCompose.h"
-#import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreFoundation/CFNotificationCenter.h>
 #import <AppKit/NSApplication.h>
@@ -59,68 +57,29 @@
 #include <unistd.h>
 #include <limits.h>
 
-@interface WaylandScreen : NSScreen {
-@public
-    CGFloat _waylandScale;
-    NSString *_outputName;
-}
-@end
-@implementation WaylandScreen
-- (CGFloat) backingScaleFactor { return _waylandScale; }
-// The output's description or name as the compositor reports it, else the name from an EDID set on the screen, else the
-// generic name.
-- (NSString *) localizedName {
-    return _outputName != nil && [self edid] == nil ? _outputName : [super localizedName];
-}
-- (void) dealloc {
-    [_outputName release];
-    [super dealloc];
-}
-@end
+// What a window needs of a wl_output: its scale and refresh rate, and the properties that
+// take effect together at wl_output.done (version 2 and later). The displays an application sees
+// (CoreGraphics' CGSConnectionWayland) describe the outputs themselves, from a connection of
+// their own.
+typedef struct { int32_t width, height, refresh, scale; } WaylandOutputState;
 
-// Mode pixels are untransformed. Publish v2 properties together at wl_output.done.
-// x, y: the output's position in the compositor's layout (wl_output.geometry).
-typedef struct { int32_t width, height, refresh, scale, transform, x, y; } WaylandOutputState;
-
-typedef struct {
-    int32_t x, y, width, height;
-    BOOL hasPosition, hasSize;
-} WaylandLogicalOutputState;
-
-// A wl_output and the modes it advertised.
+// A wl_output.
 @interface WaylandOutput : NSObject {
 @public
-    struct wl_proxy *_proxy, *_logicalProxy;
-    uint32_t _globalName, _version, _logicalVersion;
+    struct wl_proxy *_proxy;
+    uint32_t _globalName, _version;
     WaylandDisplay *_display;
     WaylandOutputState _current, _pending;
-    WaylandLogicalOutputState _logicalCurrent, _logicalPending;
-    NSArray *_modes;
-    NSMutableArray *_pendingModes;
-    // wl_output version 4: the connector name and the human readable description, published at done.
-    NSString *_name, *_pendingName, *_description, *_pendingDescription;
 }
 @end
 
 @implementation WaylandOutput
-
-- (void) dealloc {
-    [_name release];
-    [_pendingName release];
-    [_description release];
-    [_pendingDescription release];
-    [_modes release];
-    [_pendingModes release];
-    [super dealloc];
-}
-
 @end
 
 @interface WaylandDisplay (Private)
-- (void) logicalOutputEvent: (uint32_t) opcode output: (WaylandOutput *) output
-                 arguments: (union wl_argument *) args;
-- (void) attachLogicalOutput: (WaylandOutput *) output;
 - (void) processPendingEvents;
+- (void) scheduleOutputsDidChange;
+- (void) outputsDidChange;
 - (void) handleEvent: (uint32_t) opcode
                 kind: (WaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy
@@ -145,27 +104,20 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectDecoration:
             case WaylandObjectFrameCallback:
             case WaylandObjectBuffer:
+            case WaylandObjectLayerSurface:
                 [(WaylandWindow *) object handleEvent: opcode
                                                  kind: objectKind
                                                 proxy: proxy
                                             arguments: args];
-                break;
-            case WaylandObjectLogicalOutput:
-                [((WaylandOutput *) object)->_display logicalOutputEvent: opcode
-                                                                  output: object arguments: args];
-                break;
-            case WaylandObjectOutputManager:
-            case WaylandObjectOutputHead:
-            case WaylandObjectOutputHeadMode:
-            case WaylandObjectOutputConfiguration:
-                [(id<WaylandOutputManagementEvents>) object handleEvent: opcode kind: objectKind
-                                                                  proxy: proxy arguments: args];
                 break;
             case WaylandObjectDataDevice:
             case WaylandObjectDataOffer:
             case WaylandObjectDataSource:
                 [(WaylandPasteboard *) object handleEvent: opcode kind: objectKind
                                                      proxy: proxy arguments: args];
+                break;
+            case WaylandObjectIconManager:
+                [(WaylandToplevelIcons *) object handleEvent: opcode arguments: args];
                 break;
             case WaylandObjectFractionalScale:
                 if (opcode == WP_FRACTIONAL_EV_PREFERRED && args[0].u != 0)
@@ -220,39 +172,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     return created;
 }
 
-static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
-                           CFDataRef address, const void *data, void *info)
-{
-    [(WaylandDisplay *) info processPendingEvents];
-}
-
-// A process asked (CGS, _CGSActivateProcess) that this one activate its windows.
-static void activationRequestedCallback(CFNotificationCenterRef center, void *observer,
-                                        CFNotificationName name, const void *object,
-                                        CFDictionaryRef userInfo)
-{
-    [(WaylandDisplay *) observer performSelectorOnMainThread: @selector(requestActivation)
-                                                  withObject: nil
-                                               waitUntilDone: NO];
-}
-
-static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
-    [(WaylandDisplay *) info performSelector: @selector(repeatKey)];
-}
-
-static NSString *stringWithCodepoint(uint32_t codepoint) {
-    if (codepoint == 0 || codepoint > 0x10FFFF)
-        return @"";
-    if (codepoint < 0x10000) {
-        unichar character = (unichar) codepoint;
-        return [NSString stringWithCharacters: &character length: 1];
-    }
-    codepoint -= 0x10000;
-    unichar pair[2] = {(unichar) (0xD800 + (codepoint >> 10)),
-                       (unichar) (0xDC00 + (codepoint & 0x3FF))};
-    return [NSString stringWithCharacters: pair length: 2];
-}
-
 @implementation WaylandDisplay
 
 - (instancetype) init {
@@ -277,15 +196,17 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _outputs = [NSMutableArray new];
     _afterDispatch = [NSMutableArray new];
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
-    _repeatRate = 25;
-    _repeatDelay = 600;
 
-    _wlDisplay = WL.wl_display_connect(NULL);
+    // The process has one connection to the compositor and CoreGraphics owns it: it reads its socket and
+    // dispatches the events of every object on it, this display's included, then tells the observer
+    // registered at the end of this method.
+    if (_CGSNativeConnectionKind() != CGSNativeConnectionKindWayland) {
+        [self release];
+        return nil;
+    }
+    _wlDisplay = (struct wl_display *) _CGSNativeConnectionDisplay();
     if (_wlDisplay == NULL) {
-        const char *name = getenv("WAYLAND_DISPLAY");
-        NSLog(@"Wayland backend: cannot connect to the compositor "
-              @"(WAYLAND_DISPLAY=%s), trying the next backend",
-              name ? name : "unset");
+        NSLog(@"Wayland backend: no connection to the compositor, trying the next backend");
         [self release];
         return nil;
     }
@@ -329,17 +250,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     _generalPasteboard = [[WaylandPasteboard alloc] initWithName: NSGeneralPboard display: self
                                                       manager: _dataDeviceManager seat: _seat];
 
-    _xkbContext = WL.xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    if (_xkbContext == NULL)
-        NSLog(@"Wayland backend: cannot create an xkbcommon context, keyboard "
-              @"input is disabled");
-    else
-        // The Text Input Sources API describes a keyboard layout whether or not the
-        // seat has a keyboard (a compositor with no input devices never sends a
-        // keymap), so start with the system default layout; the compositor's keymap
-        // replaces it when one arrives.
-        [self installKeymap: WL.xkb_keymap_new_from_names(_xkbContext, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS)];
-
     if (WL.hasCursor) {
         const char *sizeString = getenv("XCURSOR_SIZE");
         long parsed = sizeString ? strtol(sizeString, NULL, 10) : 24;
@@ -360,37 +270,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
     _cursorFractionalScale = [self newFractionalScaleForSurface: _cursorSurface owner: (id)self];
 
-    CFSocketContext context = {.version = 0, .info = self};
-    _wlSocket = CFSocketCreateWithNative(NULL, WL.wl_display_get_fd(_wlDisplay),
-                                         kCFSocketReadCallBack, socketCallback,
-                                         &context);
-    if (_wlSocket != NULL) {
-        // The descriptor belongs to libwayland.
-        CFSocketSetSocketFlags(_wlSocket, CFSocketGetSocketFlags(_wlSocket) &
-                                                  ~kCFSocketCloseOnInvalidate);
-        _wlSource = CFSocketCreateRunLoopSource(NULL, _wlSocket, 0);
-    }
-    if (_wlSource == NULL) {
-        NSLog(@"Wayland backend: cannot watch the compositor connection, trying "
-              @"the next backend");
-        [self release];
-        return nil;
-    }
-    CFRunLoopAddSource(CFRunLoopGetMain(), _wlSource, kCFRunLoopCommonModes);
-
-    // Another process asks for the activation of this one's windows with a Darwin
-    // notification named after this process (see _CGSActivateProcess).
-    char notificationName[64];
-    snprintf(notificationName, sizeof(notificationName),
-             kCGSProcessActivationNotificationPrefix "%d", (int) getpid());
-    CFStringRef notification = CFStringCreateWithCString(NULL, notificationName,
-                                                         kCFStringEncodingUTF8);
-    if (notification != NULL) {
-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), self,
-                                        activationRequestedCallback, notification, NULL,
-                                        CFNotificationSuspensionBehaviorDeliverImmediately);
-        CFRelease(notification);
-    }
+    // Windows ordered in while the application was not active are mapped once it is.
+    [[NSNotificationCenter defaultCenter] addObserver: self
+                                             selector: @selector(applicationBecameActive:)
+                                                 name: NSApplicationDidBecomeActiveNotification
+                                               object: nil];
 
     [self runAfterDispatchBlocks];
     [self flush];
@@ -398,64 +282,44 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     // The general pasteboard and the compositor's clipboard show the same contents.
     NSPasteboardRegisterHostClipboard(_generalPasteboard);
 
+    _setupDone = YES;
+    _CGSSetNativeConnectionObserver(self);
     return self;
 }
 
 - (void) dealloc {
+    [_appMenu release];
     [_draggingManager invalidate];
     [_draggingManager release];
     [self consumeDragPress];
     [_generalPasteboard invalidate];
     [_generalPasteboard release];
-    [self stopKeyRepeat];
-    [self cancelPendingModifier];
-    [_heldKeyIdentities release];
 
-    CFNotificationCenterRemoveEveryObserver(CFNotificationCenterGetDarwinNotifyCenter(), self);
+    _CGSSetNativeConnectionObserver(nil);
     [self cancelActivationRequest];
 
-    if (_wlSource != NULL) {
-        CFRunLoopRemoveSource(CFRunLoopGetMain(), _wlSource,
-                              kCFRunLoopCommonModes);
-        CFRelease(_wlSource);
-    }
-    if (_wlSocket != NULL) {
-        CFSocketInvalidate(_wlSocket);
-        CFRelease(_wlSocket);
-    }
-    if (_xkbState != NULL)
-        WL.xkb_state_unref(_xkbState);
-    if (_xkbKeymap != NULL)
-        WL.xkb_keymap_unref(_xkbKeymap);
-    if (_xkbContext != NULL)
-        WL.xkb_context_unref(_xkbContext);
     if (_cursorTheme != NULL)
         WL.wl_cursor_theme_destroy(_cursorTheme);
-    [_outputManager release];
-    _outputManager = nil;
     [_appMenu release];
     _appMenu = nil;
+    [_toplevelIcons release];
+    _toplevelIcons = nil;
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
-                                      _lockedPointer, _relativePointer, _pointerConstraints, _relativePointerManager,
-                                      _textInput, _textInputManager, _pinchGesture, _pointerGestures, _pointer, _keyboard,
+                                      _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _logicalOutputManager,
-                                      _legacyLogicalOutputManager, _compositor, _registry};
+                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
                 WL.wl_proxy_destroy(proxies[i]);
-        for (WaylandOutput *output in _outputs) {
-            if (output->_logicalProxy) WL.wl_proxy_destroy(output->_logicalProxy);
+        for (WaylandOutput *output in _outputs)
             WL.wl_proxy_destroy(output->_proxy);
-        }
-        WL.wl_display_disconnect(_wlDisplay);
+        // The connection is CoreGraphics'; it stays open.
     }
 
     [_cursor release];
     [_inputEvent release];
-    [_screens release];
     [_outputs release];
     [_afterDispatch release];
     if (_windows != NULL)
@@ -471,14 +335,25 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         WL.wl_display_flush(_wlDisplay);
 }
 
-- (void) connectionFailed {
-    NSLog(@"Wayland backend: lost the connection to the compositor (error %d)",
-          WL.wl_display_get_error(_wlDisplay));
-    exit(1);
+// The windows carry the application icon (see WaylandToplevelIcon.h): when the application sets another
+// one, the windows already shown are given it too.
+- (void) updateWindowIcons {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateToplevelIcon];
+}
+
+- (void) applicationIconImageChanged {
+    [super applicationIconImageChanged];
+    [_toplevelIcons applicationIconChanged];
 }
 
 - (void) performAfterDispatch: (void (^)(void)) block {
     [_afterDispatch addObject: [[block copy] autorelease]];
+}
+
+- (void) performAfterRunLoopPass: (void (^)(void)) block {
+    [self performAfterDispatch: block];
+    [self scheduleAfterDispatchRun];
 }
 
 // Runs the blocks that were queued before this pass. Blocks queued by those
@@ -518,40 +393,33 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     CFRunLoopWakeUp(loop);
 }
 
+// Reads and dispatches what the compositor has sent, now. CoreGraphics does it for the whole connection
+// and calls back -nativeConnectionDidProcessEvents.
 - (void) processPendingEvents {
-    if (_wlDisplay == NULL)
-        return;
-
-    while (WL.wl_display_prepare_read(_wlDisplay) != 0) {
-        if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
-            [self connectionFailed];
-    }
-    WL.wl_display_flush(_wlDisplay);
-
-    struct pollfd pfd = {.fd = WL.wl_display_get_fd(_wlDisplay),
-                         .events = POLLIN};
-    if (poll(&pfd, 1, 0) > 0) {
-        if (WL.wl_display_read_events(_wlDisplay) < 0)
-            [self connectionFailed];
-    } else {
-        WL.wl_display_cancel_read(_wlDisplay);
-    }
-
-    if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
-        [self connectionFailed];
-
-    [self runAfterDispatchBlocks];
-    WL.wl_display_flush(_wlDisplay);
+    _CGSProcessNativeConnectionEvents();
 }
 
-- (NSEvent *) nextEventMatchingMask: (NSUInteger) mask
-                          untilDate: (NSDate *) untilDate
-                             inMode: (NSRunLoopMode) mode
-                            dequeue: (BOOL) dequeue
-{
-    [self processPendingEvents];
+// Every listener on the connection has run: this display's queued work follows.
+- (void) nativeConnectionDidProcessEvents {
+    [self runAfterDispatchBlocks];
+    [self flush];
+}
 
-    return [super nextEventMatchingMask: mask untilDate: untilDate inMode: mode dequeue: dequeue];
+// CoreGraphics read the new layout of the outputs and reported it. The windows learn of it once, with the
+// outputs of this display as they are after the same pass (see -publishOutput:).
+- (void) nativeConnectionDisplayLayoutChanged {
+    [self outputsDidChange];
+}
+
+// Another process asked for the activation of this one's windows (see _CGSActivateProcess).
+- (void) nativeConnectionActivationRequested {
+    [self requestActivation];
+}
+
+// Sends the requests made since the last wait, and handles the events libwayland has already
+// read (which leave the connection's descriptor quiet)
+- (void) willWaitForEvents {
+    [self processPendingEvents];
 }
 
 #pragma mark - Globals
@@ -610,6 +478,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _appMenuManagerVersion = MIN(version, 2);
         _appMenuManager = [self bindGlobal: name interface: &org_kde_kwin_appmenu_manager_interface
                                    version: _appMenuManagerVersion kind: 0 object: nil];
+    } else if (strcmp(interface, "xdg_toplevel_icon_manager_v1") == 0 && _toplevelIcons == nil) {
+        _toplevelIcons = [[WaylandToplevelIcons alloc] initWithDisplay: self];
+        [_toplevelIcons setManager: [self bindGlobal: name interface: &xdg_toplevel_icon_manager_v1_interface
+                                             version: 1 kind: WaylandObjectIconManager object: _toplevelIcons]
+                              name: name];
     } else if (strcmp(interface, "org_kde_plasma_shell") == 0 && _plasmaShell == NULL) {
         // Version 2 adds set_skip_taskbar, version 5 set_skip_switcher.
         _plasmaShellName = name;
@@ -643,27 +516,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                          version: 1
                             kind: 0
                           object: nil];
-    } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
-        // Version 2 adds the release request.
-        _pointerGesturesName = name;
-        _pointerGestures = [self bindGlobal: name interface: &zwp_pointer_gestures_v1_interface
-                                    version: MIN(version, 2) kind: 0 object: nil];
-        [self attachPinchGesture];
     } else if (strcmp(interface, "zwp_text_input_manager_v3") == 0 && _textInputManager == NULL) {
         _textInputManagerName = name;
         _textInputManager = [self bindGlobal: name interface: &zwp_text_input_manager_v3_interface
                                      version: 1 kind: 0 object: nil];
         [self attachTextInput];
-    } else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0 && _pointerConstraints == NULL) {
-        _pointerConstraintsName = name;
-        _pointerConstraints = [self bindGlobal: name interface: &zwp_pointer_constraints_v1_interface
-                                       version: 1 kind: 0 object: nil];
-        [self updatePointerLock];
-    } else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0 && _relativePointerManager == NULL) {
-        _relativePointerManagerName = name;
-        _relativePointerManager = [self bindGlobal: name interface: &zwp_relative_pointer_manager_v1_interface
-                                           version: 1 kind: 0 object: nil];
-        [self updatePointerLock];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame.
         _seat = [self bindGlobal: name
@@ -672,18 +529,11 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                             kind: WaylandObjectSeat
                           object: self];
         [self attachTextInput];
-    } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
-        _logicalOutputManagerName = name;
-        _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
-                                        version: MIN(version, 3) kind: 0 object: nil];
-        for (WaylandOutput *output in _outputs) [self attachLogicalOutput: output];
-    } else if (strcmp(interface, "zwlr_output_manager_v1") == 0 && _outputManager == nil) {
-        _outputManagerName = name;
-        _outputManager = [WaylandOutputManager alloc];
-        struct wl_proxy *proxy = [self bindGlobal: name interface: &zwlr_output_manager_v1_interface
-                                          version: 1 kind: WaylandObjectOutputManager
-                                           object: _outputManager];
-        _outputManager = [_outputManager initWithDisplay: _wlDisplay manager: proxy];
+    } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
+        _layerShellName = name;
+        // Version 4 adds the on-demand keyboard interactivity the bar asks for.
+        _layerShell = [self bindGlobal: name interface: &zwlr_layer_shell_v1_interface
+                               version: MIN(version, 4) kind: 0 object: nil];
     } else if (strcmp(interface, "wl_output") == 0) {
         WaylandOutput *output = [[WaylandOutput new] autorelease];
         output->_globalName = name;
@@ -691,8 +541,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         output->_current.scale = output->_pending.scale = 1;
         // Version 2 has scale and done, version 4 the name and the description.
         output->_version = MIN(version, MIN(4u, wl_output_interface.version));
-        output->_pendingModes = [NSMutableArray new];
-        output->_modes = [NSArray new];
         // Version 2 has scale and done.
         output->_proxy = [self bindGlobal: name
                                 interface: &wl_output_interface
@@ -701,50 +549,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
                                    object: output];
         if (output->_proxy != NULL) {
             [_outputs addObject: output];
-            [self attachLogicalOutput: output];
         }
-    }
-}
-
-- (void) attachLogicalOutput: (WaylandOutput *) output {
-    if (!_logicalOutputManager || output->_logicalProxy) return;
-    struct wl_proxy *manager = _logicalOutputManager;
-    // Typed new_id inherits the server-side manager version. A core v1 output
-    // cannot receive wl_output.done, so it needs a genuinely v2 factory binding.
-    if (output->_version < 2 && WL.wl_proxy_get_version(manager) >= 3) {
-        if (!_legacyLogicalOutputManager)
-            _legacyLogicalOutputManager = [self bindGlobal: _logicalOutputManagerName
-                    interface: &zxdg_output_manager_v1_interface version: 2 kind: 0 object: nil];
-        manager = _legacyLogicalOutputManager;
-    }
-    if (!manager) return;
-    output->_logicalVersion = WL.wl_proxy_get_version(manager);
-    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *)output->_proxy}};
-    output->_logicalProxy = WaylandCreateObject(manager, WP_LOGICAL_MANAGER_GET_OUTPUT,
-            &zxdg_output_v1_interface, args, WaylandObjectLogicalOutput, output);
-}
-
-- (void) logicalOutputEvent: (uint32_t) opcode output: (WaylandOutput *) output
-                 arguments: (union wl_argument *) args {
-    switch (opcode) {
-    case WP_LOGICAL_OUTPUT_EV_POSITION:
-        output->_logicalPending.x = args[0].i;
-        output->_logicalPending.y = args[1].i;
-        output->_logicalPending.hasPosition = YES;
-        break;
-    case WP_LOGICAL_OUTPUT_EV_SIZE:
-        if (args[0].i > 0 && args[1].i > 0) {
-            output->_logicalPending.width = args[0].i;
-            output->_logicalPending.height = args[1].i;
-            output->_logicalPending.hasSize = YES;
-        }
-        break;
-    case WP_LOGICAL_OUTPUT_EV_DONE:
-        if (output->_logicalVersion < 3) {
-            output->_logicalCurrent = output->_logicalPending;
-            [self invalidateScreens];
-        }
-        break;
     }
 }
 
@@ -762,28 +567,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _textInputManager = NULL; _textInputManagerName = 0;
         return;
     }
-    if (_pointerGestures && name == _pointerGesturesName) {
-        [self detachPinchGesture];
-        if (WL.wl_proxy_get_version(_pointerGestures) >= 2)
-            WaylandMarshal(_pointerGestures, WP_GESTURES_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-        else
-            WL.wl_proxy_destroy(_pointerGestures);
-        _pointerGestures = NULL; _pointerGesturesName = 0;
-        return;
-    }
-    if ((_pointerConstraints && name == _pointerConstraintsName) ||
-        (_relativePointerManager && name == _relativePointerManagerName))
-    {
-        [self releasePointerLock];
-        if (name == _pointerConstraintsName) {
-            WaylandMarshal(_pointerConstraints, WP_POINTER_CONSTRAINTS_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-            _pointerConstraints = NULL; _pointerConstraintsName = 0;
-        } else {
-            WaylandMarshal(_relativePointerManager, WP_RELATIVE_POINTER_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-            _relativePointerManager = NULL; _relativePointerManagerName = 0;
-        }
-        return;
-    }
     if (_fractionalScaleManager && name == _fractionalScaleManagerName) {
         WaylandMarshal(_fractionalScaleManager, WP_FRACTIONAL_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _fractionalScaleManager = NULL; _fractionalScaleManagerName = 0;
@@ -799,6 +582,13 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             WaylandMarshal(manager, WP_APPMENU_MANAGER_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         else
             WL.wl_proxy_destroy(manager);
+        return;
+    }
+    if (_toplevelIcons && name == [_toplevelIcons name]) {
+        // The windows keep the icons they were given.
+        [_toplevelIcons managerRemoved];
+        [_toplevelIcons release];
+        _toplevelIcons = nil;
         return;
     }
     if (_plasmaShell && name == _plasmaShellName) {
@@ -819,36 +609,20 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         _viewporter = NULL; _viewporterName = 0;
         return; // Existing viewport objects remain usable.
     }
-    if (_outputManager && name == _outputManagerName) {
-        [_outputManager release];
-        _outputManager = nil;
-        _outputManagerName = 0;
-        return;
-    }
-    if (_logicalOutputManager && name == _logicalOutputManagerName) {
-        if (_legacyLogicalOutputManager)
-            WaylandMarshal(_legacyLogicalOutputManager, WP_LOGICAL_MANAGER_DESTROY, NULL,
-                           WL_MARSHAL_FLAG_DESTROY, NULL);
-        WaylandMarshal(_logicalOutputManager, WP_LOGICAL_MANAGER_DESTROY, NULL,
-                       WL_MARSHAL_FLAG_DESTROY, NULL);
-        _logicalOutputManager = _legacyLogicalOutputManager = NULL;
-        _logicalOutputManagerName = 0;
-        // Existing logical-output children survive factory removal.
+    if (_layerShell && name == _layerShellName) {
+        // Existing layer surfaces stay usable until the compositor closes them.
+        _layerShell = NULL;
+        _layerShellName = 0;
         return;
     }
     for (WaylandOutput *output in _outputs) {
         if (output->_globalName == name) {
             for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
                 [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputRemoved: output->_proxy];
-            if (output->_logicalProxy)
-                WaylandMarshal(output->_logicalProxy, WP_LOGICAL_OUTPUT_DESTROY, NULL,
-                               WL_MARSHAL_FLAG_DESTROY, NULL);
             [_draggingManager outputRemoved: output->_proxy];
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
-            [self invalidateScreens];
-            for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-                [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputsChanged];
+            [self scheduleOutputsDidChange];
             break;
         }
     }
@@ -873,41 +647,36 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
         [self applyCursor];
 }
 
-- (void) invalidateScreens {
-    [_screens release];
-    _screens = nil;
+// An output changed. The displays are CoreGraphics', which learns of it on the same connection: its
+// objects and these ones get the events of one change in the same pass, so the windows are told when the
+// pass is over and both agree on the outputs (-outputsDidChange).
+- (void) publishOutput: (WaylandOutput *) output {
+    output->_current = output->_pending;
+    // Not while the connection is being set up: the displays are read when they are first needed.
+    if (_setupDone)
+        [self scheduleOutputsDidChange];
 }
 
-- (void) publishOutput: (WaylandOutput *) output {
-    // Not for the output's first description: the screens are being set up then.
-    BOOL changed = output->_current.width > 0 && output->_current.height > 0 &&
-                   memcmp(&output->_current, &output->_pending, sizeof output->_current) != 0;
-    output->_current = output->_pending;
-    [output->_name release];
-    output->_name = [output->_pendingName copy];
-    [output->_description release];
-    output->_description = [output->_pendingDescription copy];
-    if (output->_logicalVersion >= 3)
-        output->_logicalCurrent = output->_logicalPending;
-    [output->_modes release];
-    output->_modes = [output->_pendingModes copy];
-    [self invalidateScreens];
+- (void) scheduleOutputsDidChange {
+    if (_outputsChangePending)
+        return;
+    _outputsChangePending = YES;
+    [self performAfterDispatch: ^{
+        // CoreGraphics' report of the same change may have been handled meanwhile.
+        if (self->_outputsChangePending)
+            [self outputsDidChange];
+    }];
+}
+
+// The outputs changed: what depends on them is brought up to date once per pass.
+- (void) outputsDidChange {
+    _outputsChangePending = NO;
+    [self _invalidateScreens];
     [_draggingManager outputsChanged];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
         [window scheduleScaleUpdate];
         [window outputsChanged];
-    }
-    if (changed) {
-        // One change comes as several events; merge them into one notification for the next run loop pass.
-        NSNotification *note = [NSNotification
-                notificationWithName: NSApplicationDidChangeScreenParametersNotification
-                              object: NSApp];
-        [[NSNotificationQueue defaultQueue] enqueueNotification: note
-                                                   postingStyle: NSPostASAP
-                                                   coalesceMask: NSNotificationCoalescingOnName |
-                                                                 NSNotificationCoalescingOnSender
-                                                       forModes: nil];
     }
 }
 
@@ -916,15 +685,7 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
            arguments: (union wl_argument *) args
 {
     switch (opcode) {
-    case WP_OUTPUT_EV_GEOMETRY:
-        // Geometry's transform is its eighth argument; dispatch avoids native
-        // variadic/listener ABI differences. Ignore unknown enum values.
-        if (args[7].i >= 0 && args[7].i <= 7)
-            output->_pending.transform = args[7].i;
-        output->_pending.x = args[0].i;
-        output->_pending.y = args[1].i;
-        break;
-    case WP_OUTPUT_EV_MODE: {
+    case WP_OUTPUT_EV_MODE:
         if (args[1].i <= 0 || args[2].i <= 0 || args[3].i < 0)
             return;
         if (args[0].u & WP_OUTPUT_MODE_CURRENT) {
@@ -932,38 +693,17 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             output->_pending.height = args[2].i;
             output->_pending.refresh = args[3].i;
         }
-        NSDictionary *mode = @{
-            @"Width" : @(args[1].i),
-            @"Height" : @(args[2].i),
-            @"Depth" : @(24),
-            @"RefreshRate" : @(args[3].i / 1000.0)
-        };
-        if (![output->_pendingModes containsObject: mode])
-            [output->_pendingModes addObject: mode];
         break;
-    }
     case WP_OUTPUT_EV_SCALE:
         output->_pending.scale = MAX(args[0].i, 1);
         break;
-    case WP_OUTPUT_EV_NAME:
-    case WP_OUTPUT_EV_DESCRIPTION: {
-        NSString *text = args[0].s != NULL ? [NSString stringWithUTF8String: args[0].s] : nil;
-        if (opcode == WP_OUTPUT_EV_NAME) {
-            [output->_pendingName release];
-            output->_pendingName = [text copy];
-        } else {
-            [output->_pendingDescription release];
-            output->_pendingDescription = [text copy];
-        }
-        return; // Published with the next done event.
-    }
     case WP_OUTPUT_EV_DONE:
         [self publishOutput: output];
         return;
     default:
         return;
     }
-    // Version 1 has no done event. Do not leave the fallback screen cached.
+    // Version 1 has no done event.
     if (output->_version < 2)
         [self publishOutput: output];
 }
@@ -1002,14 +742,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
             [self seatCapabilities: args[0].u];
         break;
 
-    case WaylandObjectPointer:
-        [self pointerEvent: opcode arguments: args];
-        break;
-
-    case WaylandObjectPinchGesture:
-        [self pinchEvent: opcode arguments: args];
-        break;
-
     case WaylandObjectTextInput:
         [self textInputEvent: opcode arguments: args];
         break;
@@ -1017,28 +749,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     case WaylandObjectActivationToken:
         if (proxy == _activationToken && opcode == WP_ACTIVATION_TOKEN_EV_DONE)
             [self activationTokenDone: args[0].s];
-        break;
-
-    case WaylandObjectLockedPointer:
-        if (proxy == _lockedPointer) {
-            _pointerLocked = opcode == WP_LOCKED_POINTER_EV_LOCKED;
-        }
-        break;
-
-    case WaylandObjectRelativePointer: {
-        double dx, dy;
-        if (proxy == _relativePointer && WaylandRelativeMotionDelta(opcode, args, &dx, &dy))
-            [self pointerRelativeMotionByX: dx y: dy];
-        break;
-    }
-
-    case WaylandObjectKeyboardSync:
-        if (proxy == _modifierSync && opcode == WP_CALLBACK_EV_DONE)
-            [self flushPendingModifier];
-        break;
-
-    case WaylandObjectKeyboard:
-        [self keyboardEvent: opcode arguments: args];
         break;
 
     case WaylandObjectTouch:
@@ -1068,28 +778,8 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 - (void) seatCapabilities: (uint32_t) capabilities {
     union wl_argument args[1] = {{.o = NULL}};
 
-    if ((capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer == NULL) {
-        _pointer = WaylandCreateObject(_seat, WP_SEAT_GET_POINTER,
-                                       &wl_pointer_interface, args,
-                                       WaylandObjectPointer, self);
-        [self attachPinchGesture];
-        [self updatePointerLock];
-    } else if (!(capabilities & WP_SEAT_CAPABILITY_POINTER) && _pointer != NULL) {
-        [self detachPinchGesture];
-        [self releasePointerLock];
-        [_draggingManager cancel];
-        [self consumeDragPress];
-        [self releaseInputDevice: &_pointer opcode: WP_POINTER_RELEASE];
-        _pointerWindow = nil;
-        _pointerEnterSerial = 0;
-        _pressedButtons = 0;
-        _pendingScrollX = _pendingScrollY = 0;
-        _pendingScrollWindow = nil;
-        _pendingScrollActive = NO;
-        _wlLastClickWindow = nil;
-        [_buttonClickCounts removeAllObjects];
-    }
-
+    // The pointer is CoreGraphics': it binds the process' wl_pointer from its own seat object, decodes it
+    // into CGEvents and tells this display about it (see the pointer methods below).
     if ((capabilities & WP_SEAT_CAPABILITY_TOUCH) && _touch == NULL) {
         args[0].o = NULL;
         _touch = WaylandCreateObject(_seat, WP_SEAT_GET_TOUCH, &wl_touch_interface, args,
@@ -1097,18 +787,6 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
     } else if (!(capabilities & WP_SEAT_CAPABILITY_TOUCH) && _touch != NULL) {
         [self releaseInputDevice: &_touch opcode: WP_TOUCH_RELEASE];
         [self touchCancel];
-    }
-
-    if ((capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard == NULL) {
-        args[0].o = NULL;
-        _keyboard = WaylandCreateObject(_seat, WP_SEAT_GET_KEYBOARD,
-                                        &wl_keyboard_interface, args,
-                                        WaylandObjectKeyboard, self);
-    } else if (!(capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard != NULL) {
-        [self releaseInputDevice: &_keyboard opcode: WP_KEYBOARD_RELEASE];
-        [self stopKeyRepeat];
-        _keyboardWindow = nil;
-        [self resetKeyboardModifiers];
     }
 }
 
@@ -1176,266 +854,225 @@ static NSString *stringWithCodepoint(uint32_t codepoint) {
 
 #pragma mark - Pointer
 
-- (void) pointerEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    if (opcode != WP_POINTER_EV_AXIS && opcode != WP_POINTER_EV_FRAME)
-        [self postPendingScroll];
-    [self flushPendingModifier];
-    switch (opcode) {
-    case WP_POINTER_EV_ENTER:
-        _pointerEnterSerial = args[0].u;
-        _pointerWindow =
-                [self windowForSurface: (struct wl_proxy *) args[1].o];
-        _pointerSurfacePoint = CGPointMake(wl_fixed_to_double(args[2].f),
-                                           wl_fixed_to_double(args[3].f));
-        [_pointerWindow setLastKnownCursorPosition:
-                                [_pointerWindow transformPoint: _pointerSurfacePoint]];
-        [self performAfterDispatch: ^{ [self applyCursor]; }];
-        break;
+// The pointer is CoreGraphics': it reads the process' wl_pointer, decodes it into mouse, scroll and gesture
+// CGEvents (see CGSWaylandPointer) and tells this display what only it can use through the connection observer:
+// where the pointer is (surface, serial, position) for the cursor, the tracking areas and popup grabs, the
+// window decorations, the key state of a window at a press, and the window of each event. The NSEvents are
+// made from the CGEvents when the application takes them (see -windowNumber:location:hasLocation:forPointerEvent:
+// and -pointerEventCreated:fromCGEvent:).
 
-    case WP_POINTER_EV_LEAVE:
-        _pressedButtons = 0;
-        [_buttonClickCounts removeAllObjects];
-        [self consumeDragPress];
-        _lastMouseLocation = [self mouseLocation];
-        _pointerWindow = nil;
-        _pointerEnterSerial = 0;
-        _pendingScrollX = _pendingScrollY = 0;
-        _pendingScrollWindow = nil;
-        _pendingScrollActive = NO;
-        break;
-
-    case WP_POINTER_EV_MOTION:
-        [self pointerMotionToX: wl_fixed_to_double(args[1].f)
-                             y: wl_fixed_to_double(args[2].f)];
-        break;
-
-    case WP_POINTER_EV_BUTTON: {
-        BOOL firstPress = _pressedButtons == 0;
-        if (_pressedButtons == 0 && [_pointerWindow decorationButton: args[2].u
-                pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
-                serial: args[0].u atPoint: _pointerSurfacePoint])
-            break;
-        if (args[3].u == WP_POINTER_BUTTON_STATE_PRESSED) {
-            _inputSerial = args[0].u;
-            [_generalPasteboard inputAvailable];
-            [_inputEvent release];
-            _inputEvent = nil;
-            _inputWindow = nil;
-        }
-        [self pointerButton: args[2].u
-                    pressed: args[3].u == WP_POINTER_BUTTON_STATE_PRESSED
-                       time: args[1].u];
-        if (firstPress && args[3].u == WP_POINTER_BUTTON_STATE_PRESSED && _inputEvent != nil) {
-            [self consumeDragPress];
-            _dragPressEvent = [_inputEvent retain];
-            _dragPressWindow = _pointerWindow;
-            _dragPressSerial = args[0].u;
-            _dragPressButton = args[2].u;
-        } else if (args[3].u != WP_POINTER_BUTTON_STATE_PRESSED &&
-                   args[2].u == _dragPressButton) {
-            [self consumeDragPress];
-        }
-        break;
-
+- (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available {
+    if (available) {
+        _pointer = (struct wl_proxy *) _CGSNativeConnectionPointer();
+        return;
     }
-    case WP_POINTER_EV_AXIS:
-        [self pointerAxis: args[1].u value: wl_fixed_to_double(args[2].f)];
-        break;
-
-    case WP_POINTER_EV_FRAME:
-        [self postPendingScroll];
-        break;
-    }
+    [_draggingManager cancel];
+    [self consumeDragPress];
+    _pointer = NULL;
+    _pointerWindow = nil;
+    _pointerEnterSerial = 0;
+    _pressedButtons = 0;
 }
 
-- (void) pointerMotionToX: (CGFloat) x y: (CGFloat) y {
-    // Track the position even when no surface is under the pointer. Opening a
-    // menu maps a new surface under a stationary cursor, so the compositor
-    // sends leave and then motion with no window; dropping that motion left
-    // _pointerSurfacePoint stale and the following button landed wherever the
-    // pointer last was over a known surface.
+- (void) nativeConnectionPointerEntered: (void *) surface serial: (uint32_t) serial x: (double) x y: (double) y {
+    // The seat may have given CoreGraphics the pointer before this display was an observer: an enter says it exists.
+    if (_pointer == NULL)
+        _pointer = (struct wl_proxy *) _CGSNativeConnectionPointer();
+    _pointerEnterSerial = serial;
+    _pointerWindow = [self windowForSurface: (struct wl_proxy *) surface];
+    _pointerSurfacePoint = CGPointMake(x, y);
+    [_pointerWindow setLastKnownCursorPosition: [_pointerWindow transformPoint: _pointerSurfacePoint]];
+    [self performAfterDispatch: ^{ [self applyCursor]; }];
+}
+
+- (void) nativeConnectionPointerLeft {
+    WaylandWindow *left = _pointerWindow;
+
+    _pressedButtons = 0;
+    [self consumeDragPress];
+    _lastMouseLocation = [self mouseLocation];
+    if (left != nil && !_CGSNativeConnectionPointerLocked())
+        [self performAfterDispatch: ^{ [self pointerLeftWindow: left]; }];
+    _pointerWindow = nil;
+    _pointerEnterSerial = 0;
+}
+
+// The pointer left the window's surface. The compositor does not say where it went, so it is taken to be just
+// outside the edge of the window nearest to where it last was (the X11 backend gets the real position in its
+// crossing event). The window re-evaluates its tracking areas there, as it does for a motion, and sends the exits
+// for the areas the pointer was in. The AppKit work runs outside libwayland's listener.
+- (void) pointerLeftWindow: (WaylandWindow *) window {
+    if (![self windowIsKnown: window] || [window delegate] == nil)
+        return;
+
+    NSSize size = [[window delegate] frame].size;
+    NSPoint point = [window mouseLocationOutsideOfEventStream];
+    CGFloat toLeft = point.x, toRight = size.width - point.x, toBottom = point.y, toTop = size.height - point.y;
+    CGFloat nearest = MIN(MIN(toLeft, toRight), MIN(toBottom, toTop));
+
+    if (nearest == toLeft)
+        point.x = -1;
+    else if (nearest == toRight)
+        point.x = size.width + 1;
+    else if (nearest == toBottom)
+        point.y = -1;
+    else
+        point.y = size.height + 1;
+    [window setLastKnownCursorPosition: point];
+    [[window delegate] platformWindowSetCursorEvent: window];
+}
+
+- (BOOL) nativeConnectionPointerMovedToX: (double) x y: (double) y {
+    // Track the position even when no surface is under the pointer. Opening a menu maps a new surface under a
+    // stationary cursor, so the compositor sends leave and then motion with no window; dropping that motion left
+    // _pointerSurfacePoint stale and the following button landed wherever the pointer last was over a known surface.
     CGPoint previousPoint = _pointerSurfacePoint;
     _pointerSurfacePoint = CGPointMake(x, y);
 
     WaylandWindow *window = _pointerWindow;
     if (window == nil)
-        return;
+        return NO;
 
-    NSPoint location = [window transformPoint: _pointerSurfacePoint];
-    NSPoint last = [window mouseLocationOutsideOfEventStream];
-    [window setLastKnownCursorPosition: location];
-    [self accumulateMouseDeltaX: location.x - last.x y: last.y - location.y];
-
-    // The pointer moved: a cursor hidden until then comes back, even when the
-    // application does not want the mouse-moved event. A compositor repeats the
-    // position when a surface changes under a still pointer, and a locked pointer
-    // moves nothing on screen: neither is a move. The AppKit work runs outside
-    // libwayland's listener, as for the cursor below.
-    if (!_pointerLocked && (x != previousPoint.x || y != previousPoint.y))
-        [self performAfterDispatch: ^{ [self pointerMoved]; }];
+    [window setLastKnownCursorPosition: [window transformPoint: _pointerSurfacePoint]];
 
     if (_pressedButtons == 0 && [window isDecorationPoint: _pointerSurfacePoint]) {
         [self performAfterDispatch: ^{ [self applyCursor]; }];
-        return;
-    }
-
-    NSWindow *delegate = [window delegate];
-    NSEventType type = NSMouseMoved;
-    // AppKit here has no NSOtherMouseDragged: other buttons move the mouse.
-    if (_pressedButtons & 1)
-        type = NSLeftMouseDragged;
-    else if (_pressedButtons & 2)
-        type = NSRightMouseDragged;
-
-    if (type != NSMouseMoved || [delegate acceptsMouseMovedEvents]) {
-        // deltaY is positive downward, as AppKit and the X11 backend report it;
-        // locations are bottom-left, hence last - location.
-        NSEvent *event = [NSEvent mouseEventWithType: type
-                                            location: location
-                                       modifierFlags: [self currentModifierFlags]
-                                              window: delegate
-                                          clickCount: 1
-                                              deltaX: location.x - last.x
-                                              deltaY: last.y - location.y];
-        // Not coalesced with -discardEventsMatchingMask:beforeEvent:, which
-        // currently removes every older queued event, mouse-downs included.
-        [self postEvent: event atStart: NO];
+        return YES;
     }
 
     [self performAfterDispatch: ^{
       if ([window delegate] != nil)
           [[window delegate] platformWindowSetCursorEvent: window];
     }];
+    return NO;
 }
 
-- (void) pointerButton: (uint32_t) button pressed: (BOOL) pressed
-                  time: (uint32_t) time {
-    NSUInteger mask;
-    NSInteger number;
-    NSEventType downType, upType;
+// A window decoration (the buttons of a title bar, the edges that resize) takes the first button for itself.
+- (BOOL) nativeConnectionPointerButton: (uint32_t) button pressed: (BOOL) pressed serial: (uint32_t) serial {
+    return _pressedButtons == 0 && [_pointerWindow decorationButton: button
+                                                            pressed: pressed
+                                                             serial: serial
+                                                            atPoint: _pointerSurfacePoint];
+}
 
-    switch (button) {
-    case WP_BTN_LEFT:
-        mask = 1, number = 0, downType = NSLeftMouseDown, upType = NSLeftMouseUp;
-        break;
-    case WP_BTN_RIGHT:
-        mask = 2, number = 1, downType = NSRightMouseDown, upType = NSRightMouseUp;
-        break;
-    case WP_BTN_MIDDLE:
-        mask = 4, number = 2, downType = NSOtherMouseDown, upType = NSOtherMouseUp;
-        break;
+// A Linux button code of the Cocoa button number of a mouse event, and the mask of it in _pressedButtons.
+static uint32_t buttonCodeForNumber(int64_t number) {
+    return number == 0 ? WP_BTN_LEFT : number == 1 ? WP_BTN_RIGHT : number == 2 ? WP_BTN_MIDDLE
+                                                                                 : (uint32_t) (WP_BTN_LEFT + number);
+}
+
+static NSUInteger buttonMaskForNumber(int64_t number) {
+    return number == 0 ? 1 : number == 1 ? 2 : number == 2 ? 4 : 8;
+}
+
+// CoreGraphics has decoded an event of the pointer and is about to post it. What AppKit knows when the event
+// arrives is added: the serial and the window's key state at a press (the compositor may activate the window for
+// this very click before or after the press reaches us, so the press is judged by what we knew when it arrived),
+// the motion for CGGetLastMouseDelta. An event for a surface that is not a window of ours, and a mouse moved event
+// of a window that did not ask for them, go to the event taps only.
+- (BOOL) nativeConnectionWillPostWaylandPointerEvent: (CGEventRef) event {
+    struct wl_proxy *surface =
+            (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(event, kCGSEventNativeWindow);
+    WaylandWindow *window = [self windowForSurface: surface];
+    id delegate = [window delegate];
+    int64_t number = CGEventGetIntegerValueField(event, kCGMouseEventButtonNumber);
+
+    switch (CGEventGetType(event)) {
+    case kCGEventLeftMouseDown:
+    case kCGEventRightMouseDown:
+    case kCGEventOtherMouseDown: {
+        BOOL firstPress = _pressedButtons == 0;
+        uint32_t serial = (uint32_t) CGEventGetIntegerValueField(event, kCGSEventInputSerial);
+        _pressedButtons |= buttonMaskForNumber(number);
+        _inputSerial = serial;
+        [_generalPasteboard inputAvailable];
+        [_inputEvent release];
+        _inputEvent = nil;
+        _inputWindow = nil;
+        _firstPressSerial = firstPress ? serial : 0;
+        if (delegate != nil)
+            CGEventSetIntegerValueField(event, kCGSMouseEventWindowKeyState, [delegate isKeyWindow] ? 1 : 2);
+        return delegate != nil;
+    }
+    case kCGEventLeftMouseUp:
+    case kCGEventRightMouseUp:
+    case kCGEventOtherMouseUp:
+        _pressedButtons &= ~buttonMaskForNumber(number);
+        if (buttonCodeForNumber(number) == _dragPressButton)
+            [self consumeDragPress];
+        return delegate != nil;
+    case kCGEventMouseMoved:
+    case kCGEventLeftMouseDragged:
+    case kCGEventRightMouseDragged:
+    case kCGEventOtherMouseDragged:
+        return delegate != nil && (CGEventGetType(event) != kCGEventMouseMoved || [delegate acceptsMouseMovedEvents]);
     default:
-        mask = 8, number = (NSInteger) button - WP_BTN_LEFT;
-        downType = NSOtherMouseDown, upType = NSOtherMouseUp;
-        break;
+        return delegate != nil;
     }
-
-    if (pressed)
-        _pressedButtons |= mask;
-    else
-        _pressedButtons &= ~mask;
-
-    NSInteger eventClickCount = [[_buttonClickCounts objectForKey: @(button)] integerValue];
-    if (!pressed)
-        [_buttonClickCounts removeObjectForKey: @(button)];
-    WaylandWindow *window = _pointerWindow;
-    if (window == nil)
-        return;
-
-    if (pressed) {
-        // Group clicks only on the same button/window and within four logical
-        // pixels of the preceding press. Unsigned subtraction handles timestamp
-        // wrap without depending on the wall clock or dispatch latency.
-        CGFloat dx = _pointerSurfacePoint.x - _wlLastClickPoint.x;
-        CGFloat dy = _pointerSurfacePoint.y - _wlLastClickPoint.y;
-        if (_wlLastClickWindow == window && _wlLastClickButton == button &&
-            (uint32_t) (time - _wlLastClickTime) < [self doubleClickInterval] * 1000 &&
-            dx * dx + dy * dy <= 16 && _clickCount < NSIntegerMax)
-            _clickCount++;
-        else
-            _clickCount = 1;
-        _wlLastClickTime = time;
-        _wlLastClickButton = button;
-        _wlLastClickWindow = window;
-        _wlLastClickPoint = _pointerSurfacePoint;
-        if (_buttonClickCounts == nil)
-            _buttonClickCounts = [NSMutableDictionary new];
-        [_buttonClickCounts setObject: @(_clickCount) forKey: @(button)];
-        eventClickCount = _clickCount;
-    }
-
-    NSEvent *event = [NSEvent
-            mouseEventWithType: pressed ? downType : upType
-                      location: [window transformPoint: _pointerSurfacePoint]
-                 modifierFlags: [self currentModifierFlags]
-                        window: [window delegate]
-                    clickCount: eventClickCount
-                        deltaX: 0.0
-                        deltaY: 0.0];
-    [(NSEvent_mouse *) event _setButtonNumber: number];
-    if (pressed) {
-        // The compositor may activate the window for this very click, before
-        // or after the press reaches us; the press is judged by what we knew
-        // when it arrived, not by what the queue shows when it is taken.
-        [(NSEvent_mouse *) event _setWindowWasKeyOnArrival: [[window delegate] isKeyWindow]];
-        _inputEvent = [event retain];
-        _inputWindow = window;
-    }
-    [self postEvent: event atStart: NO];
 }
 
-- (void) pointerAxis: (uint32_t) axis value: (CGFloat) value {
-    WaylandWindow *window = _pointerWindow;
-    if (window == nil)
-        return;
+// The NSEvent of a press is what popup grabs and drags are tied to (see -popupGrabSerialForParent: and
+// -dragOriginForEvent:).
+- (void) pointerEventCreated: (NSEvent *) event fromCGEvent: (CGEventRef) cgEvent {
+    CGEventType type = CGEventGetType(cgEvent);
+    uint32_t serial = (uint32_t) CGEventGetIntegerValueField(cgEvent, kCGSEventInputSerial);
 
-    // One wheel notch is 10 units, scrolling down is positive; the X11 backend
-    // reports a notch up as deltaY 1.
-    CGFloat delta = -value / 10.0;
-    if (axis != WP_POINTER_AXIS_HORIZONTAL_SCROLL &&
-        axis != WP_POINTER_AXIS_VERTICAL_SCROLL)
+    if ((type != kCGEventLeftMouseDown && type != kCGEventRightMouseDown && type != kCGEventOtherMouseDown) ||
+        serial == 0 || CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) == 0)
         return;
-    if (!_pendingScrollActive) {
-        _pendingScrollWindow = window;
-        _pendingScrollSurfacePoint = _pointerSurfacePoint;
-        _pendingScrollModifiers = [self currentModifierFlags];
-        _pendingScrollActive = YES;
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
+                                                            cgEvent, kCGSEventNativeWindow)];
+    int64_t number = CGEventGetIntegerValueField(cgEvent, kCGMouseEventButtonNumber);
+
+    // Only the press that is the latest one still counts.
+    if (serial != _inputSerial)
+        return;
+    [_inputEvent release];
+    _inputEvent = [event retain];
+    _inputWindow = window;
+    if (serial == _firstPressSerial && (_pressedButtons & buttonMaskForNumber(number)) != 0) {
+        [self consumeDragPress];
+        _dragPressEvent = [event retain];
+        _dragPressWindow = window;
+        _dragPressSerial = serial;
+        _dragPressButton = buttonCodeForNumber(number);
+        _firstPressSerial = 0;
     }
-    if (axis == WP_POINTER_AXIS_HORIZONTAL_SCROLL)
-        _pendingScrollX += delta;
-    else if (axis == WP_POINTER_AXIS_VERTICAL_SCROLL)
-        _pendingScrollY += delta;
-
-    // wl_pointer.frame was added in version 5. Older seats deliver each axis
-    // event independently, so preserve their immediate behavior.
-    if (WL.wl_proxy_get_version(_pointer) < 5)
-        [self postPendingScroll];
 }
 
-- (void) postPendingScroll {
-    CGFloat deltaX = _pendingScrollX;
-    CGFloat deltaY = _pendingScrollY;
-    WaylandWindow *window = _pendingScrollWindow;
-    CGPoint surfacePoint = _pendingScrollSurfacePoint;
-    NSUInteger modifiers = _pendingScrollModifiers;
-    _pendingScrollX = _pendingScrollY = 0;
-    _pendingScrollWindow = nil;
-    _pendingScrollActive = NO;
-    if (deltaX == 0 && deltaY == 0)
-        return;
-
+// Where a point of one of our windows' surfaces is in global coordinates: the window's origin and the point
+// (Wayland says nothing about where a window is, so the origin is the one the application asked for).
+- (BOOL) nativeConnectionGlobalLocation: (CGPoint *) location ofSurface: (void *) surface point: (CGPoint) point {
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) surface];
     if (window == nil)
-        return;
+        return NO;
+    NSPoint local = [window transformPoint: point];
+    O2Rect frame = [window frame];
+    NSArray *screens = [self screens];
+    double primaryHeight = [screens count] > 0 ? NSHeight([[screens objectAtIndex: 0] frame]) : 0;
+    *location = CGPointMake(frame.origin.x + local.x, primaryHeight - (frame.origin.y + local.y));
+    return YES;
+}
 
-    NSEvent *event = [NSEvent
-            mouseEventWithType: NSScrollWheel
-                      location: [window transformPoint: surfacePoint]
-                 modifierFlags: modifiers
-                        window: [window delegate]
-                    clickCount: 1
-                        deltaX: deltaX
-                        deltaY: deltaY];
-    [self postEvent: event atStart: NO];
+// The window an event of the pointer is for and where the pointer was in it, from the surface and the
+// position CoreGraphics read from the compositor. They apply only while no event tap has moved the event.
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          hasLocation: (BOOL *) hasLocation
+      forPointerEvent: (CGEventRef) event {
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
+                                                            event, kCGSEventNativeWindow)];
+    if ([window delegate] == nil)
+        return NO;
+    *windowNumber = [[window delegate] windowNumber];
+    CGPoint global = CGEventGetLocation(event);
+    if (llround(global.x * 1024) == CGEventGetIntegerValueField(event, kCGSEventPostedLocationX) &&
+        llround(global.y * 1024) == CGEventGetIntegerValueField(event, kCGSEventPostedLocationY)) {
+        *location = [window transformPoint: CGPointMake(CGEventGetIntegerValueField(event, kCGSEventNativeLocationX) / 1024.0,
+                                                        CGEventGetIntegerValueField(event, kCGSEventNativeLocationY) / 1024.0)];
+        *hasLocation = YES;
+    }
+    return YES;
 }
 
 #pragma mark - Text input (text-input-v3)
@@ -1636,86 +1273,6 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     }
 }
 
-#pragma mark - Pinch gestures
-
-- (void) attachPinchGesture {
-    if (_pointerGestures == NULL || _pointer == NULL || _pinchGesture != NULL)
-        return;
-    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _pointer}};
-    _pinchGesture = WaylandCreateObject(_pointerGestures, WP_GESTURES_GET_PINCH,
-                                        &zwp_pointer_gesture_pinch_v1_interface, args,
-                                        WaylandObjectPinchGesture, self);
-}
-
-- (void) detachPinchGesture {
-    if (_pinchGesture == NULL)
-        return;
-    [self postPinchPhase: NSEventPhaseCancelled];
-    WaylandMarshal(_pinchGesture, WP_PINCH_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-    _pinchGesture = NULL;
-}
-
-- (void) postGesture: (NSEventType) type
-               phase: (NSEventPhase) phase
-       magnification: (CGFloat) magnification
-            rotation: (float) rotation
-{
-    WaylandWindow *window = _pinchWindow;
-    NSEvent *event = [[[NSEvent_gesture alloc]
-             initWithType: type
-                 location: [window transformPoint: _pointerSurfacePoint]
-            modifierFlags: [self currentModifierFlags]
-                   window: [window delegate]
-                    phase: phase
-            magnification: magnification
-                 rotation: rotation] autorelease];
-    [self postEvent: event atStart: NO];
-}
-
-// Ends an active pinch; a no-op when none is in progress.
-- (void) postPinchPhase: (NSEventPhase) phase {
-    if (_pinchWindow == nil)
-        return;
-    [self postGesture: NSEventTypeMagnify phase: phase magnification: 0 rotation: 0];
-    [self postGesture: NSEventTypeRotate phase: phase magnification: 0 rotation: 0];
-    _pinchWindow = nil;
-}
-
-// A pinch reports its scale relative to where the fingers started and its
-// rotation in degrees clockwise since the last update. AppKit events carry the
-// change in magnification and counterclockwise degrees.
-- (void) pinchEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    [self postPendingScroll];
-    switch (opcode) {
-    case WP_PINCH_EV_BEGIN:
-        _pinchWindow = [self windowForSurface: (struct wl_proxy *) args[2].o];
-        _pinchScale = 1;
-        if (_pinchWindow == nil)
-            break;
-        [self postGesture: NSEventTypeMagnify phase: NSEventPhaseBegan magnification: 0 rotation: 0];
-        [self postGesture: NSEventTypeRotate phase: NSEventPhaseBegan magnification: 0 rotation: 0];
-        break;
-
-    case WP_PINCH_EV_UPDATE: {
-        if (_pinchWindow == nil)
-            break;
-        CGFloat scale = wl_fixed_to_double(args[3].f);
-        float rotation = -wl_fixed_to_double(args[4].f);
-        if (scale != _pinchScale)
-            [self postGesture: NSEventTypeMagnify phase: NSEventPhaseChanged
-                magnification: scale - _pinchScale rotation: 0];
-        if (rotation != 0)
-            [self postGesture: NSEventTypeRotate phase: NSEventPhaseChanged magnification: 0 rotation: rotation];
-        _pinchScale = scale;
-        break;
-    }
-
-    case WP_PINCH_EV_END:
-        [self postPinchPhase: args[2].i ? NSEventPhaseCancelled : NSEventPhaseEnded];
-        break;
-    }
-}
-
 - (NSPoint) mouseLocation {
     WaylandWindow *window = _pointerWindow;
     if (window == nil)
@@ -1732,32 +1289,50 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 // where mouseLocation reports it and where the pointer reappears on unlock.
 // Without a lock the call does nothing, and nothing pretends otherwise.
 // position is in CoreGraphics' global space, as -[NSDisplay warpMouse:] documents.
-- (void) warpMouse: (NSPoint) position {
-    WaylandWindow *window = _lockWindow;
-    if (!_pointerLocked || window == nil)
-        return;
-    NSArray *screens = [self screens];
-    double primaryHeight = [screens count] > 0 ? NSHeight([[screens objectAtIndex: 0] frame]) : 0;
-    double screenX, screenY;
-    WaylandScreenPointFromCG(position.x, position.y, primaryHeight, &screenX, &screenY);
-    NSRect frame = [window frame];
-    NSPoint offset = [window contentOffset];
-    WaylandWarp warp = WaylandWarpTarget(screenX, screenY, frame.origin.x, frame.origin.y,
-                                         frame.size.width, frame.size.height, offset.x, offset.y);
-    _pointerSurfacePoint = CGPointMake(warp.surfaceX, warp.surfaceY);
-    // Window coordinates, like every other writer of the last known position.
-    [window setLastKnownCursorPosition: NSMakePoint(warp.windowX, warp.windowY)];
-}
-
-- (void) grabMouse: (BOOL) doGrab {
-    _pointerLockRequested = doGrab;
-    [self updatePointerLock];
-}
-
 #pragma mark - Pointer lock
 
 // The window to lock: the one activated last. The lock activates once it also
 // has pointer focus.
+// The relative mouse mode, the warps and the hidden cursor belong to CoreGraphics' connection (the process' one
+// wl_pointer); it asks AppKit for what only the windows know.
+- (void *) nativeConnectionSurfaceForPointerLock {
+    return [[self pointerLockTarget] surface];
+}
+
+// Where a point in CoreGraphics' global space is in a window's surface (the window's frame origin as the
+// application set it, clamped to its content). Wayland has no global coordinates of its own.
+- (BOOL) nativeConnectionPoint: (CGPoint *) point ofSurface: (void *) surface forGlobalLocation: (CGPoint) location {
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) surface];
+    if (window == nil)
+        return NO;
+    NSArray *screens = [self screens];
+    double primaryHeight = [screens count] > 0 ? NSHeight([[screens objectAtIndex: 0] frame]) : 0;
+    double screenX, screenY;
+    WaylandScreenPointFromCG(location.x, location.y, primaryHeight, &screenX, &screenY);
+    NSRect frame = [window frame];
+    NSPoint offset = [window contentOffset];
+    WaylandWarp warp = WaylandWarpTarget(screenX, screenY, frame.origin.x, frame.origin.y,
+                                         frame.size.width, frame.size.height, offset.x, offset.y);
+    *point = CGPointMake(warp.surfaceX, warp.surfaceY);
+    return YES;
+}
+
+// The cursor of the application was moved within the surface: that is where mouseLocation reports it.
+- (void) nativeConnectionPointerWarpedToX: (double) x y: (double) y {
+    WaylandWindow *window = _pointerWindow != nil ? _pointerWindow : [self pointerLockTarget];
+
+    _pointerSurfacePoint = CGPointMake(x, y);
+    [window setLastKnownCursorPosition: [window transformPoint: _pointerSurfacePoint]];
+}
+
+// The cursor was hidden or is visible again: the image (or none) is applied after the dispatch, like every
+// cursor change.
+- (void) nativeConnectionCursorHiddenChanged: (BOOL) hidden {
+    // Not necessarily in the middle of a dispatch: the run is scheduled for the next run loop pass.
+    [self performAfterDispatch: ^{ [self applyCursor]; }];
+    [self scheduleAfterDispatchRun];
+}
+
 - (WaylandWindow *) pointerLockTarget {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
@@ -1769,559 +1344,103 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 
 // Makes the lock objects match what was asked for. The compositor activates
 // the lock when the window has pointer focus, which can be later.
-- (void) updatePointerLock {
-    WaylandWindow *target = _pointerLockRequested ? [self pointerLockTarget] : nil;
-    BOOL possible = _pointer != NULL && _pointerConstraints != NULL && _relativePointerManager != NULL;
-    static BOOL loggedMissing;
-    if (_pointerLockRequested && !loggedMissing &&
-        (_pointerConstraints == NULL || _relativePointerManager == NULL)) {
-        loggedMissing = YES;
-        NSLog(@"Wayland backend: relative mouse mode was requested, but the compositor offers no %s: "
-              @"the cursor stays free and no deltas are delivered",
-              _pointerConstraints == NULL ? "zwp_pointer_constraints_v1"
-                                          : "zwp_relative_pointer_manager_v1");
-    }
-    if (!possible || target == nil || (_lockWindow != nil && _lockWindow != target)) {
-        [self releasePointerLock];
-        if (!possible || target == nil)
-            return;
-    }
-    if (_lockedPointer != NULL)
-        return;
-    _lockWindow = target;
-    _lockedPointer = WaylandLockPointer(_pointerConstraints, [target surface], _pointer);
-    _relativePointer = WaylandGetRelativePointer(_relativePointerManager, _pointer);
-    WL.wl_proxy_add_dispatcher(_lockedPointer, WaylandDispatch,
-                               (void *) (uintptr_t) WaylandObjectLockedPointer, self);
-    WL.wl_proxy_add_dispatcher(_relativePointer, WaylandDispatch,
-                               (void *) (uintptr_t) WaylandObjectRelativePointer, self);
-    [self flush];
-}
-
-- (void) releasePointerLock {
-    if (_lockedPointer == NULL)
-        return;
-    WaylandWindow *window = _lockWindow;
-    _lockWindow = nil;
-    _pointerLocked = NO;
-    // The pointer comes back where the application left its cursor.
-    WaylandUnlockPointer(_lockedPointer, _relativePointer, [window surface],
-                         _pointerSurfacePoint.x, _pointerSurfacePoint.y);
-    _lockedPointer = _relativePointer = NULL;
-    [self flush];
-}
-
 // A locked pointer moves nothing on screen: the event carries the delta at the
 // frozen cursor position, as macOS reports it while the cursor is disassociated.
-- (void) pointerRelativeMotionByX: (CGFloat) dx y: (CGFloat) dy {
-    WaylandWindow *window = _lockWindow;
-    if (!_pointerLocked || window == nil)
-        return;
-    NSEventType type = NSMouseMoved;
-    if (_pressedButtons & 1)
-        type = NSLeftMouseDragged;
-    else if (_pressedButtons & 2)
-        type = NSRightMouseDragged;
-    [self accumulateMouseDeltaX: dx y: dy];
-    NSWindow *delegate = [window delegate];
-    if (delegate == nil || (type == NSMouseMoved && ![delegate acceptsMouseMovedEvents]))
-        return;
-    [self postEvent: [NSEvent mouseEventWithType: type
-                                        location: [window transformPoint: _pointerSurfacePoint]
-                                   modifierFlags: [self currentModifierFlags]
-                                          window: delegate
-                                      clickCount: 1
-                                          deltaX: dx
-                                          deltaY: dy]
-            atStart: NO];
-}
-
 #pragma mark - Keyboard
 
-// Physical identity is metadata only: the compositor's following modifiers
-// event is authoritative for effective flags (including locks/layout changes).
-static int modifierCarbonKeycode(xkb_keysym_t sym) {
-    switch (sym) {
-    case XKB_KEY_Shift_L: return kVK_Shift;
-    case XKB_KEY_Shift_R: return kVK_RightShift;
-    case XKB_KEY_Control_L: return kVK_Control;
-    case XKB_KEY_Control_R: return kVK_RightControl;
-    case XKB_KEY_Alt_L: return kVK_Option;
-    case XKB_KEY_Alt_R: return kVK_RightOption;
-    case XKB_KEY_Super_L: case XKB_KEY_Meta_L: return kVK_Command;
-    case XKB_KEY_Super_R: case XKB_KEY_Meta_R: return 0x36; // Right Command.
-    case XKB_KEY_Caps_Lock: return kVK_CapsLock;
-    case XKB_KEY_ISO_Level3_Shift: case XKB_KEY_Mode_switch: return kVK_Function;
-    default: return -1;
-    }
+// The keyboard is CoreGraphics': it reads the process' wl_keyboard, builds the key events from the
+// compositor's keymap and posts them as CGEvents (see CGSWaylandKeyboard). What it tells this display
+// about arrives through the connection observer.
+
+// The window that has the keyboard focus, from the surface CoreGraphics reports.
+- (WaylandWindow *) keyboardWindow {
+    return [self windowForSurface: (struct wl_proxy *) _CGSNativeConnectionKeyboardFocus()];
 }
 
-// Device-dependent NSEvent bits, defined by IOKit's IOLLEvent.h. The aggregate
-// high bits still come exclusively from the compositor's XKB modifier mask.
-static NSUInteger modifierDeviceMask(int code) {
-    switch (code) {
-    case kVK_Control: return 0x0001;
-    case kVK_Shift: return 0x0002;
-    case kVK_RightShift: return 0x0004;
-    case kVK_Command: return 0x0008;
-    case 0x36: return 0x0010;
-    case kVK_Option: return 0x0020;
-    case kVK_RightOption: return 0x0040;
-    case kVK_RightControl: return 0x2000;
-    default: return 0;
-    }
-}
-
-- (void) cancelPendingModifier {
-    if (_modifierSync != NULL) {
-        WL.wl_proxy_destroy(_modifierSync);
-        _modifierSync = NULL;
-    }
-    _hasModifierKeycode = NO;
-}
-
-- (void) postModifierKeycode: (unsigned short) code {
-    NSWindow *delegate = [_keyboardWindow delegate];
-    if (delegate == nil)
-        return;
-    NSEvent *event = [NSEvent keyEventWithType: NSFlagsChanged
-            location: [_keyboardWindow mouseLocationOutsideOfEventStream]
-            modifierFlags: [self currentModifierFlags] timestamp: NSEventCurrentTime()
-            windowNumber: [delegate windowNumber] context: nil
-            characters: @"" charactersIgnoringModifiers: @""
-            isARepeat: NO keyCode: code];
-    [self postEvent: event atStart: NO];
-}
-
-- (void) flushPendingModifier {
-    if (_hasModifierKeycode)
-        [self postModifierKeycode: _modifierKeycode];
-    [self cancelPendingModifier];
-}
-
-- (void) classifyHeldKeys {
-    for (NSNumber *key in [_heldKeyIdentities allKeys]) {
-        int identity = modifierCarbonKeycode(WL.xkb_state_key_get_one_sym(
-                _xkbState, [key unsignedIntValue]));
-        [_heldKeyIdentities setObject: @(identity) forKey: key];
-    }
-    _classifyHeldKeys = NO;
-}
-
-- (void) resetKeyboardModifiers {
-    [self cancelPendingModifier];
-    [_heldKeyIdentities removeAllObjects];
-    _syncModifierFlags = NO;
-    _classifyHeldKeys = NO;
-    if (_xkbState != NULL)
-        WL.xkb_state_update_mask(_xkbState, 0, 0, 0, 0, 0, 0);
-}
-
-- (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    [self postPendingScroll];
-    switch (opcode) {
-    case WP_KEYBOARD_EV_KEYMAP:
-        [self keymapWithFormat: args[0].u fd: args[1].h size: args[2].u];
-        break;
-
-    case WP_KEYBOARD_EV_ENTER: {
-        [self resetKeyboardModifiers];
-        _keyboardWindow = [self windowForSurface: (struct wl_proxy *) args[1].o];
-        if (_heldKeyIdentities == nil)
-            _heldKeyIdentities = [NSMutableDictionary new];
-        struct wl_array *keys = args[2].a;
-        for (size_t i = 0; i < keys->size / sizeof(uint32_t); i++) {
-            uint32_t raw = ((uint32_t *)keys->data)[i];
-            [_heldKeyIdentities setObject: @(-1) forKey: @(raw + 8)];
-        }
-        // Enter is followed by modifiers: classify under that current group,
-        // without inventing key presses for keys held before focus arrived.
-        _classifyHeldKeys = YES;
-        _syncModifierFlags = YES;
-        break;
-    }
-
-    case WP_KEYBOARD_EV_LEAVE:
-        _keyboardWindow = nil;
-        [self stopKeyRepeat];
-        [self resetKeyboardModifiers];
-        break;
-
-    case WP_KEYBOARD_EV_KEY: {
-        if (_xkbState == NULL || _keyboardWindow == nil)
-            break;
-        [self flushPendingModifier];
-        xkb_keycode_t keycode = args[2].u + 8;
-        BOOL pressed = args[3].u == WP_KEYBOARD_KEY_STATE_PRESSED;
-        if (pressed) {
-            _inputSerial = args[0].u;
-            [_generalPasteboard inputAvailable];
-            [_inputEvent release];
-            _inputEvent = nil;
-            _inputWindow = nil;
-        }
-
-        NSNumber *held = [_heldKeyIdentities objectForKey: @(keycode)];
-        int modifier = held != nil ? [held intValue] : modifierCarbonKeycode(
-                WL.xkb_state_key_get_one_sym(_xkbState, keycode));
-        if (pressed)
-            [_heldKeyIdentities setObject: @(modifier) forKey: @(keycode)];
-        else
-            [_heldKeyIdentities removeObjectForKey: @(keycode)];
-        if (modifier >= 0) {
-            _modifierKeycode = modifier;
-            _hasModifierKeycode = YES;
-            // A mask-changing key is followed by modifiers; an overlapping
-            // modifier need not be. A sync drains the compositor's already
-            // queued events even across socket reads before the idle fallback.
-            // It is not a keyboard frame or a fence for future input events.
-            union wl_argument syncArgs[1] = {{.o = NULL}};
-            _modifierSync = WaylandCreateObject((struct wl_proxy *)_wlDisplay,
-                    WP_DISPLAY_SYNC, &wl_callback_interface, syncArgs,
-                    WaylandObjectKeyboardSync, self);
-            [self flush];
-            break; // Modifiers are neither text nor repeatable keys.
-        }
-        [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO];
-        if (pressed && _repeatRate > 0 &&
-            WL.xkb_keymap_key_repeats(_xkbKeymap, keycode))
-            [self startKeyRepeat: keycode];
-        else if (!pressed && keycode == _repeatKeycode)
-            [self stopKeyRepeat];
-        break;
-    }
-
-    case WP_KEYBOARD_EV_MODIFIERS: {
-        NSUInteger oldFlags = [self currentModifierFlags];
-        if (_xkbState != NULL) {
-            WL.xkb_state_update_mask(_xkbState, args[1].u, args[2].u, args[3].u,
-                                     0, 0, args[4].u);
-            [self publishKeyboardLayout];
-            if (_classifyHeldKeys)
-                [self classifyHeldKeys];
-        }
-        if (_hasModifierKeycode)
-            [self flushPendingModifier];
-        else if (_syncModifierFlags || [self currentModifierFlags] != oldFlags)
-            [self postModifierKeycode: 0xFFFF];
-        _syncModifierFlags = NO;
-        break;
-    }
-
-    case WP_KEYBOARD_EV_REPEAT_INFO:
-        _repeatRate = args[0].i;
-        _repeatDelay = args[1].i;
-        if (_repeatRate <= 0)
-            [self stopKeyRepeat];
-        break;
-    }
-}
-
-// A keymap the client cannot use (format no_keymap, an empty or unreadable xkb_v1 map) leaves the
-// keymap in force as it was. The wl_keyboard protocol sends no_keymap when the client has to
-// interpret raw key codes itself, and a compositor may replace the keymap at any time, so input
-// must survive both. With no keymap yet, the system default layout (the evdev rules, honouring
-// the XKB_DEFAULT_* variables) interprets the raw codes.
-- (struct xkb_keymap *) keymapFromFormat: (uint32_t) format fd: (int) fd size: (uint32_t) size {
-    struct xkb_keymap *keymap = NULL;
-
-    if (format == WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1 && size == 0) {
-        NSLog(@"Wayland backend: the compositor sent an empty keymap");
-    } else if (format == WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1) {
-        char *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-        if (map == MAP_FAILED) {
-            NSLog(@"Wayland backend: cannot map the keymap: %s", strerror(errno));
-        } else {
-            keymap = WL.xkb_keymap_new_from_buffer(
-                    _xkbContext, map, strnlen(map, size), XKB_KEYMAP_FORMAT_TEXT_V1,
-                    XKB_KEYMAP_COMPILE_NO_FLAGS);
-            munmap(map, size);
-            if (keymap == NULL)
-                NSLog(@"Wayland backend: cannot compile the compositor's keymap");
-        }
-    } else if (format != WP_KEYBOARD_KEYMAP_FORMAT_NO_KEYMAP) {
-        NSLog(@"Wayland backend: unsupported keymap format %u", format);
-    }
-    return keymap;
-}
-
-- (void) keymapWithFormat: (uint32_t) format fd: (int) fd size: (uint32_t) size {
-    struct xkb_keymap *keymap = NULL;
-
-    if (_xkbContext != NULL) {
-        keymap = [self keymapFromFormat: format fd: fd size: size];
-        if (keymap == NULL && _xkbKeymap == NULL)
-            keymap = WL.xkb_keymap_new_from_names(_xkbContext, NULL,
-                                                  XKB_KEYMAP_COMPILE_NO_FLAGS);
-    }
-    close(fd);
-
-    [self installKeymap: keymap];
-}
-
-// Makes keymap (nil: none usable; the reference is taken over) the one that interprets key codes
-// and that the Text Input Sources API describes.
-- (void) installKeymap: (struct xkb_keymap *) keymap {
-    struct xkb_state *state = keymap != NULL ? WL.xkb_state_new(keymap) : NULL;
-    if (state == NULL) {
-        if (keymap != NULL)
-            WL.xkb_keymap_unref(keymap);
-        if (_xkbContext != NULL && _xkbKeymap == NULL)
-            NSLog(@"Wayland backend: no usable keymap, keyboard input is disabled");
+- (void) nativeConnectionKeyboardFocusChanged: (void *) surface {
+    if (surface != NULL) {
+        _keyboardWindowUnmapped = NO;
+        _keyboardFocusWindow = [self windowForSurface: (struct wl_proxy *) surface];
         return;
     }
-
-    [self stopKeyRepeat];
-    if (_xkbState != NULL)
-        WL.xkb_state_unref(_xkbState);
-    if (_xkbKeymap != NULL)
-        WL.xkb_keymap_unref(_xkbKeymap);
-    _xkbKeymap = keymap;
-    _xkbState = state;
-    _publishedKeymap = NULL;
-    [self publishKeyboardLayout];
-    [self cancelPendingModifier];
-    // Preserve press-time identities through keymap changes until release.
-    // Only enter-seeded keys need classification under the current group.
-    _syncModifierFlags = _keyboardWindow != nil;
+    // The keyboard focus leaves a window that the application itself unmapped (the last window closed,
+    // a menu popup destroyed): that is not the focus moving to another client. The application stays
+    // active, as on macOS, where an application whose last window closes keeps the activation and
+    // the menu bar; a window that is still shown when its focus goes does resign.
+    // An application that only owns the menu bar, with a menu popup that the keyboard followed, is
+    // the same case.
+    BOOL ownUnmapping = _keyboardWindowUnmapped ||
+            ([_keyboardFocusWindow isPopup] && ![_keyboardFocusWindow isTooltip] && ![_keyboardFocusWindow isGenericPopup]);
+    _keyboardWindowUnmapped = NO;
+    _keyboardFocusWindow = nil;
+    if (!ownUnmapping)
+        [self applicationFocusMayHaveLeft];
 }
 
-- (BOOL) isModifierActive: (const char *) name {
-    return _xkbState != NULL &&
-           WL.xkb_state_mod_name_is_active(_xkbState, name,
-                                           XKB_STATE_MODS_EFFECTIVE) > 0;
+- (void) nativeConnectionKeyPressedWithSerial: (uint32_t) serial {
+    _inputSerial = serial;
+    [_generalPasteboard inputAvailable];
+    [_inputEvent release];
+    _inputEvent = nil;
+    _inputWindow = nil;
 }
 
-// The same mapping as the X11 backend's modifier flags for a key state.
-- (NSUInteger) currentModifierFlags {
-    NSUInteger flags = 0;
-    for (NSNumber *identity in [_heldKeyIdentities allValues])
-        flags |= modifierDeviceMask([identity intValue]);
-
-    if ([self isModifierActive: XKB_MOD_NAME_SHIFT])
-        flags |= NSShiftKeyMask;
-    if ([self isModifierActive: XKB_MOD_NAME_CTRL])
-        flags |= NSControlKeyMask;
-    if ([self isModifierActive: XKB_MOD_NAME_CAPS])
-        flags |= NSAlphaShiftKeyMask;
-    if ([self isModifierActive: XKB_MOD_NAME_LOGO])
-        flags |= NSCommandKeyMask;
-    if ([self isModifierActive: XKB_MOD_NAME_ALT])
-        flags |= NSAlternateKeyMask;
-    if ([self isModifierActive: "Mod5"]) // AltGr
-        flags |= NSFunctionKeyMask;
-
-    return flags;
-}
-
-- (uint32_t) codepointForKeysym: (xkb_keysym_t) keysym {
-    // CGSKeySymToUnicode knows AppKit's function key codes; XKB keysyms
-    // have the same values as X11 keysyms.
-    uint32_t codepoint = CGSKeySymToUnicode(keysym);
-    if (codepoint == 0)
-        codepoint = WL.xkb_keysym_to_utf32(keysym);
-    return codepoint;
-}
-
-- (xkb_keysym_t) keysymForKeycode: (xkb_keycode_t) keycode level: (xkb_level_index_t) level {
-    xkb_layout_index_t layout = WL.xkb_state_key_get_layout(_xkbState, keycode);
-    if (layout == XKB_LAYOUT_INVALID)
-        return XKB_KEY_NoSymbol;
-
-    const xkb_keysym_t *keysyms = NULL;
-    int count = WL.xkb_keymap_key_get_syms_by_level(_xkbKeymap, keycode, layout,
-                                                    level, &keysyms);
-    if (count <= 0 && level > 0)
-        count = WL.xkb_keymap_key_get_syms_by_level(_xkbKeymap, keycode, layout,
-                                                    0, &keysyms);
-    return count > 0 ? keysyms[0] : XKB_KEY_NoSymbol;
-}
-
-- (void) postKeyEventForKeycode: (xkb_keycode_t) keycode
-                        pressed: (BOOL) pressed
-                         repeat: (BOOL) repeat
-{
-    // Key events belong to the key window whichever surface of the application the compositor
-    // gave the focus to. That matters when the key window is a window with alpha 0, which is
-    // never shown and so never gets the focus. Menus and pop-ups that hold the focus keep it.
-    WaylandWindow *window = _keyboardWindow;
+// The window a key event is for, and where the pointer is in it (the NSEvent made from a CGEvent of the
+// keyboard). Key events belong to the key window whichever surface of the application the compositor gave
+// the focus to. That matters when the key window is a window with alpha 0, which is never shown and so
+// never gets the focus. Menus and pop-ups that hold the focus keep the keys.
+- (BOOL) windowNumber: (NSInteger *) windowNumber location: (NSPoint *) location forKeyEvent: (CGEventRef) event {
+    // An event the application or Carbon posted names no surface: it is for the key window.
+    if (CGEventGetIntegerValueField(event, kCGSEventNativeWindow) == 0)
+        return [super windowNumber: windowNumber location: location forKeyEvent: event];
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
+                                                            event, kCGSEventNativeWindow)];
     id keyPlatformWindow = [[NSApp keyWindow] platformWindow];
-    if ([keyPlatformWindow isKindOfClass: [WaylandWindow class]] &&
-        (window == nil || ![window isPopup]))
+    if ([keyPlatformWindow isKindOfClass: [WaylandWindow class]] && (window == nil || ![window isPopup]))
         window = keyPlatformWindow;
     NSWindow *delegate = [window delegate];
     if (delegate == nil)
-        return;
-
-    xkb_keysym_t keysym = WL.xkb_state_key_get_one_sym(_xkbState, keycode);
-    uint32_t special = CGSKeySymToUnicode(keysym);
-    NSString *characters;
-
-    if (special >= 0xF700 && special <= 0xF8FF) {
-        characters = stringWithCodepoint(special);
-    } else {
-        char buffer[64];
-        int length = WL.xkb_state_key_get_utf8(_xkbState, keycode, buffer,
-                                               sizeof(buffer));
-        if (length >= (int) sizeof(buffer)) {
-            char *larger = malloc(length + 1);
-            if (larger == NULL)
-                return;
-            WL.xkb_state_key_get_utf8(_xkbState, keycode, larger, length + 1);
-            characters = [NSString stringWithUTF8String: larger];
-            free(larger);
-        } else {
-            characters = length > 0 ? [NSString stringWithUTF8String: buffer]
-                                    : @"";
-        }
-    }
-
-    // AppKit ignores every modifier except Shift here.
-    xkb_level_index_t level = [self isModifierActive: XKB_MOD_NAME_SHIFT] ? 1 : 0;
-    NSString *charactersIgnoringModifiers = stringWithCodepoint(
-            [self codepointForKeysym: [self keysymForKeycode: keycode
-                                                       level: level]]);
-
-    NSEvent *event = [NSEvent
-                keyEventWithType: pressed ? NSKeyDown : NSKeyUp
-                        location: [window mouseLocationOutsideOfEventStream]
-                   modifierFlags: [self currentModifierFlags]
-                       timestamp: NSEventCurrentTime()
-                    windowNumber: [delegate windowNumber]
-                         context: nil
-                      characters: characters ? characters : @""
-     charactersIgnoringModifiers: charactersIgnoringModifiers
-                       isARepeat: repeat
-                         keyCode: keycode < 256 ? x11ToCarbon[keycode] : 0];
-    if (pressed && !repeat) {
-        _inputEvent = [event retain];
-        _inputWindow = window;
-    }
-    [self postEvent: event atStart: NO];
+        return NO;
+    *windowNumber = [delegate windowNumber];
+    *location = [window mouseLocationOutsideOfEventStream];
+    return YES;
 }
 
-- (void) startKeyRepeat: (xkb_keycode_t) keycode {
-    [self stopKeyRepeat];
-    _repeatKeycode = keycode;
-
-    CFRunLoopTimerContext context = {.version = 0, .info = self};
-    _repeatTimer = CFRunLoopTimerCreate(
-            NULL, CFAbsoluteTimeGetCurrent() + _repeatDelay / 1000.0,
-            1.0 / _repeatRate, 0, 0, repeatTimerCallback, &context);
-    CFRunLoopAddTimer(CFRunLoopGetMain(), _repeatTimer, kCFRunLoopCommonModes);
+// The press of a key starts the input event popup grabs are tied to (see -popupGrabSerialForParent:).
+- (NSEvent *) keyEventCreated: (NSEvent *) event fromCGEvent: (CGEventRef) cgEvent {
+    if ([event type] != NSKeyDown || [event isARepeat] ||
+        CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) == 0)
+        return event;
+    WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
+                                                            cgEvent, kCGSEventNativeWindow)];
+    id keyPlatformWindow = [[NSApp keyWindow] platformWindow];
+    if ([keyPlatformWindow isKindOfClass: [WaylandWindow class]] && (window == nil || ![window isPopup]))
+        window = keyPlatformWindow;
+    _inputSerial = (uint32_t) CGEventGetIntegerValueField(cgEvent, kCGSEventInputSerial);
+    [_inputEvent release];
+    _inputEvent = [event retain];
+    _inputWindow = window;
+    return event;
 }
 
-- (void) stopKeyRepeat {
-    if (_repeatTimer != NULL) {
-        CFRunLoopTimerInvalidate(_repeatTimer);
-        CFRelease(_repeatTimer);
-        _repeatTimer = NULL;
-    }
-    _repeatKeycode = 0;
-}
-
-- (void) repeatKey {
-    if (_xkbState == NULL || _repeatKeycode == 0)
-        return;
-    [self postKeyEventForKeycode: _repeatKeycode pressed: YES repeat: YES];
-    // A timer doesn't end -[NSRunLoop runMode:beforeDate:], so wake the event loop.
-    CFRunLoopStop(CFRunLoopGetMain());
+- (NSUInteger) currentModifierFlags {
+    return (NSUInteger) _CGSNativeConnectionModifierFlags();
 }
 
 - (int) keyboardLayoutId {
-    if (_xkbState == NULL)
-        return -1;
-    return (int) WL.xkb_state_serialize_layout(_xkbState,
-                                               XKB_STATE_LAYOUT_EFFECTIVE);
+    return _CGSNativeConnectionKeyboardLayoutGroup(NULL);
 }
 
 - (void) keyboardLayoutName: (NSString **) name fullName: (NSString **) fullName {
+    CFStringRef layout = NULL;
     NSString *layoutName = @"?";
 
-    int layout = [self keyboardLayoutId];
-    if (layout >= 0) {
-        const char *xkbName = WL.xkb_keymap_layout_get_name(_xkbKeymap, layout);
-        if (xkbName != NULL)
-            layoutName = [NSString stringWithUTF8String: xkbName];
-    }
+    if (_CGSNativeConnectionKeyboardLayoutGroup(&layout) >= 0 && layout != NULL)
+        layoutName = [(NSString *) layout autorelease];
     if (name != NULL)
         *name = layoutName;
     if (fullName != NULL)
         *fullName = layoutName;
-}
-
-// What the keyboard layout builder needs of the compositor's keymap: a scratch XKB state that
-// is put into each modifier layer in turn, so XKB itself decides the level of a key.
-typedef struct {
-    struct xkb_state *state;
-    xkb_layout_index_t group;
-    xkb_mod_mask_t shift, caps, option;
-} WaylandKeyLayoutContext;
-
-static uint32_t WaylandKeyLayoutKeysym(void *context, int carbonKey, unsigned layer) {
-    WaylandKeyLayoutContext *keymap = context;
-    const int keycode = carbonToX11[carbonKey];
-    if (keycode == 0)
-        return 0;
-
-    xkb_mod_mask_t depressed = 0, locked = 0;
-    if (layer & DarlingKeyLayerShift)
-        depressed |= keymap->shift;
-    if (layer & DarlingKeyLayerOption)
-        depressed |= keymap->option;
-    if (layer & DarlingKeyLayerCaps)
-        locked |= keymap->caps;
-    WL.xkb_state_update_mask(keymap->state, depressed, 0, locked, 0, 0, keymap->group);
-    xkb_keysym_t keysym = WL.xkb_state_key_get_one_sym(keymap->state, keycode);
-    return keysym == XKB_KEY_NoSymbol ? 0 : keysym;
-}
-
-static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
-    uint32_t codepoint = CGSKeySymToUnicode(keysym);
-    return codepoint != 0 ? codepoint : WL.xkb_keysym_to_utf32(keysym);
-}
-
-// Builds the 'uchr' layout of the compositor's keymap in its current group and registers it with
-// CoreGraphics, where the Text Input Sources API reads it: Wayland gives the keymap to the client
-// that owns the keyboard, so CoreGraphics' own Wayland connection cannot read it. Called when a
-// keymap arrives and when the group changes.
-- (void) publishKeyboardLayout {
-    if (_xkbState == NULL || _xkbKeymap == NULL)
-        return;
-    xkb_layout_index_t group = WL.xkb_state_serialize_layout(_xkbState, XKB_STATE_LAYOUT_EFFECTIVE);
-    if (_publishedKeymap == _xkbKeymap && _publishedGroup == group)
-        return;
-
-    WaylandKeyLayoutContext keymap;
-    keymap.state = WL.xkb_state_new(_xkbKeymap);
-    if (keymap.state == NULL)
-        return;
-    keymap.group = group;
-    xkb_mod_index_t shift = WL.xkb_keymap_mod_get_index(_xkbKeymap, XKB_MOD_NAME_SHIFT);
-    xkb_mod_index_t caps = WL.xkb_keymap_mod_get_index(_xkbKeymap, XKB_MOD_NAME_CAPS);
-    xkb_mod_index_t option = WL.xkb_keymap_mod_get_index(_xkbKeymap, "Mod5"); // AltGr
-    keymap.shift = shift != XKB_MOD_INVALID ? 1u << shift : 0;
-    keymap.caps = caps != XKB_MOD_INVALID ? 1u << caps : 0;
-    keymap.option = option != XKB_MOD_INVALID ? 1u << option : 0;
-
-    DarlingKeyLayoutSource source = {
-        .context = &keymap,
-        .keysym = WaylandKeyLayoutKeysym,
-        .codepoint = WaylandKeyLayoutCodepoint,
-        .compose = DarlingComposeCharacters,
-    };
-    uint32_t length = 0;
-    UCKeyboardLayout *layout = DarlingCreateUnicodeKeyLayout(&source, &length);
-    WL.xkb_state_unref(keymap.state);
-    if (layout == NULL)
-        return;
-
-    NSString *name = nil, *fullName = nil;
-    [self keyboardLayoutName: &name fullName: &fullName];
-    _CGSSetProvidedKeyboardLayout(layout, length, (CFStringRef) name, (CFStringRef) fullName);
-    free(layout);
-    _publishedKeymap = _xkbKeymap;
-    _publishedGroup = group;
 }
 
 #pragma mark - Screens
@@ -2334,80 +1453,15 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     return result;
 }
 
-// Prefer complete compositor logical topology. If any output is still missing
-// metadata, keep the entire set in the core-protocol horizontal fallback.
-- (NSArray *) screens {
-    if (_screens != nil)
-        return [[_screens retain] autorelease];
-
-    NSMutableArray *screens = [NSMutableArray array];
-    CGFloat x = 0;
-    NSArray *outputs = [self outputsWithModes];
-    BOOL logical = [outputs count] > 0;
-    for (WaylandOutput *output in outputs)
-        if (!output->_logicalCurrent.hasPosition || !output->_logicalCurrent.hasSize)
-            logical = NO;
-    CGFloat referenceX = 0, referenceTop = 0;
-    if (logical) {
-        WaylandOutput *first = [outputs objectAtIndex: 0];
-        referenceX = first->_logicalCurrent.x;
-        referenceTop = (CGFloat)first->_logicalCurrent.y + first->_logicalCurrent.height;
-    }
-    for (WaylandOutput *output in outputs) {
-        BOOL rotated = (output->_current.transform & 1) != 0;
-        CGFloat width = rotated ? output->_current.height : output->_current.width;
-        CGFloat height = rotated ? output->_current.width : output->_current.height;
-        NSRect frame = NSMakeRect(x, 0, width / output->_current.scale,
-                                  height / output->_current.scale);
-        if (logical) {
-            WaylandLogicalOutputState state = output->_logicalCurrent;
-            frame = NSMakeRect((CGFloat)state.x - referenceX,
-                    referenceTop - (CGFloat)state.y - state.height, state.width, state.height);
-        }
-        WaylandScreen *screen = [[[WaylandScreen alloc] initWithFrame: frame
-                                               visibleFrame: frame] autorelease];
-        // Whole scale factors only: a compositor that scales an output by 1.5 reports 2, and the
-        // logical size says so even when wl_output rounds down.
-        CGFloat wholeScale = output->_current.scale;
-        if (logical && output->_logicalCurrent.width > 0) {
-            CGFloat ratio = width / output->_logicalCurrent.width;
-            wholeScale = MAX(wholeScale, ceil(ratio - 0.01));
-        }
-        screen->_waylandScale = wholeScale;
-        NSString *outputName = [output->_description length] > 0 ? output->_description : output->_name;
-        screen->_outputName = [outputName length] > 0 ? [outputName copy] : nil;
-        [screen setCgDirectDisplayID: [screens count] + 1];
-        [screens addObject: screen];
-        x += frame.size.width;
-    }
-
-    if ([screens count] == 0) {
-        // No output has reported a mode yet.
-        static const CGFloat fallbackWidth = 1920, fallbackHeight = 1080;
-        static BOOL logged;
-        if (!logged) {
-            NSLog(@"Wayland backend: no output mode known, assuming a %.0fx%.0f "
-                  @"screen",
-                  fallbackWidth, fallbackHeight);
-            logged = YES;
-        }
-        NSRect frame = NSMakeRect(0, 0, fallbackWidth, fallbackHeight);
-        [screens addObject: [[[NSScreen alloc] initWithFrame: frame
-                                                visibleFrame: frame] autorelease]];
-    }
-
-    _screens = [screens copy];
-    return [[_screens retain] autorelease];
-}
-
-// -screens is built from -outputsWithModes in order, so the indexes agree.
+// The outputs that have reported a mode are CoreGraphics' displays (its connection to the compositor
+// lists the same outputs in the same order), so the indexes agree.
 - (size_t) fullscreenOutputs: (WaylandFullscreenOutput *) result
                      proxies: (struct wl_proxy **) proxies
                          max: (size_t) max
                      entered: (NSSet *) entered
 {
     NSArray *outputs = [self outputsWithModes];
-    // -screens invents a screen when no output has reported a mode yet.
+    // -screens invents a screen when no display is known yet.
     if ([outputs count] == 0)
         return 0;
     NSArray *screens = [self screens];
@@ -2435,59 +1489,6 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         forNativeWindowBorderWithStyle: (NSUInteger) styleMask
 {
     return frame;
-}
-
-- (NSArray *) modesForScreen: (int) screenIndex {
-    NSArray *outputs = [self outputsWithModes];
-    if (screenIndex < 0 || screenIndex >= (int) [outputs count])
-        return nil;
-    WaylandOutput *output = outputs[screenIndex];
-    // The output-management heads list every mode the output can be set to; wl_output
-    // lists only what the compositor chooses to announce.
-    NSArray *managed = [_outputManager modesForOutputAtX: output->_current.x y: output->_current.y
-                                                   width: output->_current.width
-                                                  height: output->_current.height];
-    if ([managed count] > 0)
-        return managed;
-    return [NSArray arrayWithArray: output->_modes];
-}
-
-- (NSDictionary *) currentModeForScreen: (int) screenIndex {
-    NSArray *outputs = [self outputsWithModes];
-    if (screenIndex < 0 || screenIndex >= (int) [outputs count])
-        return @{};
-    WaylandOutput *output = outputs[screenIndex];
-    return @{
-        @"Width" : @(output->_current.width),
-        @"Height" : @(output->_current.height),
-        @"Depth" : @(24),
-        @"RefreshRate" : @(output->_current.refresh / 1000.0)
-    };
-}
-
-// Modes can be changed only through wlr-output-management; a compositor
-// without it keeps its output modes (NO).
-- (BOOL) setMode: (NSDictionary *) mode forScreen: (int) screenIndex {
-    NSArray *outputs = [self outputsWithModes];
-    if (_outputManager == nil || mode == nil || screenIndex < 0 || screenIndex >= (int) [outputs count])
-        return NO;
-    WaylandOutput *output = outputs[screenIndex];
-    BOOL changed = [_outputManager
-            setModeWidth: [[mode objectForKey: @"Width"] intValue]
-                  height: [[mode objectForKey: @"Height"] intValue]
-                 refresh: (int) lround([[mode objectForKey: @"RefreshRate"] doubleValue] * 1000.0)
-            forOutputAtX: output->_current.x y: output->_current.y
-            currentWidth: output->_current.width currentHeight: output->_current.height];
-    if (changed) {
-        // wl_output.done for the new mode normally came with the round trips; if it
-        // is still on its way, wait for it so that the screens are up to date.
-        for (int i = 0; i < 200 && output->_current.width != [[mode objectForKey: @"Width"] intValue]; i++) {
-            if (WL.wl_display_roundtrip(_wlDisplay) < 0)
-                break;
-            usleep(5000);
-        }
-    }
-    return changed;
 }
 
 #pragma mark - Windows
@@ -2643,22 +1644,35 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 // would show the menu, and a client cannot put a bar of its own along the top
 // of the screen with xdg-shell, so the windows draw it themselves.
 - (BOOL) _showsMainMenuOutsideWindows {
-    if (_appMenuManager == NULL)
-        return NO;
-    if (_appMenu == nil)
-        _appMenu = [WaylandAppMenu new];
-    if ([_appMenu globalMenuPresent])
-        return YES;
-    [_appMenu release];
-    _appMenu = nil;
-    return NO;
+    // With a layer shell the menu bar window shows the menu when the desktop does not.
+    return _layerShell != NULL || [self _desktopShowsMainMenu];
 }
 
+// Asked once, with a throw-away exporter, because the answer decides whether the application exports its
+// menu at all.
+- (BOOL) _desktopShowsMainMenu {
+    if (!_desktopMenuProbed) {
+        _desktopMenuProbed = YES;
+        if (_appMenuManager != NULL) {
+            WaylandAppMenu *probe = [[WaylandAppMenu alloc] initWithDisplay: self exporting: YES];
+
+            _desktopMenuPresent = [probe globalMenuPresent];
+            [probe release];
+        }
+    }
+    return _desktopMenuPresent;
+}
+
+// The menu is exported for the desktop's global menu unless the windows carry it as strips. The menu bar
+// window, which a layer shell makes possible, is kept for the time no window carries a strip.
 - (void) _mainMenuDidChange: (NSMenu *) menu {
-    if ([NSWindow _usesInWindowMenuBar])
-        return;
-    if (_appMenu == nil)
-        _appMenu = [WaylandAppMenu new];
+    if (_appMenu == nil) {
+        BOOL strips = [NSWindow _usesInWindowMenuBar];
+
+        if (strips && _layerShell == NULL)
+            return;
+        _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self exporting: !strips];
+    }
     [_appMenu setMainMenu: menu];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];
@@ -2677,6 +1691,32 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     CFArrayAppendValue(_windows, window);
 }
 
+// A window lost the keyboard focus or the compositor's activation. The focus moving from one of our
+// surfaces to another arrives as a loss and a gain in the same dispatch; a loss that no gain follows
+// means another client has it.
+- (void) applicationFocusMayHaveLeft {
+    [self performAfterDispatch: ^{
+        if (_CGSNativeConnectionKeyboardFocus() != NULL)
+            return;
+        for (CFIndex i = 0; i < CFArrayGetCount(self->_windows); i++) {
+            if ([(WaylandWindow *) CFArrayGetValueAtIndex(self->_windows, i) isActivatedByCompositor])
+                return;
+        }
+        [self keyboardFocusLeftApplication];
+    }];
+}
+
+// Another client has the keyboard focus: no window of the application is active any more, including
+// one that was only reported active because it is never shown (see -[WaylandWindow makeKey]), which no
+// configure event would ever take the activation from. The application resigns once none is.
+- (void) keyboardFocusLeftApplication {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        [window keyboardFocusLeft];
+    }
+    [NSApp _systemFocusMovedToAnotherClient];
+}
+
 - (void) windowActivated: (WaylandWindow *) window {
     CFIndex index = CFArrayGetFirstIndexOfValue(
             _windows, CFRangeMake(0, CFArrayGetCount(_windows)), window);
@@ -2684,7 +1724,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         CFArrayRemoveValueAtIndex(_windows, index);
         CFArrayInsertValueAtIndex(_windows, 0, window);
     }
-    [self updatePointerLock];
+    _CGSNativeConnectionPointerLockTargetChanged();
 }
 
 - (void) windowUnmapped: (WaylandWindow *) window {
@@ -2694,37 +1734,30 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         if ([other levelParent] == window)
             [other levelParentUnmapped];
     }
-    if (_lockWindow == window) {
-        [self releasePointerLock];
-        [self performAfterDispatch: ^{ [self updatePointerLock]; }];
-    }
-    if (_wlLastClickWindow == window)
-        _wlLastClickWindow = nil;
+    // The window to lock the pointer to may be another one now (after the window is gone from the list).
+    [self performAfterDispatch: ^{ _CGSNativeConnectionPointerLockTargetChanged(); }];
     if (_textInputWindow == window)
         [self textInputLeft];
-    if (_pinchWindow == window)
-        [self postPinchPhase: NSEventPhaseCancelled];
     [_draggingManager windowUnmapped: window];
     if (_dragPressWindow == window) [self consumeDragPress];
     if (_pointerWindow == window) {
         _pointerWindow = nil;
         _pointerEnterSerial = 0;
         _pressedButtons = 0;
-        _pendingScrollX = _pendingScrollY = 0;
-        _pendingScrollWindow = nil;
-        _pendingScrollActive = NO;
-        [_buttonClickCounts removeAllObjects];
     }
     if (_inputWindow == window) {
         _inputWindow = nil;
         [_inputEvent release];
         _inputEvent = nil;
     }
-    if (_keyboardWindow == window) {
-        _keyboardWindow = nil;
-        [self stopKeyRepeat];
-        [self resetKeyboardModifiers];
+    if (_keyboardFocusWindow == window) {
+        // The leave event that may still follow is the application unmapping its own window, not another
+        // client taking the focus.
+        _keyboardWindowUnmapped = YES;
+        _keyboardFocusWindow = nil;
     }
+    // The keyboard focus, the pointer focus and a pinch on the window's surface end with it.
+    _CGSNativeConnectionObjectDestroyed([window surface]);
 }
 
 - (void) windowDestroyed: (WaylandWindow *) window {
@@ -2837,7 +1870,7 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     args[0].u = serial;
 
     BOOL decoration = [_pointerWindow isDecorationPoint: _pointerSurfacePoint];
-    if (!decoration && [cursor isBlank]) {
+    if (!decoration && ([cursor isBlank] || _CGSNativeConnectionCursorHidden())) {
         args[1].o = NULL;
         args[2].i = 0;
         args[3].i = 0;
@@ -3005,24 +2038,14 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
     [self applyCursor];
 }
 
-- (void) hideCursor {
-    [self setCursor: [[[WaylandCursor alloc] initBlank] autorelease]];
-}
-
-- (void) unhideCursor {
-    NSCursor *current = [NSCursor currentCursor];
-    if (current != nil) {
-        [current push];
-        [current pop];
-    } else {
-        [self setCursor: [self cursorWithName: @"arrowCursor"]];
-    }
-}
-
 #pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
 - (uint32_t) clipboardSerial {
-    return _keyboardWindow != nil ? _inputSerial : 0;
+    if (_CGSNativeConnectionKeyboardFocus() != NULL)
+        return _inputSerial;
+    // A key or click still being handled entitles its writes to the selection even when the focus
+    // left right after it, as when a virtual keyboard is removed a few milliseconds after its key.
+    return _inputEvent != nil && [NSApp currentEvent] == _inputEvent ? _inputSerial : 0;
 }
 
 - (NSDraggingManager *) draggingManager {
@@ -3091,13 +2114,59 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
 // compositor decides: it may only mark the window as wanting attention. The token
 // carries the serial of the last input event when there is one, because
 // compositors refuse requests that cannot be tied to user input.
+- (BOOL) mappingForActivation {
+    return _mappingForActivation;
+}
+
+// Maps the windows that were ordered in while the application could not take the input focus.
+- (void) mapDeferredWindows {
+    BOOL previous = _mappingForActivation;
+    _mappingForActivation = YES;
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window isMapDeferred])
+            [window ensureMapped];
+    }
+    _mappingForActivation = previous;
+    [self flush];
+}
+
+- (void) applicationBecameActive: (NSNotification *) notification {
+    [self mapDeferredWindows];
+}
+
 - (void) requestActivation {
     if (_activation == NULL || _activationToken != NULL)
         return;
+    // An application that is asked to activate shows the windows it was holding back.
+    [self mapDeferredWindows];
     WaylandWindow *window = [self windowForActivation];
+    [self requestActivationOf: window from: window];
+}
+
+// The same request for a given window, for instance one the compositor was asked to minimize. The
+// requesting surface the token names (xdg-activation set_surface) is not the surface to activate:
+// it is the key or main window, when there is another one that is shown. GUESS: with none the token
+// names no surface, which the protocol allows and some compositors refuse. Returns whether a
+// request was made; one is not while another waits for its token, and then nothing was asked.
+- (BOOL) requestActivationOfWindow: (WaylandWindow *) window {
+    NSWindow *candidates[] = {[NSApp keyWindow], [NSApp mainWindow]};
+    WaylandWindow *requester = nil;
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]) && requester == nil; i++) {
+        id platform = [candidates[i] platformWindow];
+        if ([platform isKindOfClass: [WaylandWindow class]] && platform != window &&
+            [platform isMapped] && ![platform isPopup] && ![platform isMiniaturized])
+            requester = platform;
+    }
+    return [self requestActivationOf: window from: requester];
+}
+
+- (BOOL) requestActivationOf: (WaylandWindow *) window from: (WaylandWindow *) requester {
+    if (_activation == NULL || _activationToken != NULL)
+        return NO;
     struct wl_proxy *surface = [window surface];
     if (surface == NULL)
-        return;
+        return NO;
 
     union wl_argument none[1] = {{.o = NULL}};
     _activationToken = WaylandCreateObject(_activation, WP_ACTIVATION_GET_TOKEN,
@@ -3107,11 +2176,15 @@ static uint32_t WaylandKeyLayoutCodepoint(void *context, uint32_t keysym) {
         union wl_argument serial[2] = {{.u = _inputSerial}, {.o = (struct wl_object *) _seat}};
         WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SERIAL, NULL, 0, serial);
     }
-    union wl_argument forSurface[1] = {{.o = (struct wl_object *) surface}};
-    WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SURFACE, NULL, 0, forSurface);
+    struct wl_proxy *requesting = [requester surface];
+    if (requesting != NULL) {
+        union wl_argument forSurface[1] = {{.o = (struct wl_object *) requesting}};
+        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SURFACE, NULL, 0, forSurface);
+    }
     WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_COMMIT, NULL, 0, NULL);
     _activationWindow = [window retain];
     [self flush];
+    return YES;
 }
 
 - (void) cancelActivationRequest {

@@ -151,6 +151,9 @@ typedef NS_ENUM(NSInteger, NSWorkspaceAuthorizationType) {
 - (nullable NSArray *) mountedLocalVolumePaths;
 
 - (BOOL) unmountAndEjectDeviceAtPath: (NSString *) path;
+- (BOOL) unmountAndEjectDeviceAtURL: (NSURL *) url error: (NSError **) error;
+- (void) recycleURLs: (NSArray<NSURL *> *) URLs
+   completionHandler: (void (^)(NSDictionary<NSURL *, NSURL *> *newURLs, NSError *error)) handler;
 
 - (BOOL) fileSystemChanged;
 - (BOOL) userDefaultsChanged;

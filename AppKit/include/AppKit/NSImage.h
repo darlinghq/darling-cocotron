@@ -56,7 +56,7 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 // Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSImage : NSObject <NSCopying, NSCoding, NSPasteboardWriting, NSPasteboardReading> {
+@interface NSImage : NSObject <NSCopying, NSSecureCoding, NSPasteboardWriting, NSPasteboardReading> {
     NSString *_name;
     NSSize _size;
     NS_LEGACY_IVAR_PAD(_NSImageReserved1, 8)
@@ -234,6 +234,13 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
 + (nullable instancetype) imageWithSystemSymbolName: (NSString *) name
                              variableValue: (double) value
                   accessibilityDescription: (nullable NSString *) description;
+// Documented on the AppKit page of NSImage init(symbolName:variableValue:)
+// (macOS 13), whose Objective-C declaration is this class method. Darling loads
+// no symbols of an application's own, so it answers like
+// imageWithSystemSymbolName:variableValue:accessibilityDescription: with no
+// description.
++ (nullable instancetype) imageWithSymbolName: (NSString *) name
+                             variableValue: (double) value;
 - (nullable NSImage *) imageWithSymbolConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 @property(nonatomic, readonly) NSImageSymbolConfiguration *symbolConfiguration;
@@ -255,6 +262,9 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
     NSArray<NSColor *> *_paletteColors;
     NSColor *_hierarchicalColor;
     BOOL _prefersMulticolor;
+    BOOL _prefersMonochrome;
+    BOOL _prefersHierarchical;
+    NSFontTextStyle _textStyle;
 }
 
 + (instancetype) configurationWithPointSize: (CGFloat) pointSize
@@ -262,10 +272,15 @@ typedef NS_ENUM(NSInteger, NSImageSymbolScale) {
 + (instancetype) configurationWithPointSize: (CGFloat) pointSize
                                      weight: (NSFontWeight) weight
                                       scale: (NSImageSymbolScale) scale;
++ (instancetype) configurationWithTextStyle: (NSFontTextStyle) style;
++ (instancetype) configurationWithTextStyle: (NSFontTextStyle) style
+                                      scale: (NSImageSymbolScale) scale;
 + (instancetype) configurationWithScale: (NSImageSymbolScale) scale;
 + (instancetype) configurationWithPaletteColors: (NSArray<NSColor *> *) colors;
 + (instancetype) configurationWithHierarchicalColor: (NSColor *) color;
 + (instancetype) configurationPreferringMulticolor;
++ (instancetype) configurationPreferringMonochrome;
++ (instancetype) configurationPreferringHierarchical;
 - (null_unspecified NSImageSymbolConfiguration *) configurationByApplyingConfiguration:
         (NSImageSymbolConfiguration *) configuration;
 

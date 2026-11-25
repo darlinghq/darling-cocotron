@@ -70,8 +70,10 @@ extern void CGRegionRelease(CGRegionRef region);
 // CGSNotificationSingleEventType(NX_SYSDEFINED) (or kCGSNotificationAllEvents); the data is a
 // CGSEventRecord whose data.compound.subType is kCGSHotKeyPressedSubtype or
 // kCGSHotKeyReleasedSubtype, whose data.compound.misc.L[0] is the uid, and whose flags,
-// location and time are those of the key event. AppKit turns it into an NSEvent of type
-// NSSystemDefined, which NSApplication hands to HIToolbox.
+// location and time are those of the key event. The same event, made with
+// CGEventCreateWithEventRecord(), goes through the event taps into the event stream of the process
+// (_CGSEventStreamPost), where HIToolbox reads it; AppKit gets it from HIToolbox's queue as an
+// NSEvent of type NSSystemDefined and hands it back to HIToolbox in -[NSApplication sendEvent:].
 // QUIRK: system-defined subtype 6 is a hot key press, 9 a release, and the event's data1 names
 // the hot key (the uid given when it was set). Not documented. Evidence: public write-ups of
 // the observed event (The Register, 2009, https://www.theregister.co.uk/2009/02/24/hotkeys_framework2/;
@@ -202,6 +204,16 @@ extern bool CGContextGetShouldSmoothFonts(CGContextRef context);
 extern uint32_t CGContextGetFontSmoothingStyle(CGContextRef context);
 extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style);
 
+// Display details beyond the public CGDisplay* API, for the frameworks above CoreGraphics that describe displays
+// (AppKit's NSScreen). The display is a CGDirectDisplayID.
+// Device pixels per point of the display (at least 1; 1 for a display that does not exist).
+extern double _CGSDisplayBackingScaleFactor(CGDirectDisplayID display);
+// The EDID the display's output carries, or NULL; the caller releases it.
+extern CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display);
+// The name the window system gives the display's output (a description or a connector name), or NULL; the
+// caller releases it.
+extern CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display);
+
 // Darling extras, e.g. for CGL
 // Asks the window system to give the windows of a process the input focus and raise them,
 // as a pager would (the window manager may still refuse). The pid is a Darling process
@@ -221,10 +233,11 @@ CGError _CGSActivateProcess(pid_t pid, uint32_t options);
 // and system daemons, are not applications of the window system.
 Boolean _CGSProcessHasConnection(pid_t pid);
 #define kCGSProcessConnectionNotificationPrefix "org.darlinghq.process-connection."
-// The Darling process that has the input focus. The display server answers where it can (X11:
-// the owner of _NET_ACTIVE_WINDOW). A Wayland compositor does not tell clients, so the answer
-// is the process that most recently reported (through _CGSSetFrontProcess) that it was
-// activated, shared by all Darling processes. Returns kCGErrorSuccess and sets *pid,
+// The Darling process that has the input focus: the process that most recently reported (through
+// _CGSSetFrontProcess) or was requested (through _CGSRequestFrontProcess) to be the front process,
+// as long as it has not resigned since, shared by all Darling processes. When no process is
+// in that state, the display server is asked where it can answer (X11: the owner of
+// _NET_ACTIVE_WINDOW). Returns kCGErrorSuccess and sets *pid,
 // kCGErrorNoneAvailable when no process is known, kCGErrorIllegalArgument for a NULL pid.
 CGError _CGSGetFrontProcess(pid_t* pid);
 // Reports that the process with this pid got the input focus. A windowing backend calls it
@@ -237,6 +250,56 @@ CGError _CGSSetFrontProcess(pid_t pid);
 // asked, such as a Wayland compositor, has focus on a process that is not a Darling process, or on
 // none). Posts the same name as _CGSSetFrontProcess().
 CGError _CGSResignFrontProcess(pid_t pid);
+// Publishes the activation policy of the calling process' application (NSApplicationActivationPolicy:
+// 0 regular, 1 accessory, 2 prohibited) for the other processes; AppKit calls it when the application
+// object is made and when the policy changes.
+void _CGSSetProcessActivationPolicy(int policy);
+// The policy the process with this pid published. kCGErrorNoneAvailable for a process that is gone
+// or never published one (a program that is not an application of the window system),
+// kCGErrorIllegalArgument for a pid that is not positive or a NULL policy.
+CGError _CGSGetProcessActivationPolicy(pid_t pid, int* policy);
+// Makes the process with this pid the front process: what SetFrontProcess() of the Process Manager
+// asks for. The change is visible to every process when the call returns (_CGSGetFrontProcess(),
+// and what is built on it), and every process that watches the front process is notified; then
+// the window system is asked to give the process' windows the input focus (_CGSActivateProcess()),
+// which it may decline. kCGSRequestFrontProcessFrontWindowOnly is passed on to the activation;
+// kCGSRequestFrontProcessMenuBarOwner makes the process the menu bar owner too (for a
+// regular application; an agent keeps the owner that was). Returns kCGErrorIllegalArgument for a pid
+// that is not positive and kCGErrorSuccess otherwise.
+#define kCGSRequestFrontProcessFrontWindowOnly 1
+#define kCGSRequestFrontProcessMenuBarOwner 2
+CGError _CGSRequestFrontProcess(pid_t pid, uint32_t options);
+// The request SetFrontProcess() makes for an application: _CGSRequestFrontProcess() with the menu bar
+// owner chosen from the activation policy the process published (a regular application becomes the
+// owner, an agent does not). kCGErrorInvalidOperation for a process that published the prohibited
+// policy (it cannot be the front process, and nothing changes); a process that published none is
+// not refused. Only kCGSRequestFrontProcessFrontWindowOnly is accepted in options
+// (kCGErrorIllegalArgument otherwise); a pid that is not positive is kCGErrorIllegalArgument too.
+CGError _CGSRequestFrontApplication(pid_t pid, uint32_t options);
+// The CPS calls, the window system's per-process calls that the Process Manager is built on. A serial
+// number is (0, pid); the Process Manager's special values are accepted (1: the system
+// process, accepted and left alone by CPSSetFrontProcess; 2: the calling process). They return 0 on
+// success and a nonzero error otherwise: 1003 for a NULL serial number, else a CGError.
+typedef struct CPSProcessSerNum
+{
+	uint32_t hi;
+	uint32_t lo;
+} CPSProcessSerNum;
+int CPSGetCurrentProcess(CPSProcessSerNum* psn);
+// Makes the calling process a regular application of the window system (it publishes that activation
+// policy). kCGErrorCannotComplete for another process, whose policy only it can publish.
+int CPSEnableForegroundOperation(CPSProcessSerNum* psn, uint32_t flags1, uint32_t flags2, uint32_t flags3, uint32_t flags4);
+// _CGSRequestFrontApplication() for the process: its errors, kCGErrorNoneAvailable for a serial
+// number that names no live process.
+int CPSSetFrontProcess(CPSProcessSerNum* psn);
+// Called in this process when the front process changed (by any process), on the main thread, and
+// at once in the thread that reported or requested the change when it was this process. previous
+// and current are pids, 0 for none known (the focus is in another client of the window system).
+// Not called for a change that is undone before the observers looked. An observer is added once and
+// not removed; the first one makes the process watch the front process, and an observer added while
+// this process is the front process is called with a previous pid of 0.
+typedef void (*CGSFrontProcessObserver)(pid_t previous, pid_t current, void* info);
+void _CGSAddFrontProcessObserver(CGSFrontProcessObserver observer, void* info);
 // The name of the Darwin notification that asks the process with this pid to activate its
 // windows (see above); a windowing backend observes the name of its own process.
 #define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
@@ -265,9 +328,37 @@ Boolean _CGSProcessIsHidden(pid_t pid);
 // whenever the front process may have changed.
 #define kCGSFrontProcessNotificationName "org.darlinghq.front-process"
 
+// The libnotify name whose state holds the pid of the process that owns the menu bar (see
+// _CGSSetMenuBarOwnerProcess()).
+#define kCGSMenuBarOwnerNotificationName "org.darlinghq.menubar-owner"
+// Reports that the process with this pid owns the menu bar from now on. A regular application
+// calls it with its own pid when it becomes active; an application that is not regular (an
+// agent or background application) never takes the menu bar over when it becomes active, so
+// the owner stays the application that had it. Posts kCGSFrontProcessNotificationName.
+CGError _CGSSetMenuBarOwnerProcess(pid_t pid);
+// The process that owns the menu bar: the last one that reported it, as long as it is alive and a
+// Darling process reports to have the input focus (_CGSSetFrontProcess() without a later
+// _CGSResignFrontProcess() of the same process). Returns kCGErrorNoneAvailable when there is none (nothing
+// was reported, the owner ended, or the focus is in another client of the display server, where
+// no Darling process shows a menu bar), kCGErrorIllegalArgument for a NULL pid.
+CGError _CGSGetMenuBarOwnerProcess(pid_t* pid);
+
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
 void* _CGSNativeWindowForSurfaceID(CGSConnectionID connId, CGSWindowID winId, CGSSurfaceID surfaceId);
+
+// Surfaces of application windows. There is no window server to own the drawable of an
+// NSOpenGLView, so AppKit records it here: a surface on the AppKit window with this window
+// number, backed by `nativeWindow` (the handle a GL surface is made for), with the given size
+// in points. The surface can then be looked up by its ids as for a CGS surface:
+// CGSGetSurfaceBounds() reports its size, and CGLGetSurface() reports the ids of a context
+// that draws to it. Returns the new surface id, never 0.
+CGSSurfaceID _CGSAddWindowSurface(CGSWindowID winId, void* nativeWindow, CGSize size);
+void _CGSSetWindowSurfaceSize(CGSSurfaceID surfaceId, CGSize size);
+void _CGSRemoveWindowSurface(CGSSurfaceID surfaceId);
+// The ids of the application window surface backed by `nativeWindow`. False if there is none.
+bool _CGSWindowSurfaceForNativeWindow(void* nativeWindow, CGSConnectionID* connId,
+                                      CGSWindowID* winId, CGSSurfaceID* surfaceId);
 
 // Creates a window covering `bounds` (global display coordinates), above ordinary
 // windows and shown, so that a GL context can fill a display (CGLSetFullScreen).
@@ -302,10 +393,94 @@ extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRe
 extern CGError CGEventSetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
 extern uint32_t CGEventGetEventRecordSize(CGEventRef event);
 
-// Registers the 'uchr' keyboard layout (a UCKeyboardLayout blob of `length` bytes, copied) of the
-// window system's current keymap, for a backend that cannot read the keymap itself. The Text Input
-// Sources API returns it. NULL or a zero length removes it.
-extern void _CGSSetProvidedKeyboardLayout(const void* uchr, uint32_t length, CFStringRef name, CFStringRef fullName);
+// The event stream of the process: the events that are for this process once they have been
+// through the event taps (CGEventPost() and friends deliver here), in the order they came, for
+// the frameworks above CoreGraphics to read. Thread safe. There is no Mach message, port or
+// thread behind it.
+//
+// The stream keeps events only while a reader is registered with _CGSEventStreamSetReadySource().
+// _CGSEventStreamPost() is for the window system: it enters the event at the first tap, as an
+// event of the hardware, and retains it until it has been delivered.
+extern void _CGSEventStreamPost(CGEventRef event);
+// The oldest event, which the caller releases, or NULL once the stream is empty. A reader that was
+// woken has to call this until it returns NULL: the source is signalled again only after that.
+extern CGEventRef _CGSEventStreamCopyNextEvent(void);
+// Registers the run loop source that is signalled, and its run loop woken, when an event arrives
+// at an empty stream. For the thread that waits for events: it reads the stream from where it
+// waits (before each wait, and after each wake up). A new registration replaces the old one;
+// NULL for both stops the stream and drops what is waiting.
+extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef _Nullable source, CFRunLoopRef _Nullable runLoop);
+
+// Interim (darlinghq/darling#937, until the window system backends live in CoreGraphics): the
+// poster of a window system event can attach an object to it, which the framework that reads the
+// event from the stream takes back. AppKit attaches the NSEvent its backend built, with what a
+// CGEvent cannot carry yet (input method text, gesture phases, tablet data). The object is not
+// part of the event: copies of the event do not have it, and an active event tap that changes the
+// event or replaces it with another drops it, so the reader then builds what it needs from the
+// event's fields. The event retains the object.
+// Fields of our own on the input events the window system backends post, for what a CGEvent has no
+// field for. They sit above the highest field CGEvent.h defines and belong to every event type.
+enum {
+	// The characters of a key event with the modifiers other than Shift ignored: up to four UTF-16
+	// units, the first in the lowest 16 bits, and the key code they were made for (they no longer apply
+	// when an event tap gives the event another key code).
+	kCGSKeyboardEventUnmodifiedUnicode = 180,
+	kCGSKeyboardEventUnmodifiedLength = 181,
+	kCGSKeyboardEventUnmodifiedKeyCode = 184,
+	// The window system handle of the window the event is for (the wl_surface of the keyboard focus
+	// on Wayland), compared by value only.
+	kCGSEventNativeWindow = 182,
+	// The window system serial of the input event (Wayland), 0 when it has none.
+	kCGSEventInputSerial = 183,
+	// Pointer events: where the pointer was in the window system's window the event is for
+	// (kCGSEventNativeWindow), from the window's top-left corner (X11: device pixels; Wayland: 1/1024
+	// of a surface-local point), and the global location the event was posted with (in 1/1024 points).
+	// The window location only applies while the event's location is still the posted one: an event
+	// tap that moves the event invalidates it.
+	kCGSEventNativeLocationX = 185,
+	kCGSEventNativeLocationY = 186,
+	kCGSEventPostedLocationX = 187,
+	kCGSEventPostedLocationY = 188,
+	// Not 0: the event goes to the event taps only, and not to the process' event stream (a window
+	// that has not asked for mouse moved events does not get them).
+	kCGSEventTapsOnly = 189,
+	// What the framework above the window system knew when a mouse button press arrived: 1 when the
+	// window it is for was the key window, 2 when it was not, 0 when nothing was said.
+	kCGSMouseEventWindowKeyState = 190,
+	// Pinch (magnify) and rotate gesture events: the phase (NSEventPhase bits), the change of the
+	// magnification since the previous event of the gesture and the rotation in degrees counter-clockwise
+	// since it, both in millionths. CGEvent.h has no field for them.
+	kCGSGesturePhase = 191,
+	kCGSGestureMagnification = 192,
+	kCGSGestureRotation = 193,
+};
+
+// The double-click interval of the user in seconds: the time within which a second press of a button
+// counts as a double click.
+extern double _CGSDoubleClickInterval(void);
+// The time local mouse motion is dropped after CGWarpMouseCursorPosition() (CGSetLocalEventsSuppressionInterval()).
+extern double _CGSLocalEventsSuppressionInterval(void);
+
+extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
+extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
+
+
+// What a key code types, from the current keyboard layout and the keys that give the same on every layout.
+// kCGKeyCharactersDefault is the Unicode string CGEventCreateKeyboardEvent() gives an event (no modifiers),
+// kCGKeyCharactersWithModifiers NSEvent's characters with the flags applied, kCGKeyCharactersIgnoringModifiers
+// NSEvent's charactersIgnoringModifiers (Shift still counts). Returns the number of UTF-16 units written
+// to out (at most max), 0 for a key without characters.
+typedef enum {
+	kCGKeyCharactersDefault,
+	kCGKeyCharactersWithModifiers,
+	kCGKeyCharactersIgnoringModifiers,
+} CGKeyCharactersKind;
+extern size_t _CGKeyCharacters(CGKeyCode key, CGEventFlags flags, CGKeyCharactersKind kind, UniChar* out, size_t max);
+
+// The characters of a keyboard event as NSEvent reports them (see _CGKeyCharacters). A string set with
+// CGEventKeyboardSetUnicodeString() is returned as it is for both; otherwise the characters follow the
+// event's key code and flags. Returns the number of UTF-16 units written to out (at most max).
+extern size_t _CGEventGetKeyCharacters(CGEventRef event, bool ignoringModifiers, UniChar* out, size_t max);
 
 #ifdef __OBJC__
 @class CGSConnection;

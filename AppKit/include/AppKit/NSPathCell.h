@@ -19,7 +19,7 @@ typedef NS_ENUM(NSInteger, NSPathStyle) {
     id _delegate;
     NSColor *_backgroundColor;
     NSArray *_allowedTypes;
-    NSAttributedString *_placeholder;
+    id _placeholder;
     NS_LEGACY_IVAR_PAD(_NSPathCellReserved, 32)
 }
 

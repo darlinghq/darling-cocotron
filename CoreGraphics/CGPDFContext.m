@@ -21,6 +21,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <CoreFoundation/CFString.h>
 
+// The PDF writer cannot encrypt yet. A request for encryption is refused
+// instead of writing an unprotected file the caller believes is protected.
+static bool requestsEncryption(NSDictionary *info) {
+    return [info objectForKey:(id)kCGPDFContextUserPassword] ||
+           [info objectForKey:(id)kCGPDFContextOwnerPassword] ||
+           [info objectForKey:(id)kCGPDFContextEncryptionKeyLength];
+}
+
 const CFStringRef kCGPDFContextTitle = CFSTR("kCGPDFContextTitle");
 const CFStringRef kCGPDFContextAuthor = CFSTR("kCGPDFContextAuthor");
 const CFStringRef kCGPDFContextCreator = CFSTR("kCGPDFContextCreator");
@@ -34,16 +42,34 @@ const CFStringRef kCGPDFContextBleedBox = CFSTR("BleedBox");
 const CFStringRef kCGPDFContextTrimBox = CFSTR("TrimBox");
 const CFStringRef kCGPDFContextArtBox = CFSTR("ArtBox");
 
+// The string values of these keys were read on macOS 26.7.3 and Mac OS X 10.14.4 through their public symbols
+// (black-box observation, identical on both): Subject and OutputIntent are the symbol names, while the four
+// PDF/X keys are the PDF key names of the output intent dictionary (PDF 32000-1 14.11.5), and the PDF/A key
+// is the string "CGPDFContextCreatePDFA" (the symbol is absent from 10.14.4, which has no such key; it is
+// provided anyway). Test: coregraphics-pdf-context-keys.
+// The keys are declared so callers can use them; CGPDFContextCreate accepts them and does not write them: the
+// subject (like the keywords) is dropped because only the title, author and creator reach the file, and the
+// PDF/A and PDF/X keys have no effect.
+const CFStringRef kCGPDFContextSubject = CFSTR("kCGPDFContextSubject");
+const CFStringRef kCGPDFContextCreatePDFA = CFSTR("CGPDFContextCreatePDFA");
+const CFStringRef kCGPDFContextOutputIntent = CFSTR("kCGPDFContextOutputIntent");
+const CFStringRef kCGPDFXInfo = CFSTR("Info");
+const CFStringRef kCGPDFXOutputConditionIdentifier = CFSTR("OutputConditionIdentifier");
+const CFStringRef kCGPDFXOutputIntentSubtype = CFSTR("S");
+const CFStringRef kCGPDFXDestinationOutputProfile = CFSTR("DestOutputProfile");
+
+// The keys of the outline dictionary of CGPDFContextSetOutline and CGPDFDocumentGetOutline (same observation).
+const CFStringRef kCGPDFOutlineTitle = CFSTR("Title");
+const CFStringRef kCGPDFOutlineChildren = CFSTR("Children");
+const CFStringRef kCGPDFOutlineDestination = CFSTR("Destination");
+const CFStringRef kCGPDFOutlineDestinationRect = CFSTR("DestinationRect");
+
 CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
                                 const CGRect *mediaBox,
                                 CFDictionaryRef auxiliaryInfo)
 {
     NSDictionary *info = (NSDictionary *)auxiliaryInfo;
-    // The PDF writer cannot encrypt yet. Refuse a request for encryption
-    // instead of writing an unprotected file the caller believes is protected.
-    if ([info objectForKey:(id)kCGPDFContextUserPassword] ||
-        [info objectForKey:(id)kCGPDFContextOwnerPassword] ||
-        [info objectForKey:(id)kCGPDFContextEncryptionKeyLength])
+    if (requestsEncryption(info))
         return NULL;
     const CFStringRef publicKeys[] = {kCGPDFContextTitle, kCGPDFContextAuthor, kCGPDFContextCreator};
     const NSString *backendKeys[] = {kO2PDFContextTitle, kO2PDFContextAuthor, kO2PDFContextCreator};
@@ -62,6 +88,26 @@ CGContextRef CGPDFContextCreate(CGDataConsumerRef consumer,
             initWithConsumer: (O2DataConsumer*)consumer
                     mediaBox: mediaBox
                auxiliaryInfo: info];
+}
+
+CGContextRef CGPDFContextCreateWithURL(CFURLRef url,
+                                       const CGRect *mediaBox,
+                                       CFDictionaryRef auxiliaryInfo)
+{
+    if (!url)
+        return NULL;
+    // Refuse before the consumer exists: creating it creates the file, replacing
+    // the contents of any file already at the URL.
+    if (requestsEncryption((NSDictionary *)auxiliaryInfo))
+        return NULL;
+    // The consumer is the lower layer that owns the file: it creates the file
+    // and fails for a URL that is not a file URL or cannot be written.
+    CGDataConsumerRef consumer = CGDataConsumerCreateWithURL(url);
+    if (!consumer)
+        return NULL;
+    CGContextRef context = CGPDFContextCreate(consumer, mediaBox, auxiliaryInfo);
+    CGDataConsumerRelease(consumer);
+    return context;
 }
 
 COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self) {
@@ -93,4 +139,17 @@ void CGPDFContextAddDestinationAtPoint(CGContextRef context, CFStringRef name, C
 
 void CGPDFContextSetDestinationForRect(CGContextRef context, CFStringRef name, CGRect rect) {
     [pdfContext(context) setDestinationWithName:(NSString *)name forRect:rect];
+}
+
+// The outline is kept by the context and written into the file when the context is closed (the PDF has
+// /Outlines then; documents made without an outline have none). Observed on macOS 26.7.3 and Mac OS X
+// 10.14.4: after setting any dictionary, even an empty one, the generated document answers
+// CGPDFDocumentGetOutline with a non-NULL dictionary of one key. Test: coregraphics-pdf-outline.
+// Limitation: only the titles and the nesting of kCGPDFOutlineChildren are written; the destinations are
+// not (the layout of a destination dictionary was not observed).
+// A NULL outline, or a context that is not a PDF context, is ignored.
+void CGPDFContextSetOutline(CGContextRef context, CFDictionaryRef outline) {
+    if (context == NULL || ![(id)context isKindOfClass: [O2PDFContext class]])
+        return;
+    [(O2PDFContext *)context setOutline: (NSDictionary *)outline];
 }

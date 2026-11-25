@@ -1115,6 +1115,10 @@ static unsigned char *stbi_jpeg_load_from_memory(jpeg *j,stbi_uc const *buffer, 
     _dataProvider = [dataProvider retain];
 
     CFDataRef encodedData = O2DataProviderCopyData(dataProvider);
+    if (encodedData == NULL) {
+        [self release];
+        return nil;
+    }
     CFIndex encodedLength = CFDataGetLength(encodedData);
     const uint8_t *encodedBytes = CFDataGetBytePtr(encodedData);
 
@@ -1131,7 +1135,7 @@ static unsigned char *stbi_jpeg_load_from_memory(jpeg *j,stbi_uc const *buffer, 
     CFRelease(encodedData);
 
     if (bitmap == NULL) {
-        [self dealloc];
+        [self release];
         return nil;
     }
 
@@ -1144,8 +1148,6 @@ static unsigned char *stbi_jpeg_load_from_memory(jpeg *j,stbi_uc const *buffer, 
     // JPEG has no alpha: the fourth byte of each pixel is padding
     _bitmapInfo = kO2BitmapByteOrder32Big | kO2ImageAlphaNoneSkipLast;
 
-    _pixelData = CFDataCreateWithBytesNoCopy(NULL, bitmap,
-                                             _bytesPerRow * _height, NULL);
     _pixelData = (CFDataRef)
             [[NSData alloc] initWithBytesNoCopy: bitmap
                                          length: _bytesPerRow * _height
@@ -1157,7 +1159,8 @@ static unsigned char *stbi_jpeg_load_from_memory(jpeg *j,stbi_uc const *buffer, 
 - (void) dealloc {
     [_dataProvider release];
     [_colorSpace release];
-    CFRelease(_pixelData);
+    if (_pixelData != NULL)
+        CFRelease(_pixelData);
     [super dealloc];
 }
 

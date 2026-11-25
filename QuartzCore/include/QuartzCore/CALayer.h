@@ -174,7 +174,6 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
         float _repeatCount;
         BOOL _autoreverses;
         NSString *_fillMode;
-        NSMutableDictionary *_undefinedKeyValues;
         BOOL _contentsOpaque;
     NS_EXTRA_IVARS_END(CALayer)
 }

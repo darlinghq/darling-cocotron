@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSCell.h>
 #import <AppKit/NSClipView.h>
+#import <AppKit/NSController.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSMatrix.h>
@@ -27,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSFont.h>
+#import <AppKit/NSFontManager.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSParagraphStyle.h>
 #import <AppKit/NSRaise.h>
@@ -108,6 +110,30 @@ typedef NS_OPTIONS(unsigned int, NSCellAppleFlags2) {
 };
 
 NSNotificationName NSControlTintDidChangeNotification = @"NSControlTintDidChangeNotification";
+
+/* Nib cell flags keep the x86_64 alignment numbering (right 1, center 2) on
+ * every architecture, because one compiled nib serves both slices of a
+ * universal app. NSTextAlignment swaps the two where TARGET_ABI_USES_IOS_VALUES
+ * is set, so convert at that boundary in both directions. */
+static NSTextAlignment NSCellAlignmentFromArchive(unsigned value) {
+#if TARGET_ABI_USES_IOS_VALUES
+    if (value == 1)
+        return NSTextAlignmentRight;
+    if (value == 2)
+        return NSTextAlignmentCenter;
+#endif
+    return (NSTextAlignment) value;
+}
+
+static unsigned NSCellAlignmentToArchive(NSTextAlignment alignment) {
+#if TARGET_ABI_USES_IOS_VALUES
+    if (alignment == NSTextAlignmentRight)
+        return 1;
+    if (alignment == NSTextAlignmentCenter)
+        return 2;
+#endif
+    return (unsigned) alignment;
+}
 
 @implementation NSCell
 
@@ -198,7 +224,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
 
     // importsGraph  = (flags2 & 0x10000000)
 
-    NS_EXTRA(NSCell, self)->_textAlignment = (flags2 & NSCellAppleFlag2TextAlignmentMask) >> NSCellAppleFlag2TextAlignmentShift;
+    NS_EXTRA(NSCell, self)->_textAlignment = NSCellAlignmentFromArchive((flags2 & NSCellAppleFlag2TextAlignmentMask) >> NSCellAppleFlag2TextAlignmentShift);
 
     // layoutDirRTL  = (flags2 & 0x01000000)
     NS_EXTRA(NSCell, self)->_writingDirection = NSWritingDirectionNatural;
@@ -271,7 +297,7 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSCell, controlTint, _controlTint, NSControlTint, con
     if (NS_EXTRA(NSCell, self)->_isRichText)
         *flags2 |= NSCellAppleFlag2RichText;
 
-    *flags2 |= (NS_EXTRA(NSCell, self)->_textAlignment << NSCellAppleFlag2TextAlignmentShift) & NSCellAppleFlag2TextAlignmentMask;
+    *flags2 |= (NSCellAlignmentToArchive(NS_EXTRA(NSCell, self)->_textAlignment) << NSCellAppleFlag2TextAlignmentShift) & NSCellAppleFlag2TextAlignmentMask;
 
     if (NS_EXTRA(NSCell, self)->_refusesFirstResponder)
         *flags2 |= NSCellAppleFlag2RefusesFirstResponder;
@@ -888,6 +914,75 @@ static void initImageCellState(NSCell *self, NSImage *image) {
     NS_EXTRA(NSCell, self)->_font = font;
 }
 
+// KVC accessors for the fontBold and fontItalic bindings (NSFontBoldBinding, NSFontItalicBinding), which
+// a table column applies to its data cell; without them the binding raises for an undefined key. They are not
+// public NSCell API, so they are left out of the header.
+- (BOOL) _fontHasTrait: (NSFontTraitMask) trait {
+    NSFont *font = [self font];
+
+    return font != nil && ([[NSFontManager sharedFontManager] traitsOfFont: font] & trait) != 0;
+}
+
+// GUESS: a value of NO takes the trait off the font again (the documentation says only that YES adds it).
+// The data cell of a column serves every row, so a row that is not bold must not keep the bold of the row before.
+- (void) _setFont: (NSFont *) font trait: (NSFontTraitMask) trait present: (BOOL) present {
+    NSFontManager *manager = [NSFontManager sharedFontManager];
+    NSFont *converted = present ? [manager convertFont: font toHaveTrait: trait]
+                                : [manager convertFont: font toNotHaveTrait: trait];
+
+    // GUESS: a cell without a font has nothing to change
+    if (converted != nil && converted != font)
+        [self setFont: converted];
+}
+
+// An NSNumber that is true asks for the trait, and so does a string that reads as true (see below); a row
+// without the key (nil) and the controller markers ask for none. Taking an id keeps key-value coding from
+// raising for nil, which a BOOL parameter would. NSNull raises, as the BOOL setter of key-value coding
+// does on macOS 26.7.3 (black-box observation: NSInternalInconsistencyException, "Cannot create BOOL
+// from object null of class NSNull"; it is not known whether 10.14.4 differs).
+// QUIRK: a string asks for the trait the way -boolValue reads it, except that a string starting with "t" or
+// "T" ("true", "T") does not: the bindings are documented as Booleans and say nothing about strings.
+// Evidence: black-box observation of a table column bound to fontBold and fontItalic (tier 2), macOS 26.7.3
+// and 10.14.4 (x86_64 and i386; mac-probes p792): "YES", "yes", "Y", "1", "2" and "-1" give the trait,
+// "NO", "0", "true", "T", "hello" and "" do not, although -boolValue reads "true" and "T" as YES. The
+// controller markers give neither trait; they are checked by identity, not by what they read as, because
+// Darling's markers are strings.
+// Test: appkit-cell-font-bold-italic.m, test_string_values
+static BOOL stringAsksForTrait(NSString *string) {
+    NSString *trimmed = [string stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+    if ([trimmed hasPrefix: @"t"] || [trimmed hasPrefix: @"T"])
+        return NO;
+    return [string boolValue];
+}
+
+static BOOL bindingValueIsTrue(id value) {
+    if ([value isKindOfClass: [NSNull class]])
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"Cannot create BOOL from object %@ of class %@", value, [value class]];
+    if (NSIsControllerMarker(value))
+        return NO;
+    if ([value isKindOfClass: [NSString class]])
+        return stringAsksForTrait(value);
+    return [value isKindOfClass: [NSNumber class]] && [value boolValue];
+}
+
+- (id) fontBold {
+    return [NSNumber numberWithBool: [self _fontHasTrait: NSBoldFontMask]];
+}
+
+- (void) setFontBold: (id) value {
+    [self _setFont: [self font] trait: NSBoldFontMask present: bindingValueIsTrue(value)];
+}
+
+- (id) fontItalic {
+    return [NSNumber numberWithBool: [self _fontHasTrait: NSItalicFontMask]];
+}
+
+- (void) setFontItalic: (id) value {
+    [self _setFont: [self font] trait: NSItalicFontMask present: bindingValueIsTrue(value)];
+}
+
 - (void) setImage: (NSImage *) image {
     if (image != nil)
         [self setType: NSImageCellType];
@@ -935,20 +1030,26 @@ static void initImageCellState(NSCell *self, NSImage *image) {
     }
 }
 
+// An editable cell is selectable, and one that isn't selectable isn't editable, as the NSCell reference says
+// (also observed on macOS 10.14.4 and 26.7.3; test: appkit-cell-editable-selectable.m)
 - (void) setEditable: (BOOL) flag {
-    if (NS_EXTRA(NSCell, self)->_isEditable != flag) {
-        NS_EXTRA(NSCell, self)->_isEditable = flag;
+    BOOL changed = NS_EXTRA(NSCell, self)->_isEditable != flag || (flag && !NS_EXTRA(NSCell, self)->_isSelectable);
+    NS_EXTRA(NSCell, self)->_isEditable = flag;
+    if (flag)
+        NS_EXTRA(NSCell, self)->_isSelectable = YES;
+    if (changed)
         [[[self controlView] window]
                 invalidateCursorRectsForView: [self controlView]];
-    }
 }
 
 - (void) setSelectable: (BOOL) flag {
-    if (NS_EXTRA(NSCell, self)->_isSelectable != flag) {
-        NS_EXTRA(NSCell, self)->_isSelectable = flag;
+    BOOL changed = NS_EXTRA(NSCell, self)->_isSelectable != flag || (!flag && NS_EXTRA(NSCell, self)->_isEditable);
+    NS_EXTRA(NSCell, self)->_isSelectable = flag;
+    if (!flag)
+        NS_EXTRA(NSCell, self)->_isEditable = NO;
+    if (changed)
         [[[self controlView] window]
                 invalidateCursorRectsForView: [self controlView]];
-    }
 }
 
 - (void) setScrollable: (BOOL) flag {

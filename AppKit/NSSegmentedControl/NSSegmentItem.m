@@ -52,6 +52,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _isSelected = [decoder decodeBoolForKey: @"NSSegmentItemSelected"];
     _tag = [decoder decodeIntForKey: @"NSSegmentItemTag"];
     _width = [decoder decodeFloatForKey: @"NSSegmentItemWidth"];
+    // the key an archive carries on macOS 26.7.3 and 10.14.4 for a segment whose indicator is on (probe p769.m of
+    // batch 12a in mac-probes/cristim)
+    _showsMenuIndicator = [decoder decodeBoolForKey: @"NSSegmentItemShowMenuIndicator"];
     return self;
 }
 
@@ -97,6 +100,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _menu;
 }
 
+- (BOOL) showsMenuIndicator {
+    return _showsMenuIndicator;
+}
+
 - (NSString *) toolTip {
     return _toolTip;
 }
@@ -127,6 +134,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     label = [label copy];
     [_label release];
     _label = label;
+}
+
+- (void) setShowsMenuIndicator: (BOOL) flag {
+    _showsMenuIndicator = flag;
 }
 
 - (void) setMenu: (NSMenu *) menu {

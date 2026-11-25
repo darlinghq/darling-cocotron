@@ -81,6 +81,26 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, showsStateColumn, _showsStateColumn, BOOL, sh
     NS_EXTRA(NSMenu, self)->_userInterfaceLayoutDirection = direction;
 }
 NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
+NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appearance, setAppearance:)
+
++ (NSSet *) keyPathsForValuesAffectingEffectiveAppearance {
+    return [NSSet setWithObject: @"appearance"];
+}
+
+// NSAppearanceCustomization: the menu's own appearance, else the one it
+// inherits. Observed on macOS 26.7.3: the application's for a menu that has no
+// supermenu and is not attached to anything. GUESS: a submenu or a menu of a
+// view or window inherits from its supermenu, view or window first; the
+// reference says "the nearest ancestor that has set an appearance" and the
+// probe did not reach those cases. Menu views do not
+// draw from it yet, and a change of the application's appearance is not
+// reported to observers of a menu that has none.
+// https://developer.apple.com/documentation/appkit/nsappearancecustomization
+- (NSAppearance *) effectiveAppearance {
+    NSAppearance *own = [self appearance];
+
+    return own != nil ? own : [NSApp effectiveAppearance];
+}
 
 + (void) popUpContextMenu: (NSMenu *) menu
                 withEvent: (NSEvent *) event
@@ -338,6 +358,12 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
         [NS_EXTRA(NSMenu, self)->_itemArray release];
         NS_EXTRA(NSMenu, self)->_itemArray = items;
     }
+    // The items do not archive their menu (a nib does not store it either): the menu that
+    // decoded them is the one they belong to, as if they had been added to it.
+    for (NSMenuItem *item in NS_EXTRA(NSMenu, self)->_itemArray) {
+        [item performSelector: @selector(_setMenu:) withObject: self];
+        [[item submenu] setSupermenu: self];
+    }
     return self;
 }
 
@@ -360,6 +386,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
                                 withObject: nil];
     [NS_EXTRA(NSMenu, self)->_itemArray release];
     [NS_EXTRA(NSMenu, self)->_identifier release];
+    [NS_EXTRA(NSMenu, self)->_appearance release];
     NS_EXTRA_FREE(NSMenu, self);
     [super dealloc];
 }
@@ -369,6 +396,12 @@ NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIde
     NS_EXTRA_COPY(NSMenu, copy, self);
     NS_EXTRA(NSMenu, copy)->_identifier =
         [NS_EXTRA(NSMenu, self)->_identifier copyWithZone: zone];
+    // Observed on macOS 26.7.3: a copy keeps the appearance, as it keeps the identifier.
+    [NS_EXTRA(NSMenu, copy)->_appearance retain];
+    // QUIRK: a copy of a submenu has no supermenu. Not documented. Evidence: black-box observation on macOS
+    // 26.7.3 (tier 2): the supermenu of a copy of a submenu, and of a copy of a menu with a supermenu, was nil.
+    // Test: appkit-menu-appearance (test_copy_of_a_hierarchy)
+    copy->_supermenu = nil;
 
     copy->_title = [_title copyWithZone: zone];
     NS_EXTRA(NSMenu, copy)->_name = [NS_EXTRA(NSMenu, self)->_name copyWithZone: zone];
@@ -638,37 +671,59 @@ BOOL itemIsEnabled(NSMenuItem *item) {
     return enabled;
 }
 
+// QUIRK: -update validates the items of the menu and its submenus but does not send -menuNeedsUpdate: to the
+// delegates; that message comes only when the menu is about to be shown (tracking, pop up). A delegate
+// that calls -update on its menu from -menuNeedsUpdate: therefore does not recurse. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2, x86_64 and i386, mac-probes p799): a
+// menu and its submenu whose delegates count -menuNeedsUpdate: receive none through -update, also not
+// as the main menu, nor through performKeyEquivalent: or a Command key event, while validateMenuItem: is
+// sent by -update, and a delegate calling -update in -menuNeedsUpdate: is never re-entered.
+// Test: appkit-menu-update-reentrancy
 - (void) update {
-    [self _updateWithoutSubmenus];
+    [self _validateItems];
 
     for (NSMenuItem *item in [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray])
         [[item submenu] update];
 }
 
+// The delegate's -menuNeedsUpdate:, which may add, remove or change items.
+static void askDelegateToUpdate(NSMenu *menu) {
+    id delegate = NS_EXTRA(NSMenu, menu)->_delegate;
+
+    if ([delegate respondsToSelector: @selector(menuNeedsUpdate:)])
+        [delegate menuNeedsUpdate: menu];
+}
+
+// Brings the enabled state of one item in line with its validation, when the menu enables its items itself,
+// and returns the result of the validation (the item's own state when the menu does not).
+static BOOL validateItem(NSMenu *menu, NSMenuItem *item) {
+    if (!NS_EXTRA(NSMenu, menu)->_autoenablesItems)
+        return [item isEnabled];
+
+    BOOL enabled = itemIsEnabled(item) ? YES : NO;
+    BOOL currentlyEnabled = [item isEnabled] ? YES : NO;
+
+    if (enabled != currentlyEnabled &&
+        ![item _binderForBinding: @"enabled" create: NO]) {
+        [item setEnabled: enabled];
+        [menu itemChanged: item];
+    }
+    return enabled;
+}
+
 // The delegates -menuNeedsUpdate: and the validation of this menus own
 // items; a submenu is brought up to date when it is shown.
 - (void) _updateWithoutSubmenus {
-    if ([NS_EXTRA(NSMenu, self)->_delegate respondsToSelector: @selector(menuNeedsUpdate:)]) {
-        [NS_EXTRA(NSMenu, self)->_delegate menuNeedsUpdate: self];
-    }
+    askDelegateToUpdate(self);
+    [self _validateItems];
+}
 
+// The validation of this menus own items, without asking the delegate.
+- (void) _validateItems {
     NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
-    for (i = 0; i < count; i++) {
-        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
-
-        if (NS_EXTRA(NSMenu, self)->_autoenablesItems) {
-            BOOL enabled = itemIsEnabled(item) ? YES : NO;
-            BOOL currentlyEnabled = [item isEnabled] ? YES : NO;
-
-            if (enabled != currentlyEnabled &&
-                ![item _binderForBinding: @"enabled" create: NO]) {
-                [item setEnabled: enabled];
-                [self itemChanged: item];
-            }
-        }
-
-    }
+    for (i = 0; i < count; i++)
+        validateItem(self, [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i]);
 }
 
 - (void) itemChanged: (NSMenuItem *) item {
@@ -699,23 +754,58 @@ BOOL itemIsEnabled(NSMenuItem *item) {
                         userInfo: userInfo];
 }
 
+// Asks the delegate of this menu, then those of the submenus below it, in order, whether it has a key
+// equivalent for the event of its own (-menuHasKeyEquivalent:forEvent:target:action:). The first to answer
+// YES has its action sent to its target, from the menu it belongs to, and ends the search.
+- (BOOL) _delegateHandlesKeyEquivalent: (NSEvent *) event {
+    id delegate = NS_EXTRA(NSMenu, self)->_delegate;
+
+    if ([delegate respondsToSelector: @selector(menuHasKeyEquivalent:forEvent:target:action:)]) {
+        id target = nil;
+        SEL action = NULL;
+
+        if ([delegate menuHasKeyEquivalent: self forEvent: event target: &target action: &action]) {
+            if (action != NULL)
+                [NSApp sendAction: action to: target from: self];
+            return YES;
+        }
+    }
+
+    for (NSMenuItem *item in [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray]) {
+        if ([[item submenu] _delegateHandlesKeyEquivalent: event])
+            return YES;
+    }
+    return NO;
+}
+
+// QUIRK: the search for a key equivalent never sends -menuNeedsUpdate: to the delegates. It asks them for
+// -menuHasKeyEquivalent:forEvent:target:action: first (this menu's delegate and those below it, then again by each
+// submenu that is searched), then validates the items of the menu that enables its items itself, then walks them
+// in order, a submenu through its own -performKeyEquivalent:. So a delegate that changes the key equivalents of
+// items when it updates has not done so yet. Not documented. Evidence: black-box observation on macOS 26.7.3
+// (tier 2), 22 scenarios including delegates that rewrite a key and delegates that answer; the order of the calls
+// is the one the scenarios of the test pin.
+// Test: appkit-menu-key-equivalent-after-update (test_quirk_key_equivalent_search_*)
 - (BOOL) performKeyEquivalent: (NSEvent *) event {
-    NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
+    if ([self _delegateHandlesKeyEquivalent: event])
+        return YES;
 
-    if (NS_EXTRA(NSMenu, self)->_autoenablesItems)
-        [self update];
+    // The items are validated first, and an action or a validation may change the menu: the walk goes over a copy.
+    NSArray *items = [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray];
 
-    for (i = 0; i < count; i++) {
-        NSMenuItem *item = [NS_EXTRA(NSMenu, self)->_itemArray objectAtIndex: i];
+    NSMutableArray *validated = [NSMutableArray arrayWithCapacity: [items count]];
 
+    for (NSMenuItem *item in items)
+        [validated addObject: [NSNumber numberWithBool: validateItem(self, item)]];
+
+    for (NSMenuItem *item in items) {
         if (NSKeyEquivalentMatchesEvent([item keyEquivalent],
                                         [item keyEquivalentModifierMask], event)) {
-            // With automatic enabling, -update above brought isEnabled in
-            // line with validation. Without it only isEnabled counts and
-            // validation is not consulted.
+            // With automatic enabling the validation above brought isEnabled in line with it. Without it only
+            // isEnabled counts and validation is not consulted.
             BOOL enabled = [item isEnabled];
             if (enabled && NS_EXTRA(NSMenu, self)->_autoenablesItems)
-                enabled = itemIsEnabled(item);
+                enabled = [[validated objectAtIndex: [items indexOfObjectIdenticalTo: item]] boolValue];
             if (enabled)
                 [NSApp sendAction: [item action]
                                to: [item target]

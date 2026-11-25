@@ -2,11 +2,13 @@
 //
 // NSTableView header interaction and the delegate methods around it: a click reports
 // mouseDownInHeaderOfTableColumn: then didClickTableColumn:, dragging a header cell reorders
-// the column with tableView:shouldReorderColumn:toColumn: asked first with -1 and again for the
-// new position (a refusal stops the move), moveColumn:toColumn: posts the move notification and
+// the column with tableView:shouldReorderColumn:toColumn: asked first with -1 and, when the
+// mouse goes up over another column, once more with the column's original index and that
+// position (a refusal stops the move; a column dragged back to its place is not asked about), moveColumn:toColumn: posts the move notification and
 // rejects out-of-range indexes, and double-clicking the divider after a column fits it, taking
 // the width from tableView:sizeToFitWidthOfColumn: when the delegate has it. Observed on macOS 26
-// and Mojave; the program passes on both.
+// and Mojave; the program passes on both, except for the block about a hidden column below, which holds
+// Darling's own expectations (a hidden column's rectangle is at x 0, which must not make a divider).
 #import <AppKit/AppKit.h>
 #include <stdlib.h>
 
@@ -165,10 +167,29 @@ int main(void)
         expect([order() isEqualToString:@"b,c,a"], @"dragging the first header cell to the last column moves it");
         expect([source->log containsObject:@"reorder 0 -1"], @"the delegate is first asked about the column with -1");
         expect([source->log containsObject:@"reorder 0 2"], @"and again for the position the column reaches");
+        expect(![source->log containsObject:@"reorder 0 1"] && ![source->log containsObject:@"reorder 1 2"],
+               @"not for the columns passed on the way");
         expect([[source->moveInfo objectForKey:@"NSOldColumn"] intValue] == 0 &&
                    [[source->moveInfo objectForKey:@"NSNewColumn"] intValue] == 2,
                @"the move notification reports the old and new index");
         expect(![source->log containsObject:@"click a"], @"a drag is not a click");
+
+        // Dragged out to the last column and back: neither asked about a position nor moved
+        source = setup();
+        {
+            NSPoint a = cellPoint(0), b = cellPoint(2);
+            for (int i = 1; i <= 8; i++)
+                [NSApp postEvent:mouse(NSLeftMouseDragged, inWindow(NSMakePoint(a.x + (b.x - a.x) * i / 8.0, a.y)), 1) atStart:NO];
+            for (int i = 7; i >= 0; i--)
+                [NSApp postEvent:mouse(NSLeftMouseDragged, inWindow(NSMakePoint(a.x + (b.x - a.x) * i / 8.0, a.y)), 1) atStart:NO];
+            [NSApp postEvent:mouse(NSLeftMouseUp, inWindow(a), 1) atStart:NO];
+            [window sendEvent:mouse(NSLeftMouseDown, inWindow(a), 1)];
+            drain();
+            drain();
+        }
+        expect([order() isEqualToString:@"a,b,c"], @"a column dragged back to where it was stays");
+        expect([[source->log componentsJoinedByString:@","] isEqualToString:@"mouseDown a,reorder 0 -1"],
+               [NSString stringWithFormat:@"only the start of the drag is asked about (%@)", source->log]);
 
         source = setup();
         [table setAllowsColumnReordering:NO];
@@ -184,6 +205,19 @@ int main(void)
         expect([[[source->resizeInfo objectForKey:@"NSTableColumn"] identifier] isEqualToString:@"a"],
                @"the resize notification names the column");
         expect([[source->resizeInfo objectForKey:@"NSOldWidth"] floatValue] == 100, @"and the old width");
+
+        // DARLING-ONLY expectations, not observed on macOS: with a hidden column after the first, the divider is
+        // still the first column's right edge, and a click in the first column's own header, near x 0, does not
+        // grab it (the hidden column's rectangle is at x 0, see appkit-table-hidden-columns.m)
+        source = setup();
+        [[[table tableColumns] objectAtIndex:1] setHidden:YES];
+        first = [(NSTableHeaderView *)[table headerView] headerRectOfColumn:0];
+        clickHeader(NSMakePoint(NSMinX(first) + 2, NSMidY(first)), 2);
+        expect(![source->log containsObject:@"fit 0"] && [[[table tableColumns] objectAtIndex:0] width] == 100,
+               @"a click near x 0 does not resize the column before a hidden one");
+        clickHeader(NSMakePoint(NSMaxX(first) - 1, NSMidY(first)), 2);
+        expect([source->log containsObject:@"fit 0"] && [[[table tableColumns] objectAtIndex:0] width] == 150,
+               @"the divider before a hidden column still resizes the column left of it");
 
         // Programmatic move
         source = setup();

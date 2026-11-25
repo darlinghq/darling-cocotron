@@ -5,6 +5,7 @@
 */
 
 #import "WaylandAppMenu.h"
+#import "WaylandDisplay.h"
 #import "../private-include/AppKit/NSDBusMenu.h"
 #import <AppKit/NSMenu.h>
 
@@ -21,12 +22,17 @@ static NSString *applicationName(void) {
     return name;
 }
 
-- (instancetype) init {
+- (instancetype) initWithDisplay: (WaylandDisplay *) display exporting: (BOOL) exporting {
     if ((self = [super init]) == nil)
         return nil;
 
-    _exporter = [[NSDBusMenu alloc] initWithSessionBus];
-    [_exporter setApplicationName: applicationName()];
+    _display = display;
+    _exporting = exporting;
+
+    if (exporting) {
+        _exporter = [[NSDBusMenu alloc] initWithSessionBus];
+        [_exporter setApplicationName: applicationName()];
+    }
 
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
     NSString *names[] = {NSMenuDidAddItemNotification, NSMenuDidRemoveItemNotification,
@@ -42,6 +48,7 @@ static NSString *applicationName(void) {
 
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
+    [_bar release];
     [_exporter invalidate];
     [_exporter release];
     [_menu release];
@@ -58,6 +65,22 @@ static NSString *applicationName(void) {
     [_menu release];
     _menu = [menu retain];
     [_exporter setMenu: _menu];
+    if (_display->_layerShell != NULL) {
+        if (_bar == nil)
+            _bar = [[NSMenuBarController alloc] initWithDelegate: self];
+        [_bar setMainMenu: _menu];
+    }
+}
+
+#pragma mark - NSMenuBarControllerDelegate
+
+- (BOOL) menuBarControllerDesktopShowsMenu: (NSMenuBarController *) controller {
+    return [self globalMenuPresent];
+}
+
+- (void) menuBarControllerDidUpdateBar: (NSMenuBarController *) controller {
+    // This can run from a run loop observer with no event to flush it.
+    [_display flush];
 }
 
 - (NSString *) serviceName {

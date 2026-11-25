@@ -57,14 +57,14 @@ static NSEvent *mouseEvent(NSEventType type, NSWindow *window, NSPoint point) {
     NSUInteger downStep = enterBorder ? 4 : 3;
     NSUInteger escapeStep = cancel ? downStep : downStep + 2;
     if ((cancel || disabled) && step >= escapeStep) {
-        // One Escape closes the submenu; another cancels the bar's tracker.
+        // One Escape closes the menu opened from the bar and ends the
+        // tracking: the bar is not left tracking with no menu open.
         NSEvent *escape = [NSEvent keyEventWithType: NSKeyDown location: NSZeroPoint
                 modifierFlags: 0 timestamp: [NSDate timeIntervalSinceReferenceDate]
                 windowNumber: [window windowNumber] context: nil characters: @"\033"
                 charactersIgnoringModifiers: @"\033" isARepeat: NO keyCode: 53];
         [NSApp postEvent: escape atStart: NO];
-        if (step == escapeStep + 1)
-            [timer invalidate];
+        [timer invalidate];
         return;
     }
 
@@ -97,6 +97,8 @@ static NSEvent *mouseEvent(NSEventType type, NSWindow *window, NSPoint point) {
 @end
 
 int main(void) {
+    // Each result line reaches a pipe at once, so a later crash does not hide it.
+    setvbuf(stdout, NULL, _IOLBF, 0);
     @autoreleasepool {
         [NSApplication sharedApplication];
         MenuInput *input = [[MenuInput alloc] init];
@@ -138,9 +140,9 @@ int main(void) {
             [events invalidate];
             [deadline invalidate];
             NSMenuItem *expected = test < 2 ? leaf : nil;
-            // A disabled row must leave tracking open until both Escapes;
+            // A disabled row must leave tracking open until the Escape;
             // an unrelated early cancellation must not count as a pass.
-            NSUInteger expectedSteps[] = {4, 5, 5, 7};
+            NSUInteger expectedSteps[] = {4, 5, 4, 6};
             BOOL passed = selected == expected && input->step == expectedSteps[test];
             printf("%s: %s\n", passed ? "PASS" : "FAIL",
                    test == 0 ? "direct first-row selection" :

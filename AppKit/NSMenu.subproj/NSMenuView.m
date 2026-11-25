@@ -134,8 +134,25 @@ void _NSMenuCancelTracking(NSMenu *menu) {
     return _selectedItemIndex;
 }
 
+// Tells the menu's delegate which item is about to be highlighted, nil for none. The index counts the items
+// shown. The method is optional.
+// https://developer.apple.com/documentation/appkit/nsmenudelegate/menu(_:willhighlight:)
+// Shape of the call (delegate lookup, item or nil by index) taken after the SiliconForest cocoa patches, MIT,
+// see THIRD-PARTY-NOTICES.md.
+- (void) _delegateWillHighlightItemAtIndex: (NSUInteger) itemIndex {
+    id delegate = [[self menu] delegate];
+
+    if ([delegate respondsToSelector: @selector(menu:willHighlightItem:)]) {
+        NSArray *items = [self visibleItemArray];
+        [delegate menu: [self menu]
+                willHighlightItem: itemIndex < [items count] ? [items objectAtIndex: itemIndex] : nil];
+    }
+}
+
 - (void) setSelectedItemIndex: (NSUInteger) itemIndex {
     if (_selectedItemIndex != itemIndex) {
+        // The delegate hears of the change before it happens, for the menu bar as for any menu.
+        [self _delegateWillHighlightItemAtIndex: itemIndex];
         _selectedItemIndex = itemIndex;
         [self setNeedsDisplay: YES];
         [self displayIfNeeded];
@@ -271,6 +288,29 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
         [[menu delegate] menuDidClose: menu];
 }
 
+// Left or Right in the menu opened from a title of the bar closes it and
+// opens the menu of the next title that way, wrapping around. NO when that
+// title has no menu: the caller then ends the tracking, as a bar tracking with
+// no menu open would take the next click.
+- (BOOL) _openAdjacentBarMenu: (NSInteger) step
+                   onto: (NSMutableArray *) stack
+                 screen: (NSScreen *) screen {
+    NSUInteger count = [[self itemArray] count];
+
+    [self _popBranch: stack];
+    if (count == 0)
+        return NO;
+    NSUInteger index = [self selectedItemIndex];
+    index = index == NSNotFound ? 0 : (index + count + step) % count;
+    [self setSelectedItemIndex: index];
+
+    NSMenuView *branch = [self viewAtSelectedIndexPositionOnScreen: screen];
+    if (branch == nil)
+        return NO;
+    [self _pushBranch: branch onto: stack];
+    return YES;
+}
+
 - (NSMenuItem *) trackForEvent: (NSEvent *) event {
     return [self _trackForEvent: event session: nil];
 }
@@ -383,6 +423,12 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                     lastRectView = itemIndex == NSNotFound ? nil : checkView;
 
                     MENUDEBUG(@"found an item index: %u", itemIndex);
+
+                    // The menu bar keeps its open menu while the pointer is over a part of
+                    // the bar that has no title: only another title switches menus.
+                    if (itemIndex == NSNotFound && [checkView _isMenuBar] &&
+                        [checkView selectedItemIndex] != NSNotFound)
+                        break;
 
                     // If it's not the currently selected item
                     if (itemIndex != [checkView selectedItemIndex]) {
@@ -523,7 +569,11 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                 break;
             case 27: // Escape = pop unless we're done then it's cancel
             {
-                if ([viewStack count] > 1) {
+                // A bar left tracking with no menu open would take the next
+                // click: the menu of its title is the outermost one.
+                NSUInteger outermost = [self _isMenuBar] ? 2 : 1;
+
+                if ([viewStack count] > outermost) {
                     NSView *view = [viewStack lastObject];
                     MENUDEBUG(@"popping cascading view: %@", view);
                     [self _popBranch: viewStack];
@@ -640,7 +690,10 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
             } break;
             case kNSMenuKeyboardNavigationLeft:
                 MENUDEBUG(@"Left...");
-                if ([viewStack count] > 1) {
+                if ([self _isMenuBar] && [viewStack count] == 2) {
+                    if (![self _openAdjacentBarMenu: -1 onto: viewStack screen: screen])
+                        cancelled = YES;
+                } else if ([viewStack count] > 1) {
                     NSView *view = [viewStack lastObject];
                     MENUDEBUG(@"popping cascading view: %@", view);
                     [self _popBranch: viewStack];
@@ -655,6 +708,9 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
                     nil) {
                     MENUDEBUG(@"adding a new cascading view: %@", branch);
                     [self _pushBranch: branch onto: viewStack];
+                } else if ([self _isMenuBar] && [viewStack count] == 2) {
+                    if (![self _openAdjacentBarMenu: 1 onto: viewStack screen: screen])
+                        cancelled = YES;
                 } else {
                     // We'll pop it - they're trying to navigate to the next
                     // menu most likely
@@ -850,6 +906,13 @@ const NSTimeInterval kMouseMovementThreshold = .001f;
     }
     [viewStack removeLastObject];
     _NSMenuTrackingEnd(session);
+    // QUIRK: when tracking ends with an item highlighted, the delegate is sent -menu:willHighlightItem: with nil
+    // after the submenus have closed and before -menuDidClose:. Not documented. Evidence: black-box observation
+    // on macOS 26.7.3 (tier 2), a pop-up menu positioned on an item, with and without an open submenu. Whether a
+    // call is made when nothing was highlighted was not observed, so none is.
+    // Test: appkit-menu-will-highlight-item (test_quirk_highlight_cleared_before_did_close)
+    if (_selectedItemIndex != NSNotFound)
+        [self _delegateWillHighlightItemAtIndex: NSNotFound];
     [self _didEndTracking];
 
     _selectedItemIndex = NSNotFound;

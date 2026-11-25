@@ -44,6 +44,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @interface NSTextFieldCell (NSTextFieldInset)
 - (NSSize) _textInsetSize;
+- (NSInteger) _maximumNumberOfLines;
+- (void) _setMaximumNumberOfLines: (NSInteger) value;
 @end
 
 @implementation NSTextField
@@ -392,16 +394,27 @@ NS_EXTRA_DEALLOC(NSTextField)
 }
 
 - (NSInteger) maximumNumberOfLines {
-    // TODO
-    return 0;
+    return [_cell respondsToSelector: @selector(_maximumNumberOfLines)]
+            ? [(NSTextFieldCell *) _cell _maximumNumberOfLines]
+            : 0;
 }
 
+// The cap changes how many lines the cell draws and measures, so the size and the drawing are stale.
 - (void) setMaximumNumberOfLines: (NSInteger) maximumNumberOfLines {
-    // TODO
+    if (![_cell respondsToSelector: @selector(_setMaximumNumberOfLines:)])
+        return;
+    // A negative cap is kept as given and lays the text out without a limit (the cell only limits for a cap
+    // above zero). Observed by black-box test on macOS 26.7.3 and 10.14.4: the getter returns what was set.
+    // Test: appkit-text-field-maximum-number-of-lines.m
+    [(NSTextFieldCell *) _cell _setMaximumNumberOfLines: maximumNumberOfLines];
+    [self invalidateIntrinsicContentSize];
+    [self setNeedsDisplay: YES];
 }
 
+// Only an editable field accepts the keys; a selectable one takes them when pressed (macOS 10.14.4 and 26.7.3; test:
+// appkit-textfield-label-mouse-down.m)
 - (BOOL) acceptsFirstResponder {
-    return YES;
+    return [self isEditable];
 }
 
 - (BOOL) canBecomeKeyView {
@@ -536,6 +549,13 @@ NS_EXTRA_DEALLOC(NSTextField)
 
 - (void) mouseDown: (NSEvent *) event {
     NSTextFieldCell *cell = [self selectedCell];
+
+    // A label takes no press: it goes up the responder chain, as on macOS (10.14.4 and 26.7.3; test:
+    // appkit-textfield-label-mouse-down.m), so a click on a label in a table's cell reaches the table
+    if (![self isEditable] && ![self isSelectable]) {
+        [[self nextResponder] mouseDown: event];
+        return;
+    }
 
     if (![cell isEnabled])
         return;

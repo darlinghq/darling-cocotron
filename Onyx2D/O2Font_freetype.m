@@ -509,6 +509,20 @@ NSString *O2FontCopyInstalledFamilyForStandardFamily(NSString *family) {
     return [result retain];
 }
 
+// The names of the families macOS ships (Times, Helvetica, ...) that have no installed family of that
+// name but an installed stand-in, as -availableMembersOfFontFamily: resolves them.
+NSArray *O2FontCopyStandardFamilyNamesWithStandIn(void) {
+    NSMutableArray *names = [[NSMutableArray alloc] init];
+    for (size_t i = 0; i < sizeof(standardFamilies) / sizeof(standardFamilies[0]); i++) {
+        NSString *candidate = [NSString stringWithUTF8String: standardFamilies[i].family];
+        NSString *installed = O2FontCopyInstalledFamilyForStandardFamily(candidate);
+        if (installed != nil)
+            [names addObject: candidate];
+        [installed release];
+    }
+    return names;
+}
+
 /* fontconfig ranks bitmap faces (the X11 .pcf fonts) above outline fonts for some generic
  * families, and a bitmap face has units_per_EM == 0, so every metric derived from it divides
  * by zero. Return the first scalable face of the sorted set, or the first face if none is. */
@@ -1038,7 +1052,10 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
         double maximum = [[axis objectForKey: @"maximum"] doubleValue];
         if (number != number)
             continue;
-        number = number < minimum ? minimum : (number > maximum ? maximum : number);
+        // The setting keeps the value that was asked for (CGFontCopyVariations reports it); the face is
+        // given the value inside the axis range, below.
+        (void) minimum;
+        (void) maximum;
         [settings setObject: [NSNumber numberWithDouble: number] forKey: tag];
     }
 
@@ -1067,7 +1084,11 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
         NSNumber *value = [settings objectForKey: [axis objectForKey: @"tag"]];
         if (value == nil)
             value = [axis objectForKey: @"default"];
-        coordinates[i] = (FT_Fixed) llround([value doubleValue] * 65536.0);
+        double number = [value doubleValue];
+        double minimum = [[axis objectForKey: @"minimum"] doubleValue];
+        double maximum = [[axis objectForKey: @"maximum"] doubleValue];
+        number = number < minimum ? minimum : (number > maximum ? maximum : number);
+        coordinates[i] = (FT_Fixed) llround(number * 65536.0);
     }
     FT_Error error = FT_Set_Var_Design_Coordinates(face, (FT_UInt) [axes count], coordinates);
     free(coordinates);

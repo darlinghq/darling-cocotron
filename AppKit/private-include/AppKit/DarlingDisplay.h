@@ -30,6 +30,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // another look like a double click.
     NSMutableDictionary *_buttonClickCounts;
     NSInteger _clickCount;
+    // The application icon rendered at the sizes asked for so far, by edge length.
+    NSMutableDictionary *_applicationIconPixels;
 }
+// The application icon (-[NSApplication applicationIconImage]) drawn into a square of side x side pixels:
+// premultiplied alpha, 32 bits per pixel, blue in the lowest byte (the wl_shm ARGB8888 layout). nil when the
+// application has no icon. The result is cached until -applicationIconImageChanged.
+- (NSData *) applicationIconPixelsOfSide: (int) side;
+// Called by NSApplication when the image set with -setApplicationIconImage: changes. A backend overrides it
+// (and calls super) to give its existing windows the new icon.
+- (void) applicationIconImageChanged;
 - (CGFloat) doubleClickInterval;
 @end

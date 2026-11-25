@@ -49,6 +49,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     O2Rect _frame;
     NSUInteger _styleMask;
     BOOL _mapped;
+    // The window was ordered out and is still mapped: the unmap waits for the end of the run loop pass, in
+    // case the window is ordered in again within it (see -hideWindow).
+    BOOL _unmapPending;
     CGPoint _lastMotionPos;
     BOOL _isModal;
     BOOL _overrideRedirect;
@@ -59,6 +62,7 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _fullscreenRequested;
     BOOL _fullscreenReported; // what the window manager last said, told to the delegate
     BOOL _isOpaque;
+    NSSize _opaqueRegionSize; // device size of the _NET_WM_OPAQUE_REGION currently set, zero for none (see -updateOpaqueRegion)
     BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
     BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
@@ -135,6 +139,7 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 // Called by the display after it re-read a changed scale (see
 // -[X11Display reevaluateBackingScale]).
 - (void) displayBackingScaleChangedFrom: (CGFloat) oldScale;
+- (void) setWindowIcon;
 
 // Points to the device pixels libX11 takes. AppKit-level geometry is in points;
 // every value handed to X is in device pixels. One rounding serves the X window

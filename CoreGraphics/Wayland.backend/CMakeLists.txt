@@ -15,8 +15,14 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 	add_backend(Wayland
 		SOURCES
 			CGSConnectionWayland.m
+			CGSWaylandKeyboard.m
+			CGSWaylandPointer.m
+			CGSWaylandKeymap.m
+			CGSWaylandOutputManager.m
 			CGSWindowWayland.m
 			CGSSurfaceWayland.m
+			# Dead keys and Compose sequences, shared with the X11 backend.
+			../CGSKeyCompose.m
 			# Shared with AppKit's Wayland backend: a dlopen() shim over
 			# Foundation and elfcalls with no AppKit dependency of its own.
 			../WaylandSupport/WaylandLibrary.m

@@ -38,4 +38,7 @@
 - (CGFloat) titleWidth;
 - (CGFloat) keyEquivalentWidth;
 
+// The first step of -drawWithFrame:inView:, ahead of the interior: empty here, a pop-up button cell draws its bezel.
+- (void) drawBorderAndBackgroundWithFrame: (NSRect) cellFrame inView: (NSView *) controlView;
+
 @end

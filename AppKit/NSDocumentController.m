@@ -19,6 +19,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "NSDocumentTypeName.h"
+#import <AppKit/NSAlert.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDocument.h>
 #import <AppKit/NSDocumentController.h>
@@ -161,19 +162,28 @@ static NSDocumentController *shared = nil;
 }
 
 - (NSString *) defaultType {
-    if ([_fileTypes count] == 0)
-        return nil;
+    // The type new documents are made of is the first one the application can edit; an application
+    // that declares none has no default.
+    for (NSDictionary *fileType in _fileTypes) {
+        // GUESS: an Editor entry that has neither a content type nor a name cannot be the default
+        // (there is no type name to return), so the search goes on to the next Editor entry.
+        NSString *name = NSDocumentTypeNameForInfo(fileType);
+        if (name != nil && [[fileType objectForKey: @"CFBundleTypeRole"] isEqual: @"Editor"])
+            return name;
+    }
 
-    return NSDocumentTypeNameForInfo((NSDictionary *) [_fileTypes objectAtIndex: 0]);
+    return nil;
 }
 
 - (NSArray *) documentClassNames {
     NSMutableSet *result = [NSMutableSet set];
-    int i, count = [_fileTypes count];
 
-    for (i = 0; i < count; i++)
-        [result addObject: [(NSDictionary *) [_fileTypes objectAtIndex: i]
-                                   objectForKey: @"NSDocumentClass"]];
+    for (NSDictionary *fileType in _fileTypes) {
+        // An entry that declares no document class has no name to list.
+        NSString *className = [fileType objectForKey: @"NSDocumentClass"];
+        if (className != nil)
+            [result addObject: className];
+    }
 
     return [result allObjects];
 }
@@ -344,13 +354,35 @@ static NSDocumentController *shared = nil;
     return [[window windowController] document];
 }
 
+// A URL that is not a file URL has no contents to look at here: nil with an error. The error code is
+// not observed (GUESS: NSFileReadUnknownError, the one this controller uses for a file that cannot be
+// read); the only observed failure is a missing file, which NSFileReadNoSuchFileError describes.
+static NSError *TypeLookupError(NSURL *url, NSInteger code) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain
+                               code: code
+                           userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
+}
+
 - (NSString *) typeForContentsOfURL: (NSURL *) url error: (NSError **) error {
-    if (![url isFileURL])
+    if (![url isFileURL]) {
+        if (error != NULL)
+            *error = TypeLookupError(url, NSFileReadUnknownError);
         return nil;
+    }
+
+    // Observed on macOS 26.7.3 and 10.14.4 (black-box test): a file that exists always has a type,
+    // whether or not the application declares it (a type identifier derived from the extension, or
+    // public.data without one, public.folder for a directory), and only a missing file gives
+    // nil, with NSCocoaErrorDomain code 260 (NSFileReadNoSuchFileError).
+    // Test: appkit-document-controller-type-for-contents.m
+    BOOL isDirectory = NO;
+    if (![[NSFileManager defaultManager] fileExistsAtPath: [url path] isDirectory: &isDirectory]) {
+        if (error != NULL)
+            *error = TypeLookupError(url, NSFileReadNoSuchFileError);
+        return nil;
+    }
 
     NSString *extension = [[url path] pathExtension];
-    if (extension == nil)
-        return nil;
 
     NSString *UTI = nil;
     NSError *resourceError = nil;
@@ -371,7 +403,12 @@ static NSDocumentController *shared = nil;
             return UTI;
         }
     }
-    return [self typeFromFileExtension: extension];
+    NSString *type = isDirectory ? nil : [self typeFromFileExtension: extension];
+    if (type == nil)
+        type = UTI;
+    if (type == nil)
+        type = isDirectory ? @"public.folder" : @"public.data";
+    return type;
 }
 
 - makeDocumentWithContentsOfFile: (NSString *) path ofType: (NSString *) type {
@@ -384,15 +421,53 @@ static NSDocumentController *shared = nil;
     return result;
 }
 
+// The error shown to the user for a document that could not be opened although its class reported none.
+// The same construction (Cocoa domain, NSFileReadUnknownError, the URL under NSURLErrorKey) is what
+// siliconforest patch 0351 uses for the error of its type lookup. NSFileReadUnknownError (256) is what
+// macOS 26.7.3 reports in the completion handler of -openDocumentWithContentsOfURL:display:completionHandler:
+// when the class returned nil without an error (black-box observation).
+static NSError *DocumentOpenFailureError(NSURL *url) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain
+                               code: NSFileReadUnknownError
+                           userInfo: url != nil ? @{NSURLErrorKey : url} : nil];
+}
+
+// A type with no document class gives nil with the generic error, unlike a class that returns nil without one
+// (see -makeDocumentWithContentsOfURL:ofType:error:). The documentation says an error is returned whenever the
+// document cannot be made, and a missing class is the same case for documentClassForType: whether the type has no
+// NSDocumentClass entry or names a class that does not exist; only the latter was observed.
+// QUIRK: observed on macOS 26.7.3 and Mac OS X 10.14.4 (docclass.m, identical, tier 2) and on 26.1 (arm64), probe 669.make: "NoClass makeDocumentWithContentsOfURL:ofType:error:
+// -> doc=nil ; error=NSCocoaErrorDomain/256 ... ; calls=[(none)]" and the same for
+// makeDocumentForURL:withContentsOfURL:ofType:error:, for a type whose NSDocumentClass names a class that does
+// not exist (documentClassForType: is nil there). The documentation does not give the domain or code. Only the
+// domain and the code were observed, not the userInfo.
+// Test: tests/appkit-document-controller-make-document-errors.m
+static BOOL ReportMissingDocumentClass(Class class, NSURL *url, NSError **error) {
+    if (class != Nil)
+        return NO;
+    if (error != NULL)
+        *error = DocumentOpenFailureError(url);
+    return YES;
+}
+
 - makeDocumentWithContentsOfURL: (NSURL *) url
                          ofType: (NSString *) type
                           error: (NSError **) error
 {
-    id result;
     Class class = [self documentClassForType: type];
 
-    result = [[[class alloc] initWithContentsOfURL: url
-                                            ofType: type] autorelease];
+    if (ReportMissingDocumentClass(class, url, error))
+        return nil;
+    NSError *initError = nil;
+    id result = [[[class alloc] initWithContentsOfURL: url
+                                               ofType: type
+                                                error: &initError] autorelease];
+
+    // The error is what the initialiser reported. When it returns nil without one, the error stays nil:
+    // observed on macOS 26.7.3 and 10.14.4 (black-box test, class reading nil with no error) and pinned by
+    // appkit-document-controller-make-document-errors.m.
+    if (result == nil && error != NULL)
+        *error = initError;
     return result;
 }
 
@@ -404,12 +479,21 @@ static NSDocumentController *shared = nil;
     id result = nil;
     Class class = [self documentClassForType: type];
 
+    if (ReportMissingDocumentClass(class, contentsURL, error))
+        return nil;
     result = [[[class alloc] initForURL: url
                       withContentsOfURL: contentsURL
                                  ofType: type
                                   error: error] autorelease];
 
     return result;
+}
+
+// A type with no document class gives nil with NSCocoaErrorDomain NSFileReadUnknownError (256, empty userInfo),
+// also for a nil, empty or unknown type, and an error already in the caller's variable is replaced. Observed by
+// black-box test on macOS 26.7.3 and 10.14.4 (identical); pinned by appkit-document-controller-make-untitled-error.m.
+static NSError *UntitledDocumentError(void) {
+    return [NSError errorWithDomain: NSCocoaErrorDomain code: NSFileReadUnknownError userInfo: nil];
 }
 
 - (id) makeUntitledDocumentOfType: (NSString *) type {
@@ -422,7 +506,7 @@ static NSDocumentController *shared = nil;
     if (result)
         [result _setUntitledNumber: nextUntitledNumber++];
     else
-        [self presentError: error];
+        [self presentError: error != nil ? error : UntitledDocumentError()];
 
     return result;
 }
@@ -453,6 +537,9 @@ static NSDocumentController *shared = nil;
     if (result)
         [result _setUntitledNumber: nextUntitledNumber++];
     else {
+        // A type with no document class has no initialiser to report anything.
+        if (error == nil)
+            error = UntitledDocumentError();
         if (outError)
             *outError = error;
         else
@@ -708,6 +795,75 @@ static NSDocumentController *shared = nil;
     return [[self _runOpenPanel] URLs];
 }
 
+// The types an open panel offers: the content type identifiers and extensions of every document
+// type, or nil (all files) when a type accepts any extension.
+- (NSArray *) _allOpenableTypes {
+    NSMutableArray *types = [NSMutableArray array];
+
+    for (NSDictionary *fileType in _fileTypes) {
+        for (NSString *key in [NSArray arrayWithObjects: @"LSItemContentTypes", @"CFBundleTypeExtensions", nil]) {
+            id list = [fileType objectForKey: key];
+            if (![list isKindOfClass: [NSArray class]])
+                continue;
+            for (NSString *type in list) {
+                if ([type isEqual: @"*"])
+                    return nil;
+                if (![types containsObject: type])
+                    [types addObject: type];
+            }
+        }
+    }
+
+    // An application that declares no types offers every file.
+    return [types count] > 0 ? types : nil;
+}
+
+- (void) beginOpenPanel: (NSOpenPanel *) openPanel
+               forTypes: (NSArray *) types
+      completionHandler: (void (^)(NSInteger result)) completionHandler
+{
+    NSString *directory = [self currentDirectory];
+    if (directory != nil)
+        [openPanel setDirectoryURL: [NSURL fileURLWithPath: directory isDirectory: YES]];
+    if (types != nil)
+        [openPanel setAllowedFileTypes: types];
+
+    [openPanel beginWithCompletionHandler: ^(NSModalResponse result) {
+      if (result == NSModalResponseOK)
+          [[NSUserDefaults standardUserDefaults] setObject: [[openPanel directoryURL] path]
+                                                    forKey: @"NSNavLastRootDirectory"];
+      if (completionHandler != nil)
+          completionHandler(result);
+    }];
+}
+
+- (void) beginOpenPanelWithCompletionHandler: (void (^)(NSArray<NSURL *> *urls)) completionHandler {
+    NSOpenPanel *openPanel = [NSOpenPanel openPanel];
+    [openPanel setAllowsMultipleSelection: YES];
+    NSArray *types = [self _allOpenableTypes];
+
+    IMP begin = [NSDocumentController instanceMethodForSelector: @selector(beginOpenPanel:forTypes:completionHandler:)];
+    IMP modal = [NSDocumentController instanceMethodForSelector: @selector(runModalOpenPanel:forTypes:)];
+    BOOL beginOverridden = [self methodForSelector: @selector(beginOpenPanel:forTypes:completionHandler:)] != begin;
+    BOOL modalOverridden = [self methodForSelector: @selector(runModalOpenPanel:forTypes:)] != modal;
+
+    // Documented compatibility rule: a subclass that overrides only the application-modal
+    // method has that method used.
+    if (modalOverridden && !beginOverridden) {
+        NSInteger result = [self runModalOpenPanel: openPanel forTypes: types];
+        if (completionHandler != nil)
+            completionHandler(result == NSModalResponseOK ? [openPanel URLs] : nil);
+        return;
+    }
+
+    [self beginOpenPanel: openPanel
+                forTypes: types
+       completionHandler: ^(NSInteger result) {
+         if (completionHandler != nil)
+             completionHandler(result == NSModalResponseOK ? [openPanel URLs] : nil);
+       }];
+}
+
 - (NSMutableArray *) _recentDocumentPaths {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSMutableArray *paths = [NSMutableArray
@@ -725,6 +881,19 @@ static NSDocumentController *shared = nil;
                    forKey: @"NSRecentDocumentPaths"];
 
     return paths;
+}
+
+// Tells the user why a document could not be opened. GUESS: the documentation says nothing about who
+// presents a failure to open (the legacy initialiser used to show an alert itself). An error that says
+// the user cancelled is not presented; that is this method's own rule (Darling's -presentError: does
+// not skip such errors).
+- (void) _presentOpenError: (NSError *) error forURL: (NSURL *) url {
+    // A failure that reported no error is still told to the user, with the generic error.
+    if (error == nil)
+        error = DocumentOpenFailureError(url);
+    if ([[error domain] isEqual: NSCocoaErrorDomain] && [error code] == NSUserCancelledError)
+        return;
+    [self presentError: error];
 }
 
 - (void) _openRecentDocument: sender {
@@ -750,6 +919,8 @@ static NSDocumentController *shared = nil;
                 } else if ([appDelegate respondsToSelector: @selector
                                         (application:openFile:)]) {
                     [appDelegate application: NSApp openFile: [url path]];
+                } else {
+                    [self _presentOpenError: error forURL: url];
                 }
             }
         }
@@ -899,15 +1070,28 @@ static NSDocumentController *shared = nil;
 }
 
 - (void) openDocument: sender {
-    NSArray *files = [self fileNamesFromRunningOpenPanel];
-    int i, count = [files count];
+    IMP legacy = [self methodForSelector: @selector(fileNamesFromRunningOpenPanel)];
+    if (legacy != [NSDocumentController instanceMethodForSelector: @selector(fileNamesFromRunningOpenPanel)]) {
+        // Documented compatibility rule: an override of the Mac OS 10.3 method is used instead.
+        NSArray *files = [self fileNamesFromRunningOpenPanel];
+        for (NSString *file in files) {
+            NSError *error = nil;
+            NSURL *url = [NSURL fileURLWithPath: file];
 
-    for (i = 0; i < count; i++) {
-        NSError *error = nil;
-        NSURL *url = [NSURL fileURLWithPath: [files objectAtIndex: i]];
-
-        [self openDocumentWithContentsOfURL: url display: YES error: &error];
+            if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+                [self _presentOpenError: error forURL: url];
+        }
+        return;
     }
+
+    [self beginOpenPanelWithCompletionHandler: ^(NSArray<NSURL *> *urls) {
+      for (NSURL *url in urls) {
+          NSError *error = nil;
+
+          if ([self openDocumentWithContentsOfURL: url display: YES error: &error] == nil)
+              [self _presentOpenError: error forURL: url];
+      }
+    }];
 }
 
 - (void) saveAllDocuments: sender {
@@ -953,6 +1137,8 @@ static BOOL actionIsDocumentController(SEL selector) {
                                                        display: YES
                                                          error: &error];
 
+    if (document == nil)
+        [self _presentOpenError: error forURL: url];
     return (document != nil) ? YES : NO;
 }
 
@@ -999,10 +1185,34 @@ static BOOL actionIsDocumentController(SEL selector) {
                                      userInfo: nil];
         return nil;
     }
+    if (displayNameOrNil != nil)
+        [document setDisplayName: [self _copyNameForDisplayName: displayNameOrNil]];
+    // A duplicate is an unsaved document that already has changes to save.
+    [document setDraft: YES];
+    [document updateChangeCount: NSChangeDone];
     [self addDocument: document];
     [document makeWindowControllers];
     [document showWindows];
     return document;
+}
+
+// "name copy", or "name copy 2", "name copy 3" ... when the name is taken by an open document.
+- (NSString *) _copyNameForDisplayName: (NSString *) name {
+    NSBundle *bundle = [NSBundle bundleForClass: [NSDocumentController class]];
+    NSString *candidate = [NSString stringWithFormat: NSLocalizedStringFromTableInBundle(@"%@ copy", nil, bundle, @"Name of a duplicated document"), name];
+
+    for (NSInteger number = 2;; number++) {
+        BOOL taken = NO;
+        for (NSDocument *document in _documents) {
+            if ([[document displayName] isEqualToString: candidate]) {
+                taken = YES;
+                break;
+            }
+        }
+        if (!taken)
+            return candidate;
+        candidate = [NSString stringWithFormat: NSLocalizedStringFromTableInBundle(@"%@ copy %ld", nil, bundle, @"Name of another duplicated document"), name, (long) number];
+    }
 }
 
 @end

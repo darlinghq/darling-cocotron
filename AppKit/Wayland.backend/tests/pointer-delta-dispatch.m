@@ -2,11 +2,10 @@
 #import <objc/runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include "WaylandLibrary.h"
-#include "WaylandProtocol.h"
 
 // Private-compositor regression fixture, like scroll-frame-dispatch.m: it drives
-// the backend's pointer entry point and records the AppKit events it posts.
+// the pointer entry point of CoreGraphics' pointer decoder (the process' wl_pointer) and takes the AppKit
+// events made from the CGEvents it posts.
 // AppKit reports the delta of a mouse move with y growing downward, whatever
 // the bottom-left origin of locations, and so does the X11 backend.
 //
@@ -25,14 +24,28 @@ union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; 
 - (void) pointerEvent: (uint32_t) opcode arguments: (union Argument *) args;
 @end
 
+
+static id decoder;
+
+// The decoder is CoreGraphics': what it posts becomes NSEvents in AppKit's queue
+static void drain(NSMutableArray *events) {
+    NSEvent *event;
+    while ((event = [NSApp nextEventMatchingMask: NSEventMaskAny
+                                       untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.05]
+                                          inMode: NSDefaultRunLoopMode
+                                         dequeue: YES]) != nil)
+        [events addObject: event];
+}
+
+static id ivarOf(id object, const char *name) {
+    Ivar ivar = class_getInstanceVariable(object_getClass(object), name);
+    return ivar ? object_getIvar(object, ivar) : nil;
+}
+
 static NSMutableArray *events;
 static id display;
 static NSWindow *window;
 static int failures, checks;
-
-static void capture(id self, SEL command, NSEvent *event, BOOL atStart) {
-    [events addObject: event];
-}
 
 static void deltaCheck(BOOL passed, const char *description) {
     checks++;
@@ -43,7 +56,8 @@ static void deltaCheck(BOOL passed, const char *description) {
 
 static void moveTo(double x, double y) {
     union Argument args[3] = {{.u = 0}, {.i = (int32_t) (x * 256.0)}, {.i = (int32_t) (y * 256.0)}};
-    [display pointerEvent: 2 arguments: args];
+    [decoder pointerEvent: 2 arguments: args];
+    drain(events);
 }
 
 @interface PointerDeltaApplication : NSApplication
@@ -57,19 +71,15 @@ static void moveTo(double x, double y) {
                [NSStringFromClass(object_getClass(display)) UTF8String]);
         exit(77);
     }
-    Class original = object_getClass(display);
-    Class recorder = objc_allocateClassPair(original, "PointerDeltaRecordingDisplay", 0);
-    Method method = class_getInstanceMethod(original, @selector(postEvent:atStart:));
-    deltaCheck(method != NULL, "backend event method exists");
-    class_addMethod(recorder, @selector(postEvent:atStart:), (IMP) capture,
-                    method_getTypeEncoding(method));
-    objc_registerClassPair(recorder);
+    decoder = ivarOf(_CGSConnectionForID(CGSMainConnectionID()), "_pointerDecoder");
+    deltaCheck(decoder != nil, "CoreGraphics has the pointer decoder");
     events = [NSMutableArray new];
-    object_setClass(display, recorder);
+    drain(events);
+    [events removeAllObjects];
 
     union Argument enter[4] = {{.u = 1},
         {.o = [[window platformWindow] surface]}, {.i = 100 * 256}, {.i = 100 * 256}};
-    [display pointerEvent: 0 arguments: enter];
+    [decoder pointerEvent: 0 arguments: enter];
 
     moveTo(103, 97); // right and up on screen
     NSEvent *event = [events lastObject];
@@ -80,7 +90,6 @@ static void moveTo(double x, double y) {
     deltaCheck([events count] == 2 && [event deltaX] == 0.0 && [event deltaY] == 10.0,
                "moving down reports a positive deltaY");
 
-    object_setClass(display, original);
     [events release];
     printf("RESULT checks=%d failures=%d\n", checks, failures);
     exit(failures ? 1 : 0);

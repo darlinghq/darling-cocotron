@@ -20,11 +20,36 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 
 @class NSCollectionView;
+@class NSImageView;
+@class NSTextField;
 
-@interface NSCollectionViewItem : NSViewController <NSCoding, NSCopying> {
+@class NSCollectionViewLayoutAttributes;
+
+typedef NS_ENUM(NSInteger, NSCollectionViewItemHighlightState) {
+    NSCollectionViewItemHighlightNone = 0,
+    NSCollectionViewItemHighlightForSelection = 1,
+    NSCollectionViewItemHighlightForDeselection = 2,
+    NSCollectionViewItemHighlightAsDropTarget = 3,
+};
+
+// Declared with NSCollectionView on macOS; here, so that NSCollectionViewItem can adopt it
+@protocol NSCollectionViewElement <NSObject>
+@optional
+- (void) prepareForReuse;
+- (void) applyLayoutAttributes: (NSCollectionViewLayoutAttributes *) layoutAttributes;
+@end
+
+#define _NS_SIDE_NSCollectionViewItem 0, 1,
+// Legacy ObjC ABI (i386): add new state to the extra struct, never as an ivar.
+@interface NSCollectionViewItem : NSViewController <NSCollectionViewElement, NSCoding, NSCopying> {
     NSCollectionView *_collectionView;
     BOOL _isSelected;
-    NS_LEGACY_IVAR_PAD(_NSCollectionViewItemReserved, 8)
+    unsigned char _highlightState; // an NSCollectionViewItemHighlightState
+    NS_LEGACY_IVAR_PAD(_NSCollectionViewItemReserved, 7)
+    NS_EXTRA_IVARS_BEGIN(NSCollectionViewItem)
+        NSImageView *_imageView;
+        NSTextField *_textField;
+    NS_SIDE_IVARS_END(NSCollectionViewItem)
 }
 
 - (NSCollectionView *) collectionView;
@@ -32,5 +57,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) isSelected;
 
 - (void) setSelected: (BOOL) value;
+@property(getter=isSelected) BOOL selected;
+@property NSCollectionViewItemHighlightState highlightState;
+
+// Views of the item's view that show its image and its title. Retained (observed on macOS 10.14 and 26).
+@property(retain) IBOutlet NSImageView *imageView;
+@property(retain) IBOutlet NSTextField *textField;
+
+// Called before the collection view hands out the item again for another index path
+- (void) prepareForReuse;
 
 @end

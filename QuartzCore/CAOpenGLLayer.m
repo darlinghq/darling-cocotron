@@ -407,8 +407,11 @@ static IOSurfaceRef createFrameSurface(GLsizei width, GLsizei height) {
     // The frame has an alpha channel and is premultiplied, as the contents of
     // a layer are. An opaque layer says that its frame is completely opaque,
     // so its alpha channel is not looked at, whatever the frame holds there
-    // (a frame that was cleared to alpha 0 shows its colour), and the
-    // destination's alpha stays as it is.
+    // (a frame that was cleared to alpha 0 shows its colour). The layer covers
+    // what it is drawn over, so the destination's alpha is raised to 1 (to the
+    // layer's opacity) in a pass of its own: where the destination is the
+    // surface of a native subwindow, a compositor reads that alpha, and a
+    // colour with alpha 0 is not a valid premultiplied pixel.
     BOOL opaque = [self isOpaque];
     GLboolean blendWasEnabled = glIsEnabled(GL_BLEND);
     GLboolean alphaTestWasEnabled = glIsEnabled(GL_ALPHA_TEST);
@@ -455,6 +458,15 @@ static IOSurfaceRef createFrameSurface(GLsizei width, GLsizei height) {
     glVertexPointer(2, GL_FLOAT, 0, vertices);
     glColor4f(modulate, modulate, modulate, modulate);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+    if (opaque && colorMask[3]) {
+        // The blend function set up above (none, or the constant alpha one)
+        // applies to alpha as well, with a source alpha of 1.
+        glDisable(GL_TEXTURE_2D);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_TRUE);
+        glColor4f(1, 1, 1, 1);
+        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    }
 
     glDisableClientState(GL_VERTEX_ARRAY);
     glDisableClientState(GL_TEXTURE_COORD_ARRAY);

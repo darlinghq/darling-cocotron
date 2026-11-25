@@ -78,7 +78,7 @@ APPKIT_EXPORT NSString *const NSDrawerDidCloseNotification;
 - (CGFloat) leadingOffset;
 - (CGFloat) trailingOffset;
 - (NSRectEdge) preferredEdge;
-- (int) state;
+- (NSInteger) state;
 - (NSRectEdge) edge;
 
 - (void) setDelegate: delegate;

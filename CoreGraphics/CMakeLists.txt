@@ -41,10 +41,14 @@ set_property(SOURCE
 	CGPath.m
 	CGPattern.m
 	CGPDFArray.m
+	CGPDFContentStream.m
 	CGPDFContext.m
 	CGPDFDictionary.m
 	CGPDFDocument.m
+	CGPDFObject.m
+	CGPDFOperatorTable.m
 	CGPDFPage.m
+	CGPDFScanner.m
 	CGPDFStream.m
 	CGPDFString.m
 	CGPSConverter.m
@@ -91,6 +95,7 @@ set(CoreGraphics_sources
 	CGDisplayConfiguration.m
 	CGDisplayStream.m
 	src/CGEvent.c
+	src/CPS.c
 	src/stubs.c
 	CGFont.m
 	CGFunction.m
@@ -103,10 +108,14 @@ set(CoreGraphics_sources
 	CGPath.m
 	CGPattern.m
 	CGPDFArray.m
+	CGPDFContentStream.m
 	CGPDFContext.m
 	CGPDFDictionary.m
 	CGPDFDocument.m
+	CGPDFObject.m
+	CGPDFOperatorTable.m
 	CGPDFPage.m
+	CGPDFScanner.m
 	CGPDFStream.m
 	CGPDFString.m
 	CGScreenRefresh.m
@@ -127,8 +136,10 @@ set(CoreGraphics_sources
 	CGSServerSPI.m
 	CGSSymbolicHotKeys.m
 	CGEvent.m
+	CGEventKeyboardCharacters.m
 	CGEventSource.m
 	CGEventTap.m
+	CGEventStream.m
 	CGEventObjC.m
 	# KTFont+PDF.m 'KGPDFArray.h' file not found
 )

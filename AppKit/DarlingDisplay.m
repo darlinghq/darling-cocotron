@@ -19,6 +19,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "private-include/AppKit/DarlingDisplay.h"
 #import <AppKit/NSColor.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <AppKit/NSApplication.h>
+#import <AppKit/NSGraphicsContext.h>
+#import <AppKit/NSImage.h>
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSFontTypeface.h>
 #import <AppKit/NSPrintInfo.h>
@@ -27,6 +31,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSOpenPanel.h>
 #import <Onyx2D/O2Font_freetype.h>
 #import <fontconfig/fontconfig.h>
+
+@interface NSApplication (DarlingWindowIcon)
+// See NSApplication.m: the image the window-system backends use for window icons.
+- (NSImage *) _windowApplicationIconImage;
+@end
 
 void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, NSColor *color);
 
@@ -40,7 +49,56 @@ void NSColorSetCatalogColor(NSColorListName catalogName, NSColorName colorName, 
 
 - (void) dealloc {
     [_buttonClickCounts release];
+    [_applicationIconPixels release];
     [super dealloc];
+}
+
+- (NSData *) applicationIconPixelsOfSide: (int) side {
+    if (side < 1 || side > 4096)
+        return nil;
+    NSNumber *key = [NSNumber numberWithInt: side];
+    NSData *cached = [_applicationIconPixels objectForKey: key];
+    if (cached != nil)
+        return cached;
+    NSImage *image = [NSApp _windowApplicationIconImage];
+    if (image == nil || [image size].width <= 0 || [image size].height <= 0)
+        return nil;
+
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGContextRef context = CGBitmapContextCreate(NULL, side, side, 8, 0, colorSpace,
+            kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+    CGColorSpaceRelease(colorSpace);
+    if (context == NULL)
+        return nil;
+    NSMutableData *pixels = [NSMutableData dataWithLength: (size_t) side * side * 4];
+    [NSGraphicsContext saveGraphicsState];
+    @try {
+        [NSGraphicsContext setCurrentContext:
+                [NSGraphicsContext graphicsContextWithGraphicsPort: context flipped: NO]];
+        // The icon is square on macOS; a non-square image is fitted, not stretched.
+        NSSize size = [image size];
+        CGFloat scale = side / MAX(size.width, size.height);
+        NSRect target = NSMakeRect((side - size.width * scale) / 2, (side - size.height * scale) / 2,
+                                   size.width * scale, size.height * scale);
+        [image drawInRect: target fromRect: NSZeroRect operation: NSCompositeCopy fraction: 1.0];
+    } @finally {
+        [NSGraphicsContext restoreGraphicsState];
+    }
+    const uint8_t *source = CGBitmapContextGetData(context);
+    size_t sourceStride = CGBitmapContextGetBytesPerRow(context);
+    for (int row = 0; row < side; row++)
+        memcpy((uint8_t *) [pixels mutableBytes] + (size_t) row * side * 4, source + row * sourceStride,
+               (size_t) side * 4);
+    CGContextRelease(context);
+
+    if (_applicationIconPixels == nil)
+        _applicationIconPixels = [NSMutableDictionary new];
+    [_applicationIconPixels setObject: pixels forKey: key];
+    return pixels;
+}
+
+- (void) applicationIconImageChanged {
+    [_applicationIconPixels removeAllObjects];
 }
 
 - (NSColor *) colorWithName: (NSString *) colorName {
@@ -327,7 +385,7 @@ static int compareFontPatterns(const void *a, const void *b) {
 }
 
 - (CGFloat) doubleClickInterval {
-    return 1.0;
+    return _CGSDoubleClickInterval();
 }
 
 - (int) runModalPageLayoutWithPrintInfo: (NSPrintInfo *) printInfo {

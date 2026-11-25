@@ -170,59 +170,6 @@ static NSInteger defaultButtonNumber(NSEventType type) {
     return 0.0;
 }
 
-- (CGEventRef) CGEvent {
-    CGEventRef event;
-
-    switch (_type) {
-    case NSLeftMouseDown:
-    case NSLeftMouseUp:
-    case NSRightMouseDown:
-    case NSRightMouseUp:
-    case NSMouseMoved:
-    case NSLeftMouseDragged:
-    case NSRightMouseDragged:
-    case NSOtherMouseDown:
-    case NSOtherMouseUp:
-    case NSOtherMouseDragged:
-        // The mouse event types have the same values in both enums.
-        event = CGEventCreateMouseEvent(NULL, (CGEventType) _type, CGPointZero,
-                                        (CGMouseButton) _buttonNumber);
-        CGEventSetIntegerValueField(event, kCGMouseEventButtonNumber,
-                                    _buttonNumber);
-        CGEventSetIntegerValueField(event, kCGMouseEventClickState,
-                                    _clickCount);
-        break;
-    case NSScrollWheel:
-        event = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 2,
-                                              (int32_t) _deltaY,
-                                              (int32_t) _deltaX);
-        break;
-    default:
-        return NULL;
-    }
-    if (event == NULL)
-        return NULL;
-
-    // CGEvent locations are global, in CoreGraphics' space: origin at the
-    // top-left corner of the main display, y down.
-    NSPoint point = [self locationInWindow];
-    NSWindow *window = [self window];
-    if (window != nil)
-        point = [window convertBaseToScreen: point];
-    NSArray *screens = [NSScreen screens];
-    if ([screens count] > 0)
-        point.y = NSHeight([[screens objectAtIndex: 0] frame]) - point.y;
-    CGEventSetLocation(event, NSPointToCGPoint(point));
-
-    // CGEvent times are nanoseconds on the clock NSEvent times count seconds of.
-    CGEventSetTimestamp(event, (CGEventTimestamp) ([self timestamp] * 1e9));
-
-    // NSEventModifierFlags and CGEventFlags use the same bits.
-    CGEventSetFlags(event, (CGEventFlags) [self modifierFlags]);
-
-    return (CGEventRef) CFAutorelease(event);
-}
-
 // Apple's documentation is a bit confusing here. NSEvent exposes no API to pass
 // a NSTrackingArea object on creation, yet they expose API to get that pointer.
 // Additionally, they state -trackingArea would deliver meaningful returns only
@@ -273,6 +220,46 @@ static NSInteger defaultButtonNumber(NSEventType type) {
 
 - (void) _setButtonNumber: (NSInteger) num {
     _buttonNumber = num;
+}
+
+- (void) _setDeltaX: (CGFloat) deltaX deltaY: (CGFloat) deltaY {
+    _deltaX = deltaX;
+    _deltaY = deltaY;
+}
+
+- (void) _setPreciseScrollingDeltaX: (CGFloat) deltaX deltaY: (CGFloat) deltaY phase: (NSEventPhase) phase {
+    if (_type != NSScrollWheel)
+        [NSException raise: NSInternalInconsistencyException
+                    format: @"-[%@ %s] needs a scroll wheel event, not type %d",
+                            [self class], sel_getName(_cmd), (int) _type];
+
+    _hasPreciseScrollingDeltas = YES;
+    _scrollingDeltaX = deltaX;
+    _scrollingDeltaY = deltaY;
+    // QUIRK: the legacy deltaX and deltaY of a precise scroll event are a tenth of the scrolling deltas (the
+    // deltas are in points, the legacy ones in lines of ten points). Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 and 10.14.4 (tier 2), scroll events made with CGEventCreateScrollWheelEvent2 in
+    // pixel units: 10 points gave deltaY 1, 25 gave deltaX 2.5.
+    // Test: appkit-precise-scroll-events (test_quirk_precise_legacy_deltas_are_a_tenth)
+    _deltaX = deltaX / 10;
+    _deltaY = deltaY / 10;
+    _scrollPhase = phase;
+}
+
+- (BOOL) hasPreciseScrollingDeltas {
+    return _hasPreciseScrollingDeltas;
+}
+
+- (CGFloat) scrollingDeltaX {
+    return _hasPreciseScrollingDeltas ? _scrollingDeltaX : [super scrollingDeltaX];
+}
+
+- (CGFloat) scrollingDeltaY {
+    return _hasPreciseScrollingDeltas ? _scrollingDeltaY : [super scrollingDeltaY];
+}
+
+- (NSEventPhase) phase {
+    return _hasPreciseScrollingDeltas ? _scrollPhase : [super phase];
 }
 
 - (void) _setWindowWasKeyOnArrival: (BOOL) key {

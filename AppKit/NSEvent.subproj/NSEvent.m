@@ -29,6 +29,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSDate.h>
 #import <Foundation/NSException.h>
 #import "../private-include/AppKit/NSEventTime.h"
+#import "../NSEventQueue.h"
+#import <HIToolbox/CarbonEvents.h>
+#import <HIToolbox/CarbonEventsCore.h>
 #import <Foundation/NSRaise.h>
 
 // The object +addLocalMonitorForEventsMatchingMask:handler: returns.
@@ -92,14 +95,73 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
 
 @implementation NSEvent
 
-static BOOL _mouseCoalescingEnabled = YES;
-
+// The mouse motion is coalesced in HIToolbox's event queue, which holds AppKit's events
 + (void) setMouseCoalescingEnabled: (BOOL) flag {
-    _mouseCoalescingEnabled = flag;
+    SetMouseCoalescingEnabled(flag, NULL);
 }
 
 + (BOOL) isMouseCoalescingEnabled {
-    return _mouseCoalescingEnabled;
+    return IsMouseCoalescingEnabled();
+}
+
+- (void) dealloc {
+    if (NS_EXTRA_ALLOCATED(NSEvent, self)) {
+        if (NS_EXTRA(NSEvent, self)->_cgEvent != NULL)
+            CFRelease(NS_EXTRA(NSEvent, self)->_cgEvent);
+        if (NS_EXTRA(NSEvent, self)->_eventRef != NULL)
+            ReleaseEvent((EventRef) NS_EXTRA(NSEvent, self)->_eventRef);
+    }
+    NS_EXTRA_FREE(NSEvent, self);
+    [super dealloc];
+}
+
+// The CGEvent the event was made from or taken from the queue as; any other event gives a new
+// CGEvent each time (as observed on macOS 26.7.3 for events made with the class methods).
+- (CGEventRef) CGEvent {
+    CGEventRef stored = [self _storedCGEvent];
+
+    if (stored != NULL)
+        return stored;
+    return (CGEventRef) CFAutorelease(_NSEventCreateCGEvent(self, _NSEventMainScreenMaxY()));
+}
+
+// Made once, from the event's CGEvent, unless the event came with one
+- (const void *) eventRef {
+    void *stored = __atomic_load_n(&NS_EXTRA(NSEvent, self)->_eventRef, __ATOMIC_ACQUIRE);
+    EventRef carbonEvent = NULL;
+
+    if (stored != NULL)
+        return stored;
+    if (CreateEventWithCGEvent(NULL, [self CGEvent], kEventAttributeNone, &carbonEvent) != noErr)
+        return NULL;
+    [self _setCGEvent: NULL eventRef: carbonEvent];
+    ReleaseEvent(carbonEvent);
+    return NS_EXTRA(NSEvent, self)->_eventRef;
+}
+
++ (NSEvent *) eventWithCGEvent: (CGEventRef) cgEvent {
+    if (cgEvent == NULL)
+        return nil;
+
+    NSEvent *event = _NSEventCreateFromCGEvent(cgEvent);
+    [event _setCGEvent: cgEvent eventRef: NULL];
+    return [event autorelease];
+}
+
+// Only a Carbon event made from a CGEvent becomes an NSEvent (macOS 26.7.3 returns nil for a raw
+// keyboard event made with CreateEvent, and for events of other classes).
++ (NSEvent *) eventWithEventRef: (const void *) eventRef {
+    if (eventRef == NULL)
+        return nil;
+
+    CGEventRef cgEvent = CopyEventCGEvent((EventRef) eventRef);
+    if (cgEvent == NULL)
+        return nil;
+
+    NSEvent *event = _NSEventCreateFromCGEvent(cgEvent);
+    [event _setCGEvent: cgEvent eventRef: (void *) eventRef];
+    CFRelease(cgEvent);
+    return [event autorelease];
 }
 
 - (NSSet *) touchesMatchingPhase: (NSUInteger) phase inView: (NSView *) view {
@@ -321,8 +383,8 @@ static BOOL _mouseCoalescingEnabled = YES;
     return 0;
 }
 
-// Only magnify and rotate events (NSEvent_gesture) carry a phase. No backend
-// produces precise (trackpad) scrolling yet: every scroll event is a wheel
+// Only magnify and rotate events (NSEvent_gesture) and scroll events marked as
+// precise (NSEvent_mouse) carry a phase. Every other scroll event is a wheel
 // notch measured in lines, with no phase, as a mouse wheel reports on macOS.
 - (NSEventPhase) phase {
     return NSEventPhaseNone;
@@ -352,10 +414,6 @@ static BOOL _mouseCoalescingEnabled = YES;
     return NO;
 }
 
-- (CGEventRef) CGEvent {
-    return NULL;
-}
-
 - (CGFloat) deltaZ {
     return 0;
 }
@@ -376,13 +434,6 @@ static BOOL _mouseCoalescingEnabled = YES;
 
 - (CGFloat) stageTransition {
     return 0;
-}
-
-// Darling's events do not come from the Carbon Event Manager, and none is made
-// on request, so there is no corresponding Carbon event: NULL, which the
-// reference allows when the event cannot be converted.
-- (const void *) eventRef {
-    return NULL;
 }
 
 // The private spelling, which returns the same event.
@@ -441,9 +492,9 @@ static NSTimer *_periodicTimer = nil;
                                                modifierFlags: 0
                                                       window: nil] autorelease];
 
-    [[NSDisplay currentDisplay] postEvent: event atStart: NO];
-    [[NSDisplay currentDisplay] discardEventsMatchingMask: NSPeriodicMask
-                                              beforeEvent: event];
+    // Only the newest periodic event stays queued
+    _NSEventQueuePost(event, NO);
+    _NSEventQueueDiscard(NSPeriodicMask, event);
 }
 
 + (void) startPeriodicEventsAfterDelay: (NSTimeInterval) delay

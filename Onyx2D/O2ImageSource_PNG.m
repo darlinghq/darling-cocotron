@@ -815,6 +815,32 @@ static unsigned char *O2PNGLoadCgBI(const unsigned char *buffer, NSUInteger leng
     return 1;
 }
 
+// The size in pixels, from the IHDR chunk (the first one, or the second after an iPhone PNG's CgBI); nothing is
+// decoded. A file without a readable IHDR has no properties.
+- (CFDictionaryRef) copyPropertiesAtIndex: (NSUInteger) index
+                                  options: (CFDictionaryRef) options
+{
+    const unsigned char *bytes = [_png bytes];
+    NSUInteger length = [_png length];
+    NSUInteger offset = 8;
+    for (int chunk = 0; index == 0 && chunk < 2 && offset + 8 + 13 <= length; chunk++) {
+        uint32_t chunkLength = O2PNGReadBE32(bytes + offset);
+        if (memcmp(bytes + offset + 4, "IHDR", 4) == 0 && chunkLength >= 13) {
+            uint32_t width = O2PNGReadBE32(bytes + offset + 8), height = O2PNGReadBE32(bytes + offset + 12);
+            if (width == 0 || height == 0)
+                break;
+            return (CFDictionaryRef)[@{
+                kO2ImagePropertyPixelWidth : @(width),
+                kO2ImagePropertyPixelHeight : @(height)
+            } retain];
+        }
+        if (memcmp(bytes + offset + 4, "CgBI", 4) != 0 || chunkLength > length - offset - 12)
+            break;
+        offset += 12 + chunkLength;
+    }
+    return (CFDictionaryRef)[[NSDictionary alloc] init];
+}
+
 - (O2Image *) createImageAtIndex: (NSUInteger) index
                          options: (NSDictionary *) options
 {

@@ -45,4 +45,16 @@ typedef NS_ENUM(unsigned int, CATransactionPhase) {
 // one is open already. A layer calls it when it changes.
 + (void) _openImplicitTransactionIfNeeded;
 
+
+// Private. A block (no arguments) that is called each time an implicit transaction begins.
++ (void) setImplicitTransactionDidBeginHandler: (id) handler;
+
+
+// Private. A flag that asks a run loop observer not to commit transactions; kept, no effect here.
++ (void) setDisableRunLoopObserverCommits: (BOOL) value;
+
+
+// Private. Keeps the default of that flag for later transactions; has no effect here.
++ (void) setDefaultDisableRunLoopObserverCommits: (BOOL) value;
+
 @end

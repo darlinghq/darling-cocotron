@@ -31,6 +31,7 @@
 // synchronized subsurfaces. Outgoing drags are a follow-on.
 
 #import "../private-include/AppKit/DarlingDisplay.h"
+#import <CoreGraphics/CGSNativeConnection.h>
 #include <stdint.h>
 #include <wayland-util.h>
 #include "WaylandFullscreen.h"
@@ -42,8 +43,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandOutputManager;
-@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu;
+@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -54,8 +54,6 @@ typedef enum {
     WaylandObjectRegistry = 1,
     WaylandObjectWmBase,
     WaylandObjectSeat,
-    WaylandObjectPointer,
-    WaylandObjectKeyboard,
     WaylandObjectOutput,
     WaylandObjectSurface,
     WaylandObjectXdgSurface,
@@ -64,9 +62,6 @@ typedef enum {
     WaylandObjectDecoration,
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
-    WaylandObjectKeyboardSync,
-    WaylandObjectLogicalOutput,
-    WaylandObjectPinchGesture,
     WaylandObjectTextInput,
     WaylandObjectDataDevice,
     WaylandObjectDataOffer,
@@ -74,12 +69,10 @@ typedef enum {
     WaylandObjectFractionalScale,
     WaylandObjectLockedPointer,
     WaylandObjectRelativePointer,
-    WaylandObjectOutputManager,
-    WaylandObjectOutputHead,
-    WaylandObjectOutputHeadMode,
-    WaylandObjectOutputConfiguration,
     WaylandObjectActivationToken,
+    WaylandObjectLayerSurface,
     WaylandObjectTouch,
+    WaylandObjectIconManager,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -96,7 +89,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                      union wl_argument *args,
                                      WaylandObjectKind kind, id object);
 
-@interface WaylandDisplay : DarlingDisplay {
+@interface WaylandDisplay : DarlingDisplay <CGSNativeConnectionObserver> {
 @public
     struct wl_display *_wlDisplay;
     struct wl_proxy *_registry;
@@ -108,12 +101,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_activation, *_activationToken;
     uint32_t _activationName;
     WaylandWindow *_activationWindow;
+    // Windows of an inactive application that were not mapped are being mapped for an activation.
+    BOOL _mappingForActivation;
     uint32_t _viewporterName, _fractionalScaleManagerName;
-    struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
-    uint32_t _logicalOutputManagerName;
-    // wlr-output-management, when the compositor has it: the only way to change a mode.
-    WaylandOutputManager *_outputManager;
-    uint32_t _outputManagerName;
     struct wl_proxy *_subcompositor;
     // KDE's appmenu protocol, when the compositor has it: each toplevel tells it
     // where on the session bus the application's main menu is (see
@@ -124,19 +114,24 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // window asks it to keep the window out of task lists and switchers (xdg-shell has no way to).
     struct wl_proxy *_plasmaShell;
     uint32_t _plasmaShellName, _plasmaShellVersion;
+    // xdg-toplevel-icon, when the compositor has it: the application icon for every toplevel.
+    WaylandToplevelIcons *_toplevelIcons;
     // The exported main menu; nil while the menu is drawn inside the windows.
     WaylandAppMenu *_appMenu;
+    BOOL _desktopMenuProbed, _desktopMenuPresent;
     BOOL _eglAvailable;
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;
     struct wl_proxy *_decorationManager;
+    // wlr-layer-shell, when the compositor has it: the menu bar is a layer surface.
+    struct wl_proxy *_layerShell;
+    uint32_t _layerShellName;
     struct wl_proxy *_dataDeviceManager;
     uint32_t _compositorVersion;
 
 @protected
     struct wl_proxy *_seat;
     struct wl_proxy *_pointer;
-    struct wl_proxy *_pointerGestures, *_pinchGesture;
     // text-input-v3: the input method's composition and commits for the focused text input
     // client. The text input object exists once the manager and the seat are both bound.
     struct wl_proxy *_textInputManager, *_textInput;
@@ -147,25 +142,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSString *_textInputPendingPreedit, *_textInputPendingCommit;
     int _textInputPendingCursorBegin, _textInputPendingCursorEnd;
     NSString *_textInputPreedit;     // the composition the client currently shows
-    uint32_t _pointerGesturesName;
-    WaylandWindow *_pinchWindow;
-    struct wl_proxy *_pointerConstraints, *_relativePointerManager;
-    uint32_t _pointerConstraintsName, _relativePointerManagerName;
-    // CGAssociateMouseAndMouseCursorPosition(false) was asked for; the lock
-    // objects exist only while a window can take them, and _pointerLocked is the
-    // compositor's word that the lock is active.
-    BOOL _pointerLockRequested, _pointerLocked;
-    struct wl_proxy *_lockedPointer, *_relativePointer;
-    WaylandWindow *_lockWindow; // Nonretained; cleared on unmap.
-    CGFloat _pinchScale;
-    struct wl_proxy *_keyboard;
     struct wl_proxy *_touch;
     // Finger id -> WaylandWindow it went down on (up and motion name no surface).
     NSMutableDictionary *_touchWindows;
-    CFSocketRef _wlSocket;
-    CFRunLoopSourceRef _wlSource;
+    // The outputs and the rest of the connection are set up; changes of the outputs are passed on.
+    BOOL _setupDone;
+    // A change of the outputs waits for the end of the pass over the events.
+    BOOL _outputsChangePending;
     NSMutableArray *_outputs;
-    NSArray *_screens;
     // WaylandWindows, not retained, most recently activated first.
     CFMutableArrayRef _windows;
     NSMutableArray *_afterDispatch;
@@ -176,15 +160,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSPoint _lastMouseLocation;
     uint32_t _pointerEnterSerial;
     NSUInteger _pressedButtons;
-    CGFloat _pendingScrollX, _pendingScrollY;
-    WaylandWindow *_pendingScrollWindow;
-    CGPoint _pendingScrollSurfacePoint;
-    NSUInteger _pendingScrollModifiers;
-    BOOL _pendingScrollActive;
-    uint32_t _wlLastClickTime; // Compositor milliseconds, wraps modulo 2^32.
-    uint32_t _wlLastClickButton;
-    WaylandWindow *_wlLastClickWindow; // Nonretained; cleared on unmap/device loss.
-    CGPoint _wlLastClickPoint;
+    // The serial of the press that was the first of a group of buttons: its NSEvent is the one a drag starts from.
+    uint32_t _firstPressSerial;
     uint32_t _inputSerial;
     NSEvent *_inputEvent;
     WaylandWindow *_inputWindow;
@@ -193,23 +170,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _dragPressSerial, _dragPressButton;
     WaylandDraggingManager *_draggingManager;
 
-    struct xkb_context *_xkbContext;
-    struct xkb_keymap *_xkbKeymap;
-    struct xkb_state *_xkbState;
-    struct xkb_keymap *_publishedKeymap; // Not retained; compared only.
-    uint32_t _publishedGroup;
-    WaylandWindow *_keyboardWindow;
-    BOOL _syncModifierFlags;
-    BOOL _classifyHeldKeys;
-    // Raw XKB keycode -> identity at press time; -1 denotes a non-modifier.
-    NSMutableDictionary *_heldKeyIdentities;
-    struct wl_proxy *_modifierSync;
-    BOOL _hasModifierKeycode;
-    unsigned short _modifierKeycode;
-    int32_t _repeatRate;
-    int32_t _repeatDelay;
-    uint32_t _repeatKeycode;
-    CFRunLoopTimerRef _repeatTimer;
+    // The window the keyboard focus last went to, as CoreGraphics reported it; not retained, cleared when
+    // the window is unmapped.
+    WaylandWindow *_keyboardFocusWindow;
+    // The keyboard focus was in a window of the application that was unmapped; its leave event has not arrived.
+    BOOL _keyboardWindowUnmapped;
 
     struct wl_cursor_theme *_cursorTheme;
     uint32_t _cursorThemeScale120;
@@ -230,6 +195,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (uint32_t) dragSerialForEvent: (NSEvent *) event;
 - (void) consumeDragPress;
 - (void) flush;
+// Gives every window the current application icon (see WaylandToplevelIcon.h).
+- (void) updateWindowIcons;
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
@@ -241,7 +208,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
-// Fills `result` and `proxies` with up to `max` outputs in -screens order: their
+// Fills `result` and `proxies` with up to `max` outputs in -screens order (the order of the displays): their
 // logical sizes and whether they are in `entered` (NSValue pointers, as
 // WaylandWindow keeps its entered outputs). Returns 0 until an output has
 // reported a mode.
@@ -252,18 +219,22 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) unmapPopupsForParent: (WaylandWindow *) parent;
 - (void) mapPopupsWaitingForParent;
 - (void) cancelPopupMenus;
-- (void) updatePointerLock;
-- (void) releasePointerLock;
-- (void) pointerRelativeMotionByX: (CGFloat) dx y: (CGFloat) dy;
 
 // Runs a block after libwayland has returned from dispatching events. Event
 // handlers queue application-facing calls this way, so application code never
 // runs (and exceptions never unwind) inside native libwayland frames.
 - (void) performAfterDispatch: (void (^)(void)) block;
+// Runs a block at the end of the current pass of the main run loop, whether or not events are dispatched
+// before then.
+- (void) performAfterRunLoopPass: (void (^)(void)) block;
 
 - (void) windowCreated: (WaylandWindow *) window;
 - (void) windowActivated: (WaylandWindow *) window;
 - (void) windowUnmapped: (WaylandWindow *) window;
+- (void) applicationFocusMayHaveLeft;
+- (BOOL) mappingForActivation;
+- (BOOL) requestActivationOfWindow: (WaylandWindow *) window;
+- (void) mapDeferredWindows;
 - (void) windowDestroyed: (WaylandWindow *) window;
 
 // Where the main menu is exported on the session bus, for the appmenu objects
@@ -272,5 +243,4 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (NSString *) applicationMenuObjectPath;
 
 - (struct wl_proxy *) newFractionalScaleForSurface: (struct wl_proxy *) surface owner: (id<WaylandFractionalScaleOwner>) owner;
-- (void)publishKeyboardLayout;
 @end

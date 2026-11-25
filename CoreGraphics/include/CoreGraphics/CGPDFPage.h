@@ -20,8 +20,8 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGAffineTransform.h>
-#import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CGPDFDictionary.h>
+#import <CoreGraphics/CGGeometry.h>
 
 // DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
 // forward-declares the type relies on; Darling's own build keeps its own.
@@ -45,8 +45,8 @@ COREGRAPHICS_EXPORT CGPDFPageRef CGPDFPageRetain(CGPDFPageRef self);
 COREGRAPHICS_EXPORT void CGPDFPageRelease(CGPDFPageRef self);
 COREGRAPHICS_EXPORT int CGPDFPageGetRotationAngle(CGPDFPageRef self);
 COREGRAPHICS_EXPORT size_t CGPDFPageGetPageNumber(CGPDFPageRef self);
-COREGRAPHICS_EXPORT CGPDFDictionaryRef CGPDFPageGetDictionary(CGPDFPageRef self);
 COREGRAPHICS_EXPORT CGRect CGPDFPageGetBoxRect(CGPDFPageRef self, CGPDFBox box);
+COREGRAPHICS_EXPORT CGPDFDictionaryRef CGPDFPageGetDictionary(CGPDFPageRef page);
 COREGRAPHICS_EXPORT CGAffineTransform
 CGPDFPageGetDrawingTransform(CGPDFPageRef self, CGPDFBox box, CGRect rect,
                              int clockwiseDegrees, bool preserveAspectRatio);

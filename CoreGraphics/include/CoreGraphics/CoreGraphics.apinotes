@@ -1,0 +1,7 @@
+---
+# Swift names for Darling's CoreGraphics where the SDK's differ from what the importer would infer.
+Name: CoreGraphics
+Functions:
+# iOS 13 and macOS spell the generic-RGB constructor CGColor(red:green:blue:alpha:).
+- Name: CGColorCreateGenericRGB
+  SwiftName: 'CGColor.init(red:green:blue:alpha:)'

@@ -60,6 +60,7 @@ typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
     NSTabViewBorderTypeBezel = 2,
 };
 
+#define _NS_SIDE_NSTabView 0, 1,
 // Legacy ObjC ABI (i386): instance size must stay 0x94, Apple's; an
 // application's subclass is laid out right after it. New state goes to a
 // side structure, never to a larger ivar block.
@@ -75,6 +76,9 @@ typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
     NSTabPosition _position;
     NSControlSize _controlSize;
     NS_LEGACY_IVAR_PAD(_NSTabViewReserved2, 32)
+    NS_EXTRA_IVARS_BEGIN(NSTabView)
+        NSTabViewBorderType _borderType;
+    NS_SIDE_IVARS_END(NSTabView)
 }
 
 - (null_unspecified id) delegate;
@@ -86,6 +90,7 @@ typedef NS_ENUM(NSUInteger, NSTabViewBorderType) {
 @property(nonatomic) NSControlSize controlSize;
 @property(nonatomic) NSTabViewType tabViewType;
 @property(nonatomic) NSTabPosition tabPosition;
+@property(nonatomic) NSTabViewBorderType tabViewBorderType;
 @property(nonatomic) BOOL drawsBackground;
 @property(nonatomic) BOOL allowsTruncatedLabels;
 

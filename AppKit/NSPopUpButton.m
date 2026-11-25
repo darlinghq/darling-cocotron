@@ -21,9 +21,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSObject+BindingSupport.h>
 #import <AppKit/NSPopUpButton.h>
 #import <AppKit/NSPopUpButtonCell.h>
+#import "NSKeyValueBinding/NSBinder.h"
 
 NSString *const NSPopUpButtonWillPopUpNotification =
         @"NSPopUpButtonWillPopUpNotification";
+
+@interface NSPopUpButtonCell (BindingItems)
+- (NSMenuItem *) _appendItemWithTitle: (NSString *) title;
+@end
 
 static NSString *const NSPopUpButtonBindingObservationContext =
         @"NSPopUpButtonBindingObservationContext";
@@ -76,6 +81,11 @@ static NSString *const NSPopUpButtonBindingObservationContext =
     NS_HANDLER
     NS_ENDHANDLER
 
+    if (NS_EXTRA_ALLOCATED(NSPopUpButton, self)) {
+        [NS_EXTRA(NSPopUpButton, self)->_unmatchedItem release];
+        [NS_EXTRA(NSPopUpButton, self)->_unmatchedObject release];
+        [NS_EXTRA(NSPopUpButton, self)->_selectionBindings release];
+    }
             NS_EXTRA_FREE(NSPopUpButton, self);
             [super dealloc];
 }
@@ -347,71 +357,246 @@ static NSString *const NSPopUpButtonBindingObservationContext =
 
 @implementation NSPopUpButton (BindingSupport)
 
-- (void) _setItemValues: (NSArray *) values forKey: (NSString *) key {
-    // A binding whose value is a single string, or the placeholder the binder
-    // substitutes for "no selection", must not be handed to the cell as a
-    // collection: -[NSPopUpButtonCell addItemsWithTitles:] sends -count to it and
-    // raises. Treat a lone scalar as a one-item list.
-    if (values != nil && ![values isKindOfClass: [NSArray class]] &&
-        ![values isKindOfClass: [NSSet class]]) {
-        values = [NSArray arrayWithObject: values];
-    }
+// A bound value that is not an array (a single string, or the placeholder the
+// binder substitutes for "no selection") must not be handed on as a
+// collection: it counts as a one-item list. nil is no items.
+static NSArray *popUpBindingArray(id value) {
+    if (value == nil)
+        return [NSArray array];
+    if ([value isKindOfClass: [NSArray class]])
+        return value;
+    if ([value isKindOfClass: [NSSet class]])
+        return [value allObjects];
+    return [NSArray arrayWithObject: value];
+}
 
-    // The cell stores titles, so every member must be a string. A binding whose
-    // collection holds non-strings reaches -[NSMenu itemWithTitle:], which sends
-    // -isEqualToString: to each member and raises on anything else.
-    if (values != nil) {
-        NSMutableArray *titles = [NSMutableArray arrayWithCapacity: values.count];
-        for (id value in values) {
-            [titles addObject: [value isKindOfClass: [NSString class]] ? value :
-                              ([value respondsToSelector: @selector(description)] ? [value description] : @"")];
+// Item titles are strings. A member that is not one is shown by its
+// description (the content binding reference gives that for content objects).
+static NSString *popUpItemTitle(id value) {
+    if ([value isKindOfClass: [NSString class]])
+        return value;
+    return [value respondsToSelector: @selector(description)] ? [value description] : @"";
+}
+
+// The array another content binding currently supplies, or nil when that
+// binding is not made.
+- (NSArray *) _popUpArrayOfBinding: (NSString *) name {
+    id binder = [self _binderForBinding: name];
+
+    if (binder == nil)
+        return nil;
+    return popUpBindingArray([[binder destination] valueForKeyPath: [binder keyPath]]);
+}
+
+// After the items are rebuilt the cell selects the first one without telling observers. The selection the
+// model holds is put back through the selection binding that was made first; the binder's own write to its
+// source does not write the value back to the model.
+// QUIRK: when several selection bindings (selectedObject, selectedValue, selectedTag, selectedIndex) are
+// bound, a change of the content applies the one bound first, while binding the next one applies its own value
+// at once (so the one bound last wins until then). Not documented. Evidence: black-box observation on macOS
+// 26.7.3 and 10.14.4 (tier 2), four disagreeing bindings made in two opposite orders and then a content change.
+// Test: appkit-popup-button-content-bindings (test_quirk_first_bound_selection_wins_on_content_change)
+- (void) _reapplyBoundSelection {
+    for (NSString *name in NS_EXTRA(NSPopUpButton, self)->_selectionBindings) {
+        id binder = [self _binderForBinding: name];
+
+        if ([binder respondsToSelector: @selector(syncUp)]) {
+            [binder performSelector: @selector(syncUp)];
+            return;
         }
-        values = titles;
     }
+}
 
+// The three content bindings describe one list of items, so each of them
+// rebuilds it from its own new value and what the other two supply. content is
+// the list of objects, one item each; contentValues are the titles (else the
+// descriptions of the content objects); contentObjects are the objects that
+// selectedObject answers in place of the content objects (see -_selectedObject).
+// https://developer.apple.com/library/archive/documentation/Cocoa/Reference/CocoaBindingsRef/BindingsText/NSPopUpButton.html
+// Observed on macOS 26.7.3 and 10.14.4: an item stands for its content object as its representedObject, and each
+// content object gets an item of its own even when two descriptions are equal. contentObjects is documented as
+// available only with content bound (macOS raises when it is bound alone, which is not reproduced); with neither
+// content nor contentValues there is nothing to build items from, so nothing changes.
+// QUIRK: contentValues is honoured next to content only when its key path starts with the content key path
+// (content arrangedObjects, contentValues arrangedObjects.name); any other contentValues is ignored and the
+// titles are the descriptions of the content objects (macOS logs "Binding contentValues ... ignored: Key path
+// ... needs to have the content key path ... as prefix"). Not documented. Evidence: black-box observation on
+// macOS 26.7.3 (tier 2): content "items" with contentValues "values" gave the descriptions, an array controller's
+// arrangedObjects with arrangedObjects.name gave the names. Test: appkit-popup-button-content-bindings
+// (test_quirk_content_values_need_the_content_key_path_as_prefix).
+// Limitation: the other two bindings are read from their destination, so a
+// value transformer or null placeholder on them is not applied.
+// Whether the contentValues binding, if there is one, may name the titles of the items of the content binding.
+- (BOOL) _contentValuesFitContent {
+    id valuesBinder = [self _binderForBinding: @"contentValues"];
+    id contentBinder = [self _binderForBinding: @"content"];
+
+    if (valuesBinder == nil || contentBinder == nil)
+        return YES;
+    return [[valuesBinder keyPath] hasPrefix: [[contentBinder keyPath] stringByAppendingString: @"."]];
+}
+
+// QUIRK: when the selection binding made first is selectedIndex or selectedTag, the items stand for their
+// indexes: each item's representedObject is its index as a number, not its content object, so a later
+// selectedObject binding matches none of the items and gets an item of its own. The items already there when
+// that binding is made change too. Not documented. Evidence: black-box observation on macOS 26.7.3 and Mac OS X
+// 10.14.4 (x86_64, i386; identical, tier 2; probes 641 and popup2.m): "641.22 selectedIndex bound ... reps=[0|1|2]",
+// "641.25 selectedTag bound ... reps=[0|1|2]", the four selection bindings made index first (641.27 "...
+// reps=[0|1|2|nil|nil] ... n=5", 641.29 after a content change "reps=[0|1|2|3]") against object first (641.26
+// and 641.28, "reps=[a|b|c|nil]" and "reps=[a|b|c|d]"), selectedValue alone keeping the content objects
+// (641.20), and the same index representedObjects for items built from contentValues alone, whether the
+// selection binding or the content binding is made first (popup2.m). A selection binding made after another
+// does not change them back. What macOS does for items that no binding built was not observed.
+// Test: appkit-popup-button-content-bindings (test_quirk_index_bindings_make_items_stand_for_indexes)
+static BOOL itemsStandForIndexes(NSPopUpButton *button) {
+    NSString *first = [NS_EXTRA(NSPopUpButton, button)->_selectionBindings firstObject];
+
+    return [first isEqualToString: NSSelectedIndexBinding] || [first isEqualToString: NSSelectedTagBinding];
+}
+
+- (void) _applyItemsFromContent: (NSArray *) content
+                       values: (NSArray *) values
+                      objects: (NSArray *) objects
+{
+    NSUInteger i;
+
+    if (content != nil && ![self _contentValuesFitContent])
+        values = nil;
+    NSUInteger count = content != nil ? [content count] : [values count];
+
+    if (content == nil && values == nil)
+        return;
+
+    [self _removeUnmatchedItem];
     [_cell removeAllItems];
-    [_cell addItemsWithTitles: values];
+    for (i = 0; i < count; i++) {
+        NSString *title = @"";
+        id represented = nil;
 
-    if ([self indexOfSelectedItem] >= values.count) {
-        [self selectItem: nil];
+        if (values != nil && i < [values count])
+            title = popUpItemTitle([values objectAtIndex: i]);
+        else if (content != nil && i < [content count])
+            title = popUpItemTitle([content objectAtIndex: i]);
+
+        // Observed on macOS 26.7.3 and 10.14.4: contentObjects does not change what an item stands for; with
+        // no content bound the title is the object.
+        if (itemsStandForIndexes(self))
+            represented = [NSNumber numberWithUnsignedInteger: i];
+        else if (content != nil && i < [content count])
+            represented = [content objectAtIndex: i];
+        else
+            represented = title;
+
+        NSMenuItem *item = [_cell _appendItemWithTitle: title];
+
+        [item setRepresentedObject: represented];
+        // QUIRK: an item built from the content bindings gets its index as its tag, so a bound selectedTag of 1
+        // selects the second item. Not documented. Evidence: black-box observation on macOS 26.7.3 and Mac OS X 10.14.4 (identical, tier 2) and on 26.1 (arm64), probe
+        // 641: "content=[a,b,c] only -> ... tags=[0|1|2]", the same with contentValues only (641.3, where
+        // contentObjects was bound without content, which raised, so contentValues was the only item source) and
+        // for a pull-down (641.35), and "641.25 selectedTag bound, model.tag=1, content=[a,b,c] -> ...
+        // tags=[0|1|2] selIndex=1 selTitle=b". The tag of the item added for an unmatched selection is not set
+        // here: it was 0 in 641.20 (selectedValue) and -1 in 641.26 (four selection bindings), two scenarios.
+        // Test: appkit-popup-button-content-bindings (test_quirk_bound_items_are_tagged_by_index)
+        [item setTag: i];
     }
     [self synchronizeTitleAndSelectedItem];
+    [self _reapplyBoundSelection];
 }
 
 - (id) _contentValues {
     return [self valueForKeyPath: @"itemArray.title"];
 }
 
-// FIXME: is it contentValues or contentObjects, or both?
-- (void) _setContentValues: (NSArray *) values {
-    [self _setItemValues: values forKey: @"title"];
+- (void) _setContentValues: (id) values {
+    [self _applyItemsFromContent: [self _popUpArrayOfBinding: @"content"]
+                        values: popUpBindingArray(values)
+                       objects: [self _popUpArrayOfBinding: @"contentObjects"]];
 }
 
 - (id) _contentObjects {
-    return [self valueForKeyPath: @"itemArray.title"];
+    return [self valueForKeyPath: @"itemArray.representedObject"];
 }
 
-- (void) _setContentObjects: (NSArray *) objects {
-    [self _setItemValues: objects forKey: @"title"];
+- (void) _setContentObjects: (id) objects {
+    [self _applyItemsFromContent: [self _popUpArrayOfBinding: @"content"]
+                        values: [self _popUpArrayOfBinding: @"contentValues"]
+                       objects: popUpBindingArray(objects)];
 }
 
 - (id) _content {
     return [self valueForKeyPath: @"itemArray.representedObject"];
 }
 
-- (void) _setContent: (NSArray *) values {
-    [self _setItemValues: values forKey: @"representedObject"];
-    if (![self _binderForBinding: @"contentValues"]) {
-        [self _setItemValues: [values valueForKey: @"description"]
-                      forKey: @"title"];
-    }
+- (void) _setContent: (id) content {
+    [self _applyItemsFromContent: popUpBindingArray(content)
+                        values: [self _popUpArrayOfBinding: @"contentValues"]
+                       objects: [self _popUpArrayOfBinding: @"contentObjects"]];
+}
+
+// QUIRK: a bound selectedObject or selectedValue that matches none of the items makes the pop-up button append
+// one more item for it, titled with the value ("No Value" for nil), and select that. The item is not part of the
+// content: it goes when the value matches an item again, when another item is chosen or when the content is
+// rebuilt. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2): content
+// [x,y,z] with a selection of "c" gave the items x y z c with c selected, nil gave "No Value", and the item went
+// when the selection came back to "y".
+// Test: appkit-popup-button-content-bindings (test_quirk_unmatched_selection_gets_an_item)
+- (void) _removeUnmatchedItem {
+    NSMenuItem *item = NS_EXTRA(NSPopUpButton, self)->_unmatchedItem;
+
+    if (item == nil)
+        return;
+    NS_EXTRA(NSPopUpButton, self)->_unmatchedItem = nil;
+    [NS_EXTRA(NSPopUpButton, self)->_unmatchedObject release];
+    NS_EXTRA(NSPopUpButton, self)->_unmatchedObject = nil;
+    if ([self indexOfItem: item] >= 0)
+        [self removeItemAtIndex: [self indexOfItem: item]];
+    [item release];
+}
+
+- (void) _selectUnmatchedItemTitled: (NSString *) title forObject: (id) object {
+    NSMenuItem *item = [_cell _appendItemWithTitle: title];
+
+    NS_EXTRA(NSPopUpButton, self)->_unmatchedItem = [item retain];
+    NS_EXTRA(NSPopUpButton, self)->_unmatchedObject = [object retain];
+    [self selectItem: item];
+}
+
+// The object the selected item stands for: its content object, or the matching contentObjects entry when that is
+// bound; for the item of an unmatched selection, the object it was made for. A model value is matched against
+// the content objects only (observed on macOS 26.7.3 and 10.14.4).
+- (id) _selectedObject {
+    NSMenuItem *item = [_cell selectedItem];
+
+    if (item != nil && item == NS_EXTRA(NSPopUpButton, self)->_unmatchedItem)
+        return NS_EXTRA(NSPopUpButton, self)->_unmatchedObject;
+
+    // GUESS: the reference says selectedObject answers the contentObjects entry for the chosen item when that
+    // binding is made; what macOS answers was not observed (selecting a model value that is a contentObjects
+    // entry did not select the item there, see -_setSelectedObject:).
+    NSArray *objects = [self _popUpArrayOfBinding: @"contentObjects"];
+    NSInteger index = [_cell indexOfSelectedItem];
+
+    if (objects != nil && index >= 0 && (NSUInteger) index < [objects count])
+        return [objects objectAtIndex: index];
+    return [item representedObject];
+}
+
+- (void) _applySelectedObject: (id) object {
+    [self _removeUnmatchedItem];
+    NSInteger index = object != nil ? [_cell indexOfItemWithRepresentedObject: object] : -1;
+
+    if (index >= 0)
+        [_cell selectItemAtIndex: index];
+    else
+        [self _selectUnmatchedItemTitled: object != nil ? popUpItemTitle(object) : @"No Value" forObject: object];
 }
 
 - (NSInteger) _selectedTag {
     return [[_cell selectedItem] tag];
 }
 
-- (void) _setSelectedTag: (NSInteger) tag {
+- (void) _applySelectedTag: (NSInteger) tag {
     int index = [_cell indexOfItemWithTag: tag];
 
     if (index >= 0)
@@ -422,7 +607,7 @@ static NSString *const NSPopUpButtonBindingObservationContext =
     return [self indexOfSelectedItem];
 }
 
-- (void) _setSelectedIndex: (NSUInteger) idx {
+- (void) _applySelectedIndex: (NSUInteger) idx {
     [self selectItemAtIndex: idx];
 }
 
@@ -430,12 +615,56 @@ static NSString *const NSPopUpButtonBindingObservationContext =
     return [self titleOfSelectedItem];
 }
 
-- (void) _setSelectedValue: (id) value {
+- (void) _applySelectedValue: (id) value {
     if (value && ![value isKindOfClass: [NSString class]]) {
         // Cocoa actually accepts non string values
         value = [NSString stringWithFormat: @"%@", value];
     }
-    [self selectItemWithTitle: value];
+    [self _removeUnmatchedItem];
+    if (value != nil && [self indexOfItemWithTitle: value] >= 0)
+        [self selectItemWithTitle: value];
+    else
+        [self _selectUnmatchedItemTitled: value != nil ? value : @"No Value" forObject: nil];
+}
+
+// What a binding does to the items or the selection is not a choice made in the pop-up button: the other
+// selection bindings are not told of it, so they do not write their own view of the selection to the model.
+// QUIRK: with several selection bindings, applying one model value changes the selection without writing to the
+// model through the others. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2):
+// four selection bindings with disagreeing model values wrote nothing to the model while they were bound and when
+// the content changed.
+// Test: appkit-popup-button-content-bindings (test_quirk_first_bound_selection_wins_on_content_change)
+- (void) _setItemsFromContent: (NSArray *) content
+                       values: (NSArray *) values
+                      objects: (NSArray *) objects
+{
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth++;
+    [self _applyItemsFromContent: content values: values objects: objects];
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth--;
+}
+
+- (void) _setSelectedObject: (id) object {
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth++;
+    [self _applySelectedObject: object];
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth--;
+}
+
+- (void) _setSelectedTag: (NSInteger) tag {
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth++;
+    [self _applySelectedTag: tag];
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth--;
+}
+
+- (void) _setSelectedIndex: (NSUInteger) idx {
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth++;
+    [self _applySelectedIndex: idx];
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth--;
+}
+
+- (void) _setSelectedValue: (id) value {
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth++;
+    [self _applySelectedValue: value];
+    NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth--;
 }
 
 - (void) bind: (NSString *) binding
@@ -461,6 +690,32 @@ static NSString *const NSPopUpButtonBindingObservationContext =
                toObject: observable
             withKeyPath: keyPath
                 options: options];
+
+    if ([binding isEqualToString: NSSelectedObjectBinding] || [binding isEqualToString: NSSelectedValueBinding] ||
+        [binding isEqualToString: NSSelectedTagBinding] || [binding isEqualToString: NSSelectedIndexBinding]) {
+        NSMutableArray *order = NS_EXTRA(NSPopUpButton, self)->_selectionBindings;
+
+        if (order == nil)
+            order = NS_EXTRA(NSPopUpButton, self)->_selectionBindings = [[NSMutableArray alloc] init];
+        [order removeObject: binding];
+        [order addObject: binding];
+        if ([order count] == 1 && itemsStandForIndexes(self) &&
+            ([self _binderForBinding: @"content"] != nil || [self _binderForBinding: @"contentValues"] != nil)) {
+            NSMenuItem *unmatched = NS_EXTRA(NSPopUpButton, self)->_unmatchedItem;
+            NSInteger index = 0;
+
+            for (NSMenuItem *item in [self itemArray]) {
+                if (item != unmatched)
+                    [item setRepresentedObject: [NSNumber numberWithInteger: index]];
+                index++;
+            }
+        }
+    }
+}
+
+- (void) unbind: (NSString *) binding {
+    [super unbind: binding];
+    [NS_EXTRA(NSPopUpButton, self)->_selectionBindings removeObject: binding];
 }
 
 - (void) observeValueForKeyPath: (NSString *) keyPath
@@ -469,7 +724,10 @@ static NSString *const NSPopUpButtonBindingObservationContext =
                         context: (void *) context
 {
     if (context == NSPopUpButtonBindingObservationContext) {
-        if ([keyPath isEqualToString: @"cell.selectedItem"]) {
+        if ([keyPath isEqualToString: @"cell.selectedItem"] && NS_EXTRA(NSPopUpButton, self)->_boundChangeDepth > 0) {
+            // A binding is applying the selection: the other bindings are not told (see
+            // -_setItemsFromContent:values:objects:).
+        } else if ([keyPath isEqualToString: @"cell.selectedItem"]) {
             if ([[change objectForKey: NSKeyValueChangeNotificationIsPriorKey]
                         boolValue]) {
                 [self willChangeValueForKey: @"selectedIndex"];
@@ -482,6 +740,10 @@ static NSString *const NSPopUpButtonBindingObservationContext =
                 [self didChangeValueForKey: @"selectedValue"];
                 [self didChangeValueForKey: @"selectedIndex"];
                 [self didChangeValueForKey: @"selectedTag"];
+                // The item made for an unmatched selection goes when another item is chosen.
+                if (NS_EXTRA(NSPopUpButton, self)->_unmatchedItem != nil &&
+                    [_cell selectedItem] != NS_EXTRA(NSPopUpButton, self)->_unmatchedItem)
+                    [self _removeUnmatchedItem];
             }
         } else {
             if ([[change objectForKey: NSKeyValueChangeNotificationIsPriorKey]

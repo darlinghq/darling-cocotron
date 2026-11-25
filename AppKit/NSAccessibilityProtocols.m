@@ -18,14 +18,15 @@
 */
 
 // The NSAccessibility protocol (macOS 10.10) for NSView, NSControl, NSCell and its
-// control cells, NSWindow and NSApplication, and the legacy attribute methods
+// control cells, NSMenuItem, NSWindow and NSApplication, and the legacy attribute methods
 // (accessibilityAttributeValue: and friends) on top of it. NSAccessibilityElement.m
 // uses the same storage and methods.
 //
 // Every property can be set; a set value replaces the computed default and is kept
 // per object. The defaults are those of macOS 10.14 and 26: views are not elements
 // and stand for their unignored descendants, controls stand for their cells, cells
-// and windows are elements, and parents are the nearest unignored ancestor.
+// and windows are elements, and parents are the nearest unignored ancestor. The
+// NSMenuItem defaults are observations, see the QUIRK comment there.
 //
 // Nothing here talks to an assistive-technology service: there is no such backend.
 
@@ -37,6 +38,8 @@
 #import <AppKit/NSControl.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSImageCell.h>
+#import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuItem.h>
 #import <AppKit/NSPopUpButtonCell.h>
 #import <AppKit/NSSliderCell.h>
 #import <AppKit/NSTextFieldCell.h>
@@ -70,6 +73,18 @@ void _NSAccessibilitySetStoredValue(id element, NSString *key, id value) {
 
 void _NSAccessibilityRemoveStoredValue(id element, NSString *key) {
     [objc_getAssociatedObject(element, &storedValuesKey) removeObjectForKey: key];
+}
+
+// QUIRK: a window that has not been given a document answers the URL string of its represented URL (nil when it has
+// none); a value set explicitly, nil and the empty string included, replaces it, and clearing the represented URL
+// afterwards does not restore it. Not documented (the documentation gives no default). Evidence: black-box
+// observation on macOS 26.7.3 and 10.14.4 (x86_64 and i386) (tier 2), probe p764.m of batch 12a in
+// mac-probes/cristim. Every other class answers nil.
+// Test: appkit-window-accessibility-document (test_quirk_window_document_defaults_to_represented_url)
+NSString *_NSAccessibilityDefaultDocument(id element) {
+    if (![element isKindOfClass: [NSWindow class]])
+        return nil;
+    return [[(NSWindow *) element representedURL] absoluteString];
 }
 
 id _NSAccessibilityStoredObject(id element, NSString *key, id fallback) {
@@ -405,6 +420,78 @@ static BOOL imageIsNamed(NSImage *image, NSString *name, NSString *highlightedNa
 
 - (NSAccessibilityRole) _accessibilityDefaultRole {
     return NSAccessibilityImageRole;
+}
+
+@end
+
+@implementation NSMenuItem (NSAccessibility)
+
+ACCESSIBILITY_COMMON_METHODS
+
+// Stored values are kept per object, so a copy of an item starts without them, except for the label
+// (see -copyWithZone: in NSMenuItem.m). The documentation lists NSMenuItem as conforming to NSAccessibility and
+// NSAccessibilityElement but gives no defaults for it.
+//
+// QUIRK: the defaults of an item are the following, none of them documented. Evidence: black-box observation of
+// NSMenuItem on macOS 26.7.3 (tier 2; a probe on 10.14.4 without a window server answered nil for the role, title
+// and label, so that Mojave has no usable observation): an item is an element, with the menu item role (a separator
+// too), the item's title as title and as label (an empty string for a separator), no help, identifier or value,
+// no window or top level element, a zero frame, the owning menu as parent, no children (the submenu, if there is
+// one, is the only child) and -isEnabled as enabled state.
+// Test: appkit-menuitem-accessibility (quirk: defaults of a menu item)
+- (BOOL) isAccessibilityElement {
+    return _NSAccessibilityStoredBool(self, _NSAccessibilityElementKey, YES);
+}
+
+- (void) setAccessibilityElement: (BOOL) value {
+    _NSAccessibilitySetStoredValue(self, _NSAccessibilityElementKey, [NSNumber numberWithBool: value]);
+}
+
+- (void) setAccessibilityFrame: (NSRect) value {
+    _NSAccessibilitySetStoredValue(self, _NSAccessibilityFrameKey, [NSValue valueWithRect: value]);
+}
+
+- (NSAccessibilityRole) accessibilityRole {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityRoleAttribute, NSAccessibilityMenuItemRole);
+}
+
+- (NSArray *) accessibilityChildren {
+    NSMenu *submenu = [self submenu];
+
+    return _NSAccessibilityStoredObject(self, NSAccessibilityChildrenAttribute,
+                                        submenu != nil ? [NSArray arrayWithObject: submenu] : [NSArray array]);
+}
+
+- (id) accessibilityParent {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityParentAttribute, [self menu]);
+}
+
+- (id) accessibilityWindow {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityWindowAttribute, nil);
+}
+
+- (id) accessibilityTopLevelUIElement {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityTopLevelUIElementAttribute, nil);
+}
+
+- (NSRect) accessibilityFrame {
+    return _NSAccessibilityStoredRect(self, _NSAccessibilityFrameKey, NSZeroRect);
+}
+
+- (NSString *) accessibilityLabel {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityDescriptionAttribute, [self title]);
+}
+
+- (NSString *) accessibilityTitle {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityTitleAttribute, [self title]);
+}
+
+- (id) accessibilityValue {
+    return _NSAccessibilityStoredObject(self, NSAccessibilityValueAttribute, nil);
+}
+
+- (BOOL) isAccessibilityEnabled {
+    return _NSAccessibilityStoredBool(self, NSAccessibilityEnabledAttribute, [self isEnabled]);
 }
 
 @end

@@ -1,15 +1,3 @@
-#import <Foundation/NSObject.h>
-
-@class NSMutableDictionary;
-
-@interface CIFilter : NSObject {
-    NSMutableDictionary *_keyValues;
-}
-
-+ (CIFilter *) filterWithName: (NSString *) name;
-- (void) setDefaults;
-
-- valueForKey: (NSString *) key;
-- (void) setValue: value forKey: (NSString *) key;
-
-@end
+/* QuartzCore re-exports CoreImage, which implements this class (the sources here are not
+   built). One declaration, as in Apple's SDK, so code that sees both frameworks agrees. */
+#import <CoreImage/CIFilter.h>

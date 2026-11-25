@@ -25,6 +25,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NSString *_propertyName;
     BOOL _optional;
     BOOL _transient;
+    NSDictionary *_userInfo;
+    NSArray *_validationPredicates;
+    NSArray *_validationWarnings;
 }
 
 - (NSEntityDescription *) entity;

@@ -173,7 +173,12 @@ enum {
   kCGMouseEventWindowUnderMousePointer = 91,
   kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent = 92,
   kCGEventUnacceleratedPointerMovementX = 170,
-  kCGEventUnacceleratedPointerMovementY = 171
+  kCGEventUnacceleratedPointerMovementY = 171,
+  kCGScrollWheelEventMomentumOptionPhase = 173,
+  kCGScrollWheelEventAcceleratedDeltaAxis1 = 176,
+  kCGScrollWheelEventAcceleratedDeltaAxis2 = 175,
+  kCGScrollWheelEventRawDeltaAxis1 = 178,
+  kCGScrollWheelEventRawDeltaAxis2 = 177
 };
 
 
@@ -238,5 +243,12 @@ enum {
 typedef uint32_t CGEventSourceKeyboardType;
 
 #define CGEventMaskBit(eventType) ((CGEventMask) 1 << (eventType))
+
+// An event mask that represents all event types.
+#define kCGEventMaskForAllEvents (~(CGEventMask) 0)
+
+// Posted when an event tap is made or removed (see notify(3)).
+#define kCGNotifyEventTapAdded "com.apple.coregraphics.eventTapAdded"
+#define kCGNotifyEventTapRemoved "com.apple.coregraphics.eventTapRemoved"
 
 #endif

@@ -58,6 +58,8 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 - (void) _recycleView: (NSView *) view;
 - (void) _recycleCellViewsOutsideRows: (NSRange) rows;
 - (NSView *) _cellViewAtColumn: (NSInteger) column row: (NSInteger) row make: (BOOL) make;
+- (NSRect) _spacedFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row;
+- (NSRect) _drawingFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row;
 - (void) _setObjectValueOfCellView: (NSView *) view column: (NSTableColumn *) column row: (NSInteger) row;
 - (BOOL) _delegateMakesCellViews;
 - (NSView *) _delegateCellViewForTableColumn: (NSTableColumn *) column row: (NSInteger) row;
@@ -71,6 +73,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 - (void) noteSelectionIsChanging;
 - (void) noteSelectionDidChange;
 - (void) noteColumnDidResizeWithOldWidth: (CGFloat) oldWidth;
+- (CGFloat) _spaceTakenByColumn: (NSTableColumn *) column;
 - (BOOL) dataSourceCanSetObjectValue;
 - (void) dataSourceSetObjectValue: object
                    forTableColumn: (NSTableColumn *) tableColumn
@@ -331,6 +334,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
     [_backgroundColor release];
     [_gridColor release];
     [NS_EXTRA(NSTableView, self)->_selectedRowIndexes release];
+    [NS_EXTRA(NSTableView, self)->_draggedRows release];
     [NS_EXTRA(NSTableView, self)->_selectedColumns release];
     [NS_EXTRA(NSTableView, self)->_sortDescriptors release];
     [NS_EXTRA(NSTableView, self)->_registeredNibs release];
@@ -601,6 +605,13 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return [self _effectiveRowHeight];
 }
 
+// The width a column takes in the table and its header, with its share of the intercell spacing.
+// Observed on macOS 26.7.3 (black-box test, pinned by tests/appkit-table-hidden-columns.m): a hidden column takes no width at all, spacing included; the documentation of isHidden says only
+// that the column stays in tableColumns and in the count.
+- (CGFloat) _spaceTakenByColumn: (NSTableColumn *) column {
+    return [column isHidden] ? 0. : [column width] + _intercellSpacing.width;
+}
+
 - (NSRect) rectOfRow: (NSInteger) row {
     NSRect rect = _bounds;
     NSInteger i, count;
@@ -617,8 +628,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     rect.size.width = 0.;
     count = [_tableColumns count];
     for (i = 0; i < count; i++)
-        rect.size.width += [[_tableColumns objectAtIndex: i] width] +
-                           _intercellSpacing.width;
+        rect.size.width += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
     rect.size.height = rowHeightAtIndex(self, row) + _intercellSpacing.height;
 
     return rect;
@@ -635,14 +645,23 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                             (long) column, 0, (unsigned long) [_tableColumns count]];
     }
 
+    // QUIRK: the rectangle of a hidden column is NSZeroRect, wherever the column is in the table: its y and
+    // height are 0 as well, not the height of the shown columns; the documentation of isHidden and of
+    // rectOfColumn: does not say. Observed on macOS 26.1 (arm64), 5 columns of 50 to 90 points: probe 657.R
+    // "hidden=4 ... column 4 -> HIDDEN ; rectOfColumn:={{0,0},{0,0}}" (the same for the hidden columns 0, 2,
+    // and 1 and 3), while a shown column gave "rectOfColumn:={{10,0},{65,172}}". The earlier observations (macOS
+    // 26.7.3, 10.14.4, probe 657.1) printed x and width only. The header rect of a hidden column keeps the
+    // header's height (probe 657.R "headerRectOfColumn:={{0,0},{0,28}}").
+    // Test: tests/appkit-table-hidden-columns.m (test_rects_close_the_gap)
+    if ([[_tableColumns objectAtIndex: column] isHidden])
+        return NSZeroRect;
+
     rect.origin.x = 0.;
     for (i = 0; i < column; i++)
-        rect.origin.x += [[_tableColumns objectAtIndex: i] width] +
-                         _intercellSpacing.width;
+        rect.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
     rect.origin.y = 0.;
 
-    rect.size.width = [[_tableColumns objectAtIndex: column] width] +
-                      _intercellSpacing.width;
+    rect.size.width = [self _spaceTakenByColumn: [_tableColumns objectAtIndex: column]];
     rect.size.height = 0.;
     for (i = 0; i < numberOfRows; i++)
         rect.size.height +=
@@ -684,36 +703,40 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return range; // returns 0,0 if not found, not NSNotFound
 }
 
+// The columns that the rect touches, as one range: it starts at the first column that is not hidden and ends
+// beyond the rect's right edge, and so may hold hidden columns between its ends.
+// QUIRK: a rect that reaches past the last shown column gets a range that runs to the last column, hidden
+// columns after the last shown one included; the documentation does not mention hidden columns. Observed on
+// macOS 26.1 (arm64) with 5 columns, column 4 hidden and the rect covering the table: the range was 0..4
+// (probe 657.1 "hidden=4 ... columnsInRect(full)=0..4"; "hidden=0,4 ... =1..4"; "hidden=all but 2 ... =2..4"),
+// while a rect ending inside a shown column stopped at it (probe 657.2 "hidden=4 ... x120+150:1..3").
+// Test: tests/appkit-table-hidden-columns.m (test_ranges_over_whole_rects)
 - (NSRange) columnsInRect: (NSRect) rect {
-    NSRange range = NSMakeRange(0, 0);
     NSInteger numberOfColumns = [self numberOfColumns];
-    NSInteger i;
-    CGFloat width = 0.;
+    NSInteger i, first = -1, last = -1;
+    CGFloat right = 0.;
 
     for (i = 0; i < numberOfColumns; i++) {
-        width += [[_tableColumns objectAtIndex: i] width] +
-                 _intercellSpacing.width;
+        NSTableColumn *column = [_tableColumns objectAtIndex: i];
 
-        if (width > rect.origin.x)
+        right += [self _spaceTakenByColumn: column];
+        if ([column isHidden])
+            continue;
+        if (first < 0) {
+            if (right <= rect.origin.x)
+                continue;
+            first = i;
+        }
+        last = i;
+        if (right > rect.origin.x + rect.size.width)
             break;
     }
-    if (i < numberOfColumns) {
-        range.location = i;
 
-        for (; i < numberOfColumns; i++) {
-            if (width > rect.origin.x + rect.size.width)
-                break;
-
-            width += [[_tableColumns objectAtIndex: i] width] +
-                     _intercellSpacing.width;
-        }
-        if (i < numberOfColumns)
-            range.length = i - range.location + 1;
-        else
-            range.length = numberOfColumns - range.location;
-    }
-
-    return range; // returns 0,0 if not found, not NSNotFound
+    if (first < 0)
+        return NSMakeRange(0, 0); // returns 0,0 if not found, not NSNotFound
+    if (i == numberOfColumns)
+        last = numberOfColumns - 1;
+    return NSMakeRange(first, last - first + 1);
 }
 
 - (NSInteger) rowAtPoint: (NSPoint) point {
@@ -738,27 +761,58 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return column;
 }
 
-- (NSRect) frameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
+// The rectangle of the column and row, including the intercell spacing.
+- (NSRect) _spacedFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
     NSRect frame;
     NSInteger i;
 
-    if (column < 0 || column > [self numberOfColumns] || row < 0 ||
-        row > [self numberOfRows])
+    if (column < 0 || column >= [self numberOfColumns] || row < 0 ||
+        row >= [self numberOfRows])
+        return NSZeroRect;
+
+    // QUIRK: NSZeroRect for a hidden column, as in -rectOfColumn: (not x 0 and width 0 with the row's y and
+    // height). Observed on macOS 26.1 (arm64): probe 657.R "hidden=2 ... column 2 -> HIDDEN ;
+    // frameOfCellAtColumn:row:1={{0,0},{0,0}} ; frameOfCellAtColumn:row:0={{0,0},{0,0}}" while the shown
+    // cells of the same table gave "row:1={{16,29},{50,24}}".
+    if ([[_tableColumns objectAtIndex: column] isHidden])
         return NSZeroRect;
 
     frame.origin.x = 0.;
     for (i = 0; i < column; i++)
-        frame.origin.x += [[_tableColumns objectAtIndex: i] width] +
-                          _intercellSpacing.width;
+        frame.origin.x += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
 
     frame.origin.y = 0.;
     for (i = 0; i < row; i++)
         frame.origin.y += rowHeightAtIndex(self, i) + _intercellSpacing.height;
 
-    frame.size.width = [[_tableColumns objectAtIndex: column] width] +
-                       _intercellSpacing.width;
+    frame.size.width = [self _spaceTakenByColumn: [_tableColumns objectAtIndex: column]];
     frame.size.height = rowHeightAtIndex(self, row) + _intercellSpacing.height;
 
+    return frame;
+}
+
+// What the cells draw and edit in: the rectangle of the column and row with the spacing, which is how the
+// table view drew cells before frameOfCellAtColumn:row: followed the platform's frame, the cell's alone.
+- (NSRect) _drawingFrameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
+    return [self _spacedFrameOfCellAtColumn: column row: row];
+}
+
+// The frame of the cell without the intercell spacing: the column's width and the row's height, placed
+// half the spacing (rounded down) in from the corner of the rectangle of the column and the row.
+// Black-box observation of the frame on macOS 10.14.4 and 26.7.3, for the cells of table and outline views
+// alike (with the default style on 10.14.4, which is the plain one on later systems).
+// Test: tests/appkit-table-cell-frames.m
+- (NSRect) frameOfCellAtColumn: (NSInteger) column row: (NSInteger) row {
+    NSRect frame = [self _spacedFrameOfCellAtColumn: column row: row];
+
+    if (NSIsEmptyRect(frame) || NSWidth(frame) <= 0)
+        return frame; // also the empty frame of a hidden column
+    CGFloat insetX = floor(_intercellSpacing.width / 2), insetY = floor(_intercellSpacing.height / 2);
+
+    frame.origin.x += insetX;
+    frame.origin.y += insetY;
+    frame.size.width -= _intercellSpacing.width;
+    frame.size.height -= _intercellSpacing.height;
     return frame;
 }
 
@@ -1086,7 +1140,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     _editingCell = nil;
     _editedColumn = column;
     _editedRow = row;
-    NS_EXTRA(NSTableView, self)->_editingFrame = NS_EXTRA(NSTableView, self)->_editingBorder = [self frameOfCellAtColumn: column
+    NS_EXTRA(NSTableView, self)->_editingFrame = NS_EXTRA(NSTableView, self)->_editingBorder = [self _drawingFrameOfCellAtColumn: column
                                                            row: row];
     NS_EXTRA(NSTableView, self)->_editingFrame = [self _adjustedFrame: NS_EXTRA(NSTableView, self)->_editingFrame forCell: editingCell];
     NS_EXTRA(NSTableView, self)->_editingBorder.origin.x--;
@@ -1376,8 +1430,17 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [_headerView setNeedsDisplay: YES];
 }
 
+// Hidden columns are left out of the set: https://developer.apple.com/documentation/appkit/nstableview/columnindexes(in:)
+// says columns that are hidden are not included, unlike the range columnsInRect: gives.
 - (NSIndexSet *) columnIndexesInRect: (NSRect) rect {
-    return [NSIndexSet indexSetWithIndexesInRange: [self columnsInRect: rect]];
+    NSRange range = [self columnsInRect: rect];
+    NSMutableIndexSet *result = [NSMutableIndexSet indexSet];
+    NSUInteger i;
+
+    for (i = range.location; i < NSMaxRange(range); i++)
+        if (![[_tableColumns objectAtIndex: i] isHidden])
+            [result addIndex: i];
+    return result;
 }
 
 - (void) deselectRow: (NSInteger) row {
@@ -1502,8 +1565,21 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if (numberOfRows > 0) {
         size.width = [self rectOfRow: 0].size.width;
     }
+    // The height of the rows, as -rectOfColumn: gives it for a shown column; not read from the rectangle of
+    // column 0, which is NSZeroRect when that column is hidden.
     if ([_tableColumns count] > 0)
-        size.height = [self rectOfColumn: 0].size.height;
+        size.height = MAX(numberOfRows > 0 ? NSMaxY([self rectOfRow: numberOfRows - 1]) : 0.,
+                          [[self superview] bounds].size.height);
+
+    // The table is at least as wide and as tall as its clip view, whatever its columns and rows add up to: observed
+    // on macOS 26.7.3, where after -reloadData a table of 4 rows and 296 points of columns in a 400 by 300 point
+    // clip view is 400 by 300 points, so that a click beside the columns or below the rows still reaches the table.
+    // Test: appkit-table-click-beside-columns.
+    if ([[self superview] isKindOfClass: [NSClipView class]]) {
+        NSSize clipSize = [[self superview] bounds].size;
+        size.width = MAX(size.width, clipSize.width);
+        size.height = MAX(size.height, clipSize.height);
+    }
 
     headerSize.width = size.width;
 
@@ -1593,13 +1669,23 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if ([clipView isKindOfClass: [NSClipView class]]) {
         NSSize size = [clipView bounds].size;
         NSInteger i, count = [_tableColumns count];
-        CGFloat lastWidth = size.width - (count * _intercellSpacing.width);
-        NSTableColumn *lastColumn = [_tableColumns lastObject];
+        NSTableColumn *lastColumn = nil;
+        CGFloat lastWidth = size.width;
 
-        for (i = 0; i < count - 1; ++i)
-            lastWidth -= [[_tableColumns objectAtIndex: i] width];
+        // Observed on macOS 26.7.3: the column that takes the slack is the last one that is not hidden
+        for (i = 0; i < count; ++i) {
+            NSTableColumn *column = [_tableColumns objectAtIndex: i];
 
-        // The last column takes what the others leave and stops at its minimum width.
+            if ([column isHidden])
+                continue;
+            lastWidth -= [self _spaceTakenByColumn: column];
+            lastColumn = column;
+        }
+        if (lastColumn == nil)
+            return;
+
+        // What the others leave goes to the last column, which stops at its minimum width.
+        lastWidth += [lastColumn width];
         [lastColumn setWidth: MAX(lastWidth, [lastColumn minWidth])];
 
         [self setNeedsDisplay: YES];
@@ -1630,13 +1716,23 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
+// A click makes the table the first responder (NSControl answers with the selectability of its cell, which a table
+// does not have).
+- (BOOL) needsPanelToBecomeKey {
+    return YES;
+}
+
 - (BOOL) becomeFirstResponder {
     [self setNeedsDisplay: YES];
     return [super becomeFirstResponder];
 }
 
+// A table gives way to the field editor of the cell it edits. NSControl checks its selected cell while it has an
+// editor; a table's editor belongs to the cell being edited (test: appkit-tableview-edit-column.m).
 - (BOOL) resignFirstResponder {
     [self setNeedsDisplay: YES];
+    if (NS_EXTRA(NSControl, self)->_currentEditor != nil)
+        return _editingCell == nil || [_editingCell hasValidObjectValue];
     return [super resignFirstResponder];
 }
 
@@ -1661,9 +1757,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                 if (!(row == _editedRow && column == _editedColumn))
                     [self drawHighlightedSelectionForColumn: column
                                                         row: row
-                                                     inRect: [self frameOfCellAtColumn:
+                                                     inRect: [self _drawingFrameOfCellAtColumn:
                                                                              column
-                                                                                   row: row]];
+                                                                                           row: row]];
 }
 
 - (NSCell *) preparedCellAtColumn: (NSInteger) columnNumber
@@ -1681,6 +1777,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     }
 
     if ([dataCell respondsToSelector: @selector(setTextColor:)]) {
+        // A selected row keeps the normal text colour while its highlight is the grey, secondary one
+        // (selectedTextColor is the colour of selected text in a text view, not of a selected row).
         if ([self isRowSelected: row] ||
             [self isColumnSelected: columnNumber]) {
             [(NSTextFieldCell *) dataCell
@@ -1692,7 +1790,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                                            NSTableViewSelectionHighlightStyleNone &&
                                    [self _selectionIsEmphasized])
                                           ? [NSColor alternateSelectedControlTextColor]
-                                          : [NSColor selectedTextColor]];
+                                          : [NSColor textColor]];
         } else
             [(NSTextFieldCell *) dataCell setTextColor: [NSColor textColor]];
     }
@@ -1732,6 +1830,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         }
 
         for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
+            if ([[_tableColumns objectAtIndex: drawThisColumn] isHidden])
+                continue;
+
             NSView *cellView = [self _cellViewAtColumn: drawThisColumn row: row make: YES];
 
             if (cellView != nil) {
@@ -1752,6 +1853,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                     format: @"invalid row in drawRow:clipRect:"];
 
     for (; drawThisColumn < NSMaxRange(visibleColumns); drawThisColumn++) {
+        if ([[_tableColumns objectAtIndex: drawThisColumn] isHidden])
+            continue;
 
         if (row == _editedRow && drawThisColumn == _editedColumn &&
             _editingCell != nil) {
@@ -1769,8 +1872,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             NSCell *dataCell = [self preparedCellAtColumn: drawThisColumn
                                                       row: row];
             NSRect cellRect = [self
-                    _adjustedFrame: [self frameOfCellAtColumn: drawThisColumn
-                                                          row: row]
+                    _adjustedFrame: [self _drawingFrameOfCellAtColumn: drawThisColumn
+                                                                  row: row]
                            forCell: dataCell];
 
             [dataCell drawWithFrame: cellRect inView: self];
@@ -1840,6 +1943,9 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         NSRange rangeOfColumns = [self columnsInRect: clipRect];
         n = rangeOfColumns.location + rangeOfColumns.length;
         for (i = rangeOfColumns.location; i < n; i++) {
+            if ([[_tableColumns objectAtIndex: i] isHidden])
+                continue;
+
             NSRect columnRect = [self rectOfColumn: i];
             x = columnRect.origin.x + columnRect.size.width +
                 ((i < n - 1) ? -0.5 : 0.5);
@@ -1882,10 +1988,19 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     CGFloat result = 0;
 
     for (i = 0; i < count; ++i)
-        result += [[_tableColumns objectAtIndex: i] width] +
-                  _intercellSpacing.width;
+        result += [self _spaceTakenByColumn: [_tableColumns objectAtIndex: i]];
 
     return result;
+}
+
+// The columns that take room in the table, in order. Observed on macOS 26.7.3: the autoresizing styles leave the hidden ones alone.
+- (NSArray *) _shownTableColumns {
+    NSMutableArray *shown = [NSMutableArray arrayWithCapacity: [_tableColumns count]];
+
+    for (NSTableColumn *column in _tableColumns)
+        if (![column isHidden])
+            [shown addObject: column];
+    return shown;
 }
 
 // Moves the width the columns miss (or exceed) relative to the clip view onto
@@ -1893,7 +2008,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 // maximum widths, and what a column cannot absorb passes to the next one.
 - (void) _autoresizeColumnsToFitClipView {
     NSTableViewColumnAutoresizingStyle style = NS_EXTRA(NSTableView, self)->_columnAutoresizingStyle;
-    NSInteger count = [_tableColumns count];
+    NSArray *shown = [self _shownTableColumns];
+    NSInteger count = [shown count];
 
     if (count == 0 || ![[self superview] isKindOfClass: [NSClipView class]])
         return;
@@ -1923,7 +2039,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         NSInteger visits = style == NSTableViewFirstColumnOnlyAutoresizingStyle ? 1 : count;
 
         for (i = 0; i < visits && fabs(delta) >= 0.5; ++i) {
-            NSTableColumn *column = [_tableColumns objectAtIndex: fromLast ? count - 1 - i : i];
+            NSTableColumn *column = [shown objectAtIndex: fromLast ? count - 1 - i : i];
             CGFloat before = [column width];
 
             [column setWidth: before + delta];
@@ -1933,20 +2049,43 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
-// Spreads delta over the columns in equal whole points, the points left over
-// going one each to the first columns.
+// Spreads delta over the shown columns in whole points. A round gives each column in turn the share delta / count
+// rounded to the nearest point (a column takes no more than what is left of delta), the last columns getting
+// less, and a column that reaches its minimum or maximum width takes no more in the next rounds; the part it
+// could not take is spread the same way over the columns that did take their share, until delta is used up, so
+// the widths change by exactly delta as long as some column has room. When the share rounds to nothing the
+// points left go one each to the first columns.
+// QUIRK: the documentation of NSTableViewUniformColumnAutoresizingStyle gives the equal distribution of the
+// space among all columns and nothing about limits or whole points. Evidence: black-box observation on macOS
+// 26.7.3 and 10.14.4 (tier 2, x86_64 and i386, mac-probes p790; the contributor's probe on 26.1 gave the same
+// structure): five columns of 50, 60, 70, 80 and 240 points (minimum width 20), the clip view 200 narrower:
+// 20 20 26 37 197; 203 narrower: 20 20 25 36 196; 100 narrower: 30 40 50 60 220; 307 narrower: 20 20 20 20 113;
+// five columns of 50 to 90 (maximum width 100) 103 wider: 75 84 94 100 100, with maximum width 1000:
+// 71 81 91 101 109; 53 narrower: 39 49 59 69 81.
+// Test: tests/appkit-table-column-autoresizing.m
 - (void) _resizeColumnsUniformlyBy: (CGFloat) delta {
-    NSInteger i, count = [_tableColumns count];
+    NSMutableArray *columns = [[[self _shownTableColumns] mutableCopy] autorelease];
 
-    if (count == 0)
-        return;
+    while ([columns count] > 0 && fabs(delta) >= 1) {
+        CGFloat sign = delta > 0 ? 1 : -1;
+        CGFloat share = round(delta / [columns count]);
+        NSMutableArray *remaining = [NSMutableArray arrayWithCapacity: [columns count]];
 
-    CGFloat share = floor(delta / count);
-    NSInteger extra = (NSInteger) (delta - share * count);
+        if (share == 0)
+            share = sign;
+        for (NSTableColumn *column in columns) {
+            if (fabs(delta) < 1)
+                break;
 
-    for (i = 0; i < count; ++i) {
-        NSTableColumn *column = [_tableColumns objectAtIndex: i];
-        [column setWidth: [column width] + share + (i < extra ? 1 : 0)];
+            CGFloat before = [column width];
+            CGFloat wanted = before + (fabs(share) < fabs(delta) ? share : delta);
+
+            [column setWidth: wanted];
+            delta -= [column width] - before;
+            if ([column width] == wanted)
+                [remaining addObject: column];
+        }
+        columns = remaining;
     }
 }
 
@@ -2181,7 +2320,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     if ([self drawsGrid])
         [self drawGridInClipRect: clipRect];
 
-    if (NS_EXTRA(NSTableView, self)->_draggingRow >= 0) {
+    NSInteger dropRow = [self _dropIndicatorRow];
+    if (NS_EXTRA(NSTableView, self)->_draggingTargetShown && [self _dropIndicatorIsOn]) {
+        // GUESS: the highlight of a drop on a row, or on the whole table (row -1), is an outline
+        NSRect target = dropRow < 0 ? [self visibleRect]
+                      : NSIntersectionRect([self rectOfRow: dropRow], [self visibleRect]);
+        [[NSColor blackColor] setStroke];
+        [NSBezierPath strokeRect: NSInsetRect(target, 1.0, 1.0)];
+    } else if (NS_EXTRA(NSTableView, self)->_draggingTargetShown && dropRow >= 0) {
         NSRect rowRect;
         [[NSColor blackColor] setStroke];
         if ([self numberOfRows] == 0)
@@ -2190,8 +2336,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                                 toPoint: NSMakePoint([self bounds].size.width,
                                                      0)];
         else {
-            if (NS_EXTRA(NSTableView, self)->_draggingRow == [self numberOfRows]) {
-                rowRect = NSIntersectionRect([self rectOfRow: NS_EXTRA(NSTableView, self)->_draggingRow - 1],
+            if (dropRow == [self numberOfRows]) {
+                rowRect = NSIntersectionRect([self rectOfRow: dropRow - 1],
                                              [self visibleRect]);
                 [NSBezierPath
                         strokeLineFromPoint: NSMakePoint(
@@ -2204,7 +2350,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                                                              rowRect.size
                                                                      .height)];
             } else {
-                rowRect = NSIntersectionRect([self rectOfRow: NS_EXTRA(NSTableView, self)->_draggingRow],
+                rowRect = NSIntersectionRect([self rectOfRow: dropRow],
                                              [self visibleRect]);
                 [NSBezierPath
                         strokeLineFromPoint: NSMakePoint(0, rowRect.origin.y)
@@ -2320,8 +2466,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         return;
     }
 
-    NSTableColumn *clickedColumnObject =
-            [_tableColumns objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn];
+    // Where no column lies the documented clickedColumn is -1, which names no column object. The nil column
+    // and its nil cell make the lookups below no-ops and leave nothing to track or edit.
+    NSInteger clickedColumn = NS_EXTRA(NSTableView, self)->_clickedColumn;
+    NSTableColumn *clickedColumnObject = clickedColumn >= 0 ? [_tableColumns objectAtIndex: clickedColumn] : nil;
 
     NSCell *clickedCell = [clickedColumnObject dataCellForRow: NS_EXTRA(NSTableView, self)->_clickedRow];
 
@@ -2330,7 +2478,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     // Button cells track the mouse by default; the delegate can change that for any cell
     BOOL tracksCell = [clickedCell isKindOfClass: [NSButtonCell class]];
 
-    if ([_delegate respondsToSelector: @selector(tableView:shouldTrackCell:forTableColumn:row:)])
+    if (clickedColumnObject != nil &&
+        [_delegate respondsToSelector: @selector(tableView:shouldTrackCell:forTableColumn:row:)])
         tracksCell = [_delegate tableView: self
                           shouldTrackCell: clickedCell
                            forTableColumn: clickedColumnObject
@@ -2424,8 +2573,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
                         byExtendingSelection: NO];
         } else { // normal selection, allow for dragging
             BOOL dragging = NO;
-            if ([_dataSource respondsToSelector: @selector
-                             (tableView:writeRowsWithIndexes:toPasteboard:)]) {
+            NSEvent *down = event;
+            if ([self _dataSourceWritesRows]) {
                 NSPoint currentPoint;
                 do {
                     event = [_window
@@ -2456,7 +2605,28 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
                 NSPasteboard *pasteboard =
                         [NSPasteboard pasteboardWithName: NSDragPboard];
-                if ([_dataSource tableView: self
+                if ([self _dataSourceHasPasteboardWriters]) {
+                    // The rows' writers are the dragging session's items; a row without one stays out
+                    NSMutableArray *items = [NSMutableArray array];
+                    NSMutableIndexSet *dragged = [NSMutableIndexSet indexSet];
+                    NSUInteger row = [rowIndexes firstIndex];
+                    for (; row != NSNotFound; row = [rowIndexes indexGreaterThanIndex: row]) {
+                        id<NSPasteboardWriting> writer = [self _pasteboardWriterForRow: row];
+                        if (writer == nil)
+                            continue;
+                        NSDraggingItem *item = [[[NSDraggingItem alloc] initWithPasteboardWriter: writer] autorelease];
+                        [item setDraggingFrame: [self rectOfRow: row] contents: nil];
+                        [items addObject: item];
+                        [dragged addIndex: row];
+                    }
+                    if ([items count] == 0)
+                        dragging = NO;
+                    else {
+                        [NS_EXTRA(NSTableView, self)->_draggedRows release];
+                        NS_EXTRA(NSTableView, self)->_draggedRows = [dragged copy];
+                        [self beginDraggingSessionWithItems: items event: down source: self];
+                    }
+                } else if ([_dataSource tableView: self
                             writeRowsWithIndexes: rowIndexes
                                     toPasteboard: pasteboard] == NO)
                     dragging = NO;
@@ -2521,17 +2691,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     } else if ([event clickCount] == 2) {
         // nb this logic was backwards previously
 
-        id binder = [[_tableColumns objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn]
-                _binderForBinding: @"value"
-                           create: NO];
+        id binder = [clickedColumnObject _binderForBinding: @"value"
+                                                    create: NO];
         BOOL interpretedAsEdit = NO;
-        if ([[_tableColumns objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn] isEditable]) {
+        if ([clickedColumnObject isEditable]) {
             if ([self dataSourceCanSetObjectValue] ||
                 [binder allowsEditingForRow: NS_EXTRA(NSTableView, self)->_clickedRow]) {
                 if (NS_EXTRA(NSTableView, self)->_clickedColumn != -1 && NS_EXTRA(NSTableView, self)->_clickedRow != -1) {
-                    if ([self delegateShouldEditTableColumn:
-                                        [_tableColumns
-                                                objectAtIndex: NS_EXTRA(NSTableView, self)->_clickedColumn]
+                    if ([self delegateShouldEditTableColumn: clickedColumnObject
                                                         row: NS_EXTRA(NSTableView, self)->_clickedRow]) {
                         interpretedAsEdit = YES;
                         [self editColumn: [self clickedColumn]
@@ -2613,9 +2780,47 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return isLocal ? NS_EXTRA(NSTableView, self)->_draggingSourceMaskLocal : NS_EXTRA(NSTableView, self)->_draggingSourceMaskNonLocal;
 }
 
-- (NSInteger) _getDraggedRow: (id<NSDraggingInfo>) info {
-    NSPoint dragPoint = [self convertPoint: [info draggingLocation]
-                                  fromView: nil];
+#pragma mark Dragging source
+
+// The data source can give the rows to drag: as pasteboard writers, which come first, or onto a pasteboard
+- (BOOL) _dataSourceHasPasteboardWriters {
+    return [_dataSource respondsToSelector: @selector(tableView:pasteboardWriterForRow:)];
+}
+
+- (BOOL) _dataSourceWritesRows {
+    return [self _dataSourceHasPasteboardWriters] ||
+           [_dataSource respondsToSelector: @selector(tableView:writeRowsWithIndexes:toPasteboard:)];
+}
+
+- (id<NSPasteboardWriting>) _pasteboardWriterForRow: (NSInteger) row {
+    return [_dataSource tableView: self pasteboardWriterForRow: row];
+}
+
+- (NSDragOperation) draggingSession: (NSDraggingSession *) session
+    sourceOperationMaskForDraggingContext: (NSDraggingContext) context
+{
+    return [self draggingSourceOperationMaskForLocal: context == NSDraggingContextWithinApplication];
+}
+
+- (void) draggingSession: (NSDraggingSession *) session willBeginAtPoint: (NSPoint) screenPoint {
+    NSIndexSet *rows = NS_EXTRA(NSTableView, self)->_draggedRows ?: [NSIndexSet indexSet];
+    if ([_dataSource respondsToSelector: @selector(tableView:draggingSession:willBeginAtPoint:forRowIndexes:)])
+        [_dataSource tableView: self draggingSession: session willBeginAtPoint: screenPoint forRowIndexes: rows];
+}
+
+- (void) draggingSession: (NSDraggingSession *) session
+            endedAtPoint: (NSPoint) screenPoint
+               operation: (NSDragOperation) operation
+{
+    if ([_dataSource respondsToSelector: @selector(tableView:draggingSession:endedAtPoint:operation:)])
+        [_dataSource tableView: self draggingSession: session endedAtPoint: screenPoint operation: operation];
+    [NS_EXTRA(NSTableView, self)->_draggedRows release];
+    NS_EXTRA(NSTableView, self)->_draggedRows = nil;
+}
+
+#pragma mark Drop target
+
+- (NSInteger) _getDraggedRowForPoint: (NSPoint) dragPoint {
     NSInteger draggedRow = [self rowAtPoint: dragPoint];
     if (-1 == draggedRow) {
         if (dragPoint.y >= [self rectOfRow: [self numberOfRows] - 1].origin.y) {
@@ -2625,61 +2830,157 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     return draggedRow;
 }
 
-- (unsigned) _validateDraggedRow: (id<NSDraggingInfo>) info {
-    BOOL result;
-    NSInteger proposedRow = [self _getDraggedRow: info];
+- (NSInteger) _getDraggedRow: (id<NSDraggingInfo>) info {
+    return [self _getDraggedRowForPoint: [self convertPoint: [info draggingLocation]
+                                                   fromView: nil]];
+}
 
-    if ([_dataSource
-                respondsToSelector: @selector
-                (tableView:validateDrop:proposedRow:proposedDropOperation:)]) {
-        if ((result = [_dataSource tableView: self
-                                validateDrop: info
-                                 proposedRow: proposedRow
-                       proposedDropOperation: NSTableViewDropAbove]))
-            NS_EXTRA(NSTableView, self)->_draggingRow = proposedRow;
-        else
-            NS_EXTRA(NSTableView, self)->_draggingRow = -1;
+- (void) setDropRow: (NSInteger) row dropOperation: (NSTableViewDropOperation) operation {
+    NS_EXTRA(NSTableView, self)->_draggingRow = row;
+    NS_EXTRA(NSTableView, self)->_draggingOperation = operation;
+}
+
+// The table proposes the drop under the pointer: on the row when the pointer is in the middle of it, above
+// the row or above the next one when it is near the top or bottom edge, above the end of the table when the
+// pointer is below the last row. The data source may retarget it with -setDropRow:dropOperation: from
+// validateDrop. The target left in the table afterwards is what acceptDrop receives.
+// Observed by black-box test on macOS 26.7.3 and 10.14.4 (pointer at 2%, 10%, 25%, 40%..75%, 90% and 98% of a
+// row's height: above, above, on, on, on, next row above, next row above); the edge zones are of a fifth of the
+// row's height here, the observed boundaries lie between 10% and 25% and between 75% and 90%.
+// Test: appkit-table-set-drop-row.m, appkit-tableview-drag.m
+- (void) _proposeDropForPoint: (NSPoint) point {
+    NSInteger row = [self rowAtPoint: point];
+    NSTableViewDropOperation operation = NSTableViewDropAbove;
+
+    if (row < 0) {
+        row = [self _getDraggedRowForPoint: point];
+    } else {
+        NSRect rect = [self rectOfRow: row];
+        CGFloat fraction = NSHeight(rect) > 0 ? (point.y - NSMinY(rect)) / NSHeight(rect) : 0.5;
+
+        if (![self isFlipped])
+            fraction = 1.0 - fraction;
+        if (fraction > 0.8)
+            row++;
+        else if (fraction >= 0.2)
+            operation = NSTableViewDropOn;
     }
+    [self setDropRow: row dropOperation: operation];
+}
 
+// The data source's side of a drop. NSOutlineView overrides these to ask its data source about items.
+- (BOOL) _dataSourceValidatesDrops {
+    return [_dataSource respondsToSelector: @selector(tableView:validateDrop:proposedRow:proposedDropOperation:)];
+}
+
+- (NSDragOperation) _dataSourceValidateDrop: (id<NSDraggingInfo>) info {
+    return [_dataSource tableView: self
+                     validateDrop: info
+                      proposedRow: NS_EXTRA(NSTableView, self)->_draggingRow
+            proposedDropOperation: NS_EXTRA(NSTableView, self)->_draggingOperation];
+}
+
+- (BOOL) _dataSourceAcceptDrop: (id<NSDraggingInfo>) info {
+    if (![_dataSource respondsToSelector: @selector(tableView:acceptDrop:row:dropOperation:)])
+        return NO;
+    return [_dataSource tableView: self
+                       acceptDrop: info
+                              row: NS_EXTRA(NSTableView, self)->_draggingRow
+                    dropOperation: NS_EXTRA(NSTableView, self)->_draggingOperation];
+}
+
+// A drop forced on a table whose data source validates no drops
+- (BOOL) _dataSourceAcceptUnvalidatedDrop: (id<NSDraggingInfo>) info {
+    // QUIRK: a drop that reaches a table whose data source implements no validateDrop (the drag itself
+    // was refused, so this is only a drop forced on the table) still goes to acceptDrop, with the
+    // target row -2 and NSTableViewDropOn; a data source without acceptDrop is not asked.
+    // Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2), identical on both.
+    // Test: appkit-table-set-drop-row.m, test_quirk_drop_without_validate_drop
+    if (![_dataSource respondsToSelector: @selector(tableView:acceptDrop:row:dropOperation:)])
+        return NO;
+    return [_dataSource tableView: self acceptDrop: info row: -2 dropOperation: NSTableViewDropOn];
+}
+
+// The row the drop feedback goes with (-1: the whole table), and whether the drop is on it rather than above it
+- (NSInteger) _dropIndicatorRow {
+    return NS_EXTRA(NSTableView, self)->_draggingRow;
+}
+
+- (BOOL) _dropIndicatorIsOn {
+    return NS_EXTRA(NSTableView, self)->_draggingOperation == NSTableViewDropOn;
+}
+
+- (void) _showDropTarget: (BOOL) shown {
+    NS_EXTRA(NSTableView, self)->_draggingTargetShown = shown;
     [self display];
+}
 
+- (NSDragOperation) _validateDraggedRow: (id<NSDraggingInfo>) info {
+    NSDragOperation result = NSDragOperationNone;
+
+    [self _proposeDropForPoint: [self convertPoint: [info draggingLocation] fromView: nil]];
+
+    // A data source without validateDrop refuses the drag (nothing is proposed to it).
+    if ([self _dataSourceValidatesDrops])
+        result = [self _dataSourceValidateDrop: info];
+
+    NS_EXTRA(NSTableView, self)->_draggingTargetKnown = result != NSDragOperationNone;
+    [self _showDropTarget: result != NSDragOperationNone];
     return result;
 }
 
+- (BOOL) _draggingPasteboardHasDraggedType: (id<NSDraggingInfo>) sender {
+    for (NSString *type in [self _draggedTypes])
+        if ([[[sender draggingPasteboard] types] containsObject: type])
+            return YES;
+    return NO;
+}
+
 - (NSDragOperation) draggingEntered: (id<NSDraggingInfo>) sender {
-    for (NSInteger i = 0; i < [[self _draggedTypes] count]; i++) {
-        if ([[[sender draggingPasteboard] types]
-                    containsObject: [[self _draggedTypes] objectAtIndex: i]])
-            return [self _validateDraggedRow: sender];
-    }
+    if ([self _draggingPasteboardHasDraggedType: sender])
+        return [self _validateDraggedRow: sender];
     return NSDragOperationNone;
 }
 
 - (NSDragOperation) draggingUpdated: (id<NSDraggingInfo>) sender {
-    for (NSInteger i = 0; i < [[self _draggedTypes] count]; i++) {
-        if ([[[sender draggingPasteboard] types]
-                    containsObject: [[self _draggedTypes] objectAtIndex: i]])
-            return [self _validateDraggedRow: sender];
-    }
+    if ([self _draggingPasteboardHasDraggedType: sender])
+        return [self _validateDraggedRow: sender];
     return NSDragOperationNone;
 }
 
 - (void) draggingExited: (id<NSDraggingInfo>) sender {
-    NS_EXTRA(NSTableView, self)->_draggingRow = -1;
-    [self display];
+    NS_EXTRA(NSTableView, self)->_draggingTargetKnown = NO;
+    [self _showDropTarget: NO];
 }
 
 - (BOOL) prepareForDragOperation: (id<NSDraggingInfo>) sender {
-    NS_EXTRA(NSTableView, self)->_draggingRow = -1;
-    [self display];
+    [self _showDropTarget: NO];
     return YES;
 }
 
 - (BOOL) performDragOperation: (id<NSDraggingInfo>) sender {
-    return [_dataSource tableView: self
-                       acceptDrop: sender
-                              row: [self _getDraggedRow: sender]
-                    dropOperation: NSTableViewDropAbove];
+    if (![self _dataSourceValidatesDrops]) {
+        NS_EXTRA(NSTableView, self)->_draggingTargetKnown = NO;
+        return [self _dataSourceAcceptUnvalidatedDrop: sender];
+    }
+
+    if (!NS_EXTRA(NSTableView, self)->_draggingTargetKnown) {
+        // Dropped without a preceding validation: validate now; the outline this draws is cleared again at once
+        BOOL refused = [self _validateDraggedRow: sender] == NSDragOperationNone;
+
+        [self _showDropTarget: NO];
+        if (refused)
+            return NO;
+    }
+
+    NS_EXTRA(NSTableView, self)->_draggingTargetKnown = NO;
+    return [self _dataSourceAcceptDrop: sender];
+}
+
+- (void) draggingEnded: (id<NSDraggingInfo>) sender {
+    NS_EXTRA(NSTableView, self)->_draggingTargetKnown = NO;
+    if (NS_EXTRA(NSTableView, self)->_draggingTargetShown)
+        [self _showDropTarget: NO];
 }
 
 - (NSString *) description {
@@ -2859,7 +3160,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     CGFloat widths = 0;
 
     for (NSTableColumn *column in _tableColumns)
-        widths += [column width];
+        widths += [column isHidden] ? 0 : [column width];
 
     NSString *signature = [NSString stringWithFormat: @"%@ %@ %ld %lu %g", NSStringFromRange(rows), NSStringFromRange(columns),
                                                       (long) [self numberOfRows], (unsigned long) [_tableColumns count], widths];
@@ -3183,7 +3484,14 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
         madeView = view != nil;
     }
     if (view != nil) {
-        NSRect frame = group ? [self rectOfRow: row] : [self frameOfCellAtColumn: column row: row];
+        NSRect frame = [self frameOfCellAtColumn: column row: row];
+
+        if (group) {
+            // A group row's view spans the whole row, less the spacing above and below it
+            frame = [self rectOfRow: row];
+            frame.origin.y += floor(_intercellSpacing.height / 2);
+            frame.size.height -= _intercellSpacing.height;
+        }
 
         if (rowView != nil) {
             // The row view holds the cell views, in its own coordinates

@@ -139,6 +139,20 @@ static Class _fontPanelFactory;
 - (NSArray *) availableFontFamilies {
     NSArray *families = [NSFontFamily allFontFamilyNames];
 
+    // The families every macOS provides are listed when an installed family stands in for them, as
+    // -availableMembersOfFontFamily: answers for them. Code that looks a family up by scanning this
+    // list (the common way, because NSFontManager wants exact names) must find them.
+    NSArray *standIns = O2FontCopyStandardFamilyNamesWithStandIn();
+    if ([standIns count] > 0) {
+        NSMutableArray *merged = [NSMutableArray arrayWithArray: families];
+        for (NSString *name in standIns) {
+            if (![merged containsObject: name])
+                [merged addObject: name];
+        }
+        families = [merged sortedArrayUsingSelector: @selector(localizedStandardCompare:)];
+    }
+    [standIns release];
+
     if (![_delegate respondsToSelector: @selector(fontManager:
                                                 willIncludeFont:)])
         return families;
@@ -220,8 +234,29 @@ static Class _fontPanelFactory;
 }
 
 - (NSArray *) availableFontNamesWithTraits: (NSFontTraitMask) traits {
-    NSUnimplementedMethod();
-    return nil;
+    NSMutableArray *result = [NSMutableArray array];
+
+    // QUIRK: the answer is every face whose traits (as -availableMembersOfFontFamily: lists them)
+    // contain all the bits of the mask, so NSItalicFontMask also lists bold italic faces, and a
+    // mask of 0 (or one with NSUnitalicFontMask / NSUnboldFontMask, which no face reports) lists
+    // nothing. The documentation says "exactly" the traits and says 0 means neither italic nor
+    // bold; macOS does not do that. Evidence: black-box observation on macOS 10.14.4 (x86_64,
+    // i386) and 26.7.3 (tier 2): masks 0, unitalic, unbold, unitalic|unbold, bold|unitalic give
+    // an empty array; italic, bold, italic|bold, expanded, condensed and fixed pitch equal the
+    // faces of the member table with those bits set. The order is unspecified (not sorted).
+    // Test: appkit-nsfontmanager-font-names-with-traits (quirk_ lines).
+    if (traits == 0)
+        return result;
+
+    for (NSString *familyName in [NSFontFamily allFontFamilyNames]) {
+        NSFontFamily *family = [NSFontFamily fontFamilyWithName: familyName];
+
+        for (NSFontTypeface *typeface in [family typefaces])
+            if (([typeface traits] & traits) == traits)
+                [result addObject: [typeface name]];
+    }
+
+    return result;
 }
 
 - (BOOL) fontNamed: (NSString *) name hasTraits: (NSFontTraitMask) traits {
@@ -311,6 +346,24 @@ static Class _fontPanelFactory;
 
     [_panel setPanelFont: _selectedFont isMultiple: _isMultiple];
     return _panel;
+}
+
+- (void) dealloc {
+    [NS_EXTRA(NSFontManager, self)->_fontMenu release];
+    NS_EXTRA_FREE(NSFontManager, self);
+    [super dealloc];
+}
+
+- (void) setFontMenu: (NSMenu *) newMenu {
+    newMenu = [newMenu retain];
+    [NS_EXTRA(NSFontManager, self)->_fontMenu release];
+    NS_EXTRA(NSFontManager, self)->_fontMenu = newMenu;
+}
+
+- (NSMenu *) fontMenu: (BOOL) create {
+    // GUESS: the documentation says create == YES builds the menu when there is none; Darling
+    // has no default Font menu, so this answers nil then, as it does for create == NO.
+    return NS_EXTRA(NSFontManager, self)->_fontMenu;
 }
 
 - (BOOL) sendAction {

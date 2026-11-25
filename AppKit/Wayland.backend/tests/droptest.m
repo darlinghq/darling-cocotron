@@ -51,6 +51,9 @@ static void dropCheck(BOOL value, const char *what) {
         NSData *raw=[pb dataForType:@"text/uri-list"];
         dropCheck([raw isEqual:[fileEnv("FILE_WIRE") dataUsingEncoding:NSUTF8StringEncoding]],"raw URI preserved after conversion");
         if(!getenv("FILE_BAD"))dropCheck([[pb propertyListForType:NSFilenamesPboardType] isEqual:files],"converted cache stable");
+        if(!getenv("FILE_BAD"))dropCheck([[pb availableTypeFromArray:@[NSPasteboardTypeFileURL]] isEqual:NSPasteboardTypeFileURL] &&
+                [[pb stringForType:NSPasteboardTypeFileURL] isEqual:[[NSURL fileURLWithPath:fileEnv("FILE_ONE")] absoluteString]],
+                "public.file-url reads as the first file's URL");
         return YES; // Deliberately accepts even failed conversion; backend must refuse finish.
     }
     NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];

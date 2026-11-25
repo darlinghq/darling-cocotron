@@ -19,7 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/Foundation.h>
 
-@class NSPasteboard, NSWindow, NSImage, NSView, NSDraggingItem, NSDraggingSession;
+@class NSPasteboard, NSWindow, NSImage, NSView, NSDraggingItem, NSDraggingSession, NSDictionary, NSArray, NSURL;
 
 typedef NS_OPTIONS(NSUInteger, NSDragOperation) {
     NSDragOperationNone = 0x00,
@@ -31,8 +31,6 @@ typedef NS_OPTIONS(NSUInteger, NSDragOperation) {
     NSDragOperationDelete = 0x20,
     NSDragOperationEvery = NSUIntegerMax,
 };
-
-
 
 typedef NS_ENUM(NSInteger, NSDraggingFormation) {
     NSDraggingFormationDefault = 0,
@@ -77,18 +75,15 @@ typedef NS_OPTIONS(NSUInteger, NSSpringLoadingOptions) {
 - (NSInteger) draggingSequenceNumber;
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination;
 
+// What a destination sees of the items, and may change for the rest of the drag
 @property NSDraggingFormation draggingFormation;
 @property BOOL animatesToDestination;
 @property NSInteger numberOfValidItemsForDrop;
-
-// Calls the block with an item for each object on the dragging pasteboard
-// that can be read as one of the classes.
-- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) options
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
                                    forView: (NSView *) view
                                    classes: (NSArray<Class> *) classArray
-                             searchOptions: (NSDictionary<NSString *, id> *) searchOptions
+                             searchOptions: (NSDictionary *) searchOptions
                                 usingBlock: (void (^)(NSDraggingItem *draggingItem, NSInteger idx, BOOL *stop)) block;
-
 @property(readonly) NSSpringLoadingHighlight springLoadingHighlight;
 - (void) resetSpringLoading;
 @end
@@ -108,10 +103,8 @@ typedef NS_OPTIONS(NSUInteger, NSSpringLoadingOptions) {
 @end
 
 @protocol NSDraggingSource <NSObject>
-@required
 - (NSDragOperation) draggingSession: (NSDraggingSession *) session
     sourceOperationMaskForDraggingContext: (NSDraggingContext) context;
-
 @optional
 - (void) draggingSession: (NSDraggingSession *) session willBeginAtPoint: (NSPoint) screenPoint;
 - (void) draggingSession: (NSDraggingSession *) session movedToPoint: (NSPoint) screenPoint;
@@ -121,7 +114,8 @@ typedef NS_OPTIONS(NSUInteger, NSSpringLoadingOptions) {
 - (BOOL) ignoreModifierKeysForDraggingSession: (NSDraggingSession *) session;
 @end
 
-// The messages a source of -[NSView dragImage:...] gets.
+// The source methods of -dragImage:at:offset:event:pasteboard:source:slideBack:, which came before
+// dragging sessions
 @interface NSObject (NSDraggingSourceDeprecated)
 - (BOOL) ignoreModifierKeysWhileDragging;
 - (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) flag;

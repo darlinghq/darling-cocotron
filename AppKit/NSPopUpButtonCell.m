@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSMenu.h>
+#import <AppKit/NSMenuView.h>
 #import <AppKit/NSPopUpButtonCell.h>
 #import <AppKit/NSPopUpWindow.h>
 #import <AppKit/NSRaise.h>
@@ -285,24 +286,35 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     edge = NS_EXTRA(NSPopUpButtonCell, self)->_preferredEdge;
 }
 
-- (void) _addItemWithTitle: (NSString *) title {
-
-    NSMenuItem *duplicate = [_menu itemWithTitle: title];
-    if (duplicate != nil) {
-        // don't allow items with duplicate titles by default
-        [_menu removeItem: duplicate];
-    }
-
-    [_menu addItemWithTitle: title
-                     action: @selector(_popUpItemAction:)
-              keyEquivalent: @""];
-    NSMenuItem *item = [[_menu itemArray] lastObject];
+// Appends an item for the title without looking for an earlier item of the
+// same title. The first item of an empty menu becomes the selected one.
+- (NSMenuItem *) _appendItemWithTitle: (NSString *) title {
+    NSMenuItem *item = [_menu addItemWithTitle: title
+                                        action: @selector(_popUpItemAction:)
+                                 keyEquivalent: @""];
     [item setTarget: self];
 
     if (_selectedIndex < 0) {
         _selectedIndex = 0;
         [self _setStateOfItemAtIndex: 0 to: NSControlStateValueOn];
     }
+    return item;
+}
+
+- (void) _addItemWithTitle: (NSString *) title {
+
+    // QUIRK: an item with an empty title never replaces an earlier one: only titled items are
+    // de-duplicated, so adding @"" to a pop-up that holds a separator or an empty-titled item
+    // keeps both. Not documented. Evidence: black-box observation of NSPopUpButtonCell on
+    // macOS 26.7.3 and 10.14.4 (tier 2): [A]+A has 1 item, []+@"" 2, [A,@"",B]+@"" 4.
+    // Test: appkit-nsmenuitem-title-never-nil (quirk: empty titles are not de-duplicated)
+    NSMenuItem *duplicate = [title length] > 0 ? [_menu itemWithTitle: title] : nil;
+    if (duplicate != nil) {
+        // don't allow items with duplicate titles by default
+        [_menu removeItem: duplicate];
+    }
+
+    [self _appendItemWithTitle: title];
 }
 
 - (void) addItemWithTitle: (NSString *) title {
@@ -378,8 +390,16 @@ NSNotificationName NSPopUpButtonCellWillPopUpNotification =
     [self selectItem: item];
 }
 
+// QUIRK: a title that only matches a separator item (an empty title) selects nothing: the index
+// of the selected item becomes -1. Not documented. Evidence: black-box observation of
+// NSPopUpButtonCell on macOS 26.7.3 and 10.14.4 (tier 2), [A, separator] with @"".
+// Test: appkit-nsmenuitem-title-never-nil (quirk: selecting the title of a separator)
 - (void) selectItemWithTitle: (NSString *) title {
-    [self selectItemAtIndex: [self indexOfItemWithTitle: title]];
+    NSInteger index = [self indexOfItemWithTitle: title];
+
+    if (index >= 0 && [[self itemAtIndex: index] isSeparatorItem])
+        index = -1;
+    [self selectItemAtIndex: index];
 }
 
 - (BOOL) selectItemWithTag: (NSInteger) tag {
@@ -582,6 +602,24 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     return [super drawTitle: title withFrame: titleRect inView: controlView];
 }
 
+// The border and background of a pop-up button cell is its bezel (with the arrows of the styles that have them), and
+// the whole cell is that and then the interior, so a subclass overriding the step is called once, before the bezel.
+// Observed on macOS 26.7.3 and 10.14.4 (x86_64 and i386), probe p767.m of batch 12a in mac-probes/cristim: for a
+// bordered pop-up button cell the step draws the pixels of the bezel and calls it once.
+- (void) drawBorderAndBackgroundWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    [self drawBezelWithFrame: cellFrame inView: controlView];
+}
+
+- (void) drawWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
+    _controlView = controlView;
+
+    if ([self isTransparent])
+        return;
+
+    [self drawBorderAndBackgroundWithFrame: cellFrame inView: controlView];
+    [self drawInteriorWithFrame: cellFrame inView: controlView];
+}
+
 - (void) drawBezelWithFrame: (NSRect) frame inView: (NSView *) controlView {
 
     [super drawBezelWithFrame: frame inView: controlView];
@@ -639,7 +677,7 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     for (NSMenuItem *item in [self itemArray]) {
         NSString *title = [item title];
 
-        if (title != nil)
+        if (![item isSeparatorItem])
             widest = MAX(widest, [title sizeWithAttributes: attributes].width);
     }
     return widest;
@@ -746,15 +784,32 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     origin = [controlView convertPoint: origin toView: nil];
     origin = [[controlView window] convertBaseToScreen: origin];
 
-    [[_menu delegate] menuNeedsUpdate: _menu];
-    //	[[_menu delegate] menuWillOpen: _menu];
+    // The delegate calls are optional, and go to the menu itself, not to the copy shown for a pull-down: the
+    // update (-menuNeedsUpdate: once, then the validation of the items), the tracking notification and
+    // -menuWillOpen:, in the order macOS makes them; after the tracking come -menuDidClose: and the end
+    // notification. The list of items does not open submenus, so a submenu's delegate is not asked: macOS
+    // updates and opens a submenu of a pop-up, which is not implemented here.
+    // QUIRK: a pop-up (not pull-down) button's menu is updated before NSMenuDidBeginTrackingNotification is
+    // posted, a pull-down's after it. Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2).
+    // Test: appkit-popupbuttoncell-menu-delegate (test_quirk_pop_up_updates_before_begin_notification)
+    BOOL pullsDown = NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown;
+    NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+
+    if (pullsDown) {
+        [center postNotificationName: NSMenuDidBeginTrackingNotification object: _menu];
+        [_menu _updateWithoutSubmenus];
+    } else {
+        [_menu _updateWithoutSubmenus];
+        [center postNotificationName: NSMenuDidBeginTrackingNotification object: _menu];
+    }
+    if ([[_menu delegate] respondsToSelector: @selector(menuWillOpen:)])
+        [[_menu delegate] menuWillOpen: _menu];
     NSMenu *menu = _menu;
     if (NS_EXTRA(NSPopUpButtonCell, self)->_pullsDown && [_menu numberOfItems]) {
         // Don't display the first item for pullDowns controls
         menu = [[_menu copy] autorelease];
         [menu removeItemAtIndex: 0];
     }
-    [menu update];
 
     NSPopUpWindow *window = [[NSPopUpWindow alloc]
             initWithFrame: NSMakeRect(origin.x, origin.y, cellFrame.size.width,
@@ -783,7 +838,9 @@ static void texturedPopUpTitleInsets(BOOL pullsDown, NSControlSize size, CGFloat
     }
     _selectedIndex = (itemIndex == NSNotFound) ? -1 : itemIndex;
     [window close]; // release when closed=YES
-                    //	[[_menu delegate] menuDidClose: _menu];
+    if ([[_menu delegate] respondsToSelector: @selector(menuDidClose:)])
+        [[_menu delegate] menuDidClose: _menu];
+    [center postNotificationName: NSMenuDidEndTrackingNotification object: _menu];
 
     return itemIndex != NSNotFound;
 }

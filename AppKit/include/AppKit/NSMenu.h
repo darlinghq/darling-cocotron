@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/AppKitIvarLayout.h>
 #import <AppKit/AppKitExport.h>
+#import <AppKit/NSAppearance.h>
 #import <Foundation/Foundation.h>
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
@@ -55,7 +56,7 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 // Legacy ObjC ABI (i386): instance size must stay 0x1c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
-@interface NSMenu : NSObject <NSCopying, NSUserInterfaceItemIdentification> {
+@interface NSMenu : NSObject <NSCopying, NSUserInterfaceItemIdentification, NSAppearanceCustomization> {
     NSMenu *_supermenu;
     NSString *_title;
     NS_LEGACY_IVAR_PAD(_NSMenuReserved1, 12)
@@ -68,6 +69,7 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
         NSUserInterfaceItemIdentifier _identifier;
         BOOL _hasExplicitUserInterfaceLayoutDirection;
         NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
+        NSAppearance *_appearance;
     NS_EXTRA_IVARS_END(NSMenu)
 }
 
@@ -75,6 +77,9 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 // the direction the menu's items are laid out in; unless set, the
 // application's
 @property NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
+
+@property(nullable, strong) NSAppearance *appearance;
+@property(readonly, strong) NSAppearance *effectiveAppearance;
 
 + (void) popUpContextMenu: (NSMenu*) menu
                 withEvent: (NSEvent*) event

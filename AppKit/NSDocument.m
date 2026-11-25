@@ -30,12 +30,18 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSavePanel.h>
 #import <AppKit/NSWindowController.h>
+#import <CoreServices/CoreServices.h>
 #import <dispatch/dispatch.h>
 #import <objc/runtime.h>
 
 // Declared by NSDocument subclasses that autosave in place (macOS 10.7).
 @interface NSObject (NSDocumentAutosavesInPlace)
 + (BOOL) autosavesInPlace;
+@end
+
+// Private: set on the document -duplicateAndReturnError: makes.
+@interface NSDocument (NSDocumentDuplicationPrivate)
+- (void) _setDuplicateBaseName: (NSString *) name contentsURL: (NSURL *) url;
 @end
 
 @implementation NSDocument
@@ -180,6 +186,7 @@ static int untitled_document_number = 0;
     [NS_EXTRA(NSDocument, self)->_undoManager release];
     [NS_EXTRA(NSDocument, self)->_activeEditors release];
     [NS_EXTRA(NSDocument, self)->_displayName release];
+    [NS_EXTRA(NSDocument, self)->_duplicateBaseName release];
 
     NS_EXTRA_FREE(NSDocument, self);
     [super dealloc];
@@ -735,10 +742,8 @@ static int untitled_document_number = 0;
 {
     NSString *path = [NS_EXTRA(NSDocument, self)->_fileURL path];
     NSString *extension = [path pathExtension];
-    if ([extension length] == 0) {
-        extension = [[[NSDocumentController sharedDocumentController]
-                fileExtensionsFromType: [self fileType]] firstObject];
-    }
+    if ([extension length] == 0)
+        extension = [self fileNameExtensionForType: [self fileType] saveOperation: operation];
     NSSavePanel *savePanel = [NSSavePanel savePanel];
     [savePanel setRequiredFileType: extension];
     // Suggest a name before prepareSavePanel:, which may replace it.
@@ -1038,6 +1043,13 @@ static int untitled_document_number = 0;
     }
 
     [controllers release];
+
+    // The temporary file a duplicate was made from is not the user's.
+    if (NS_EXTRA(NSDocument, self)->_removesAutosavedContents) {
+        NS_EXTRA(NSDocument, self)->_removesAutosavedContents = NO;
+        [[NSFileManager defaultManager] removeItemAtURL: NS_EXTRA(NSDocument, self)->_autosavedContentsFileURL
+                                                  error: NULL];
+    }
 
     [[NSDocumentController sharedDocumentController] removeDocument: self];
 }
@@ -1574,9 +1586,98 @@ static int untitled_document_number = 0;
     [self updateChangeCount: NSChangeDone];
 }
 
-- (void) performSynchronousFileAccessUsingBlock: (void (^)(void)) block {
-    // FIXME: this is just a stub for now that performs no synchronization
+- (void) performSynchronousFileAccessUsingBlock: (void (NS_NOESCAPE ^)(void)) block {
+    // File access is never asynchronous here (saves finish before they return),
+    // so there is no earlier access to wait for.
     block();
+}
+
+- (NSString *) fileNameExtensionForType: (NSString *) typeName
+                          saveOperation: (NSSaveOperationType) saveOperation
+{
+    if ([typeName length] == 0)
+        return nil;
+
+    CFStringRef preferred = UTTypeCopyPreferredTagWithClass((CFStringRef) typeName, kUTTagClassFilenameExtension);
+    if (preferred != NULL)
+        return [(NSString *) preferred autorelease];
+
+    // A type that is not a content type identifier is a document type name.
+    return [[[NSDocumentController sharedDocumentController] fileExtensionsFromType: typeName] firstObject];
+}
+
+- (BOOL) checkAutosavingSafetyAndReturnError: (NSError **) outError {
+    // The checks of macOS (a document untouched for a long time, a folder where
+    // users do not usually edit) are not made: no error is ever signalled.
+    return YES;
+}
+
+// The name copies of a duplicate are made from: a document with a file is named
+// without its extension, a duplicate keeps the name it was made from.
+- (NSString *) _duplicateBaseName {
+    if (NS_EXTRA(NSDocument, self)->_duplicateBaseName != nil)
+        return NS_EXTRA(NSDocument, self)->_duplicateBaseName;
+    NSString *name = [self displayName];
+    if (NS_EXTRA(NSDocument, self)->_fileURL != nil)
+        name = [name stringByDeletingPathExtension];
+    return name;
+}
+
+- (void) _setDuplicateBaseName: (NSString *) name contentsURL: (NSURL *) url {
+    [NS_EXTRA(NSDocument, self)->_duplicateBaseName release];
+    NS_EXTRA(NSDocument, self)->_duplicateBaseName = [name copy];
+    [self setAutosavedContentsFileURL: url];
+    NS_EXTRA(NSDocument, self)->_removesAutosavedContents = (url != nil);
+}
+
+- (NSDocument *) duplicateAndReturnError: (NSError **) outError {
+    NSString *type = [self autosavingFileType];
+    NSString *extension = [self fileNameExtensionForType: type saveOperation: NSAutosaveElsewhereOperation];
+    NSString *fileName = [NSString stringWithFormat: @"Duplicate %@", [[NSProcessInfo processInfo] globallyUniqueString]];
+    if ([extension length] > 0)
+        fileName = [fileName stringByAppendingPathExtension: extension];
+    NSURL *url = [NSURL fileURLWithPath: [NSTemporaryDirectory() stringByAppendingPathComponent: fileName]];
+
+    // The copy is made from a file holding the current contents, as a file of
+    // the autosaved kind: it is not the document's own file.
+    if (![self writeSafelyToURL: url ofType: type forSaveOperation: NSAutosaveElsewhereOperation error: outError])
+        return nil;
+
+    NSString *baseName = [self _duplicateBaseName];
+    NSDocument *copy = [[NSDocumentController sharedDocumentController] duplicateDocumentWithContentsOfURL: url
+                                                                                                  copying: NO
+                                                                                              displayName: baseName
+                                                                                                    error: outError];
+    if (copy == nil) {
+        [[NSFileManager defaultManager] removeItemAtURL: url error: NULL];
+        return nil;
+    }
+    [copy _setDuplicateBaseName: baseName contentsURL: url];
+    return copy;
+}
+
+- (void) duplicateDocumentWithDelegate: delegate
+                  didDuplicateSelector: (SEL) selector
+                           contextInfo: (void *) info
+{
+    // First make sure there are no uncommitted changes
+    for (id editor in [[NS_EXTRA(NSDocument, self)->_activeEditors copy] autorelease])
+        [editor commitEditing];
+
+    NSError *error = nil;
+    BOOL duplicated = [self duplicateAndReturnError: &error] != nil;
+    if (!duplicated && error != nil)
+        [self presentError: error];
+
+    if ([delegate respondsToSelector: selector]) {
+        void (*delegateMethod)(id, SEL, id, BOOL, void *) =
+                (void (*)(id, SEL, id, BOOL, void *)) [delegate methodForSelector: selector];
+        delegateMethod(delegate, selector, self, duplicated, info);
+    }
+}
+
+- (void) duplicateDocument: sender {
+    [self duplicateDocumentWithDelegate: nil didDuplicateSelector: NULL contextInfo: NULL];
 }
 
 - (void) saveToURL: (NSURL *) url

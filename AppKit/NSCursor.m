@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSRaise.h>
+#import <CoreGraphics/CGDirectDisplay.h>
+#import <CoreGraphics/CGSNativeConnection.h>
 #import <Foundation/NSNull.h>
 #ifdef WINDOWS
 #import <AppKit/Win32Cursor.h>
@@ -470,16 +472,26 @@ static NSMutableArray *_cursorStack = nil;
     return shared;
 }
 
+// On Wayland the hide count of the cursor is CoreGraphics' (it has the process' one wl_pointer): +hide and
+// +unhide are CGDisplayHideCursor() and CGDisplayShowCursor(), and so is the "hidden until the mouse moves"
+// flag. The other backends keep their count in the display for now.
 + (void) hide {
-    [[NSDisplay currentDisplay] hideCursorCounted];
+    if (_CGSNativeConnectionKind() == CGSNativeConnectionKindWayland)
+        CGDisplayHideCursor(kCGDirectMainDisplay);
+    else
+        [[NSDisplay currentDisplay] hideCursorCounted];
 }
 
 + (void) unhide {
-    [[NSDisplay currentDisplay] unhideCursorCounted];
+    if (_CGSNativeConnectionKind() == CGSNativeConnectionKindWayland)
+        CGDisplayShowCursor(kCGDirectMainDisplay);
+    else
+        [[NSDisplay currentDisplay] unhideCursorCounted];
 }
 
 + (void) setHiddenUntilMouseMoves: (BOOL) flag {
-    [[NSDisplay currentDisplay] setCursorHiddenUntilMouseMoves: flag];
+    if (!_CGSSetCursorHiddenUntilMouseMoves(flag))
+        [[NSDisplay currentDisplay] setCursorHiddenUntilMouseMoves: flag];
 }
 
 - initWithImage: (NSImage *) image

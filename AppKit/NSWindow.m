@@ -18,7 +18,6 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
-#import "NSDraggingSession-Private.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBezierPath.h>
 #import <AppKit/NSButtonCell.h>
@@ -63,6 +62,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGWindowPrivate.h>
 #include <math.h>
 #import "NSGestureRecognizer-Private.h"
+#import "private-include/AppKit/NSEventTime.h"
 
 const NSNotificationName NSWindowDidBecomeKeyNotification =
         @"NSWindowDidBecomeKeyNotification";
@@ -199,27 +199,63 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSView *) view;
 
-- (NSComparisonResult) compareKeyViewPosition: (_NSKeyViewPosition *) other;
-
 @end
 
 @implementation _NSKeyViewPosition
 
+// The loop a window builds for itself visits a view, then its subviews, each level in reading order: rows from
+// the top down, left to right inside a row; a view belongs to the row of the highest one remaining when
+// their vertical extents overlap (views that only touch are in different rows). Black-box observation on
+// macOS 26.7.3 and 10.14.4 (tier 2, mac-probes p794c): a left view whose top is up to 23 points below the top
+// of a right view 24 points tall comes first, from 24 points on (the extents only touch) it comes second; a
+// view of a third row whose extent overlaps only the second member of a row is not part of that row; the
+// subviews of a container are visited before the views that come after the container.
+// Test: appkit-window-recalculate-key-view-loop-order.m
 + (void) addKeyViewPositionsWithView: (NSView *) view
                              toArray: (NSMutableArray *) array
 {
+    NSMutableArray *remaining = [NSMutableArray array];
+
     [array addObject: [[[_NSKeyViewPosition alloc] initWithView: view]
                               autorelease]];
 
     for (NSView *child in [view subviews])
-        [self addKeyViewPositionsWithView: child toArray: array];
+        [remaining addObject: [[[_NSKeyViewPosition alloc] initWithView: child]
+                                      autorelease]];
+
+    // Highest first; the sort is stable for equal tops.
+    [remaining sortWithOptions: NSSortStable
+               usingComparator: ^NSComparisonResult(_NSKeyViewPosition *a, _NSKeyViewPosition *b) {
+                   CGFloat top = NSMaxY(a->_rect), otherTop = NSMaxY(b->_rect);
+
+                   return top > otherTop ? NSOrderedAscending : (top < otherTop ? NSOrderedDescending : NSOrderedSame);
+               }];
+
+    while ([remaining count] > 0) {
+        _NSKeyViewPosition *leader = [remaining objectAtIndex: 0];
+        NSMutableArray *row = [NSMutableArray array];
+
+        for (_NSKeyViewPosition *candidate in remaining)
+            if (candidate == leader ||
+                (NSMinY(candidate->_rect) < NSMaxY(leader->_rect) &&
+                 NSMaxY(candidate->_rect) > NSMinY(leader->_rect)))
+                [row addObject: candidate];
+        [remaining removeObjectsInArray: row];
+        [row sortWithOptions: NSSortStable
+             usingComparator: ^NSComparisonResult(_NSKeyViewPosition *a, _NSKeyViewPosition *b) {
+                 CGFloat left = NSMinX(a->_rect), otherLeft = NSMinX(b->_rect);
+
+                 return left < otherLeft ? NSOrderedAscending : (left > otherLeft ? NSOrderedDescending : NSOrderedSame);
+             }];
+        for (_NSKeyViewPosition *position in row)
+            [self addKeyViewPositionsWithView: position->_view toArray: array];
+    }
 }
 
 + (NSArray *) sortedKeyViewPositionsWithView: (NSView *) view {
     NSMutableArray *result = [NSMutableArray array];
 
     [self addKeyViewPositionsWithView: view toArray: result];
-    [result sortUsingSelector: @selector(compareKeyViewPosition:)];
 
     return result;
 }
@@ -232,20 +268,6 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSView *) view {
     return _view;
-}
-
-- (NSComparisonResult) compareKeyViewPosition: (_NSKeyViewPosition *) other {
-
-    // Sort by larger Y (cartesian coordinates)
-    if (NSMaxY(_rect) < NSMaxY(other->_rect))
-        return NSOrderedDescending;
-    else {
-        // Then sort by smaller X
-        if (NSMinX(_rect) < NSMinX(other->_rect))
-            return NSOrderedAscending;
-        else
-            return NSOrderedDescending;
-    }
 }
 
 @end
@@ -301,6 +323,9 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
     NSWindow *_destinationWindow;
     NSPoint _screenPoint;
     NSDragOperation _sourceMask;
+    NSInteger _validItems; // -1 until a destination sets numberOfValidItemsForDrop
+    NSDraggingFormation _formation;
+    BOOL _animatesToDestination;
 }
 @end
 
@@ -316,7 +341,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 - (NSDragOperation) draggingSourceOperationMask {
-    return _sourceMask;
+    return [NSDraggingSession _operationMask: _sourceMask narrowedForSource: _source];
 }
 
 - (NSPoint) draggingLocation {
@@ -338,7 +363,52 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 }
 
 - (id) draggingSource {
-    return _source;
+    return [NSDraggingSession _sourceForDestination: _source];
+}
+
+- (NSDraggingFormation) draggingFormation {
+    return _formation;
+}
+
+- (void) setDraggingFormation: (NSDraggingFormation) formation {
+    _formation = formation;
+}
+
+- (BOOL) animatesToDestination {
+    return _animatesToDestination;
+}
+
+- (void) setAnimatesToDestination: (BOOL) animates {
+    _animatesToDestination = animates;
+}
+
+- (NSInteger) numberOfValidItemsForDrop {
+    return _validItems >= 0 ? _validItems : (NSInteger) [[_pasteboard pasteboardItems] count];
+}
+
+- (void) setNumberOfValidItemsForDrop: (NSInteger) count {
+    _validItems = count;
+}
+
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
+                                   forView: (NSView *) view
+                                   classes: (NSArray<Class> *) classArray
+                             searchOptions: (NSDictionary *) searchOptions
+                                usingBlock: (void (^)(NSDraggingItem *, NSInteger, BOOL *)) block
+{
+    [NSDraggingSession _enumerateItemsOfDraggingInfo: self
+                                              source: _source
+                                             forView: view
+                                             classes: classArray
+                                       searchOptions: searchOptions
+                                          usingBlock: block];
+}
+
+- (NSSpringLoadingHighlight) springLoadingHighlight {
+    return NSSpringLoadingHighlightNone;
+}
+
+- (void) resetSpringLoading {
 }
 
 - (void) slideDraggedImageTo: (NSPoint) point {
@@ -347,8 +417,6 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (NSInteger) draggingSequenceNumber {
     return 0;
 }
-
-NS_DRAGGING_INFO_SHARED_METHODS
 
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination {
     return nil;
@@ -438,6 +506,10 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
 @protocol NSScrollViewSeparatorTrackingAdapter
 - (NSRect) scrollViewFrame;
 - (BOOL) hasScrolledContentsUnderTitlebar;
+@end
+
+@interface NSApplication (DarlingTerminateCheck)
+- (void) _windowWasOrderedOut: (NSWindow *) window;
 @end
 
 @implementation NSWindow
@@ -531,28 +603,67 @@ static BOOL _allowsAutomaticWindowTabbing;
     return 0;
 }
 
-// Darling setting DarlingInWindowMenuBar (boolean, off by default): draw the
-// main menu as a strip inside each titled window instead of in the desktop's
-// global menu or the application's own menu bar. It is read from the
-// application's preferences, falling back to NSGlobalDomain, and from the
-// org.darlinghq.AppKit domain. The strip is drawn as well when the display
-// backend has nowhere else to show the menu, so that it is never missing. The
-// answer is fixed at first use, because the frame of every window depends on it.
+// Where the main menu is shown is a Darling setting, DarlingMenuBarStyle, a
+// string read from the application's preferences, falling back to
+// NSGlobalDomain, and from the org.darlinghq.AppKit domain:
+//   "window": a strip inside each window that can carry one, always;
+//   "screen": outside the windows, in the desktop's global menu or in a menu
+//             bar along the top of the screen, whenever the display backend
+//             can show it there;
+//   "auto" (the default, also for any other value): the desktop's global menu
+//             when the desktop has one, and the strips otherwise.
+// The older boolean DarlingInWindowMenuBar means "window" when it is YES, if
+// DarlingMenuBarStyle is not set.
+// Whichever the style, the menu bar along the top of the screen is also shown
+// while the application has a main menu and no visible window carries a strip
+// (see NSMenuBarController), when the backend can show one.
+// The answer is fixed at first use, because the frame of every window depends on it.
+static NSString *menuBarStylePreference(void) {
+    CFStringRef key = CFSTR("DarlingMenuBarStyle");
+    CFPropertyListRef value =
+            CFPreferencesCopyAppValue(key, kCFPreferencesCurrentApplication);
+
+    if (value == NULL || CFGetTypeID(value) != CFStringGetTypeID()) {
+        if (value != NULL)
+            CFRelease(value);
+        value = CFPreferencesCopyAppValue(key, CFSTR("org.darlinghq.AppKit"));
+    }
+    if (value != NULL && CFGetTypeID(value) != CFStringGetTypeID()) {
+        CFRelease(value);
+        value = NULL;
+    }
+    return [(NSString *) value autorelease];
+}
+
 + (BOOL) _usesInWindowMenuBar {
     static BOOL value;
     static dispatch_once_t once;
 
     dispatch_once(&once, ^{
-      CFStringRef key = CFSTR("DarlingInWindowMenuBar");
-      Boolean valid = false;
-      Boolean flag = CFPreferencesGetAppBooleanValue(
-              key, kCFPreferencesCurrentApplication, &valid);
+      NSString *style = [menuBarStylePreference() lowercaseString];
+      BOOL forceWindow = [style isEqualToString: @"window"];
+      BOOL forceScreen = [style isEqualToString: @"screen"];
 
-      if (!valid)
-          flag = CFPreferencesGetAppBooleanValue(
-                  key, CFSTR("org.darlinghq.AppKit"), &valid);
-      value = (valid && flag) ||
-              ![[NSDisplay currentDisplay] _showsMainMenuOutsideWindows];
+      if (style == nil) {
+          CFStringRef key = CFSTR("DarlingInWindowMenuBar");
+          Boolean valid = false;
+          Boolean flag = CFPreferencesGetAppBooleanValue(
+                  key, kCFPreferencesCurrentApplication, &valid);
+
+          if (!valid)
+              flag = CFPreferencesGetAppBooleanValue(
+                      key, CFSTR("org.darlinghq.AppKit"), &valid);
+          forceWindow = valid && flag;
+      }
+
+      NSDisplay *display = [NSDisplay currentDisplay];
+
+      if (forceWindow)
+          value = YES;
+      else if (forceScreen)
+          value = ![display _showsMainMenuOutsideWindows];
+      else
+          value = ![display _desktopShowsMainMenu];
     });
     return value;
 }
@@ -620,8 +731,22 @@ static BOOL _allowsAutomaticWindowTabbing;
     return nil;
 }
 
+// -_autosaveFrameKeyWithName: gives a saved frame one defaults key per screen
+// layout: the fixed text, the name, then the screen frame as text. Remove every
+// such key of this name. The screen frame text starts with "{", which keeps the
+// keys of a longer name that begins with this one out of the match.
 + (void) removeFrameUsingName: (NSString *) name {
-    NSUnimplementedMethod();
+    if ([name length] == 0)
+        return;
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *prefix = [NSString stringWithFormat: @"NSWindow frame %@ ", name];
+
+    for (NSString *key in [[defaults dictionaryRepresentation] allKeys]) {
+        if ([key hasPrefix: prefix] &&
+            [[key substringFromIndex: [prefix length]] hasPrefix: @"{"])
+            [defaults removeObjectForKey: key];
+    }
 }
 
 // The window manager's frame shows these buttons for a window with a title
@@ -727,9 +852,10 @@ static BOOL _allowsAutomaticWindowTabbing;
     NS_EXTRA(NSWindow, self)->_savedFrame = _frame;
 
     _level = NSNormalWindowLevel;
-    NS_EXTRA(NSWindow, self)->_minSize = NSZeroSize;
-    // "The default maximum size of a window is {FLT_MAX, FLT_MAX}"
-    NS_EXTRA(NSWindow, self)->_maxSize = NSMakeSize(FLT_MAX, FLT_MAX);
+    // "The default maximum size of a window is {FLT_MAX, FLT_MAX}". The limits are kept as content
+    // sizes (see -minSize), so that is the maximum of the content too.
+    NS_EXTRA(NSWindow, self)->_contentMinSize = NSZeroSize;
+    NS_EXTRA(NSWindow, self)->_contentMaxSize = NSMakeSize(FLT_MAX, FLT_MAX);
     NS_EXTRA(NSWindow, self)->_title = @"";
     NS_EXTRA(NSWindow, self)->_miniwindowTitle = @"";
     _backgroundColor = [[NSColor windowBackgroundColor] copy];
@@ -905,6 +1031,8 @@ static BOOL _allowsAutomaticWindowTabbing;
 - (void) setStyleMask: (NSWindowStyleMask) mask {
     NS_EXTRA(NSWindow, self)->_styleMask = mask;
     [_platformWindow setStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    // What the frame adds around the content, and so the frame size limits, depend on the style.
+    [self _sizeLimitsChanged];
 
     [self _hideMenuViewIfNeeded];
 
@@ -1008,12 +1136,24 @@ static BOOL _allowsAutomaticWindowTabbing;
     return 0;
 }
 
+// minSize and contentMinSize (and maxSize and contentMaxSize) are two views of one limit: the
+// content size is kept, and the frame size is that plus what the frame adds around the content
+// (title bar, toolbar) in the current style. The last setter called wins. The _minSize and
+// _maxSize ivars are unused.
+- (NSSize) _frameChrome {
+    return [self frameRectForContentRect: NSZeroRect].size;
+}
+
 - (NSSize) minSize {
-    return NS_EXTRA(NSWindow, self)->_minSize;
+    NSSize content = NS_EXTRA(NSWindow, self)->_contentMinSize;
+    NSSize chrome = [self _frameChrome];
+    return NSMakeSize(content.width + chrome.width, content.height + chrome.height);
 }
 
 - (NSSize) maxSize {
-    return NS_EXTRA(NSWindow, self)->_maxSize;
+    NSSize content = NS_EXTRA(NSWindow, self)->_contentMaxSize;
+    NSSize chrome = [self _frameChrome];
+    return NSMakeSize(content.width + chrome.width, content.height + chrome.height);
 }
 
 - (NSSize) contentMinSize {
@@ -1500,22 +1640,58 @@ static BOOL _allowsAutomaticWindowTabbing;
     [self setFrame: frame display: NO];
 }
 
+// The window system limits user resizing to the sizes below, which a platform window reads when
+// it is told they changed.
+- (void) _sizeLimitsChanged {
+    id platform = _platformWindow;
+    if ([platform respondsToSelector: @selector(sizeLimitsChanged)])
+        [platform sizeLimitsChanged];
+}
+
+// QUIRK: the minimum and maximum of the frame and of the content are two views of one limit: setting
+// either changes what the other returns and the last call wins (the documentation lists them as
+// separate properties). A minimum below what the frame adds around the content is zero as a content
+// size, a maximum below it goes negative, and a titled window with no minimum reports a minSize one
+// title bar high. Evidence: black-box observation on macOS 26.7.3 (tier 2): after setMinSize 300x200
+// contentMinSize is 300x168, a later setContentMinSize 100x100 makes minSize 100x132, and setMaxSize
+// 0x0 gives contentMaxSize 0x-32.
+// Test: tests/appkit-window-frame-size-limits.m (the quirk_ checks).
+- (NSSize) _minFrameSize {
+    NSSize content = NS_EXTRA(NSWindow, self)->_contentMinSize;
+    NSSize chrome = [self _frameChrome];
+    return NSMakeSize(content.width > 0 ? content.width + chrome.width : 0,
+                      content.height > 0 ? content.height + chrome.height : 0);
+}
+
+- (NSSize) _maxFrameSize {
+    NSSize content = NS_EXTRA(NSWindow, self)->_contentMaxSize;
+    NSSize chrome = [self _frameChrome];
+    return NSMakeSize(content.width > 0 && content.width < FLT_MAX ? content.width + chrome.width : FLT_MAX,
+                      content.height > 0 && content.height < FLT_MAX ? content.height + chrome.height : FLT_MAX);
+}
+
 - (void) setMinSize: (NSSize) size {
-    NS_EXTRA(NSWindow, self)->_minSize = size;
+    NSSize chrome = [self _frameChrome];
+    NS_EXTRA(NSWindow, self)->_contentMinSize =
+            NSMakeSize(MAX(0, size.width - chrome.width), MAX(0, size.height - chrome.height));
+    [self _sizeLimitsChanged];
 }
 
 - (void) setMaxSize: (NSSize) size {
-    NS_EXTRA(NSWindow, self)->_maxSize = size;
+    NSSize chrome = [self _frameChrome];
+    NS_EXTRA(NSWindow, self)->_contentMaxSize =
+            NSMakeSize(size.width - chrome.width, size.height - chrome.height);
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentMinSize: (NSSize) value {
-    // The value was already being stored; the unimplemented marker made every
-    // caller raise instead.
     NS_EXTRA(NSWindow, self)->_contentMinSize = value;
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentMaxSize: (NSSize) value {
     NS_EXTRA(NSWindow, self)->_contentMaxSize = value;
+    [self _sizeLimitsChanged];
 }
 
 - (void) setContentBorderThickness: (CGFloat) thickness
@@ -2580,8 +2756,11 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if ([self initialFirstResponder] != nil) {
         [self makeFirstResponder: [self initialFirstResponder]];
     } else {
-        // Otherwise calculate one and set the first responder.
-        if ([self autorecalculatesKeyViewLoop]) {
+        // Otherwise calculate one and set the first responder. A window that
+        // does not recalculate its loop automatically still gets one when it
+        // has none (documented for -recalculateKeyViewLoop).
+        if ([self autorecalculatesKeyViewLoop] ||
+            ![self _hasEstablishedKeyViewLoop]) {
             [self recalculateKeyViewLoop];
         }
         if ([self firstResponder] == self) {
@@ -2647,20 +2826,49 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return 0.20;
 }
 
+// With a view as the first responder, the next (previous) valid key view of that view takes the focus, and
+// nothing changes when there is none; a text field's field editor is a view outside the loop, so while it is
+// edited the call changes nothing (the editor's own handling of Tab moves on). With the window itself as the
+// first responder the initial first responder is chosen when it accepts first responder status, and
+// otherwise its next (previous) valid key view; without an initial first responder the first (last) valid
+// key view of the loop is. Black-box observation on macOS 26.7.3 and 10.14.4 (tier 2, mac-probes p794b,
+// p794d): selectNextKeyView: and selectPreviousKeyView: leave a field editor, and a custom view without
+// next key view, as the first responder (also with an initial first responder set); with the window as
+// first responder, Next gives the first valid key view of a loop that skips a button, Previous the last one,
+// and a set initial first responder wins in both directions.
+// Test: appkit-window-select-key-view-initial.m
 - (void) selectNextKeyView: sender {
     if ([_firstResponder isKindOfClass: [NSView class]]) {
         NSView *view = (NSView *) _firstResponder;
 
-        [self selectKeyViewFollowingView: view];
+        if ([view nextValidKeyView] != nil)
+            [self selectKeyViewFollowingView: view];
+        return;
     }
+
+    NSView *initial = [self initialFirstResponder];
+    NSView *candidate = initial == nil ? [_contentView nextValidKeyView]
+                                       : ([initial acceptsFirstResponder] ? initial : [initial nextValidKeyView]);
+
+    if (candidate != nil)
+        [self _makeFirstResponder: candidate selecting: NSSelectingNext];
 }
 
 - (void) selectPreviousKeyView: sender {
     if ([_firstResponder isKindOfClass: [NSView class]]) {
         NSView *view = (NSView *) _firstResponder;
 
-        [self selectKeyViewPrecedingView: view];
+        if ([view previousValidKeyView] != nil)
+            [self selectKeyViewPrecedingView: view];
+        return;
     }
+
+    NSView *initial = [self initialFirstResponder];
+    NSView *candidate = initial == nil ? [_contentView previousValidKeyView]
+                                       : ([initial acceptsFirstResponder] ? initial : [initial previousValidKeyView]);
+
+    if (candidate != nil)
+        [self _makeFirstResponder: candidate selecting: NSSelectingPrevious];
 }
 
 // While the new key view is made first responder, -keyViewSelectionDirection
@@ -2685,6 +2893,27 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
 - (void) selectKeyViewPrecedingView: (NSView *) view {
     [self _makeFirstResponder: [view previousValidKeyView] selecting: NSSelectingPrevious];
+}
+
+// YES when some view of the window can hand the key focus on to another one,
+// that is when somebody has set up a key view loop. A manual chain whose next
+// views are all hidden or refuse first responder status counts as no loop. The
+// check runs once, when the window first becomes key, so views added later
+// get no links from it.
+- (BOOL) _hasEstablishedKeyViewLoop {
+    NSMutableArray *pending = [NSMutableArray array];
+
+    if (_contentView != nil)
+        [pending addObject: _contentView];
+    while ([pending count] > 0) {
+        NSView *view = [pending lastObject];
+
+        [pending removeLastObject];
+        if ([view canBecomeKeyView] && [view nextValidKeyView] != nil)
+            return YES;
+        [pending addObjectsFromArray: [view subviews]];
+    }
+    return NO;
 }
 
 - (void) recalculateKeyViewLoopIfNeeded {
@@ -2730,6 +2959,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     if (create && newFieldEditor == nil && _sharedFieldEditor == nil) {
         newFieldEditor = _sharedFieldEditor = [[NSTextView alloc] init];
+        // The container of a field editor follows neither the width nor the height of the view (macOS 26.7.3
+        // and 10.14.4, black-box, tier 2, mac-probes p783); the view sizes it to itself.
+        [[_sharedFieldEditor textContainer] setWidthTracksTextView: NO];
         // Cells draw their titles without padding; keep editing aligned.
         [[_sharedFieldEditor textContainer] setLineFragmentPadding: 0];
     }
@@ -2906,6 +3138,19 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     // The window now has the size the constraints ask for, so the frame changes that follow
     // from it do not call for another fit; they are still new input for the layout pass.
     DarlingLayoutSetLastGeneration(_contentView, DarlingLayoutKindWindowFit, DarlingLayoutGeneration());
+}
+
+// A display cycle of the window: the constraints and the layout of a window on screen are brought up to date before
+// it draws, so the views it draws have their frames. Ordering a window in draws it at once, and with the same cycle:
+// a view whose needsLayout was set before then is laid out without another event or display request.
+// Test: tests/appkit-collection-view-scroll-position-none.m (a collection view set up before the window is ordered
+// front gets its content size).
+- (void) _layoutAndDisplayIfNeeded {
+    if ([self isVisible] && ![self isMiniaturized]) {
+        [self _fitContentSizeToConstraints];
+        [_backgroundView layoutSubtreeIfNeeded];
+    }
+    [self displayIfNeeded];
 }
 
 - (void) layoutIfNeeded {
@@ -3132,7 +3377,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
            incomplete). This may be the right place to do this, maybe not,
            further investigation is required.
         */
-        [self displayIfNeeded];
+        [self _layoutAndDisplayIfNeeded];
         // This is here since it would seem that doing this any earlier will not
         // work.
         if (![self isKindOfClass: [NSPanel class]] &&
@@ -3159,7 +3404,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
            incomplete). This may be the right place to do this, maybe not,
            further investigation is required.
         */
-        [self displayIfNeeded];
+        [self _layoutAndDisplayIfNeeded];
         // This is here since it would seem that doing this any earlier will not
         // work.
         if (![self isKindOfClass: [NSPanel class]] &&
@@ -3183,6 +3428,10 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         appearance = [self _willChangeViewAppearanceForVisible: NO];
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
+        // A window that the application closes reports through its close
+        // notification instead.
+        if (wasVisible && !NS_EXTRA(NSWindow, self)->_isClosed)
+            [NSApp _windowWasOrderedOut: self];
         if (![self isKindOfClass: [NSPanel class]]) {
             [NSApp removeWindowsItem: self];
         }
@@ -3569,14 +3818,21 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [recognizer _resetIfFinished];
 
     if (shouldValidateToolbarItems && [self toolbar]) {
-        [NSObject cancelPreviousPerformRequestsWithTarget: [self toolbar]
-                                                 selector: @selector
-                                                 (validateVisibleItems)
+        [NSObject cancelPreviousPerformRequestsWithTarget: self
+                                                 selector: @selector(_validateToolbarIfShown)
                                                    object: nil];
-        [[self toolbar] performSelector: @selector(validateVisibleItems)
-                             withObject: nil
-                             afterDelay: .5];
+        [self performSelector: @selector(_validateToolbarIfShown)
+                   withObject: nil
+                   afterDelay: .5];
     }
+}
+
+// The toolbar is validated after events only while the window is shown: an event can close the window, and its
+// toolbar items' targets may be gone by the time the validation would run.
+// Test: tests/appkit-toolbar-closed-window-validation.m
+- (void) _validateToolbarIfShown {
+    if ([self isVisible])
+        [[self toolbar] validateVisibleItems];
 }
 
 - (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
@@ -3694,10 +3950,13 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
                       source: (id) source
 {
     NSWindowLocalDraggingInfo *info = [[NSWindowLocalDraggingInfo alloc] init];
+    info->_validItems = -1;
     info->_pasteboard = pasteboard;
     info->_image = image;
     info->_source = source;
-    info->_sourceMask = [NSDraggingSession _operationMaskOfSource: source local: YES defaultMask: NSDragOperationEvery];
+    info->_sourceMask = NSDragOperationEvery;
+    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)])
+        info->_sourceMask = [source draggingSourceOperationMaskForLocal: YES];
 
     NSPoint screenPoint;
     if ([event window] != nil)
@@ -3732,7 +3991,8 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         [imageWindow orderFront: nil];
     }
 
-    [NSDraggingSession _source: source beganWithImage: image at: imageOrigin];
+    if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
+        [source draggedImage: image beganAt: imageOrigin];
 
     NSArray *types = [pasteboard types];
     id destination = nil;
@@ -3765,7 +4025,8 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             }
             [imageWindow setFrameOrigin: NSMakePoint(screenPoint.x - imageOffset.x,
                                                      screenPoint.y - imageOffset.y)];
-            [NSDraggingSession _source: source movedWithImage: image to: screenPoint];
+            if ([source respondsToSelector: @selector(draggedImage:movedTo:)])
+                [source draggedImage: image movedTo: screenPoint];
             runPendingSourcesDuringDrag(0.008);
         }
         if (dropped)
@@ -3821,7 +4082,8 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if ([destination respondsToSelector: @selector(draggingEnded:)])
         [destination draggingEnded: info];
 
-    [NSDraggingSession _source: source endedWithImage: image at: screenPoint operation: operation];
+    if ([source respondsToSelector: @selector(draggedImage:endedAt:operation:)])
+        [source draggedImage: image endedAt: screenPoint operation: operation];
     [destination release];
     [info release];
 }
@@ -3936,7 +4198,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         if ([NSApp modalWindow] == self) {
             [NSApp abortModal];
         } else {
-            [self close];
+            [self _closeOnBehalfOfUser];
         }
     }
 }
@@ -3947,8 +4209,22 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 {
     // Callback used by performClose:
     if (shouldClose) {
-        [self close];
+        [self _closeOnBehalfOfUser];
     }
+}
+
+// Closes the window as a result of the user asking for it (the close button,
+// the window manager's close request, the Close menu item), as opposed to the
+// application closing it by itself. NSApplication tells the two apart when it
+// decides whether closing the last window should end the application.
+- (void) _closeOnBehalfOfUser {
+    NS_EXTRA(NSWindow, self)->_closingByUser = YES;
+    [self close];
+    NS_EXTRA(NSWindow, self)->_closingByUser = NO;
+}
+
+- (BOOL) _isClosingByUser {
+    return NS_EXTRA(NSWindow, self)->_closingByUser;
 }
 
 - (void) performMiniaturize: (id) sender {
@@ -4186,12 +4462,9 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     }
 }
 
+// The sender's title is the application's to set (macOS leaves it as it is)
 - (void) toggleToolbarShown: (id) sender {
     [_toolbar setVisible: ![_toolbar isVisible]];
-    [sender setTitle: [NSString stringWithFormat: @"%@ Toolbar",
-                                                  [_toolbar isVisible]
-                                                          ? @"Hide"
-                                                          : @"Show"]];
 }
 
 - (void) runToolbarCustomizationPalette: (id) sender {
@@ -4642,14 +4915,16 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     // Don't allow the platform window changes to violate our window size limits
     // (if we have them). Windows (for example) likes to make the platform
     // window very small so it fits in the task bar...
-    if (!NSEqualSizes([self minSize], NSMakeSize(0, 0))) {
-        frame.size.width = MAX(NSWidth(frame), [self minSize].width);
-        frame.size.height = MAX(NSHeight(frame), [self minSize].height);
-    }
-
-    if (!NSEqualSizes([self maxSize], NSMakeSize(FLT_MAX, FLT_MAX))) {
-        frame.size.width = MIN(NSWidth(frame), [self maxSize].width);
-        frame.size.height = MIN(NSHeight(frame), [self maxSize].height);
+    // The same limits the platform window is given (see -_minFrameSize), and the minimum wins over a
+    // maximum below it, as in what is sent to the window system. Only a resize is limited: a move
+    // reports the size the window has and must not change it (nothing would resize the views).
+    if (didSize) {
+        NSSize maxSize = [self _maxFrameSize];
+        frame.size.width = MIN(NSWidth(frame), maxSize.width);
+        frame.size.height = MIN(NSHeight(frame), maxSize.height);
+        NSSize minSize = [self _minFrameSize];
+        frame.size.width = MAX(NSWidth(frame), minSize.width);
+        frame.size.height = MAX(NSHeight(frame), minSize.height);
     }
 
     // We don't want the miniaturized frame.
@@ -4949,8 +5224,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSMouseExited
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
@@ -4969,8 +5243,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSMouseEntered
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
@@ -4989,7 +5262,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     mouseEventWithType: NSMouseMoved
                               location: mousePoint
                          modifierFlags: [NSEvent modifierFlags]
-                             timestamp: [NSDate timeIntervalSinceReferenceDate]
+                             timestamp: NSEventCurrentTime()
                           windowNumber: [self windowNumber]
                                context: [self graphicsContext]
                            eventNumber: 0 // NSEvent currently ignores this.
@@ -5007,8 +5280,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                     enterExitEventWithType: NSCursorUpdate
                                   location: mousePoint
                              modifierFlags: [NSEvent modifierFlags]
-                                 timestamp:
-                                         [NSDate timeIntervalSinceReferenceDate]
+                                 timestamp: NSEventCurrentTime()
                               windowNumber: [self windowNumber]
                                    context: [self graphicsContext]
                                eventNumber: 0 // NSEvent currently ignores this.
@@ -5093,6 +5365,8 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
         return [[self undoManager] canUndo];
     if ([item action] == @selector(redo:))
         return [[self undoManager] canRedo];
+    if ([item action] == @selector(toggleToolbarShown:))
+        return _toolbar != nil;
 
     return YES;
 }

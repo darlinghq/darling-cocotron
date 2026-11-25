@@ -70,6 +70,9 @@ enum {
 #else
         void *_cglWindow; // a CGLWindowRef
 #endif
+        // The id of the surface the drawable is registered as with CoreGraphics (see
+        // _CGSAddWindowSurface), 0 while there is no drawable.
+        int _surfaceID;
         BOOL _hasPrepared, _drawableAttachmentSucceeded, _presentObserved;
         int _viewportResetPending;
     NS_SIDE_IVARS_END(NSOpenGLContext)

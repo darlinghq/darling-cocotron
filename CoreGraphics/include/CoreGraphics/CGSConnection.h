@@ -34,6 +34,24 @@
 	_Atomic CGSWindowID _nextWindowId;
 	NSMutableDictionary<NSNumber*, CGSWindow*>* _windows;
 	_Atomic int _hotKeyOperatingMode;
+
+@protected
+	// The displays as -buildScreens described them, until the layout changes. Guarded by
+	// @synchronized(self).
+	NSArray<CGSScreen*>* _screens;
+	// The pointer's bookkeeping shared by the backends (guarded by @synchronized(self)): the hide count, whether the
+	// mouse is connected to the cursor, the motion not yet taken by CGGetLastMouseDelta() and when the
+	// suppression of the local mouse motion after a warp ends (CFAbsoluteTime, 0 for none).
+	int _pointerHideCount;
+	BOOL _pointerDisassociated;
+	double _pointerDeltaX, _pointerDeltaY;
+	double _pointerSuppressUntil;
+	BOOL _pointerHiddenUntilMouseMoves;
+	// The displays the reconfiguration callbacks were last told about (nil until the displays
+	// have been read once). Guarded by @synchronized(self).
+	NSArray<CGSScreen*>* _reportedScreens;
+	// Non-zero while this process changes a mode itself, which it reports itself.
+	_Atomic int _suppressLayoutReports;
 }
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
 -(void) dealloc;
@@ -91,9 +109,81 @@
 // time (nanoseconds since startup) are those of the key event (the time is when it was seen).
 -(void) postHotKeyEventForUID:(int)uid pressed:(BOOL)pressed flags:(CGEventFlags)flags location:(CGPoint)location time:(uint64_t)time;
 
+// The modes of a display, and the one it is in, are in the display's CGSScreen (-createScreens).
+// Calls -setMode:forScreen: and, when it succeeded, makes the new layout the one that was reported:
+// the caller reports the change itself (CGDisplaySwitchToMode() does), so what the window system
+// sends about it is not a further change. Backends implement -setMode:forScreen:.
+-(BOOL) changeMode:(NSDictionary *)mode forScreen:(int)screenIndex;
+// Changes the mode of display screenIndex + 1 (the CGDirectDisplayID minus one) to one of the
+// modes in its CGSScreen, matched by PixelWidth, PixelHeight and RefreshRate. Returns whether the
+// window system applied it; the new layout is then visible to -createScreens. A window system
+// that leaves the mode to the user's session answers NO. The default implementation answers NO.
 -(BOOL) setMode:(NSDictionary *)mode forScreen:(int)screenIndex;
-// Implementations should cache this information, because it may be accessed frequently
+
+// The active displays, the main display first, as the window system describes them now; nil when
+// it reports none. Cached (it is read for every CoreGraphics call about displays) until the
+// layout changes, and every call returns the same objects until then. The caller releases the
+// array. Backends implement -buildScreens, not this.
 -(NSArray<CGSScreen*>*) createScreens;
+// For backends: describes the displays afresh, each with its displayID, bounds, backingScale, modes
+// and currentMode (and the edid and name when the window system tells). Called with the lock held.
+-(NSArray<CGSScreen*>*) buildScreens;
+// Drops the cached displays without telling anyone. Backends that cache more of the layout
+// override it and call super.
+-(void) invalidateScreens;
+// For backends: the window system reported that the layout or a mode changed. Drops the cache and
+// reports what differs from the previously reported layout to the callbacks registered with
+// CGDisplayRegisterReconfigurationCallback(), on the calling thread, which is the main thread
+// for events the backend reads.
+-(void) displayLayoutChanged;
+// Makes the current layout the one that was reported, for a change CoreGraphics itself reported.
+-(void) acceptDisplayLayout;
+
+// Moves the pointer to a point in CoreGraphics' global space (inside the desktop). The default
+// implementation does nothing and returns kCGErrorCannotComplete.
+-(CGError) warpPointerToPoint:(CGPoint)point;
+
+// The pointer state of the process (CGDisplayHideCursor(), CGAssociateMouseAndMouseCursorPosition(),
+// CGGetLastMouseDelta() and the warp above). A connection that keeps it answers YES here and implements
+// the methods below; with NO the functions go to the controller a framework registered (see
+// CGSPointerController.h). The methods can be called from any thread.
+-(BOOL) managesPointer;
+// Each call hides the cursor once more, -unhideCursor undoes one (nothing hidden: nothing happens),
+// -forceShowCursor forgets every pending hide.
+-(void) hideCursor;
+-(void) unhideCursor;
+-(void) forceShowCursor;
+-(BOOL) cursorIsVisible;
+// NO disconnects the mouse from the cursor: the cursor stays where it is and the mouse only makes deltas.
+-(void) setMouseAssociatedWithCursor:(BOOL)associated;
+// The mouse motion since the previous call in whole points, and the way for a framework that makes mouse events
+// of its own for the window system (a display overlay) to add the motion it saw.
+-(void) takeMouseDeltaX:(int32_t*)dx y:(int32_t*)dy;
+-(void) accumulateMouseDeltaX:(double)dx y:(double)dy;
+// The shared bookkeeping (hide count, deltas, suppression after a warp) is implemented here, so that every
+// backend that keeps the pointer behaves the same. A backend tells a warp with -noteMouseWarp, asks
+// -localMouseMotionSuppressed for each local motion it decodes, and reacts to a change in the hooks below
+// (called on the thread that changed the state, outside the lock).
+-(void) cursorHiddenStateChanged:(BOOL)hidden;
+-(void) mouseAssociationChanged:(BOOL)associated;
+-(void) noteMouseWarp;
+-(BOOL) localMouseMotionSuppressed;
+-(BOOL) mouseAssociated;
+// Whether the mouse is disassociated from the cursor with the cursor held (the frozen position in
+// *frozenRoot, window system pixels), and whether the application wants that; for the framework above.
+-(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot;
+// The windows the pointer could be confined to changed.
+-(void) pointerWindowsChanged;
+// +[NSCursor setHiddenUntilMouseMoves:]: the flag is idempotent and counts as one hide; the backend that
+// answers YES to -cancelsHiddenUntilMouseMoves calls -pointerDidMove when the mouse moves, which clears it.
+// A backend that does not leaves the flag to the framework above (the default, NO).
+-(BOOL) cancelsHiddenUntilMouseMoves;
+-(void) setCursorHiddenUntilMouseMoves:(BOOL)flag;
+-(void) pointerDidMove;
+// The pointer is locked to a surface (Wayland: the lock of the disassociated mouse is active), and the surface to
+// lock may be another one now. The defaults say no and do nothing.
+-(BOOL) pointerLocked;
+-(void) pointerLockTargetMayHaveChanged;
 
 // Implementations should also emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 // if layout changes.
@@ -106,6 +196,33 @@
 
 // For CGL
 -(void*) nativeDisplay;
+
+// The connection to the window system is shared with the framework that builds windows on its native
+// objects (see CGSNativeConnection.h). The kind of this backend's connection; the default is none.
++(int) nativeConnectionKind;
+// The framework's observer, if any. A connection with an observer must outlive it: the observer
+// uses its native display.
++(id) nativeObserver;
++(void) setNativeObserver:(id)observer;
+// Keyboard state for the frameworks that read the window system's input from the event stream: the
+// object with the keyboard focus, the modifier flags with the device bits, the end of the focus
+// on a destroyed object and the keyboard layout group in effect. The defaults know nothing.
+-(void*) keyboardFocus;
+-(uint64_t) modifierFlags;
+-(void) nativeObjectDestroyed:(void*)object;
+-(void) flushPendingKeyboardEvents;
+// The pointer: the seat's wl_pointer (Wayland), and where the pointer is in its surface, set by the
+// framework that moved it without the compositor saying so. The defaults know nothing.
+-(void*) nativePointer;
+-(void) setPointerSurfacePointX:(double)x y:(double)y;
+-(int) keyboardLayoutGroup;
+-(NSString*) keyboardLayoutName;
+// Reads what the window system has sent and handles it: this is what the run loop calls when the
+// connection's socket is readable. The default implementation does nothing.
+-(void) processPendingEvents;
+// The windows of this process were asked (by another process) to be activated, and the window
+// system has no request for it: the observer is told. Backends call it on the main thread.
+-(void) activationRequested;
 @end
 
 #endif

@@ -37,6 +37,10 @@ static NSStatusBar *_statusBar = nil;
     return _statusBar;
 }
 
++ (BOOL) _hasStatusItems {
+    return _statusBar != nil && [_statusBar->_statusItems count] > 0;
+}
+
 - (id) init {
     self = [super init];
     if (self) {

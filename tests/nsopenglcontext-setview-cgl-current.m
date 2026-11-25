@@ -11,6 +11,7 @@
 //   nsopenglcontext-setview-cgl-current.sh grabs it from the X server and
 //   checks the colour.
 #import <Cocoa/Cocoa.h>
+#import "test-argument-words.h"
 #import <OpenGL/OpenGL.h>
 #import <OpenGL/gl.h>
 #include <pthread.h>
@@ -58,6 +59,7 @@ int main(int argc, char **argv)
 		[g_ctx setView:v];
 		pthread_t t;
 		pthread_create(&t, NULL, render, NULL);
+		TestIgnoreArgumentWords();
 		[NSApp run];
 	}
 	return 0;

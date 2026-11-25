@@ -33,11 +33,6 @@ size_t CGPDFPageGetPageNumber(CGPDFPageRef self) {
     return self ? (size_t)[self pageNumber] + 1 : 0;
 }
 
-// the page object itself, which the page keeps alive
-CGPDFDictionaryRef CGPDFPageGetDictionary(CGPDFPageRef self) {
-    return self ? (CGPDFDictionaryRef)[self dictionary] : NULL;
-}
-
 CGRect CGPDFPageGetBoxRect(CGPDFPageRef self, CGPDFBox box) {
     CGRect result;
 
@@ -45,6 +40,11 @@ CGRect CGPDFPageGetBoxRect(CGPDFPageRef self, CGPDFBox box) {
         result = CGRectZero;
 
     return result;
+}
+
+// The page's own dictionary, not retained for the caller; NULL for a NULL page.
+CGPDFDictionaryRef CGPDFPageGetDictionary(CGPDFPageRef page) {
+    return (CGPDFDictionaryRef)[(O2PDFPage *)page dictionary];
 }
 
 CGAffineTransform CGPDFPageGetDrawingTransform(CGPDFPageRef self, CGPDFBox box,

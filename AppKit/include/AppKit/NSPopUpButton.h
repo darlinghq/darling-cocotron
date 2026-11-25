@@ -33,6 +33,10 @@ APPKIT_EXPORT NSString *const NSPopUpButtonWillPopUpNotification;
 @interface NSPopUpButton : NSButton {
     NS_EXTRA_IVARS_BEGIN(NSPopUpButton)
         BOOL _observerAdded;
+        NSMenuItem *_unmatchedItem;          // the item shown for a bound selection that matches no item
+        id _unmatchedObject;                 // the bound selectedObject it stands for
+        NSMutableArray *_selectionBindings;  // names of the selection bindings, in the order they were made
+        NSInteger _boundChangeDepth;         // above zero while a binding is changing the items or the selection
     NS_EXTRA_IVARS_END(NSPopUpButton)
 }
 - (instancetype) initWithFrame: (NSRect) frame pullsDown: (BOOL) pullsDown;

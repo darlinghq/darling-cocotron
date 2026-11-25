@@ -21,6 +21,7 @@
 //   chose TITLE     an item was chosen
 //   resigned        the application resigned active while it was running
 #import <AppKit/AppKit.h>
+#import "test-argument-words.h"
 #include <objc/message.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -241,6 +242,7 @@ int main(int argc, char **argv) {
             note("timeout");
             exit(3);
         }];
+        TestIgnoreArgumentWords();
         [NSApp run];
     }
     return 0;

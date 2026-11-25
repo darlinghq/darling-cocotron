@@ -4,8 +4,8 @@
  Licensed under the MIT license, the same as the rest of this project.
 */
 // NSEvent's eventRef (Apple's NSEvent reference, macOS 10.5): the Carbon event
-// that corresponds to the event, or NULL when there is none. Darling's events
-// have none. The private -_eventRef returns the same.
+// that corresponds to the event, made once (see also appkit-carbon-event-queue.m).
+// The private -_eventRef returns the same.
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 
@@ -24,8 +24,8 @@ int main(void) {
                      charactersIgnoringModifiers: @"a" isARepeat: NO keyCode: 0];
         NSEvent *mouse = [NSEvent mouseEventWithType: NSEventTypeLeftMouseDown location: NSZeroPoint modifierFlags: 0
                                            timestamp: 0 windowNumber: 0 context: nil eventNumber: 0 clickCount: 1 pressure: 1];
-        CHECK(key.eventRef == NULL, "a key event has no Carbon event");
-        CHECK(mouse.eventRef == NULL, "a mouse event has no Carbon event");
+        CHECK(key.eventRef == key.eventRef, "a key event's Carbon event is made once");
+        CHECK(mouse.eventRef == mouse.eventRef, "a mouse event's Carbon event is made once");
         CHECK([key _eventRef] == key.eventRef && [mouse _eventRef] == mouse.eventRef, "-_eventRef returns the same");
     }
     printf("%s\n", failures ? "FAILED" : "ALL PASSED");

@@ -1,7 +1,7 @@
 # Vendored Wayland protocol XML
 
-The protocols here are not part of wayland-protocols, so they are kept in this tree, byte for byte, with
-their copyright and permission notices.
+The protocols here are not part of the wayland-protocols release every supported system has (or not at all), so they
+are kept in this tree, byte for byte, with their copyright and permission notices.
 
 ## wlr-output-management
 
@@ -43,3 +43,29 @@ window stays out of task lists and window switchers (xdg-shell cannot say so).
 - The file warns that the protocol is a desktop-environment detail; KDE's own client libraries use these requests for
   skip-taskbar on Wayland, and KWin offers the global to ordinary clients.
 - The backend checks the opcodes it uses against the generated tables at start (`WaylandCheckOpcodes`).
+
+## wlr-layer-shell-unstable-v1.xml
+
+Also a wlroots protocol, kept byte for byte. It is used for the application menu bar, a layer surface
+anchored along the top edge.
+
+- Source: https://gitlab.freedesktop.org/wlroots/wlr-protocols, `unstable/wlr-layer-shell-unstable-v1.xml`
+- Commit: a5028afbe4a1cf0daf020c4104c1565a09d6e58a
+- Copyright: 2017 Drew DeVault
+- Licence: the permission notice at the top of the file (use, copy, modify, distribute and sell without fee,
+  provided the copyright notice appears in all copies and supporting documentation; no warranty). It is
+  permissive and compatible with this project's MIT licence.
+
+## xdg-toplevel-icon
+
+`xdg-toplevel-icon-v1.xml` is the staging protocol `xdg_toplevel_icon_manager_v1`, with which a client gives a
+toplevel an icon from pixel buffers (or an icon name). It is in wayland-protocols from 1.34 on; the file is kept
+here so that systems with an older release still build the backend.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/xdg-toplevel-icon/xdg-toplevel-icon-v1.xml`
+  (wayland-protocols 1.50)
+- Copyright: 2023-2024 Matthias Klumpp, 2024 David Edmundson
+- Licence: the MIT permission notice at the top of the file.
+
+The AppKit Wayland backend uses it to show the application icon (`-[NSApplication applicationIconImage]`) on every
+toplevel, so compositors do not have to guess an icon from the `app_id`. See `WaylandToplevelIcon.m`.

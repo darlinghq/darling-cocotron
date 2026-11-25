@@ -38,8 +38,8 @@
 
 @end
 
-// The property-based accessibility API (macOS 10.10). NSView, NSWindow, NSCell and
-// NSApplication implement these; there is no assistive-technology backend behind them.
+// The property-based accessibility API (macOS 10.10). NSView, NSWindow, NSCell, NSMenuItem
+// and NSApplication implement these; there is no assistive-technology backend behind them.
 @protocol NSAccessibility <NSObject>
 
 @required
@@ -59,6 +59,8 @@
 @property(copy) NSString *accessibilityValueDescription;
 @property(copy) NSString *accessibilityHelp;
 @property(copy) NSString *accessibilityPlaceholderValue;
+// The URL of the file the element represents, as a string (macOS 10.10); stored only.
+@property(copy) NSString *accessibilityDocument;
 @property(strong) id accessibilityMinValue;
 @property(strong) id accessibilityMaxValue;
 @property(getter = isAccessibilityEnabled) BOOL accessibilityEnabled;

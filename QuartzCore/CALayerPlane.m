@@ -142,10 +142,11 @@ BOOL CALayerCanPresentOnOwnPlane(CALayer *layer, CALayer *root) {
                 return NO;
         }
 
-        // Siblings after `current` are drawn above it; a z position reorders them.
+        // Siblings after `current` are drawn above it; a z position reorders them,
+        // and so does an animation of it, which the renderer follows.
         BOOL above = NO;
         for (CALayer *sibling in [parent sublayers]) {
-            if ([sibling zPosition] != 0)
+            if ([sibling zPosition] != 0 || [sibling animationForKey: @"zPosition"] != nil)
                 return NO;
             if (sibling == current) {
                 above = YES;

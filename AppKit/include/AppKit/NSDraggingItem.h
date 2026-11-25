@@ -25,55 +25,48 @@
 @class NSArray, NSString;
 @protocol NSPasteboardWriting;
 
+NS_ASSUME_NONNULL_BEGIN
+
 typedef NSString *NSDraggingImageComponentKey NS_STRING_ENUM;
 
 APPKIT_EXPORT NSDraggingImageComponentKey const NSDraggingImageComponentIconKey;
 APPKIT_EXPORT NSDraggingImageComponentKey const NSDraggingImageComponentLabelKey;
 
-// One part of the image of a dragging item: its contents (an NSImage or a
-// CGImageRef) drawn in its frame, in the item's coordinates.
+// One layer of a dragging item's image: an image placed in the item's frame
 @interface NSDraggingImageComponent : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSDraggingImageComponentReserved, 20)
-    NS_EXTRA_IVARS_BEGIN(NSDraggingImageComponent)
-        NSDraggingImageComponentKey _key;
-        id _contents;
-        NSRect _frame;
-    NS_EXTRA_IVARS_END(NSDraggingImageComponent)
+    // The original's ivars take 24 bytes on i386 (appkit-i386-ivar-layout)
+    NSDraggingImageComponentKey _key;
+    id _contents;
+    NSRect _frame;
 }
 
-+ (NSDraggingImageComponent *) draggingImageComponentWithKey: (NSDraggingImageComponentKey) key;
-
++ (instancetype) draggingImageComponentWithKey: (NSDraggingImageComponentKey) key;
 - (instancetype) initWithKey: (NSDraggingImageComponentKey) key;
 
 @property(copy) NSDraggingImageComponentKey key;
-@property(retain) id contents;
-@property NSRect frame;
+@property(retain, nullable) id contents;   // an NSImage or a CGImageRef
+@property NSRect frame;                    // in the item's coordinates, its frame's origin at (0, 0)
 
 @end
 
-// One of the things a drag carries: its object (written to the pasteboard
-// when the drag begins) and how it is shown.
 @interface NSDraggingItem : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSDraggingItemReserved, 32)
-    NS_EXTRA_IVARS_BEGIN(NSDraggingItem)
-        id _item;
-        NSRect _draggingFrame;
-        NSArray<NSDraggingImageComponent *> * (^_imageComponentsProvider)(void);
-    NS_EXTRA_IVARS_END(NSDraggingItem)
+    // The original's ivars take 36 bytes on i386 (appkit-i386-ivar-layout)
+    id _item;
+    NSRect _draggingFrame;
+    NSArray *_Nonnull (^_imageComponentsProvider)(void);
+    NS_LEGACY_IVAR_PAD(_NSDraggingItemReserved, 12)
 }
 
 - (instancetype) initWithPasteboardWriter: (id<NSPasteboardWriting>) pasteboardWriter;
 
 @property(readonly, retain) id item;
-// in the coordinates of the view the drag begins in, or of the destination's
 @property NSRect draggingFrame;
-@property(copy) NSArray<NSDraggingImageComponent *> * (^imageComponentsProvider)(void);
+@property(copy, nullable) NSArray<NSDraggingImageComponent *> *_Nonnull (^imageComponentsProvider)(void);
+@property(readonly, copy, nullable) NSArray<NSDraggingImageComponent *> *imageComponents;
 
-// Sets the frame and makes the image one icon component with the contents,
-// filling the frame.
-- (void) setDraggingFrame: (NSRect) frame contents: (id) contents;
-
-// What the provider gives, or nil without one.
-@property(readonly, copy) NSArray<NSDraggingImageComponent *> *imageComponents;
+// Sets the frame, and a provider of one icon component showing the contents over all of it
+- (void) setDraggingFrame: (NSRect) frame contents: (nullable id) contents;
 
 @end
+
+NS_ASSUME_NONNULL_END

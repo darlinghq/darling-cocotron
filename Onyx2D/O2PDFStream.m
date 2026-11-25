@@ -25,6 +25,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2PDFFilter.h>
 #import <Onyx2D/O2PDFStream.h>
 #import <Onyx2D/O2PDFxref.h>
+#include <string.h>
 
 @implementation O2PDFStream
 
@@ -108,12 +109,28 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return _bytesPerRow;
 }
 
+static O2PDFStreamImageFilter O2PDFStreamImageFilterNamed(const char *name) {
+    if (strcmp(name, "DCTDecode") == 0 || strcmp(name, "DCT") == 0)
+        return kO2PDFStreamDCTImageFilter;
+    if (strcmp(name, "JPXDecode") == 0)
+        return kO2PDFStreamJPXImageFilter;
+    return kO2PDFStreamNoImageFilter;
+}
+
 - (NSData *) resultData {
+    return [self dataLeavingImageFilter: NULL];
+}
+
+// A NULL imageFilter decodes every filter, as -data always has.
+- (NSData *) dataLeavingImageFilter: (O2PDFStreamImageFilter *) imageFilter {
     O2PDFInteger length;
     NSData *result;
     const char *name;
     O2PDFDictionary *parameters;
     O2PDFArray *filters;
+    // -bytesPerRow describes the data -data returns, so only that path may set it.
+    size_t scratchBytesPerRow = 0;
+    size_t *bytesPerRow = imageFilter ? &scratchBytesPerRow : &_bytesPerRow;
 
     if (![_dictionary getIntegerForKey: "Length" value: &length]) {
         O2PDFError(__FILE__, __LINE__, @"stream does not contain Length");
@@ -121,6 +138,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
 
     result = _data;
+    if (imageFilter)
+        *imageFilter = kO2PDFStreamNoImageFilter;
 
     if ([_dictionary getNameForKey: "Filter" value: &name]) {
 
@@ -128,10 +147,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                                         value: &parameters])
             parameters = nil;
 
+        if (imageFilter &&
+            (*imageFilter = O2PDFStreamImageFilterNamed(name)) != kO2PDFStreamNoImageFilter)
+            return result;
         result = [O2PDFFilter decodeWithName: name
                                         data: result
                                   parameters: parameters
-                                 bytesPerRow: &_bytesPerRow];
+                                 bytesPerRow: bytesPerRow];
     } else if ([_dictionary getArrayForKey: "Filter" value: &filters]) {
         O2PDFArray *parameterArray;
         int i, count = [filters count];
@@ -147,10 +169,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             }
             if (![parameterArray getDictionaryAtIndex: i value: &parameters])
                 parameters = nil;
+            // QUIRK: with an image filter left applied, a DCT or JPX filter that is not the last one is
+            // not decoded either: the data passes through it unchanged and the chain goes on (a later
+            // filter that cannot be applied still gives no data). Only the last filter is reported.
+            // Not documented. Evidence: black-box observation of CGPDFStreamCopyData on macOS 26.7.3 and
+            // 10.14.4 (tier 2): [/DCTDecode /DCTDecode] gives the 21 input bytes, [/DCTDecode
+            // /NoSuchFilter] gives NULL without decoding the image data.
+            // Test: coregraphics-pdf-page-dictionary-and-stream-data ("quirk: image filter before the end")
+            if (imageFilter && O2PDFStreamImageFilterNamed(name) != kO2PDFStreamNoImageFilter) {
+                if (i == count - 1)
+                    *imageFilter = O2PDFStreamImageFilterNamed(name);
+                continue;
+            }
             result = [O2PDFFilter decodeWithName: name
                                             data: result
                                       parameters: parameters
-                                     bytesPerRow: &_bytesPerRow];
+                                     bytesPerRow: bytesPerRow];
         }
     }
 

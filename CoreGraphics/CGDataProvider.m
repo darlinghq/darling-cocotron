@@ -50,7 +50,7 @@ CGDataProviderCreateWithData(void *info, const void *data, size_t size,
     return (CGDataProviderRef)O2DataProviderCreateWithData(info, data, size, releaseCallback);
 }
 
-// The callback providers read all of their data when they are created, into a
+// A direct provider reads all of its data when it is created, into a
 // copy the provider owns; the client's info is released with the provider.
 typedef struct {
     void *info;
@@ -79,33 +79,6 @@ static CGDataProviderRef createProviderOwningBytes(void *bytes, size_t size, voi
         free(context);
     }
     return provider;
-}
-
-// The data is read from the current position (the start, unless the client's
-// stream is elsewhere) to the end, as an image source would read it.
-CGDataProviderRef CGDataProviderCreateSequential(void *info, const CGDataProviderSequentialCallbacks *callbacks) {
-    if (callbacks == NULL || callbacks->getBytes == NULL)
-        return NULL;
-    size_t capacity = 4096, size = 0;
-    unsigned char *bytes = malloc(capacity);
-    if (bytes == NULL)
-        return NULL;
-    for (;;) {
-        if (size == capacity) {
-            unsigned char *grown = realloc(bytes, capacity * 2);
-            if (grown == NULL) {
-                free(bytes);
-                return NULL;
-            }
-            bytes = grown;
-            capacity *= 2;
-        }
-        size_t count = callbacks->getBytes(info, bytes + size, capacity - size);
-        if (count == 0)
-            break;
-        size += count;
-    }
-    return createProviderOwningBytes(bytes, size, info, callbacks->releaseInfo);
 }
 
 CGDataProviderRef CGDataProviderCreateDirect(void *info, off_t size, const CGDataProviderDirectCallbacks *callbacks) {
@@ -153,6 +126,13 @@ CGDataProviderRef CGDataProviderCreateWithCopyOfData(const void *data, size_t si
     if (provider == NULL)
         free(copy);
     return provider;
+}
+
+// NULL for NULL callbacks, a callbacks version other than 0 and a missing getBytes callback
+// (observed on macOS 26.7.3 and 10.14.4); skipForward, rewind and releaseInfo may be NULL.
+// The callbacks structure has the layout of O2DataProviderSequentialCallbacks.
+CGDataProviderRef CGDataProviderCreateSequential(void *info, const CGDataProviderSequentialCallbacks *callbacks) {
+    return (CGDataProviderRef)O2DataProviderCreateSequential(info, (const O2DataProviderSequentialCallbacks *)callbacks);
 }
 
 COREGRAPHICS_EXPORT CFDataRef CGDataProviderCopyData(CGDataProviderRef self) {

@@ -1,11 +1,13 @@
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSException.h>
+#import <objc/runtime.h>
 #import <QuartzCore/CAAnimation.h>
 #import <QuartzCore/CAConstraintLayoutManager.h>
 #import <QuartzCore/CALayer.h>
 #import <QuartzCore/CALayerContext.h>
 #import <QuartzCore/CAScrollLayer.h>
 #import <QuartzCore/CATransaction.h>
+#import <IOSurface/IOSurface.h>
 #import <Onyx2D/O2Image.h>
 #import "CAKeyedCoding.h"
 #import <QuartzCore/CATransactionPrivate.h>
@@ -90,6 +92,12 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
 - (void) setSublayers: (NSArray *) sublayers {
     sublayers = sublayers != nil ? [sublayers copy] : [NSArray new];
 
+    // The same layers in the same order change nothing.
+    if ([sublayers isEqualToArray: NS_EXTRA(CALayer, self)->_sublayers]) {
+        [sublayers release];
+        return;
+    }
+
     // A layer has a single superlayer, so the new sublayers leave the layers
     // they are in now.
     for (CALayer *layer in sublayers) {
@@ -157,6 +165,20 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
 }
 
 - (void) setPosition: (CGPoint) value {
+    // QUIRK: setting an animatable property to the value it has changes
+    // nothing: the delegate and the layer's actions are not asked and no
+    // implicit animation is added. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 (tier 2): in a window-hosted layer tree,
+    // position, bounds, opacity, cornerRadius, transform and hidden set to
+    // their current values gave no -actionForLayer:forKey: call and no animation
+    // key, while a different value gave one call and one animation key. On
+    // macOS 10.14.4 (no window server, so no hosted tree and no animation
+    // keys): same values gave no -actionForLayer:forKey: call, different
+    // values gave one.
+    // Test: tests/quartzcore-layer-idle-frames.m (same-value cases).
+    if (CGPointEqualToPoint(NS_EXTRA(CALayer, self)->_position, value))
+        return;
+
     CAAnimation *animation = [self animationForKey: @"position"];
 
     [CATransaction _openImplicitTransactionIfNeeded];
@@ -174,6 +196,10 @@ NSString *const CAToneMapModeIfSupported = @"ifSupported";
 }
 
 - (void) setBounds: (CGRect) value {
+    // QUIRK: as in -setPosition:, nothing happens for the value it has.
+    if (CGRectEqualToRect(NS_EXTRA(CALayer, self)->_bounds, value))
+        return;
+
     CAAnimation *animation = [self animationForKey: @"bounds"];
 
     [CATransaction _openImplicitTransactionIfNeeded];
@@ -367,6 +393,10 @@ static BOOL CALayerTransformIsAffine(CATransform3D t) {
 }
 
 - (void) setOpacity: (float) value {
+    // QUIRK: as in -setPosition:, nothing happens for the value it has.
+    if (NS_EXTRA(CALayer, self)->_opacity == value)
+        return;
+
     CAAnimation *animation = [self animationForKey: @"opacity"];
 
     [CATransaction _openImplicitTransactionIfNeeded];
@@ -399,11 +429,38 @@ static BOOL CALayerTransformIsAffine(CATransform3D t) {
     NS_EXTRA(CALayer, self)->_opaque = value;
 }
 
+// Setting a property to the value it already has changes nothing on screen,
+// so it must not ask for a frame.
+static BOOL colorsEqual(CGColorRef a, CGColorRef b) {
+    return a == b || (a != NULL && b != NULL && CGColorEqualToColor(a, b));
+}
+
+static BOOL valuesEqual(id a, id b) {
+    return a == b || [a isEqual: b];
+}
+
 - (id) contents {
     return NS_EXTRA(CALayer, self)->_contents;
 }
 
+// Whether setting the contents to value, which the layer already has, leaves
+// what is drawn as it is. The renderer draws the same image object without
+// uploading it again, and a surface whose pixels were not written to since
+// they were last uploaded.
+static BOOL contentsUnchanged(CALayer *layer, id value) {
+    if (value != [layer contents])
+        return NO;
+    if (value == nil)
+        return YES;
+    if (CFGetTypeID((CFTypeRef) value) != IOSurfaceGetTypeID())
+        return YES;
+    return [layer _textureContents] == value &&
+           IOSurfaceGetSeed((IOSurfaceRef) value) == [layer _textureSeed];
+}
+
 - (void) setContents: (id) value {
+    if (contentsUnchanged(self, value))
+        return;
     value = [value retain];
     [NS_EXTRA(CALayer, self)->_contents release];
     NS_EXTRA(CALayer, self)->_contents = value;
@@ -415,6 +472,8 @@ static BOOL CALayerTransformIsAffine(CATransform3D t) {
 }
 
 - (void) setContentsScale: (CGFloat) value {
+    if (NS_EXTRA(CALayer, self)->_contentsScale == value)
+        return;
     NS_EXTRA(CALayer, self)->_contentsScale = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -424,6 +483,8 @@ static BOOL CALayerTransformIsAffine(CATransform3D t) {
 }
 
 - (void) setContentsCenter: (CGRect) value {
+    if (CGRectEqualToRect(NS_EXTRA(CALayer, self)->_contentsCenter, value))
+        return;
     NS_EXTRA(CALayer, self)->_contentsCenter = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -443,6 +504,8 @@ static BOOL CALayerTransformIsAffine(CATransform3D t) {
 }
 
 - (void) setContentsGravity: (CALayerContentsGravity) value {
+    if (valuesEqual(NS_EXTRA(CALayer, self)->_contentsGravity, value))
+        return;
     value = [value copy];
     [NS_EXTRA(CALayer, self)->_contentsGravity release];
     NS_EXTRA(CALayer, self)->_contentsGravity = value;
@@ -490,6 +553,8 @@ static BOOL CALayerTransformIsAffine(CATransform3D t) {
 }
 
 - (void) setTransform: (CATransform3D) value {
+    if (CATransform3DEqualToTransform(NS_EXTRA(CALayer, self)->_transform, value))
+        return;
     NS_EXTRA(CALayer, self)->_transform = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -509,6 +574,8 @@ static BOOL CALayerTransformIsAffine(CATransform3D t) {
 }
 
 - (void) setSublayerTransform: (CATransform3D) value {
+    if (CATransform3DEqualToTransform(NS_EXTRA(CALayer, self)->_sublayerTransform, value))
+        return;
     NS_EXTRA(CALayer, self)->_sublayerTransform = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -895,7 +962,6 @@ static BOOL isOpaqueBlack(CGColorRef color) {
     [NS_EXTRA(CALayer, self)->_layoutManager release];
     [NS_EXTRA(CALayer, self)->_constraints release];
     [NS_EXTRA(CALayer, self)->_animations release];
-    [NS_EXTRA(CALayer, self)->_undefinedKeyValues release];
     [NS_EXTRA(CALayer, self)->_minificationFilter release];
     [NS_EXTRA(CALayer, self)->_magnificationFilter release];
     [NS_EXTRA(CALayer, self)->_contentsFormat release];
@@ -917,6 +983,7 @@ static BOOL isOpaqueBlack(CGColorRef color) {
         CGColorRelease(NS_EXTRA(CALayer, self)->_backgroundColor);
     if (NS_EXTRA(CALayer, self)->_borderColor)
         CGColorRelease(NS_EXTRA(CALayer, self)->_borderColor);
+    [NS_EXTRA(CALayer, self)->_contents release];
     [NS_EXTRA(CALayer, self)->_textureContents release];
     NS_EXTRA_FREE(CALayer, self);
     [super dealloc];
@@ -939,6 +1006,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 // Appearance changes need a new frame even when no view is redisplayed: the
 // context's timer renders and presents one, then stops again once idle.
 - (void) setBackgroundColor: (CGColorRef) value {
+    if (colorsEqual(NS_EXTRA(CALayer, self)->_backgroundColor, value))
+        return;
     replaceColor(&NS_EXTRA(CALayer, self)->_backgroundColor, value);
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -948,6 +1017,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setBorderColor: (CGColorRef) value {
+    if (colorsEqual(NS_EXTRA(CALayer, self)->_borderColor, value))
+        return;
     replaceColor(&NS_EXTRA(CALayer, self)->_borderColor, value);
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -957,6 +1028,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setBorderWidth: (CGFloat) value {
+    if (NS_EXTRA(CALayer, self)->_borderWidth == value)
+        return;
     NS_EXTRA(CALayer, self)->_borderWidth = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -966,6 +1039,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setCornerRadius: (CGFloat) value {
+    if (NS_EXTRA(CALayer, self)->_cornerRadius == value)
+        return;
     NS_EXTRA(CALayer, self)->_cornerRadius = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -975,6 +1050,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setCornerCurve: (CALayerCornerCurve) value {
+    if (valuesEqual(NS_EXTRA(CALayer, self)->_cornerCurve, value))
+        return;
     value = [value copy];
     [NS_EXTRA(CALayer, self)->_cornerCurve release];
     NS_EXTRA(CALayer, self)->_cornerCurve = value;
@@ -986,6 +1063,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setMaskedCorners: (CACornerMask) value {
+    if (NS_EXTRA(CALayer, self)->_maskedCorners == value)
+        return;
     NS_EXTRA(CALayer, self)->_maskedCorners = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -995,6 +1074,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setMasksToBounds: (BOOL) value {
+    if (NS_EXTRA(CALayer, self)->_masksToBounds == value)
+        return;
     NS_EXTRA(CALayer, self)->_masksToBounds = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1022,6 +1103,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setFilters: (NSArray *) value {
+    if (valuesEqual(NS_EXTRA(CALayer, self)->_filters, value))
+        return;
     value = [value copy];
     [NS_EXTRA(CALayer, self)->_filters release];
     NS_EXTRA(CALayer, self)->_filters = value;
@@ -1033,6 +1116,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setCompositingFilter: (id) value {
+    if (valuesEqual(NS_EXTRA(CALayer, self)->_compositingFilter, value))
+        return;
     [value retain];
     [NS_EXTRA(CALayer, self)->_compositingFilter release];
     NS_EXTRA(CALayer, self)->_compositingFilter = value;
@@ -1044,6 +1129,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setShadowColor: (CGColorRef) value {
+    if (colorsEqual(NS_EXTRA(CALayer, self)->_shadowColor, value))
+        return;
     replaceColor(&NS_EXTRA(CALayer, self)->_shadowColor, value);
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1053,6 +1140,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setShadowOpacity: (float) value {
+    if (NS_EXTRA(CALayer, self)->_shadowOpacity == value)
+        return;
     NS_EXTRA(CALayer, self)->_shadowOpacity = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1062,6 +1151,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setShadowRadius: (CGFloat) value {
+    if (NS_EXTRA(CALayer, self)->_shadowRadius == value)
+        return;
     NS_EXTRA(CALayer, self)->_shadowRadius = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1071,6 +1162,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setShadowOffset: (CGSize) value {
+    if (CGSizeEqualToSize(NS_EXTRA(CALayer, self)->_shadowOffset, value))
+        return;
     NS_EXTRA(CALayer, self)->_shadowOffset = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1094,6 +1187,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setAllowsGroupOpacity: (BOOL) value {
+    if (NS_EXTRA(CALayer, self)->_allowsGroupOpacity == value)
+        return;
     NS_EXTRA(CALayer, self)->_allowsGroupOpacity = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1103,6 +1198,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setHidden: (BOOL) value {
+    if (NS_EXTRA(CALayer, self)->_hidden == value)
+        return;
     NS_EXTRA(CALayer, self)->_hidden = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1120,6 +1217,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setZPosition: (CGFloat) value {
+    if (NS_EXTRA(CALayer, self)->_zPosition == value)
+        return;
     NS_EXTRA(CALayer, self)->_zPosition = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1129,6 +1228,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setAnchorPointZ: (CGFloat) value {
+    if (NS_EXTRA(CALayer, self)->_anchorPointZ == value)
+        return;
     NS_EXTRA(CALayer, self)->_anchorPointZ = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1138,6 +1239,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setContentsRect: (CGRect) value {
+    if (CGRectEqualToRect(NS_EXTRA(CALayer, self)->_contentsRect, value))
+        return;
     NS_EXTRA(CALayer, self)->_contentsRect = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1398,6 +1501,8 @@ static void replaceColor(CGColorRef *slot, CGColorRef value) {
 }
 
 - (void) setGeometryFlipped: (BOOL) value {
+    if (NS_EXTRA(CALayer, self)->_geometryFlipped == value)
+        return;
     NS_EXTRA(CALayer, self)->_geometryFlipped = value;
     [NS_EXTRA(CALayer, self)->_context startTimerIfNeeded];
 }
@@ -1689,23 +1794,27 @@ static CFTimeInterval layerTimeFromAbsolute(CALayer *layer, CFTimeInterval time)
     return [NS_EXTRA(CALayer, self)->_animations allKeys];
 }
 
-// A layer is a key-value coding container: a key it has no property for holds whatever value is
-// set for it, and reads as nil until then (Core Animation Programming Guide, "Key-Value Coding
+// A layer is a key-value coding container: it keeps a value for any key it has no property for, and
+// such a key reads as nil until then (Core Animation Programming Guide, "Key-Value Coding
 // Extensions"). Observed on macOS 26.7.3: setting nil removes the value, +defaultValueForKey: is
 // not consulted for such keys, and neither -initWithLayer: nor archiving carries them over.
 // Test: tests/quartzcore-kvc-arbitrary-keys.m.
-- (id) valueForUndefinedKey: (NSString *) key {
-    return [[[NS_EXTRA(CALayer, self)->_undefinedKeyValues objectForKey: key] retain] autorelease];
-}
+static char CALayerUndefinedValuesKey;
 
 - (void) setValue: (id) value forUndefinedKey: (NSString *) key {
-    if (value == nil) {
-        [NS_EXTRA(CALayer, self)->_undefinedKeyValues removeObjectForKey: key];
-        return;
+    NSMutableDictionary *values = objc_getAssociatedObject(self, &CALayerUndefinedValuesKey);
+    if (values == nil) {
+        values = [NSMutableDictionary dictionary];
+        objc_setAssociatedObject(self, &CALayerUndefinedValuesKey, values, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (NS_EXTRA(CALayer, self)->_undefinedKeyValues == nil)
-        NS_EXTRA(CALayer, self)->_undefinedKeyValues = [[NSMutableDictionary alloc] init];
-    [NS_EXTRA(CALayer, self)->_undefinedKeyValues setObject: value forKey: key];
+    if (value != nil)
+        [values setObject: value forKey: key];
+    else
+        [values removeObjectForKey: key];
+}
+
+- (id) valueForUndefinedKey: (NSString *) key {
+    return [objc_getAssociatedObject(self, &CALayerUndefinedValuesKey) objectForKey: key];
 }
 
 - valueForKey: (NSString *) key {

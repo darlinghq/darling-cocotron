@@ -22,6 +22,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @class NSData, NSMutableData;
 @class O2PDFDictionary, O2PDFxref;
 
+// The image filter, if any, that ends a stream's filter chain.
+typedef enum {
+    kO2PDFStreamNoImageFilter,
+    kO2PDFStreamDCTImageFilter,
+    kO2PDFStreamJPXImageFilter,
+} O2PDFStreamImageFilter;
+
 @interface O2PDFStream : O2PDFObject {
     O2PDFDictionary *_dictionary;
     NSData *_data;
@@ -42,6 +49,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (O2PDFxref *) xref;
 - (O2PDFDictionary *) dictionary;
 - (NSData *) data;
+// The data with every filter decoded except a DCT or JPX image filter that ends
+// the chain, which is left applied; the filter left is reported in imageFilter.
+// Without such a filter this is -data, apart from not being cached.
+- (NSData *) dataLeavingImageFilter: (O2PDFStreamImageFilter *) imageFilter;
 - (NSMutableData *) mutableData;
 - (size_t) bytesPerRow;
 

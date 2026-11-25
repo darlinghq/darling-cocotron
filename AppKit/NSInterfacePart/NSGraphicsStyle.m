@@ -1222,12 +1222,6 @@ static void textFieldBezelOutline(NSRect rect, BOOL enabled) {
     }
 }
 
-// Inferred: the list box frame was not observed on macOS; it is drawn as the text field bezel's outline, so text
-// areas match text fields.
-- (void) drawListBoxBorderInRect: (NSRect) rect enabled: (BOOL) enabled {
-    textFieldBezelOutline(rect, enabled);
-}
-
 - (void) drawTextViewInsertionPointInRect: (NSRect) rect
                                     color: (NSColor *) color
 {

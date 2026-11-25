@@ -27,6 +27,9 @@
 #import <CoreFoundation/CFSocket.h>
 #import "X11Monitors.h"
 
+@class CGSX11Keyboard;
+@class CGSX11Pointer;
+
 @interface CGSConnectionX11 : CGSConnection {
 @public
 	// The X11 display, which the CGS windows and surfaces of this connection draw on.
@@ -38,11 +41,10 @@
     // over a Unix domain socket, not a Mach port.
     CFSocketRef _cfSocket;
     CFRunLoopSourceRef _source;
+    CFRunLoopObserverRef _beforeWaitingObserver;
 
-	// One entry per X11 screen, each describing the root window of that screen, so
-	// that its size is in the coordinate space -mouseLocation reports. Dropped when
-	// XRandR reports a reconfiguration.
-	NSArray<CGSScreen*>* _screens;
+	// RandR reported a layout change that -processPendingEvents has not looked at yet.
+	BOOL _layoutChanged;
 
 	CGSKeyboardLayout* _keyboardLayout;
 	int _keyboardLayoutGroup;
@@ -58,12 +60,21 @@
 	NSMutableSet<NSNumber*>* _pressedHotKeys;
 	BOOL _detectableAutoRepeat;
 
+	// The keyboard of the connection: its key events become CGEvents (see CGSX11Keyboard.h).
+	CGSX11Keyboard* _keyboard;
+	// The pointer of the connection: its button and motion events become CGEvents (see CGSX11Pointer.h).
+	CGSX11Pointer* _pointer;
+
 @private
 	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
 	// @synchronized(self); the cache is dropped when XRandR reports a
 	// reconfiguration, like _screens.
 	X11Frame _primaryRoot;
+	// Device pixels per point, read together with _primaryRoot.
+	CGFloat _primaryScale;
 	BOOL _primaryRootValid;
+	// The cursor the connection's windows show while the process' cursor is hidden (None before the first hide).
+	Cursor _blankCursor;
 }
 
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
@@ -71,9 +82,22 @@
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
 
 -(void) processPendingEvents;
+// A point in root coordinates (device pixels) in CoreGraphics' global space (points).
+-(CGPoint) _cgPointFromRoot:(CGPoint)root;
+// The CGS window that has this X window, 0 when none.
+-(CGSWindowID) _windowIDForNativeWindow:(Window)native;
+// The device pixel position of a point of CoreGraphics' global space (rounded).
+-(void) _getRootX:(int*)x y:(int*)y forPoint:(CGPoint)point;
+// Shows a blank cursor on the windows of this connection, or the cursor they had (the process' cursor is hidden).
+-(void) _setBlankCursorOnWindows:(BOOL)blank;
+// The blank cursor, made on first use.
+-(Cursor) _blankCursorMade;
 -(NSArray<NSDictionary*>*) copyWindowDescriptions;
 
 +(BOOL) isAvailable;
+// The pointer of the process' connection, nil without one. Not retained for the caller (a test of the pointer's
+// decoding uses it to give the decoder an event of its own).
++(CGSX11Pointer*) _processPointer;
 
 @end
 

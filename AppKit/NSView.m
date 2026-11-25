@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSCursorRect.h>
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSDraggingManager.h>
+
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphics.h>
 #import <AppKit/NSGraphicsContextFunctions.h>
@@ -2262,7 +2263,12 @@ static int setWindowDepth;
             NSTrackingArea *area = [NS_EXTRA(NSView, self)->_trackingAreas objectAtIndex: i];
             NSRect rectOfInterest;
 
-            rectOfInterest = NSIntersectionRect([area rect], [self bounds]);
+            // With this option the area covers whatever part of the view is
+            // visible now, and the rect it was created with plays no part.
+            if ([area options] & NSTrackingInVisibleRect)
+                rectOfInterest = [self visibleRect];
+            else
+                rectOfInterest = NSIntersectionRect([area rect], [self bounds]);
 
             if (rectOfInterest.size.width > 0. &&
                 rectOfInterest.size.height > 0.) {
@@ -3113,8 +3119,15 @@ static void clearNeedsDisplay(NSView *self) {
     // reasons
     clearInvalidRects(self);
 
-    if (NS_EXTRA(NSView, self)->_needsDisplay)
+    if (NS_EXTRA(NSView, self)->_needsDisplay) {
+        // What is behind a view that does not fill its bounds is part of what has to be redrawn, as for
+        // -setNeedsDisplayInRect:. Without it an opaque ancestor that already has a smaller area
+        // invalid clips the redraw to that area, and the new content is drawn over the old.
+        NSView *opaqueAncestor = [self opaqueAncestor];
+        if (opaqueAncestor != nil && opaqueAncestor != self)
+            [opaqueAncestor setNeedsDisplayInRect: [self convertRect: [self visibleRect] toView: opaqueAncestor]];
         [[self window] setViewsNeedDisplay: YES];
+    }
 }
 
 - (void) setNeedsDisplayInRect: (NSRect) rect {
@@ -3578,7 +3591,7 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
         [self getRectsBeingDrawn: &rects count: &rectsCount];
         // If there is only one rect, it's the visible rect - it's already
         // clipped
-        if (rectsCount > 1)
+        if (rectsCount > 1 && !getenv("TOD_NOCLIP"))
             CGContextClipToRects(graphicsPort, rects, rectsCount);
 
         // A layer keeps its earlier contents (see -_lockFocusInContext:), so
@@ -3791,7 +3804,7 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
     return NSZeroPoint;
 }
 
-- (NSRect) rectForPage: (int) page {
+- (NSRect) rectForPage: (NSInteger) page {
     return NSZeroRect;
 }
 
@@ -3847,7 +3860,63 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
             source: source
          slideBack: (BOOL) slideBack
 {
-    location = [self convertPoint: location toView: nil];
+    [self _dragImage: image
+        atWindowLocation: [self convertPoint: location toView: nil]
+                  offset: offset
+                   event: event
+              pasteboard: pasteboard
+                  source: source
+               slideBack: slideBack];
+}
+
+// Writes each item's writer to the drag pasteboard as an item of its own; the drag itself starts when the event
+// handler that called this has returned
+- (NSDraggingSession *) beginDraggingSessionWithItems: (NSArray<NSDraggingItem *> *) items
+                                                event: (NSEvent *) event
+                                               source: (id<NSDraggingSource>) source
+{
+    // QUIRK: an item whose dragging frame has a zero size raises NSRangeException. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
+    // Test: appkit-dragging-session.m test_begin_returns_session_with_pasteboard_items
+    for (NSDraggingItem *item in items)
+        if (NSEqualSizes([item draggingFrame].size, NSZeroSize))
+            [NSException raise: NSRangeException
+                        format: @"NSDraggingItem.draggingFrame cannot be set to a zero size %@",
+                                NSStringFromRect([item draggingFrame])];
+
+    // QUIRK: while a session is waiting to start or running, another one is
+    // not started and nil is returned. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 (tier 2): a second call made before the run
+    // loop ran the first drag returns nil (an item with a zero-size frame
+    // still raises first).
+    // Test: tests/appkit-dragging-session.m, "a second session waits for none".
+    if ([NSDraggingSession _isSessionPendingOrRunning])
+        return nil;
+
+    NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
+    NSMutableArray *writers = [NSMutableArray arrayWithCapacity: [items count]];
+    for (NSDraggingItem *item in items)
+        [writers addObject: [item item]];
+    [pasteboard clearContents];
+    [pasteboard writeObjects: writers];
+
+    NSDraggingSession *session = [[NSDraggingSession alloc] _initWithItems: items
+                                                                      view: self
+                                                                     event: event
+                                                                    source: source
+                                                                pasteboard: pasteboard];
+    [session _scheduleStart];
+    return [session autorelease];
+}
+
+// -dragImage:at:..., with the image's corner already in the window's coordinates
+- (void) _dragImage: (NSImage *) image
+     atWindowLocation: (NSPoint) location
+               offset: (NSSize) offset
+                event: (NSEvent *) event
+           pasteboard: (NSPasteboard *) pasteboard
+               source: (id) source
+            slideBack: (BOOL) slideBack
+{
     if ([NSDraggingManager draggingManager] == nil) {
         // The window runs the drag in-process.
         [[self window] dragImage: image

@@ -19,6 +19,9 @@
 #import <AppKit/NSStatusBar.h>
 
 @interface NSStatusBar (Private)
+// Whether the application has put any item in the status bar. Does not create
+// the status bar.
++ (BOOL) _hasStatusItems;
 #ifdef WIN32
 - (void) _trayNotificationForID: (int) aTrayID event: (int) anEvent;
 - (Win32Window *) fakeWindow;

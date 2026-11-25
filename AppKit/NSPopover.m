@@ -18,6 +18,7 @@
 */
 
 #import <AppKit/NSApplication.h>
+#import "NSDelegateNotifications.h"
 #import <AppKit/NSPanel.h>
 #import <AppKit/NSPopover.h>
 #import <AppKit/NSView.h>
@@ -34,7 +35,6 @@ NSNotificationName const NSPopoverDidShowNotification = @"NSPopoverDidShowNotifi
 @synthesize animates = _animates;
 @synthesize contentSize = _contentSize;
 @synthesize contentViewController = _contentViewController;
-@synthesize delegate = _delegate;
 @synthesize positioningRect = _positioningRect;
 
 - (instancetype) init {
@@ -58,7 +58,25 @@ NSNotificationName const NSPopoverDidShowNotification = @"NSPopoverDidShowNotifi
     return self;
 }
 
+- (id<NSPopoverDelegate>) delegate {
+    return _delegate;
+}
+
+// The delegate is an observer of the popover's notifications for the methods it implements.
+- (void) setDelegate: (id<NSPopoverDelegate>) delegate {
+    NSDelegateNotification notes[] = {{NSPopoverWillShowNotification, @selector(popoverWillShow:)},
+                                      {NSPopoverDidShowNotification, @selector(popoverDidShow:)},
+                                      {NSPopoverWillCloseNotification, @selector(popoverWillClose:)},
+                                      {NSPopoverDidCloseNotification, @selector(popoverDidClose:)},
+                                      {nil, NULL}};
+
+    NSDelegateNotificationsRemove(_delegate, self, notes);
+    _delegate = delegate;
+    NSDelegateNotificationsAdd(_delegate, self, notes);
+}
+
 - (void) dealloc {
+    [self setDelegate: nil];
     [_panel orderOut: nil];
     [_panel release];
     [_appearance release];
@@ -105,10 +123,7 @@ NSNotificationName const NSPopoverDidShowNotification = @"NSPopoverDidShowNotifi
 }
 
 - (void) _notify: (NSNotificationName) name delegateSelector: (SEL) selector {
-    NSNotification *note = [NSNotification notificationWithName: name object: self];
-    if ([_delegate respondsToSelector: selector])
-        [_delegate performSelector: selector withObject: note];
-    [[NSNotificationCenter defaultCenter] postNotification: note];
+    [[NSNotificationCenter defaultCenter] postNotificationName: name object: self];
 }
 
 - (void) showRelativeToRect: (NSRect) positioningRect

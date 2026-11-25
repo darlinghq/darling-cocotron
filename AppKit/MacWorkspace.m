@@ -3,8 +3,12 @@
 #import <AppKit/NSImage.h>
 #import <AppKit/NSRunningApplication.h>
 #import <AppKit/NSRaise.h>
+#import "NSWorkspaceVolumeEvents.h"
 #include <LaunchServices/LaunchServices.h>
 #include <LaunchServices/LaunchServicesPriv.h>
+#include <DiskArbitration/DiskArbitration.h>
+#include <CarbonCore/MacErrors.h>
+#include <stdlib.h>
 #include <dispatch/dispatch.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #include <string.h>
@@ -331,6 +335,17 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
 
 @implementation MacWorkspace
 
+static NSImage *ImageForGenericIcon(NSString *name);
+
+// The icon of a mount point (one for removable volumes, one for the others), or nil for any other directory.
+static NSImage *VolumeIconForPath(NSString *path) {
+    NSDictionary *volume = [[NSURL fileURLWithPath: path isDirectory: YES]
+        resourceValuesForKeys: @[NSURLIsVolumeKey, NSURLVolumeIsRemovableKey] error: NULL];
+    if (![volume[NSURLIsVolumeKey] boolValue])
+        return nil;
+    return ImageForGenericIcon([volume[NSURLVolumeIsRemovableKey] boolValue] ? @"NSVolumeRemovable" : @"NSVolumeInternal");
+}
+
 // The icon of a file that has no icon of its own: the one for its type, which comes from the filename
 // extension. A path that is empty or does not exist still gets one, as on macOS.
 - (NSImage *) _iconByTypeForPath: (NSString *) path isDirectory: (BOOL) isDirectory {
@@ -361,6 +376,10 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
     }
     if (!isDirectory)
         return [self _iconByTypeForPath: path isDirectory: NO];
+
+    NSImage *volumeIcon = VolumeIconForPath(path);
+    if (volumeIcon != nil)
+        return volumeIcon;
 
     NSDictionary *info = [NSDictionary dictionaryWithContentsOfFile:
             [path stringByAppendingPathComponent: @"Contents/Info.plist"]];
@@ -398,12 +417,13 @@ static BOOL SetIcnsResourceFork(NSString *path, NSArray *elements) {
     return [self _iconByTypeForPath: path isDirectory: YES];
 }
 
-// One file gets its own icon; a group (or nothing) gets the generic document icon.
+// No files have no icon, one file its own, and several the multiple documents image (as on macOS 26).
 - (NSImage *) iconForFiles: (NSArray *) array {
+    if ([array count] == 0)
+        return nil;
     if ([array count] == 1)
         return [self iconForFile: [array objectAtIndex: 0]];
-
-    return [self _iconByTypeForPath: @"" isDirectory: NO];
+    return [NSImage imageNamed: NSImageNameMultipleDocuments];
 }
 
 // A file type is a UTI, a filename extension, or an HFS type code in quotes.
@@ -452,8 +472,15 @@ static NSImage *DeclaredIconForType(UTType *uti) {
         return icon;
 
     UTType *uti = TypeForFileType(type);
-    if ([uti conformsToType: UTTypeDirectory])
+    // applications and volumes are directories too
+    if ([uti conformsToType: UTTypeVolume])
+        icon = ImageForGenericIcon(@"NSVolumeInternal");
+    else if ([uti conformsToType: UTTypeApplication])
+        icon = ImageForGenericIcon(@"application-x-executable");
+    else if ([uti conformsToType: UTTypeDirectory])
         icon = [NSImage imageNamed: NSImageNameFolder];
+    else if ([uti conformsToType: UTTypeDiskImage])
+        icon = ImageForGenericIcon(@"NSDiskImage");
     else {
         icon = DeclaredIconForType(uti);
         if (icon == nil) {
@@ -727,9 +754,7 @@ extern OSStatus _LSOpenFileOnHost(CFURLRef fileURL, Boolean reveal) __attribute_
 // event listing the items as bookmark data (file URLs where no bookmark can be made), or a reopen event for no items,
 // both with the boolean parameter 'aapd' set to true, which tells a reveal from an open.
 
-// Sends the event to the running application with the bundle identifier; fails with procNotFound when it is not running
-// (or has not yet started to receive events).
-static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *urls) {
+static NSAppleEventDescriptor *makeRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *urls) {
     NSAppleEventDescriptor *target = [NSAppleEventDescriptor
             descriptorWithDescriptorType: typeApplicationBundleID
                                     data: [bundleIdentifier dataUsingEncoding: NSUTF8StringEncoding]];
@@ -756,7 +781,24 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
         [event setParamDescriptor: list forKeyword: keyDirectObject];
     }
     [event setParamDescriptor: [NSAppleEventDescriptor descriptorWithBoolean: YES] forKeyword: 'aapd'];
-    return AESendMessage([event aeDesc], NULL, kAENoReply, 5 * 60);
+    return event;
+}
+
+// Sends the event to the file viewer, launching it when it is not running. A launched viewer gets the event as the
+// launch's initial event, so it receives only that event and no open-application event (as on macOS 26.7.3: the reveal
+// is the first and only event a file viewer started by it gets).
+static OSStatus sendRevealEvent(NSURL *viewerURL, NSAppleEventDescriptor *event) {
+    OSStatus status = AESendMessage([event aeDesc], NULL, kAENoReply, 5 * 60);
+    FSRef viewer;
+    if (status != procNotFound || !CFURLGetFSRef((CFURLRef) viewerURL, &viewer))
+        return status;
+    LSApplicationParameters parameters = {
+        .version = 0,
+        .flags = kLSLaunchDefaults,
+        .application = &viewer,
+        .initialEvent = (AppleEvent *) [event aeDesc],
+    };
+    return LSOpenApplication(&parameters, NULL);
 }
 
 - (void) _revealURLs: (NSArray<NSURL *> *) urls {
@@ -766,16 +808,7 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
 
     NSURL *viewerURL = [self URLForApplicationWithBundleIdentifier: viewerID];
     if (viewerURL != nil) {
-        OSStatus status = sendRevealEvent(viewerID, urls);
-        if (status == procNotFound && [self launchApplication: [viewerURL path]]) {
-            // The first event must not be lost while the application starts: it is delivered as soon as the
-            // application takes events, so keep trying for a limited time.
-            for (int attempt = 0; attempt < 100 && status == procNotFound; attempt++) {
-                usleep(100000);
-                status = sendRevealEvent(viewerID, urls);
-            }
-        }
-        if (status == noErr)
+        if (sendRevealEvent(viewerURL, makeRevealEvent(viewerID, urls)) == noErr)
             return;
     }
 
@@ -834,10 +867,26 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
     if (!path)
         return NO;
 
-    // TODO: call statfs() to get filesystem information
-    // Use DiskArbitration for the rest.
-    NSUnimplementedMethod();
-    return NO;
+    NSDictionary *values = [[NSURL fileURLWithPath: path]
+        resourceValuesForKeys: @[NSURLVolumeURLKey, NSURLVolumeIsRemovableKey, NSURLVolumeIsReadOnlyKey,
+                                 NSURLVolumeTypeNameKey]
+                        error: NULL];
+    if (values[NSURLVolumeURLKey] == nil)
+        return NO;
+
+    BOOL removable = [values[NSURLVolumeIsRemovableKey] boolValue];
+    if (isRemovable)
+        *isRemovable = removable;
+    if (isWritable)
+        *isWritable = ![values[NSURLVolumeIsReadOnlyKey] boolValue];
+    // A removable volume (a disk image) is the one kind that can be unmounted and ejected.
+    if (isUnmountable)
+        *isUnmountable = removable;
+    if (description)
+        *description = values[NSURLVolumeTypeNameKey];
+    if (type)
+        *type = values[NSURLVolumeTypeNameKey];
+    return YES;
 }
 
 - (BOOL) getInfoForFile: (NSString *) path
@@ -857,25 +906,160 @@ static OSStatus sendRevealEvent(NSString *bundleIdentifier, NSArray<NSURL *> *ur
 }
 
 - (NSArray *) mountedRemovableMedia {
-    // TODO: call [[NSFileManager defaultManager]
-    // mountedVolumeURLsIncludingResourceValuesForKeys:@[NSURLVolumeIsRemovableKey]
-    // options:NSVolumeEnumerationSkipHiddenVolumes]
-    NSUnimplementedMethod();
-    return @[];
+    NSArray *volumes = [[NSFileManager defaultManager]
+        mountedVolumeURLsIncludingResourceValuesForKeys: @[NSURLVolumeIsRemovableKey] options: 0];
+    NSMutableArray *paths = [NSMutableArray array];
+    for (NSURL *volume in volumes) {
+        NSNumber *removable = nil;
+        [volume getResourceValue: &removable forKey: NSURLVolumeIsRemovableKey error: NULL];
+        if ([removable boolValue])
+            [paths addObject: [volume path]];
+    }
+    return paths;
 }
 
 - (NSArray *) mountedLocalVolumePaths {
-    // TODO: call [[NSFileManager defaultManager]
-    // mountedVolumeURLsIncludingResourceValuesForKeys:@[]
-    // options:NSVolumeEnumerationSkipHiddenVolumes]
-    NSUnimplementedMethod();
-    return @[];
+    // Every volume, hidden ones included (macOS lists even its automounted ones here).
+    NSArray *volumes = [[NSFileManager defaultManager] mountedVolumeURLsIncludingResourceValuesForKeys: nil options: 0];
+    NSMutableArray *paths = [NSMutableArray arrayWithCapacity: [volumes count]];
+    for (NSURL *volume in volumes)
+        [paths addObject: [volume path]];
+    return paths;
+}
+
+// QUIRK: the failures of a recycle are listed under the userInfo key "NSUnderlyingErrors", not under the documented
+// NSMultipleUnderlyingErrorsKey (whose value is a different string). Not documented. Evidence: black-box observation
+// on macOS 26.7.3 (tier 2): a recycle of a file and a missing file gives an error whose userInfo has exactly
+// NSLocalizedDescription and NSUnderlyingErrors. Test: nsworkspace-recycle.m.
+static NSString *const RecycleUnderlyingErrorsKey = @"NSUnderlyingErrors";
+
+- (void) recycleURLs: (NSArray<NSURL *> *) URLs
+   completionHandler: (void (^)(NSDictionary<NSURL *, NSURL *> *newURLs, NSError *error)) handler {
+    NSArray *items = [[URLs copy] autorelease];
+    void (^completion)(NSDictionary *, NSError *) = [[handler copy] autorelease];
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        @autoreleasepool {
+            NSFileManager *fileManager = [[[NSFileManager alloc] init] autorelease];
+            NSMutableDictionary *moved = [NSMutableDictionary dictionary];
+            NSMutableArray *failures = [NSMutableArray array];
+            NSURL *firstFailed = nil;
+
+            for (NSURL *item in items) {
+                NSURL *result = nil;
+                NSError *error = nil;
+                if ([fileManager trashItemAtURL: item resultingItemURL: &result error: &error] && result != nil)
+                    moved[item] = result;
+                else {
+                    if (firstFailed == nil)
+                        firstFailed = item;
+                    [failures addObject: error ?: [NSError errorWithDomain: NSCocoaErrorDomain
+                                                                      code: NSFileWriteUnknownError
+                                                                  userInfo: nil]];
+                }
+            }
+
+            NSError *error = nil;
+            if ([failures count] > 0) {
+                NSString *description = [NSString stringWithFormat:
+                    @"The file \u201C%@\u201D could not be moved to the trash.", [firstFailed lastPathComponent]];
+                error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                            code: [[failures objectAtIndex: 0] code]
+                                        userInfo: @{
+                                            NSLocalizedDescriptionKey: description,
+                                            RecycleUnderlyingErrorsKey: failures,
+                                        }];
+            }
+
+            if (completion != nil) {
+                NSDictionary *newURLs = [[moved copy] autorelease];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    completion(newURLs, error);
+                });
+            }
+        }
+    });
 }
 
 - (BOOL) unmountAndEjectDeviceAtPath: (NSString *) path {
-    // TODO: call FSEjectVolumeSync()
-    NSUnimplementedMethod();
-    return NO;
+    if (!path)
+        return NO;
+    return [self unmountAndEjectDeviceAtURL: [NSURL fileURLWithPath: path] error: NULL];
+}
+
+// The run loop mode an eject waits in: only its own DiskArbitration session, and the one that posts the mount
+// notifications (NSWorkspaceVolumeEvents.h), are scheduled in it.
+static NSString *const NSWorkspaceEjectRunLoopMode = @"NSWorkspaceEjectRunLoopMode";
+
+struct eject_request {
+    BOOL done;
+    BOOL dissented;
+};
+
+static void eject_request_completed(DADiskRef disk, DADissenterRef dissenter, void *context) {
+    struct eject_request *request = context;
+    request->dissented = dissenter != NULL;
+    request->done = YES;
+}
+
+// Waits for a DiskArbitration request; a request always completes (diskarbitrationd answers within its approval
+// timeout), but the wait is bounded so that a daemon that has gone away cannot hang the caller.
+static BOOL eject_request_wait(struct eject_request *request) {
+    NSDate *limit = [NSDate dateWithTimeIntervalSinceNow: 60];
+    while (!request->done && [limit timeIntervalSinceNow] > 0)
+        CFRunLoopRunInMode((CFStringRef) NSWorkspaceEjectRunLoopMode, 0.25, true);
+    return request->done && !request->dissented;
+}
+
+- (BOOL) unmountAndEjectDeviceAtURL: (NSURL *) url error: (NSError **) error {
+    char resolved[PATH_MAX];
+    if (error)
+        *error = nil;
+    if (![url isFileURL] || realpath([url fileSystemRepresentation], resolved) == NULL) {
+        if (error)
+            *error = [NSError errorWithDomain: NSOSStatusErrorDomain code: ioErr userInfo: nil];
+        return NO;
+    }
+
+    NSURL *volume = nil;
+    [[NSURL fileURLWithPath: [[NSFileManager defaultManager] stringWithFileSystemRepresentation: resolved
+                                                                                       length: strlen(resolved)]]
+        getResourceValue: &volume forKey: NSURLVolumeURLKey error: NULL];
+
+    BOOL ejected = NO;
+    DASessionRef session = DASessionCreate(kCFAllocatorDefault);
+    DADiskRef disk = (session && volume) ? DADiskCreateFromVolumePath(kCFAllocatorDefault, session, (CFURLRef) volume) : NULL;
+    DADiskRef whole = disk ? DADiskCopyWholeDisk(disk) : NULL;
+    if (whole) {
+        CFRunLoopRef runLoop = CFRunLoopGetCurrent();
+        struct eject_request unmount = { NO, NO }, eject = { NO, NO };
+
+        DASessionScheduleWithRunLoop(session, runLoop, (CFStringRef) NSWorkspaceEjectRunLoopMode);
+        // On the main thread, the process's own notification session must answer the unmount approval (and post
+        // the notifications) while the eject waits, or the request would wait for its approval timeout.
+        BOOL onMain = runLoop == CFRunLoopGetMain();
+        if (onMain)
+            NSWorkspaceVolumeEventsSchedule((CFStringRef) NSWorkspaceEjectRunLoopMode, YES);
+        DADiskUnmount(whole, kDADiskUnmountOptionWhole, eject_request_completed, &unmount);
+        if (eject_request_wait(&unmount)) {
+            DADiskEject(whole, kDADiskEjectOptionDefault, eject_request_completed, &eject);
+            ejected = eject_request_wait(&eject);
+        }
+        // A request that timed out can no longer call back: its session is unscheduled and released here.
+        if (onMain)
+            NSWorkspaceVolumeEventsSchedule((CFStringRef) NSWorkspaceEjectRunLoopMode, NO);
+        DASessionUnscheduleFromRunLoop(session, runLoop, (CFStringRef) NSWorkspaceEjectRunLoopMode);
+    }
+    if (whole)
+        CFRelease(whole);
+    if (disk)
+        CFRelease(disk);
+    if (session)
+        CFRelease(session);
+
+    if (!ejected && error)
+        *error = [NSError errorWithDomain: NSOSStatusErrorDomain code: fBsyErr userInfo: nil];
+    return ejected;
 }
 
 - (BOOL) fileSystemChanged {

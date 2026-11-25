@@ -18,6 +18,7 @@
 
 #import "WaylandWindow.h"
 #import "WaylandSubWindow.h"
+#import "WaylandToplevelIcon.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindowLevel.h"
@@ -98,10 +99,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) dealloc {
     [self invalidate];
-    if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    if (_surface)
-        sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    [self destroySurface];
     [_subwindows release];
     [_display release];
     [_deviceDictionary release];
@@ -160,6 +158,33 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
     return _surface;
 }
+
+// The surface with the objects that are tied to it. The role objects must be gone first.
+- (void) destroySurface {
+    if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (_surface)
+        sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    _fractionalScale = _viewport = _surface = NULL;
+}
+
+// The core protocol makes the role of a wl_surface permanent for its lifetime, and xdg_toplevel and
+// xdg_popup are different roles, so a surface that was a toplevel cannot be given a popup role
+// (or the other way round) once its role objects are gone: a strict compositor ends the connection
+// with a protocol error. -unmap keeps the surface so that the subsurfaces of EGL and Metal children
+// stay attached to it, which is right while the role stays the same. When the window is about to
+// be shown with the other role, the surface is replaced instead, and the children move to the new
+// one. Returns whether it was replaced.
+- (BOOL) prepareSurfaceForRole: (WaylandSurfaceRole) role {
+    if (_surface == NULL || _surfaceRole == WaylandSurfaceRoleNone || _surfaceRole == role)
+        return NO;
+    for (NSValue *value in _subwindows)
+        [(WaylandSubWindow *) [value pointerValue] parentSurfaceWillBeReplaced];
+    [self destroySurface];
+    _surfaceRole = WaylandSurfaceRoleNone;
+    return YES;
+}
+
 - (WaylandDisplay *) waylandDisplay { return _display; }
 - (BOOL) isInvalidated { return _invalidated; }
 - (void) addSubwindow: (WaylandSubWindow *) child {
@@ -221,8 +246,41 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // Mapped, or ordered in but kept unmapped because it is fully transparent. Such a window counts as
 // on screen for the window order (and so for the choice of the next key window), as on X11 where
 // it is mapped with no opacity.
+// The keyboard focus is in another client. A window the compositor does not hold active can still be
+// active for AppKit, because a window that is never shown is reported active when it is made key.
+- (BOOL) isActivatedByCompositor {
+    return _activated;
+}
+
+- (void) keyboardFocusLeft {
+    NSWindow *delegate = _delegate;
+    if (delegate != nil && !_activated && [delegate _isActive])
+        [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
+}
+
 - (BOOL) isOrderedIn {
-    return _mapped || (_fullyTransparent && _shouldBeMapped && !_invalidated);
+    return _mapped || ((_fullyTransparent || _mapDeferred) && _shouldBeMapped && !_invalidated);
+}
+
+- (BOOL) isMapDeferred {
+    return _mapDeferred && _shouldBeMapped && !_invalidated;
+}
+
+// Mapping a toplevel makes compositors give it the keyboard focus (nothing in xdg-shell lets a client
+// say that a window is shown without taking it), but an application that is not active does not take
+// the focus by ordering a window in. Such a window stays unmapped until the application is active
+// (the display maps it then) or is asked to activate; modal windows and sheets are shown, as the
+// application cannot continue without them.
+- (BOOL) mapWouldTakeFocusFromOthers {
+    // The menu bar is a layer surface without keyboard interactivity: it takes no focus.
+    if ([self wantsLayerSurface])
+        return NO;
+    if ([NSApp _mayTakeInputFocus] || [_display mappingForActivation])
+        return NO;
+    NSWindow *window = _delegate;
+    if ([window isSheet] || window == [NSApp modalWindow])
+        return NO;
+    return YES;
 }
 
 - (BOOL) isPopup { return _popup != NULL; }
@@ -233,6 +291,47 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (WaylandWindow *) popupParent { return _popupParent; }
 - (uint32_t) popupGrabSerial { return _popupGrabSerial; }
 - (struct wl_proxy *) xdgSurface { return _xdgSurface; }
+- (struct wl_proxy *) layerSurface { return _layerSurface; }
+
+// The menu bar window is a layer surface along the top of the screen when the
+// compositor offers wlr-layer-shell; otherwise it is an ordinary borderless
+// toplevel, which the compositor places.
+- (BOOL) wantsLayerSurface {
+    return _display->_layerShell != NULL &&
+           [_delegate isKindOfClass: NSClassFromString(@"NSMenuBarWindow")];
+}
+
+// The bar is anchored to the top, left and right edges, as tall as the window
+// is, and keeps that strip free of other windows (the exclusive zone).
+- (void) updateLayerSize {
+    int32_t height = MAX(1, (int32_t) ceil(_frame.size.height));
+    union wl_argument args[2] = {{.u = 0}, {.u = (uint32_t) height}};
+
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_SIZE, NULL, 0, args);
+    args[0].i = height;
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_EXCLUSIVE_ZONE, NULL, 0, args);
+}
+
+- (void) createLayerRole {
+    union wl_argument args[5];
+
+    args[0].o = NULL;
+    args[1].o = (struct wl_object *) _surface;
+    args[2].o = NULL; // the compositor picks the output
+    args[3].u = WP_LAYER_TOP;
+    args[4].s = "menubar";
+    _layerSurface = WaylandCreateObject(_display->_layerShell, WP_LAYER_SHELL_GET_LAYER_SURFACE,
+                                        &zwlr_layer_surface_v1_interface, args,
+                                        WaylandObjectLayerSurface, self);
+    args[0].u = WP_LAYER_ANCHOR_TOP | WP_LAYER_ANCHOR_LEFT | WP_LAYER_ANCHOR_RIGHT;
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_ANCHOR, NULL, 0, args);
+    [self updateLayerSize];
+    // The bar never takes the keyboard focus (the protocol default): a compositor that gives an
+    // on-demand surface the focus when the pointer is over it (KWin does as soon as the bar is
+    // mapped under the pointer) would take it from the application's window, which then looks to
+    // AppKit like the application losing the focus, so the bar would hide, and show again once the
+    // focus came back, in a loop. The menus the bar opens grab the keyboard themselves.
+}
 
 #pragma mark - Mapping
 
@@ -243,6 +342,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) ensureMapped {
+    if (_unmapPending && !_invalidated) {
+        // Ordered out and in again within one pass of the run loop: nothing changed for the window.
+        _unmapPending = NO;
+        _shouldBeMapped = YES;
+        return;
+    }
     if (_mapped || _invalidated)
         return;
     _shouldBeMapped = YES;
@@ -272,6 +377,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _popupWaitingForParent = parent != nil && !parent->_configured;
     if (_popupWaitingForParent)
         return;
+    if (parent == nil && !tooltip && !menu && [self mapWouldTakeFocusFromOthers]) {
+        _mapDeferred = YES;
+        return;
+    }
+    _mapDeferred = NO;
     _surfaceGeneration++;
     _configureUpdatePending = NO;
     // WaylandDecorations (org.darlinghq.AppKit) or DARLING_WAYLAND_DECORATIONS set to
@@ -287,38 +397,53 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     union wl_argument args[4];
 
+    BOOL layerRole = [self wantsLayerSurface];
+    BOOL surfaceRenewed = [self prepareSurfaceForRole: layerRole ? WaylandSurfaceRoleLayer
+                                                       : parent != nil ? WaylandSurfaceRolePopup
+                                                                       : WaylandSurfaceRoleToplevel];
     [self ensureSurface];
 
-    args[0].o = NULL;
-    args[1].o = (struct wl_object *) _surface;
-    _xdgSurface = WaylandCreateObject(_display->_wmBase,
-                                      WP_WM_BASE_GET_XDG_SURFACE,
-                                      &xdg_surface_interface, args,
-                                      WaylandObjectXdgSurface, self);
-
-    if (parent != nil) {
-        _popupParent = [parent retain];
-        [self createPopupRole];
+    if (layerRole) {
+        [self createLayerRole];
+        _surfaceRole = WaylandSurfaceRoleLayer;
     } else {
         args[0].o = NULL;
-        _toplevel = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_TOPLEVEL,
-                                    &xdg_toplevel_interface, args,
-                                    WaylandObjectToplevel, self);
+        args[1].o = (struct wl_object *) _surface;
+        _xdgSurface = WaylandCreateObject(_display->_wmBase,
+                                          WP_WM_BASE_GET_XDG_SURFACE,
+                                          &xdg_surface_interface, args,
+                                          WaylandObjectXdgSurface, self);
 
-        [self updateTitle];
-        args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
-        if (args[0].s != NULL)
-            WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, args);
-        _fullscreenRequested = NO;
-        [self updateFullscreen];
-        [self updateSizeLimits];
-        _levelParent = nil;
-        [self updateLevelParent];
+        if (parent != nil) {
+            _popupParent = [parent retain];
+            [self createPopupRole];
+            _surfaceRole = WaylandSurfaceRolePopup;
+        } else {
+            args[0].o = NULL;
+            _toplevel = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_TOPLEVEL,
+                                        &xdg_toplevel_interface, args,
+                                        WaylandObjectToplevel, self);
+            _surfaceRole = WaylandSurfaceRoleToplevel;
+            _minimizeAdvertised = _pendingMinimizeAdvertised = NO;
 
-        _decorationForcedClient = forceClient;
-        [self updateDecorationMode];
-        [self updateApplicationMenu];
-        [self updateTaskbarPresence];
+            [self updateTitle];
+            args[0].s = [[[NSProcessInfo processInfo] processName] UTF8String];
+            if (args[0].s != NULL)
+                WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, args);
+            _fullscreenRequested = NO;
+            [self updateFullscreen];
+            [self updateSizeLimits];
+            _levelParent = nil;
+            [self updateLevelParent];
+
+            _decorationForcedClient = forceClient;
+            [self updateDecorationMode];
+            [self updateApplicationMenu];
+            [self updateTaskbarPresence];
+            _toplevelIconSet = NO;
+            [self updateToplevelIcon];
+        }
+
     }
 
     _pendingWidth = _pendingHeight = 0;
@@ -332,6 +457,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_subwindowRedrawNeeded) [self scheduleSubwindowRedraw];
     _configured = NO;
     _needsPresent = _context != nil;
+    if (surfaceRenewed) {
+        for (NSValue *value in _subwindows)
+            [(WaylandSubWindow *) [value pointerValue] parentSurfaceReplaced];
+        if ([_subwindows count] > 0) [self scheduleSubwindowRedraw];
+    }
     [_display flush];
 }
 
@@ -359,6 +489,17 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_SKIP_TASKBAR, NULL, 0, value);
     if (_display->_plasmaShellVersion >= 5)
         WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_SKIP_SWITCHER, NULL, 0, value);
+}
+
+// Gives the toplevel the application icon the compositor shows for it (xdg-toplevel-icon); the request is
+// double-buffered, so a window that is already showing content commits for it to take effect.
+- (void) updateToplevelIcon {
+    if (_toplevel == NULL || _display->_toplevelIcons == nil)
+        return;
+    if ([_display->_toplevelIcons applyToToplevel: _toplevel hadIcon: &_toplevelIconSet] && _mapped && _configured) {
+        sendRequest(_surface, WP_SURFACE_COMMIT, 0);
+        [_display flush];
+    }
 }
 
 // The window's presentation can change while it is mapped (its collection behavior).
@@ -427,10 +568,16 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     struct wl_proxy *positioner = [self newPopupPositioner];
     union wl_argument args[3];
     args[0].o = NULL;
-    args[1].o = (struct wl_object *) [_popupParent xdgSurface];
+    // A popup of a layer surface has no xdg parent; the layer surface adopts it.
+    BOOL layerParent = [_popupParent layerSurface] != NULL;
+    args[1].o = layerParent ? NULL : (struct wl_object *) [_popupParent xdgSurface];
     args[2].o = (struct wl_object *) positioner;
     _popup = WaylandCreateObject(_xdgSurface, WP_XDG_SURFACE_GET_POPUP,
             &xdg_popup_interface, args, WaylandObjectPopup, self);
+    if (layerParent) {
+        args[0].o = (struct wl_object *) _popup;
+        WaylandMarshal([_popupParent layerSurface], WP_LAYER_SURFACE_GET_POPUP, NULL, 0, args);
+    }
     sendRequest(positioner, WP_POSITIONER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if ([self isTooltip] || (_genericPopup && [_delegate ignoresMouseEvents])) {
         // No grab, and an empty input region: the pointer keeps its focus on the
@@ -471,7 +618,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (BOOL) isPopupWaitingForParent { return _popupWaitingForParent; }
 
 - (void) unmap {
+    _unmapPending = NO;
     _shouldBeMapped = NO;
+    _mapDeferred = NO;
     _popupWaitingForParent = NO;
     _keyRequested = NO;
     if (!_mapped)
@@ -506,7 +655,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     }
     if (_toplevel != NULL)
         sendRequest(_toplevel, WP_TOPLEVEL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    sendRequest(_xdgSurface, WP_XDG_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    if (_layerSurface != NULL) {
+        sendRequest(_layerSurface, WP_LAYER_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+        _layerSurface = NULL;
+    }
+    if (_xdgSurface != NULL)
+        sendRequest(_xdgSurface, WP_XDG_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     // Retain the parent wl_surface across hide/show: EGL child surfaces keep
     // their native-window identity. A NULL buffer unmaps the entire subtree.
     union wl_argument detach[] = {{.o = NULL}, {.i = 0}, {.i = 0}};
@@ -517,12 +671,16 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self destroyBuffers];
 
     _mapped = NO;
+    // The toplevel is gone, and so is what the compositor did to it.
+    [self endMinimized];
     _levelParent = nil;
     _configureUpdatePending = NO;
     _configured = NO;
     // The compositor moves the focus away from a window that is unmapped without telling the client,
-    // so the window tells its application, which stops being active when no other window of it has
-    // the focus (as the X11 backend learns from the focus-out event).
+    // so the window tells its application, which stops being active when another window of it is
+    // still shown and none has the focus (as the X11 backend learns from the focus-out event). That
+    // the focus went elsewhere is not known: the application whose last window is unmapped stays
+    // active, as on macOS, until a window system event shows another client has the focus.
     BOOL wasActivated = _activated;
     _activated = NO;
     if (wasActivated) {
@@ -538,6 +696,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // from before fullscreen would be lost if the next map saved it again.
     _fullscreenRequested = _pendingFullscreen = _fullscreenRecheckPending = NO;
     _fullscreenReported = NO;
+    _fullscreenSettling = NO;
     [_display windowUnmapped: self];
     [_display flush];
 }
@@ -553,8 +712,25 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) hideWindowForAppDeactivation: (NSRect) frame {
 }
 
+// Ordering a window out and in again within one pass of the run loop is invisible on macOS: the window
+// stays where it is and keeps the focus. Toolkits do it for each pass of a frame loop. Here unmapping a
+// toplevel destroys its role, and mapping it creates a new one that the compositor places and focuses
+// anew, so the unmap waits for the end of the pass and is dropped if the window is ordered in by then.
+// Windows that are not application toplevels (pop-ups, the menu bar, windows never shown) unmap at once.
 - (void) hideWindow {
-    [self unmap];
+    if (!_mapped || _toplevel == NULL || _popup != NULL) {
+        [self unmap];
+        return;
+    }
+    if (_unmapPending)
+        return;
+    _unmapPending = YES;
+    _shouldBeMapped = NO;
+    _keyRequested = NO;
+    [_display performAfterRunLoopPass: ^{
+        if (self->_unmapPending)
+            [self unmap];
+    }];
 }
 
 - (void) sheetOrderFrontFromFrame: (NSRect) frame
@@ -613,20 +789,60 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) captureEvents {
 }
 
-- (void) miniaturize {
-    if (_toplevel != NULL) {
-        sendRequest(_toplevel, WP_TOPLEVEL_SET_MINIMIZED, 0);
-        [_display flush];
-    }
+// xdg-shell has no request to undo set_minimized and no event that says a toplevel is minimized,
+// so the window keeps the state itself. GUESS: the compositor minimizes the window when asked (it
+// may ignore the request, and then the window is reported miniaturized until it is shown again).
+// The state is kept only when something can bring the window back (xdg-activation) and the
+// compositor advertised that it minimizes (a compositor that did not ignores the request, so the
+// window would be reported miniaturized while it stays on screen). Otherwise the request is sent as
+// before and the window keeps being reported as not miniaturized. GUESS: a compositor that
+// predates the capabilities event (xdg_toplevel before version 5) minimizes.
+- (BOOL) compositorMinimizes {
+    return WL.wl_proxy_get_version(_toplevel) < 5 || _minimizeAdvertised;
 }
 
+- (void) miniaturize {
+    if (_toplevel == NULL || _minimized)
+        return;
+    sendRequest(_toplevel, WP_TOPLEVEL_SET_MINIMIZED, 0);
+    [_display flush];
+    if (_display->_activation == NULL || ![self compositorMinimizes])
+        return;
+    _minimized = YES;
+    [_display performAfterDispatch: ^{
+        if (self->_minimized && !self->_invalidated)
+            [self->_delegate platformWindowMiniaturized: self];
+    }];
+}
+
+// The only client-side way to bring a minimized toplevel back is to ask for its activation
+// (xdg-activation-v1); the compositor decides, and may only mark the window as wanting attention.
+// The window counts as shown again from the request on. If no request could be made (one is waiting
+// for its token) the state stays, and asking again later works. A restore the compositor does itself
+// (its task bar) ends the state when a configure changes the window to activated (see
+// -applyConfigure); a compositor that never reports the window deactivated cannot be told.
 - (void) deminiaturize {
+    if (_minimized && [_display requestActivationOfWindow: self])
+        [self endMinimized];
     [self ensureMapped];
 }
 
 - (BOOL) isMiniaturized {
-    // xdg-shell doesn't report whether a toplevel is minimized.
-    return NO;
+    return _minimized;
+}
+
+// The window is shown again (activated by the compositor, or mapped anew): tell the NSWindow.
+- (void) endMinimized {
+    if (!_minimized)
+        return;
+    _minimized = NO;
+    // A window being invalidated (-dealloc does it) has no NSWindow to tell, and must not be retained.
+    if (_invalidated)
+        return;
+    [_display performAfterDispatch: ^{
+        if (!self->_minimized && !self->_invalidated)
+            [self->_delegate platformWindowDeminiaturized: self];
+    }];
 }
 
 // What xdg-shell offers of occlusion is the suspended state, sent by compositors that stop repainting a
@@ -769,7 +985,28 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         WaylandToplevelSetFullscreen(_toplevel, output);
     else
         WaylandToplevelUnsetFullscreen(_toplevel);
+    if (_configured)
+        [self beginFullscreenSettle];
     [_display flush];
+}
+
+// After set_fullscreen or unset_fullscreen the client waits for the configure that
+// answers it before it commits again: the compositor decides the size. A commit
+// sent before the answer arrives has the size the window gets from the
+// application's own side of the change (the title bar goes away, for instance),
+// and a compositor that lets a client's size count for a floating window (sway)
+// then sends one more configure with that size and the fullscreen state, which
+// wins over the real fullscreen size. Drawing resumes when a configure brings the
+// requested state, or after a second when the compositor answers nothing.
+- (void) beginFullscreenSettle {
+    _fullscreenSettling = YES;
+    NSUInteger token = ++_fullscreenSettleToken;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (self->_fullscreenSettleToken != token || !self->_fullscreenSettling)
+            return;
+        self->_fullscreenSettling = NO;
+        [self presentIfPossible];
+    });
 }
 
 - (void) outputsChanged {
@@ -848,17 +1085,53 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [_display flush];
 }
 
+// A size limit of the NSWindow as a xdg_toplevel size: in window geometry coordinates, where 0
+// means no limit. A value that is 0 or less, or too large to represent (the FLT_MAX of an unset
+// maximum), is no limit.
+static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
+    if (!(limit > 0) || limit >= (CGFloat) INT32_MAX - decoration)
+        return 0;
+    return (int32_t) ceil(limit + decoration);
+}
+
 - (void) updateSizeLimits {
+    if (_layerSurface != NULL) {
+        [self updateLayerSize];
+        return;
+    }
     if (_toplevel == NULL)
         return;
 
-    union wl_argument args[2] = {{.i = 0}, {.i = 0}};
+    CGFloat decorationWidth = _clientDecorated ? 2 * WaylandBorder : 0;
+    CGFloat decorationHeight = _clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0;
+    union wl_argument min[2] = {{.i = 0}, {.i = 0}};
+    union wl_argument max[2] = {{.i = 0}, {.i = 0}};
     if (!(_styleMask & NSWindowStyleMaskResizable)) {
-        args[0].i = (int32_t) _frame.size.width + (_clientDecorated ? 2 * WaylandBorder : 0);
-        args[1].i = (int32_t) _frame.size.height + (_clientDecorated ? 2 * WaylandBorder + WaylandTitleHeight : 0);
+        min[0].i = max[0].i = (int32_t) _frame.size.width + (int32_t) decorationWidth;
+        min[1].i = max[1].i = (int32_t) _frame.size.height + (int32_t) decorationHeight;
+    } else if ([_delegate respondsToSelector: @selector(_minFrameSize)]) {
+        NSSize minSize = [(NSWindow *) _delegate _minFrameSize];
+        NSSize maxSize = [(NSWindow *) _delegate _maxFrameSize];
+        min[0].i = WaylandToplevelLimit(minSize.width, decorationWidth);
+        min[1].i = WaylandToplevelLimit(minSize.height, decorationHeight);
+        max[0].i = WaylandToplevelLimit(maxSize.width, decorationWidth);
+        max[1].i = WaylandToplevelLimit(maxSize.height, decorationHeight);
+        // A maximum below the minimum is a protocol error, so the minimum wins.
+        for (int i = 0; i < 2; i++)
+            if (max[i].i != 0 && max[i].i < min[i].i)
+                max[i].i = min[i].i;
     }
-    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, args);
-    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, args);
+    // Double buffered: the compositor sees them with the surface's next commit.
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, min);
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, max);
+}
+
+// The NSWindow's minSize, maxSize, contentMinSize or contentMaxSize changed.
+- (void) sizeLimitsChanged {
+    if (_toplevel == NULL)
+        return;
+    [self updateSizeLimits];
+    [_display flush];
 }
 
 - (void) setOpaque: (BOOL) value {
@@ -1230,7 +1503,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // per frame callback.
 - (void) presentIfPossible {
     if (!_needsPresent || !_mapped || !_configured || _configureUpdatePending || _frameCallback != NULL ||
-        _context == nil)
+        _fullscreenSettling || _context == nil)
         return;
 
     O2Surface *surface = [_context surface];
@@ -1309,6 +1582,29 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [self configure: args[0].u];
         break;
 
+    case WaylandObjectLayerSurface:
+        if (opcode == WP_LAYER_SURFACE_EV_CONFIGURE) {
+            union wl_argument ack[1] = {{.u = args[0].u}};
+            WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_ACK_CONFIGURE, NULL, 0, ack);
+            // A zero size leaves the choice to the client.
+            _pendingWidth = args[1].u != 0 ? (int32_t) args[1].u : (int32_t) ceil(_frame.size.width);
+            _pendingHeight = args[2].u != 0 ? (int32_t) args[2].u : (int32_t) ceil(_frame.size.height);
+            _pendingActivated = NO;
+            _pendingMaximized = _pendingFullscreen = NO;
+            [self scheduleConfigureApply];
+        } else if (opcode == WP_LAYER_SURFACE_EV_CLOSED) {
+            // The compositor took the bar away (its output is gone): it is not a window the
+            // user closed, so the bar is only hidden.
+            NSUInteger generation = _surfaceGeneration;
+            [_display performAfterDispatch: ^{
+                if (!self->_mapped || self->_surfaceGeneration != generation)
+                    return;
+                [self unmap];
+                [self->_delegate orderOut: nil];
+            }];
+        }
+        break;
+
     case WaylandObjectToplevel:
         if (opcode == WP_TOPLEVEL_EV_CONFIGURE) {
             _pendingWidth = args[0].i;
@@ -1320,6 +1616,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _pendingSuspended = WaylandStatesContain(states, WP_TOPLEVEL_STATE_SUSPENDED);
         } else if (opcode == WP_TOPLEVEL_EV_CLOSE) {
             [self closeRequested];
+        } else if (opcode == WP_TOPLEVEL_EV_WM_CAPABILITIES) {
+            _pendingMinimizeAdvertised = WaylandStatesContain(args[0].a, WP_TOPLEVEL_CAPABILITY_MINIMIZE);
         }
         break;
 
@@ -1373,7 +1671,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) configure: (uint32_t) serial {
     union wl_argument args[1] = {{.u = serial}};
     WaylandMarshal(_xdgSurface, WP_XDG_SURFACE_ACK_CONFIGURE, NULL, 0, args);
+    [self scheduleConfigureApply];
+}
 
+- (void) scheduleConfigureApply {
     if (_configureUpdatePending)
         return;
     _configureUpdatePending = YES;
@@ -1416,6 +1717,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // Tell the delegate when the compositor's fullscreen state changes.
     BOOL fullscreenChanged = _pendingFullscreen != _fullscreenReported;
     _fullscreenReported = _pendingFullscreen;
+    if (_fullscreenSettling && _fullscreenReported == _fullscreenRequested)
+        _fullscreenSettling = NO;
 
     BOOL sized = NO;
     BOOL moved = NO;
@@ -1455,6 +1758,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;
     _activated = activated;
+    _minimizeAdvertised = _pendingMinimizeAdvertised;
+    // Only the change to activated shows a restore: a configure that repeats the state of a window
+    // that was active when it was minimized may already be on its way.
+    if (activationChanged && activated)
+        [self endMinimized];
 
     BOOL suspendedChanged = _pendingSuspended != _suspended;
     _suspended = _pendingSuspended;
@@ -1492,6 +1800,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
           } else if (activationChanged) {
               [delegate platformWindowDeactivated: self
                           checkForAppDeactivation: NO];
+              [self->_display applicationFocusMayHaveLeft];
           }
         }];
     }

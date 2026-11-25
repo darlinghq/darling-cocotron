@@ -9,6 +9,7 @@
 #include <setjmp.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 @implementation O2ImageDecoder_JPEG_libjpeg
 
@@ -61,30 +62,56 @@ BOOL O2JPEGGetDimensions(CFDataRef data, size_t *width, size_t *height) {
     return YES;
 }
 
+// QUIRK: ImageIO refuses to create an image for a JPEG whose declared size is more than 100 million pixels (10000x10000
+// is the largest square one it decodes; 10001x10000 and 16384x16384 give no image), and the decoded size must neither
+// overflow nor force a huge allocation for a header of a few hundred bytes (up to 65500x65500 pixels).
+// Evidence: black-box observation of CGImageSourceCreateImageAtIndex on macOS 26.7.3 and 10.14.4 (x86_64 and i386,
+// identical), tier 2: header-only JPEGs of 8192x8192, 9000x9000, 9999x10000, 10000x9999 and 10000x10000 give an image,
+// 10001x10000, 10000x10001, 11000x11000, 12000x8334 and 16384x16384 give none. macOS also refuses some narrower
+// images than that (for example 20000x20 and 3x60000); only the area bound is reproduced here.
+// Test: tests/imageio-jpeg-decode-limits.c
+#define O2JPEG_MAX_PIXELS ((size_t) 100000000)
+
 static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
                                                  int len, int *x, int *y)
 {
     struct jpeg_decompress_struct cinfo;
-    jpeg_create_decompress(&cinfo);
-
     o2jpg_error_mgr jerr;
 
+    // Zeroed so that jpeg_destroy_decompress is safe (mem is NULL) if
+    // jpeg_create_decompress fails before it initializes the struct.
+    memset(&cinfo, 0, sizeof(cinfo));
+    // libjpeg reports errors from jpeg_create_decompress through cinfo.err,
+    // so it has to be set up first.
     cinfo.err = jpeg_std_error(&jerr.err);
     // Use our own exit routine - we don't want to exit the app when something
     // goes wrong
     jerr.err.error_exit = o2error_exit;
     // We need to use setjmp since the error exit method must no return
+    // Modified after setjmp and read after longjmp, so it must live in memory
+    unsigned char *volatile outputImage = NULL;
     if (setjmp(jerr.jmp)) {
         // Do some cleaning and return an empty image
         jpeg_destroy_decompress(&cinfo);
+        free(outputImage);
         return 0;
     }
+    jpeg_create_decompress(&cinfo);
 
     /// Read the data from our memory buffer
     jpeg_mem_src(&cinfo, (unsigned char *) buffer, len);
 
     // Setup the jpeg header and set the decompress options
     jpeg_read_header(&cinfo, TRUE);
+
+    // Reject an image with too many pixels before libjpeg allocates anything
+    // for it.
+    if (cinfo.image_width == 0 || cinfo.image_height == 0 ||
+        cinfo.image_width > O2JPEG_MAX_PIXELS ||
+        cinfo.image_height > O2JPEG_MAX_PIXELS / cinfo.image_width) {
+        jpeg_destroy_decompress(&cinfo);
+        return NULL;
+    }
 
     // We only support RGBA format for the output format
     if (cinfo.jpeg_color_space == JCS_CMYK ||
@@ -109,11 +136,10 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     *y = cinfo.output_height;
 
     // Number of bytes in a decompressed row
-    int bytesPerRow = cinfo.output_width * wantedPixelSize;
+    size_t bytesPerRow = (size_t) cinfo.output_width * wantedPixelSize;
 
     // Buffer for the final decompressed data
-    unsigned char *outputImage =
-            (unsigned char *) malloc(bytesPerRow * cinfo.output_height);
+    outputImage = (unsigned char *) malloc(bytesPerRow * cinfo.output_height);
     if (outputImage) {
 #ifdef JCS_ALPHA_EXTENSIONS
         // Scanline buffers pointers - they'll point directly to the final image
@@ -127,18 +153,24 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
 #endif
 
         while (cinfo.output_scanline < cinfo.image_height) {
-            int currentLine = cinfo.output_scanline;
+            size_t currentLine = cinfo.output_scanline;
 #ifdef JCS_ALPHA_EXTENSIONS
-            // We'll decode directly into the final buffer
-            for (int i = 0; i < cinfo.rec_outbuf_height; ++i) {
+            // We'll decode directly into the final buffer. Only rows inside it
+            // are handed to libjpeg, and only the rows it returns in linesRead
+            // are converted.
+            JDIMENSION rowsLeft = cinfo.output_height - cinfo.output_scanline;
+            JDIMENSION rowsWanted = (JDIMENSION) cinfo.rec_outbuf_height;
+            if (rowsWanted > rowsLeft)
+                rowsWanted = rowsLeft;
+            for (JDIMENSION i = 0; i < rowsWanted; ++i) {
                 scanlineBuffer[i] =
                         outputImage + (currentLine + i) * bytesPerRow;
             }
-            jpeg_read_scanlines(&cinfo, scanlineBuffer,
-                                cinfo.rec_outbuf_height);
+            JDIMENSION linesRead =
+                    jpeg_read_scanlines(&cinfo, scanlineBuffer, rowsWanted);
             if (cinfo.out_color_space == JCS_CMYK) {
                 // Convert from CMYK to RGBA
-                for (int i = 0; i < cinfo.rec_outbuf_height; ++i) {
+                for (JDIMENSION i = 0; i < linesRead; ++i) {
                     unsigned char *out =
                             outputImage + (currentLine++) * bytesPerRow;
                     for (int j = 0; j < cinfo.output_width; ++j) {
@@ -203,6 +235,10 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     _dataProvider = [dataProvider retain];
 
     CFDataRef encodedData = O2DataProviderCopyData(dataProvider);
+    if (encodedData == NULL) {
+        [self release];
+        return nil;
+    }
     CFIndex encodedLength = CFDataGetLength(encodedData);
     const uint8_t *encodedBytes = CFDataGetBytePtr(encodedData);
 
@@ -217,7 +253,7 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
     CFRelease(encodedData);
 
     if (bitmap == NULL) {
-        [self dealloc];
+        [self release];
         return nil;
     }
 
@@ -241,7 +277,8 @@ static unsigned char *stbi_jpeg_load_from_memory(const uint8_t const *buffer,
 - (void) dealloc {
     [_dataProvider release];
     [_colorSpace release];
-    CFRelease(_pixelData);
+    if (_pixelData != NULL)
+        CFRelease(_pixelData);
     [super dealloc];
 }
 

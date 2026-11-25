@@ -56,8 +56,10 @@ run() { # <name> <server argument> <test argument>
 for variant in plain cancel-once; do
     run $variant "$([ $variant = plain ] || echo cancel-once)" "$@" || fail=1
     grep -q '^PASS' "$work/$variant.out" || fail=1
-    # Switched, restored by release, switched again, restored by CGReleaseAllDisplays, ...
-    [ "$(grep -c '^APPLIED 1024x768@60000' "$work/$variant.log")" -ge 3 ] || { echo "FAIL: $variant: no switch"; fail=1; }
+    # Switched, restored by release, switched again, restored by CGReleaseAllDisplays, ... The server lists two
+    # refresh rates for 1024x768 and the test picks the last listed one for CGDisplaySetDisplayMode, so any
+    # refresh rate counts as a switch.
+    [ "$(grep -c '^APPLIED 1024x768@' "$work/$variant.log")" -ge 3 ] || { echo "FAIL: $variant: no switch"; fail=1; }
     [ "$(grep -c '^APPLIED 1280x720@60000' "$work/$variant.log")" -ge 3 ] || { echo "FAIL: $variant: no restore"; fail=1; }
     grep -q '^FINAL 1280x720@60000' "$work/$variant.log" || { echo "FAIL: $variant: final mode"; fail=1; }
 done

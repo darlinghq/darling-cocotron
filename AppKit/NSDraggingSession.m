@@ -17,254 +17,73 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#import "NSDraggingSession-Private.h"
-#import "NSDraggingManager.h"
+#import <AppKit/NSDraggingManager.h>
+#import <AppKit/NSDraggingSession.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSPasteboard.h>
 #import <AppKit/NSPasteboardItem.h>
 #import <AppKit/NSView.h>
 #import <AppKit/NSWindow.h>
-#import <ApplicationServices/ApplicationServices.h>
-#import <CoreFoundation/CoreFoundation.h>
 #import <Foundation/NSArray.h>
+#import <Foundation/NSDictionary.h>
+#import <Foundation/NSRunLoop.h>
 #import <Foundation/NSValue.h>
-#import <objc/runtime.h>
+#include <stdatomic.h>
 
-// The session whose drag is running. Drags run on the main thread, one at a
-// time, so there is never more than one.
-static NSDraggingSession *currentSession;
+@interface NSPasteboard (NSDraggingItemReading)
+- (id) _objectForItem: (NSPasteboardItem *) item
+              classes: (NSArray<Class> *) classArray
+              options: (NSDictionary *) options;
+@end
 
-@implementation NSDraggingSession
+@interface NSView (NSDraggingSession)
+- (void) _dragImage: (NSImage *) image
+     atWindowLocation: (NSPoint) location
+               offset: (NSSize) offset
+                event: (NSEvent *) event
+           pasteboard: (NSPasteboard *) pasteboard
+               source: (id) source
+            slideBack: (BOOL) slideBack;
+@end
 
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSDraggingSession, draggingFormation, _draggingFormation,
-                           NSDraggingFormation, draggingFormation, setDraggingFormation:)
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSDraggingSession, animatesToStartingPositionsOnCancelOrFail,
-                           _animatesToStartingPositionsOnCancelOrFail, BOOL,
-                           animatesToStartingPositionsOnCancelOrFail,
-                           setAnimatesToStartingPositionsOnCancelOrFail:)
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSDraggingSession, draggingLeaderIndex, _draggingLeaderIndex,
-                           NSInteger, draggingLeaderIndex, setDraggingLeaderIndex:)
-
-- (instancetype) _initWithItems: (NSArray<NSDraggingItem *> *) items
-                           view: (NSView *) view
-                         source: (id) source
-                     pasteboard: (NSPasteboard *) pasteboard
-                 sequenceNumber: (NSInteger) sequenceNumber
-                  startLocation: (NSPoint) startLocation
-                    startFrames: (NSArray *) startFrames
-                         leader: (NSInteger) leader
-{
-    self = [super init];
-    if (self == nil)
-        return nil;
-    NS_EXTRA(NSDraggingSession, self)->_items = [items copy];
-    NS_EXTRA(NSDraggingSession, self)->_view = [view retain];
-    NS_EXTRA(NSDraggingSession, self)->_source = [source retain];
-    NS_EXTRA(NSDraggingSession, self)->_pasteboard = [pasteboard retain];
-    NS_EXTRA(NSDraggingSession, self)->_draggingSequenceNumber = sequenceNumber;
-    NS_EXTRA(NSDraggingSession, self)->_draggingLocation = startLocation;
-    NS_EXTRA(NSDraggingSession, self)->_startLocation = startLocation;
-    NS_EXTRA(NSDraggingSession, self)->_startFrames = [startFrames copy];
-    NS_EXTRA(NSDraggingSession, self)->_draggingLeaderIndex = leader;
-    // The defaults the header documents.
-    NS_EXTRA(NSDraggingSession, self)->_draggingFormation = NSDraggingFormationNone;
-    NS_EXTRA(NSDraggingSession, self)->_animatesToStartingPositionsOnCancelOrFail = YES;
-    return self;
+static NSRect screenRectFromView(NSView *view, NSRect rect) {
+    rect = [view convertRect: rect toView: nil];
+    NSWindow *window = [view window];
+    return window != nil ? [window convertRectToScreen: rect] : rect;
 }
 
-- (void) dealloc {
-    if (NS_EXTRA_ALLOCATED(NSDraggingSession, self)) {
-        [NS_EXTRA(NSDraggingSession, self)->_items release];
-        [NS_EXTRA(NSDraggingSession, self)->_view release];
-        [NS_EXTRA(NSDraggingSession, self)->_source release];
-        [NS_EXTRA(NSDraggingSession, self)->_pasteboard release];
-        [NS_EXTRA(NSDraggingSession, self)->_startFrames release];
-    }
-    NS_EXTRA_FREE(NSDraggingSession, self);
-    [super dealloc];
-}
-
-- (NSPasteboard *) draggingPasteboard {
-    return NS_EXTRA(NSDraggingSession, self)->_pasteboard;
-}
-
-- (NSInteger) draggingSequenceNumber {
-    return NS_EXTRA(NSDraggingSession, self)->_draggingSequenceNumber;
-}
-
-- (NSPoint) draggingLocation {
-    return NS_EXTRA(NSDraggingSession, self)->_draggingLocation;
-}
-
-- (id) _source {
-    return NS_EXTRA(NSDraggingSession, self)->_source;
-}
-
-- (void) _setDraggingLocation: (NSPoint) location {
-    NS_EXTRA(NSDraggingSession, self)->_draggingLocation = location;
-}
-
-// Where an item is now, in screen coordinates: the items keep the place they
-// had relative to the pointer when the drag began.
-- (NSRect) _screenFrameOfItemAtIndex: (NSUInteger) index {
-    NSRect frame = [[NS_EXTRA(NSDraggingSession, self)->_startFrames objectAtIndex: index] rectValue];
-    NSPoint start = NS_EXTRA(NSDraggingSession, self)->_startLocation;
-    NSPoint now = NS_EXTRA(NSDraggingSession, self)->_draggingLocation;
-    frame.origin.x += now.x - start.x;
-    frame.origin.y += now.y - start.y;
-    return frame;
-}
-
-static NSRect screenRectToView(NSRect rect, NSView *view) {
-    if (view == nil)
-        return rect;
+static NSRect viewRectFromScreen(NSView *view, NSRect rect) {
     NSWindow *window = [view window];
     if (window != nil)
         rect = [window convertRectFromScreen: rect];
     return [view convertRect: rect fromView: nil];
 }
 
-// The pasteboard has an item for each dragging item, in the same order, as
-// -beginDraggingSessionWithItems:event:source: wrote them.
-- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) options
-                                   forView: (NSView *) view
-                                   classes: (NSArray<Class> *) classArray
-                             searchOptions: (NSDictionary<NSPasteboardReadingOptionKey, id> *) searchOptions
-                                usingBlock: (void (^)(NSDraggingItem *draggingItem, NSInteger idx, BOOL *stop)) block
-{
-    NSArray<NSDraggingItem *> *items = NS_EXTRA(NSDraggingSession, self)->_items;
-    NSPasteboard *pasteboard = NS_EXTRA(NSDraggingSession, self)->_pasteboard;
-    NSArray *pasteboardItems = [pasteboard pasteboardItems];
-    NSUInteger count = MIN([items count], [pasteboardItems count]);
-
-    for (NSUInteger index = 0; index < count; index++) {
-        id object = [pasteboard _readObjectForClasses: classArray
-                                              options: searchOptions
-                                             fromItem: [pasteboardItems objectAtIndex: index]];
-        if (object == nil)
-            continue;
-
-        // A new item each time (observed on macOS 26.7.3), with the original's image.
-        NSDraggingItem *original = [items objectAtIndex: index];
-        NSDraggingItem *item = [[[NSDraggingItem alloc] _initWithItem: object] autorelease];
-        [item setDraggingFrame: screenRectToView([self _screenFrameOfItemAtIndex: index], view)];
-        [item setImageComponentsProvider: [original imageComponentsProvider]];
-
-        BOOL stop = NO;
-        block(item, (NSInteger) index, &stop);
-        if (stop)
-            break;
-    }
+static NSPoint screenPointOfEvent(NSEvent *event) {
+    NSPoint point = [event locationInWindow];
+    NSWindow *window = [event window];
+    return window != nil ? [window convertRectToScreen: NSMakeRect(point.x, point.y, 0, 0)].origin : point;
 }
 
-@end
-
-#pragma mark Beginning a session
-
-static NSInteger lastSequenceNumber;
-// A session was begun and its drag has not run yet.
-static BOOL sessionPending;
-// The source of the running session was told the drag ended.
-static BOOL sessionEnded;
-
-static void draggingSourceEnded(id source, NSImage *image, NSPoint point, NSDragOperation operation);
-
-@interface NSWindow (NSDraggingInProcess)
-- (void) _dragImageInProcess: (NSImage *) image
-                          at: (NSPoint) imageLocation
-                       event: (NSEvent *) event
-                  pasteboard: (NSPasteboard *) pasteboard
-                      source: (id) source;
-@end
-
-// Runs the drag the way -[NSView dragImage:...] does, without sending that
-// message: a subclass's override of it is not part of a session's drag.
-static void runDrag(NSWindow *window, NSImage *image, NSPoint locationInWindow, NSEvent *event,
-                    NSPasteboard *pasteboard, id source, BOOL slideBack)
-{
-    NSDraggingManager *manager = [NSDraggingManager draggingManager];
-    if (manager == nil) {
-        [window _dragImageInProcess: image
-                                 at: locationInWindow
-                              event: event
-                         pasteboard: pasteboard
-                             source: source];
-        return;
-    }
-    [manager dragImage: image
-                    at: locationInWindow
-                offset: NSZeroSize
-                 event: event
-            pasteboard: pasteboard
-                source: source
-             slideBack: slideBack];
+static NSInteger nextSequenceNumber(void) {
+    static _Atomic NSInteger last;
+    return atomic_fetch_add(&last, 1) + 1;
 }
 
-static NSRect standardFrame(NSDraggingItem *item) {
-    return NSRectFromCGRect(CGRectStandardize(NSRectToCGRect([item draggingFrame])));
-}
+// The session that was begun and whose drag has not finished yet, and whether its source was told the drag
+// ended. Drags run on the main thread, one at a time.
+static NSDraggingSession *activeSession;
+static BOOL activeSessionEnded;
 
-// The rectangle all items cover, in the view's coordinates.
-static NSRect unionOfFrames(NSArray<NSDraggingItem *> *items) {
-    NSRect bounds = NSZeroRect;
-    BOOL first = YES;
-    for (NSDraggingItem *item in items) {
-        NSRect frame = standardFrame(item);
-        bounds = first ? frame : NSUnionRect(bounds, frame);
-        first = NO;
-    }
-    return bounds;
-}
-
-static void drawComponentContents(id contents, NSRect rect) {
-    if ([contents isKindOfClass: [NSImage class]]) {
-        [(NSImage *) contents drawInRect: rect
-                                fromRect: NSZeroRect
-                               operation: NSCompositeSourceOver
-                                fraction: 1.0];
-        return;
-    }
-    if (contents != nil && CFGetTypeID((CFTypeRef) contents) == CGImageGetTypeID()) {
-        CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
-        CGContextDrawImage(context, NSRectToCGRect(rect), (CGImageRef) contents);
-    }
-}
-
-// One image of every item's components, laid out as the items are in the view.
-static NSImage *compositeImage(NSArray<NSDraggingItem *> *items, NSRect bounds, BOOL flipped) {
-    NSSize size = bounds.size;
-    if (size.width < 1)
-        size.width = 1;
-    if (size.height < 1)
-        size.height = 1;
-    NSImage *image = [[[NSImage alloc] initWithSize: size] autorelease];
-
-    [image lockFocus];
-    for (NSDraggingItem *item in items) {
-        NSRect frame = standardFrame(item);
-        CGFloat x = frame.origin.x - bounds.origin.x;
-        // The image is never flipped, so in a flipped view an item that is
-        // lower in the view is lower in the image too.
-        CGFloat y = flipped ? NSMaxY(bounds) - NSMaxY(frame) : frame.origin.y - bounds.origin.y;
-        for (NSDraggingImageComponent *component in [item imageComponents]) {
-            NSRect rect = [component frame];
-            rect.origin.x += x;
-            rect.origin.y += y;
-            drawComponentContents([component contents], rect);
-        }
-    }
-    [image unlockFocus];
-    return image;
-}
-
-// The index of the item nearest to the point, the default leader.
+// The index of the item nearest to the point (in the items' coordinates): the documented leader is the item
+// under the mouse.
 static NSInteger nearestItem(NSArray<NSDraggingItem *> *items, NSPoint point) {
-    NSInteger best = 0;
+    NSInteger best = 0, index = 0;
     CGFloat bestDistance = 0;
-    NSInteger index = 0;
     for (NSDraggingItem *item in items) {
-        NSRect frame = standardFrame(item);
+        NSRect frame = NSRectFromCGRect(CGRectStandardize(NSRectToCGRect([item draggingFrame])));
         CGFloat dx = point.x < NSMinX(frame) ? NSMinX(frame) - point.x
                    : point.x > NSMaxX(frame) ? point.x - NSMaxX(frame) : 0;
         CGFloat dy = point.y < NSMinY(frame) ? NSMinY(frame) - point.y
@@ -279,310 +98,257 @@ static NSInteger nearestItem(NSArray<NSDraggingItem *> *items, NSPoint point) {
     return best;
 }
 
-@implementation NSView (NSDrag)
+// The items of a pasteboard read as the first of the classes each can be read as, with their frames, in order.
+// The block may change an item's frame and image; what it sets is written back through `update`.
+static void enumerateItems(NSPasteboard *pasteboard, NSArray<NSValue *> *frames, NSArray<NSDraggingItem *> *images,
+                           NSView *view, NSArray<Class> *classArray, NSDictionary *searchOptions,
+                           void (^block)(NSDraggingItem *, NSInteger, BOOL *),
+                           void (^update)(NSInteger index, NSDraggingItem *item)) {
+    NSArray *items = [pasteboard pasteboardItems];
+    BOOL stop = NO;
+    for (NSUInteger index = 0; index < [items count] && !stop; index++) {
+        id object = [pasteboard _objectForItem: [items objectAtIndex: index] classes: classArray options: searchOptions];
+        if (object == nil)
+            continue;
+        NSDraggingItem *item = [[NSDraggingItem alloc] initWithPasteboardWriter: object];
+        NSRect frame = index < [frames count] ? [[frames objectAtIndex: index] rectValue] : NSZeroRect;
+        [item setDraggingFrame: view != nil ? viewRectFromScreen(view, frame) : frame];
+        if (index < [images count])
+            [item setImageComponentsProvider: [[images objectAtIndex: index] imageComponentsProvider]];
+        block(item, (NSInteger) index, &stop);
+        if (update != nil)
+            update((NSInteger) index, item);
+        [item release];
+    }
+}
 
-- (NSDraggingSession *) beginDraggingSessionWithItems: (NSArray<NSDraggingItem *> *) items
-                                                event: (NSEvent *) event
-                                               source: (id<NSDraggingSource>) source
+@implementation NSDraggingSession
+
+@synthesize draggingFormation = _formation, animatesToStartingPositionsOnCancelOrFail = _animates,
+            draggingLeaderIndex = _leaderIndex, draggingPasteboard = _pasteboard,
+            draggingSequenceNumber = _sequenceNumber, draggingLocation = _location;
+
+- (instancetype) _initWithItems: (NSArray<NSDraggingItem *> *) items
+                           view: (NSView *) view
+                          event: (NSEvent *) event
+                         source: (id<NSDraggingSource>) source
+                     pasteboard: (NSPasteboard *) pasteboard
 {
-    // QUIRK: while a session is waiting to start or running, another one is
-    // not started and nil is returned. Not documented. Evidence: black-box
-    // observation on macOS 26.7.3 (tier 2): a second call made before the run
-    // loop ran the first drag returns nil.
-    // Test: tests/appkit-dragging-session.m, "a second session waits for none".
-    if (sessionPending || currentSession != nil)
+    if ((self = [super init])) {
+        _items = [items copy];
+        _screenFrames = [[NSMutableArray alloc] init];
+        for (NSDraggingItem *item in items)
+            [_screenFrames addObject: [NSValue valueWithRect: screenRectFromView(view, [item draggingFrame])]];
+        _pasteboard = [pasteboard retain];
+        _source = [(id) source retain];
+        _view = [view retain];
+        _event = [event retain];
+        // The documented defaults, which both Macs report for a new session
+        _formation = NSDraggingFormationNone;
+        _animates = YES;
+        _sequenceNumber = nextSequenceNumber();
+        _location = screenPointOfEvent(event);
+        _leaderIndex = nearestItem(items, [view convertPoint: [event locationInWindow] fromView: nil]);
+    }
+    return self;
+}
+
+- (void) dealloc {
+    [_items release];
+    [_screenFrames release];
+    [_pasteboard release];
+    [_source release];
+    [_view release];
+    [_event release];
+    [super dealloc];
+}
+
+- (void) enumerateDraggingItemsWithOptions: (NSDraggingItemEnumerationOptions) enumOpts
+                                   forView: (NSView *) view
+                                   classes: (NSArray<Class> *) classArray
+                             searchOptions: (NSDictionary *) searchOptions
+                                usingBlock: (void (^)(NSDraggingItem *, NSInteger, BOOL *)) block
+{
+    enumerateItems(_pasteboard, _screenFrames, _items, view, classArray, searchOptions, block,
+                   ^(NSInteger index, NSDraggingItem *item) {
+                       // Until the drag starts, what the block sets is what will be dragged
+                       NSRect frame = [item draggingFrame];
+                       [_screenFrames replaceObjectAtIndex: index
+                                                withObject: [NSValue valueWithRect: view != nil
+                                                                                         ? screenRectFromView(view, frame)
+                                                                                         : frame]];
+                       [[_items objectAtIndex: index] setImageComponentsProvider: [item imageComponentsProvider]];
+                   });
+}
+
+// The items' images drawn into one, which covers all their frames (in screen coordinates)
+- (NSImage *) _composedImageInRect: (NSRect *) bounds {
+    NSRect all = NSZeroRect;
+    for (NSValue *frame in _screenFrames)
+        all = NSIsEmptyRect(all) ? [frame rectValue] : NSUnionRect(all, [frame rectValue]);
+    *bounds = all;
+    if (NSIsEmptyRect(all))
         return nil;
+    NSImage *image = [[[NSImage alloc] initWithSize: all.size] autorelease];
+    [image lockFocus];
+    for (NSUInteger i = 0; i < [_items count]; i++) {
+        NSRect frame = [[_screenFrames objectAtIndex: i] rectValue];
+        for (NSDraggingImageComponent *component in [[_items objectAtIndex: i] imageComponents]) {
+            id contents = [component contents];
+            NSImage *picture = nil;
+            if ([contents isKindOfClass: [NSImage class]])
+                picture = contents;
+            else if (contents != nil && CFGetTypeID((CFTypeRef) contents) == CGImageGetTypeID())
+                picture = [[[NSImage alloc] initWithCGImage: (CGImageRef) contents size: NSZeroSize] autorelease];
+            if (picture == nil)
+                continue;
+            NSRect place = [component frame];
+            place.origin.x += NSMinX(frame) - NSMinX(all);
+            place.origin.y += NSMinY(frame) - NSMinY(all);
+            [picture drawInRect: place fromRect: NSZeroRect operation: NSCompositingOperationSourceOver fraction: 1];
+        }
+    }
+    [image unlockFocus];
+    return image;
+}
 
-    NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
-    [pasteboard clearContents];
-    NSMutableArray *writers = [NSMutableArray arrayWithCapacity: [items count]];
-    for (NSDraggingItem *item in items)
-        if ([item item] != nil)
-            [writers addObject: [item item]];
-    [pasteboard writeObjects: writers];
+// Runs once the event handler that began the session has returned, through the view's drag
+- (void) _start {
+    NSRect bounds;
+    NSImage *image = [self _composedImageInRect: &bounds];
+    NSPoint mouse = screenPointOfEvent(_event);
+    _mouseInImage = NSMakePoint(mouse.x - NSMinX(bounds), mouse.y - NSMinY(bounds));
+    NSPoint origin = bounds.origin;
+    NSWindow *window = [_view window];
+    if (window != nil)
+        origin = [window convertRectFromScreen: NSMakeRect(origin.x, origin.y, 0, 0)].origin;
+    activeSessionEnded = NO;
+    @try {
+        [_view _dragImage: image
+            atWindowLocation: origin
+                      offset: NSZeroSize
+                       event: _event
+                  pasteboard: _pasteboard
+                      source: self
+                   slideBack: _animates];
+        // A drag the backend could not start still ends for the source
+        if (!activeSessionEnded) {
+            _location = [NSEvent mouseLocation];
+            if ([_source respondsToSelector: @selector(draggingSession:endedAtPoint:operation:)])
+                [_source draggingSession: self endedAtPoint: _location operation: NSDragOperationNone];
+        }
+    } @finally {
+        if (activeSession == self)
+            activeSession = nil;
+    }
+}
 
-    NSWindow *window = [self window];
-    NSPoint eventInView = [self convertPoint: [event locationInWindow] fromView: nil];
-    NSPoint start = [NSEvent mouseLocation];
+- (void) _scheduleStart {
+    activeSession = self;
+    [[NSRunLoop currentRunLoop]
+        performSelector: @selector(_start)
+                 target: self
+               argument: nil
+                  order: 0
+                  modes: [NSArray arrayWithObjects: NSDefaultRunLoopMode, NSEventTrackingRunLoopMode,
+                                                    NSModalPanelRunLoopMode, nil]];
+}
 
-    NSMutableArray *startFrames = [NSMutableArray arrayWithCapacity: [items count]];
-    for (NSDraggingItem *item in items) {
-        NSRect frame = [self convertRect: standardFrame(item) toView: nil];
+- (id) _draggingSource {
+    return _source;
+}
+
+// The drag reports the dragged image's corner on the screen; the source is told where the mouse is
+- (NSPoint) _mousePointForImagePoint: (NSPoint) point {
+    return NSMakePoint(point.x + _mouseInImage.x, point.y + _mouseInImage.y);
+}
+
+#pragma mark The drag's source
+
+- (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) local {
+    return [_source draggingSession: self
+        sourceOperationMaskForDraggingContext: local ? NSDraggingContextWithinApplication
+                                                     : NSDraggingContextOutsideApplication];
+}
+
+- (BOOL) ignoreModifierKeysWhileDragging {
+    return [_source respondsToSelector: @selector(ignoreModifierKeysForDraggingSession:)] &&
+           [_source ignoreModifierKeysForDraggingSession: self];
+}
+
+- (void) draggedImage: (NSImage *) image beganAt: (NSPoint) point {
+    _location = [self _mousePointForImagePoint: point];
+    if ([_source respondsToSelector: @selector(draggingSession:willBeginAtPoint:)])
+        [_source draggingSession: self willBeginAtPoint: _location];
+}
+
+- (void) draggedImage: (NSImage *) image movedTo: (NSPoint) point {
+    _location = [self _mousePointForImagePoint: point];
+    if ([_source respondsToSelector: @selector(draggingSession:movedToPoint:)])
+        [_source draggingSession: self movedToPoint: _location];
+}
+
+- (void) draggedImage: (NSImage *) image endedAt: (NSPoint) point operation: (NSDragOperation) operation {
+    if (activeSession == self)
+        activeSessionEnded = YES;
+    _location = [self _mousePointForImagePoint: point];
+    if ([_source respondsToSelector: @selector(draggingSession:endedAtPoint:operation:)])
+        [_source draggingSession: self endedAtPoint: _location operation: operation];
+}
+
+@end
+
+@implementation NSDraggingSession (NSDraggingManager)
+
++ (BOOL) _isSessionPendingOrRunning {
+    return activeSession != nil;
+}
+
++ (id) _sourceForDestination: (id) dragSource {
+    return [dragSource isKindOfClass: [NSDraggingSession class]] ? [dragSource _draggingSource] : dragSource;
+}
+
+// The NSDraggingInfo documentation: holding Control narrows the mask to link, Option to copy and Command to
+// generic, unless the source ignores the modifier keys
++ (NSDragOperation) _operationMask: (NSDragOperation) mask narrowedForSource: (id) dragSource {
+    if ([dragSource respondsToSelector: @selector(ignoreModifierKeysWhileDragging)] &&
+        [dragSource ignoreModifierKeysWhileDragging])
+        return mask;
+    NSEventModifierFlags flags = [NSEvent modifierFlags];
+    if (flags & NSEventModifierFlagControl)
+        return mask & NSDragOperationLink;
+    if (flags & NSEventModifierFlagOption)
+        return mask & NSDragOperationCopy;
+    if (flags & NSEventModifierFlagCommand)
+        return mask & NSDragOperationGeneric;
+    return mask;
+}
+
++ (void) _enumerateItemsOfDraggingInfo: (id<NSDraggingInfo>) info
+                                source: (id) dragSource
+                               forView: (NSView *) view
+                               classes: (NSArray<Class> *) classArray
+                         searchOptions: (NSDictionary *) searchOptions
+                            usingBlock: (void (^)(NSDraggingItem *, NSInteger, BOOL *)) block
+{
+    NSArray *frames = nil, *images = nil;
+    if ([dragSource isKindOfClass: [NSDraggingSession class]]) {
+        NSDraggingSession *session = dragSource;
+        frames = session->_screenFrames;
+        images = session->_items;
+    } else {
+        // A drag from another application brings no frames: each item is where the mouse is
+        NSPoint location = [info draggingLocation];
+        NSWindow *window = [info draggingDestinationWindow];
         if (window != nil)
-            frame = [window convertRectToScreen: frame];
-        // relative to where the pointer is now rather than to the event
-        NSPoint eventOnScreen = window != nil ? [window convertBaseToScreen: [event locationInWindow]]
-                                              : [event locationInWindow];
-        frame.origin.x += start.x - eventOnScreen.x;
-        frame.origin.y += start.y - eventOnScreen.y;
-        [startFrames addObject: [NSValue valueWithRect: frame]];
+            location = [window convertRectToScreen: NSMakeRect(location.x, location.y, 0, 0)].origin;
+        NSMutableArray *at = [NSMutableArray array];
+        NSUInteger count = [[[info draggingPasteboard] pasteboardItems] count];
+        for (NSUInteger i = 0; i < count; i++)
+            [at addObject: [NSValue valueWithRect: NSMakeRect(location.x, location.y, 0, 0)]];
+        frames = at;
     }
-
-    NSDraggingSession *session = [[NSDraggingSession alloc]
-            _initWithItems: items
-                      view: self
-                    source: source
-                pasteboard: pasteboard
-            sequenceNumber: ++lastSequenceNumber
-             startLocation: start
-               startFrames: startFrames
-                    leader: nearestItem(items, eventInView)];
-
-    // The drag runs once the caller has returned to the run loop, so it can
-    // still set the session's properties (as on macOS, where this method
-    // returns before the source hears of the drag).
-    NSRect bounds = unionOfFrames(items);
-    BOOL flipped = [self isFlipped];
-    NSImage *image = [compositeImage(items, bounds, flipped) retain];
-    NSPoint at = [self convertPoint: NSMakePoint(NSMinX(bounds), flipped ? NSMaxY(bounds) : NSMinY(bounds))
-                             toView: nil];
-    NSEvent *heldEvent = [event retain];
-    NSWindow *heldWindow = [window retain];
-    NSDraggingSession *heldSession = [session retain];
-
-    CFRunLoopRef runLoop = CFRunLoopGetMain();
-    sessionPending = YES;
-    CFRunLoopPerformBlock(runLoop, kCFRunLoopCommonModes, ^{
-        sessionPending = NO;
-        currentSession = heldSession;
-        sessionEnded = NO;
-        @try {
-            runDrag(heldWindow, image, at, heldEvent, pasteboard, source,
-                    [heldSession animatesToStartingPositionsOnCancelOrFail]);
-            // A drag the backend could not start still ends for the source.
-            if (!sessionEnded)
-                draggingSourceEnded(source, image, [NSEvent mouseLocation], NSDragOperationNone);
-        } @finally {
-            currentSession = nil;
-            [heldSession release];
-            [heldWindow release];
-            [heldEvent release];
-            [image release];
-        }
-    });
-    CFRunLoopWakeUp(runLoop);
-
-    return [session autorelease];
-}
-
-@end
-
-#pragma mark Telling the source
-
-static NSDraggingSession *sessionOfSource(id source) {
-    if (currentSession != nil && [currentSession _source] == source)
-        return currentSession;
-    return nil;
-}
-
-static NSDragOperation draggingSourceOperationMask(id source, BOOL local, NSDragOperation defaultMask) {
-    NSDraggingSession *session = sessionOfSource(source);
-    if (session != nil &&
-        [source respondsToSelector: @selector(draggingSession:sourceOperationMaskForDraggingContext:)])
-        return [source draggingSession: session
-                sourceOperationMaskForDraggingContext: local ? NSDraggingContextWithinApplication
-                                                             : NSDraggingContextOutsideApplication];
-    if ([source respondsToSelector: @selector(draggingSourceOperationMaskForLocal:)])
-        return [source draggingSourceOperationMaskForLocal: local];
-    return defaultMask;
-}
-
-static void draggingSourceBegan(id source, NSImage *image, NSPoint point) {
-    NSDraggingSession *session = sessionOfSource(source);
-    if (session != nil) {
-        if ([source respondsToSelector: @selector(draggingSession:willBeginAtPoint:)])
-            [source draggingSession: session willBeginAtPoint: point];
-        return;
-    }
-    if ([source respondsToSelector: @selector(draggedImage:beganAt:)])
-        [source draggedImage: image beganAt: point];
-}
-
-static void draggingSourceMoved(id source, NSImage *image, NSPoint point) {
-    NSDraggingSession *session = sessionOfSource(source);
-    if (session != nil) {
-        [session _setDraggingLocation: [NSEvent mouseLocation]];
-        if ([source respondsToSelector: @selector(draggingSession:movedToPoint:)])
-            [source draggingSession: session movedToPoint: point];
-        return;
-    }
-    if ([source respondsToSelector: @selector(draggedImage:movedTo:)])
-        [source draggedImage: image movedTo: point];
-}
-
-static void draggingSourceEnded(id source, NSImage *image, NSPoint point, NSDragOperation operation) {
-    NSDraggingSession *session = sessionOfSource(source);
-    if (session != nil) {
-        sessionEnded = YES;
-        [session _setDraggingLocation: [NSEvent mouseLocation]];
-        if ([source respondsToSelector: @selector(draggingSession:endedAtPoint:operation:)])
-            [source draggingSession: session endedAtPoint: point operation: operation];
-        return;
-    }
-    if ([source respondsToSelector: @selector(draggedImage:endedAt:operation:)])
-        [source draggedImage: image endedAt: point operation: operation];
-}
-
-#pragma mark The destination's side
-
-// What a destination set on the dragging info of a drop.
-@interface NSDraggingInfoSettings : NSObject {
-  @public
-    NSDraggingFormation _formation;
-    BOOL _animatesToDestination;
-    NSInteger _numberOfValidItems;
-    BOOL _hasNumberOfValidItems;
-}
-@end
-
-@implementation NSDraggingInfoSettings
-@end
-
-static char kDraggingInfoSettingsKey;
-
-static NSDraggingInfoSettings *settingsOf(id<NSDraggingInfo> info, BOOL create) {
-    NSDraggingInfoSettings *settings = objc_getAssociatedObject(info, &kDraggingInfoSettingsKey);
-    if (settings == nil && create) {
-        settings = [[[NSDraggingInfoSettings alloc] init] autorelease];
-        // the header: the current formation, the session's for a drag of this application
-        NSDraggingSession *session = sessionOfSource([info draggingSource]);
-        settings->_formation = session != nil ? [session draggingFormation] : NSDraggingFormationDefault;
-        objc_setAssociatedObject(info, &kDraggingInfoSettingsKey, settings, OBJC_ASSOCIATION_RETAIN);
-    }
-    return settings;
-}
-
-static NSDraggingFormation draggingInfoFormation(id<NSDraggingInfo> info) {
-    return settingsOf(info, YES)->_formation;
-}
-
-static void draggingInfoSetFormation(id<NSDraggingInfo> info, NSDraggingFormation formation) {
-    settingsOf(info, YES)->_formation = formation;
-}
-
-static BOOL draggingInfoAnimatesToDestination(id<NSDraggingInfo> info) {
-    return settingsOf(info, YES)->_animatesToDestination;
-}
-
-static void draggingInfoSetAnimatesToDestination(id<NSDraggingInfo> info, BOOL animates) {
-    settingsOf(info, YES)->_animatesToDestination = animates;
-}
-
-// Until the destination sets it: every item of the drag. Inferred from the
-// header, which has the destination lower it when it accepts only some.
-static NSInteger draggingInfoNumberOfValidItems(id<NSDraggingInfo> info) {
-    NSDraggingInfoSettings *settings = settingsOf(info, YES);
-    if (settings->_hasNumberOfValidItems)
-        return settings->_numberOfValidItems;
-    return (NSInteger) [[[info draggingPasteboard] pasteboardItems] count];
-}
-
-static void draggingInfoSetNumberOfValidItems(id<NSDraggingInfo> info, NSInteger count) {
-    NSDraggingInfoSettings *settings = settingsOf(info, YES);
-    settings->_numberOfValidItems = count;
-    settings->_hasNumberOfValidItems = YES;
-}
-
-static void draggingInfoEnumerateItems(id<NSDraggingInfo> info,
-        NSDraggingItemEnumerationOptions options, NSView *view, NSArray<Class> *classArray,
-        NSDictionary<NSPasteboardReadingOptionKey, id> *searchOptions,
-        void (^block)(NSDraggingItem *draggingItem, NSInteger idx, BOOL *stop))
-{
-    NSPasteboard *pasteboard = [info draggingPasteboard];
-
-    // A drag this application began knows where each of its items is.
-    NSDraggingSession *session = sessionOfSource([info draggingSource]);
-    if (session != nil && [[session draggingPasteboard] isEqual: pasteboard]) {
-        [session enumerateDraggingItemsWithOptions: options
-                                           forView: view
-                                           classes: classArray
-                                     searchOptions: searchOptions
-                                        usingBlock: block];
-        return;
-    }
-
-    // Otherwise the items are where the dragged image is, all of them.
-    NSRect frame = NSZeroRect;
-    frame.origin = [info draggedImageLocation];
-    frame.size = [[info draggedImage] size];
-    NSWindow *window = [info draggingDestinationWindow];
-    if (view != nil)
-        frame = [view convertRect: frame fromView: nil];
-    else if (window != nil)
-        frame = [window convertRectToScreen: frame];
-
-    NSInteger index = 0;
-    for (NSPasteboardItem *pasteboardItem in [pasteboard pasteboardItems]) {
-        id object = [pasteboard _readObjectForClasses: classArray
-                                              options: searchOptions
-                                             fromItem: pasteboardItem];
-        if (object != nil) {
-            NSDraggingItem *item = [[[NSDraggingItem alloc] _initWithItem: object] autorelease];
-            [item setDraggingFrame: frame];
-            BOOL stop = NO;
-            block(item, index, &stop);
-            if (stop)
-                break;
-        }
-        index++;
-    }
-}
-
-@implementation NSDraggingSession (NSDraggingPrivate)
-
-+ (NSDragOperation) _operationMaskOfSource: (id) source
-                                     local: (BOOL) local
-                               defaultMask: (NSDragOperation) defaultMask
-{
-    return draggingSourceOperationMask(source, local, defaultMask);
-}
-
-+ (void) _source: (id) source beganWithImage: (NSImage *) image at: (NSPoint) point {
-    draggingSourceBegan(source, image, point);
-}
-
-+ (void) _source: (id) source movedWithImage: (NSImage *) image to: (NSPoint) point {
-    draggingSourceMoved(source, image, point);
-}
-
-+ (void) _source: (id) source endedWithImage: (NSImage *) image at: (NSPoint) point
-       operation: (NSDragOperation) operation
-{
-    draggingSourceEnded(source, image, point, operation);
-}
-
-+ (NSDraggingFormation) _formationOfInfo: (id<NSDraggingInfo>) info {
-    return draggingInfoFormation(info);
-}
-
-+ (void) _setFormation: (NSDraggingFormation) formation ofInfo: (id<NSDraggingInfo>) info {
-    draggingInfoSetFormation(info, formation);
-}
-
-+ (BOOL) _animatesToDestinationOfInfo: (id<NSDraggingInfo>) info {
-    return draggingInfoAnimatesToDestination(info);
-}
-
-+ (void) _setAnimatesToDestination: (BOOL) animates ofInfo: (id<NSDraggingInfo>) info {
-    draggingInfoSetAnimatesToDestination(info, animates);
-}
-
-+ (NSInteger) _numberOfValidItemsOfInfo: (id<NSDraggingInfo>) info {
-    return draggingInfoNumberOfValidItems(info);
-}
-
-+ (void) _setNumberOfValidItems: (NSInteger) count ofInfo: (id<NSDraggingInfo>) info {
-    draggingInfoSetNumberOfValidItems(info, count);
-}
-
-+ (void) _enumerateItemsOfInfo: (id<NSDraggingInfo>) info
-                       options: (NSDraggingItemEnumerationOptions) options
-                       forView: (NSView *) view
-                       classes: (NSArray<Class> *) classArray
-                 searchOptions: (NSDictionary<NSPasteboardReadingOptionKey, id> *) searchOptions
-                    usingBlock: (void (^)(NSDraggingItem *draggingItem, NSInteger idx, BOOL *stop)) block
-{
-    draggingInfoEnumerateItems(info, options, view, classArray, searchOptions, block);
+    enumerateItems([info draggingPasteboard], frames, images, view, classArray, searchOptions, block, nil);
 }
 
 @end

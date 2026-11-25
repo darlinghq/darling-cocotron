@@ -29,7 +29,8 @@ const CFStringRef kCTForegroundColorAttributeName = CFSTR("CTForegroundColor");
 const CFStringRef kCTParagraphStyleAttributeName = CFSTR("NSParagraphStyle");
 const CFStringRef kCTGlyphInfoAttributeName = CFSTR("NSGlyphInfo");
 const CFStringRef kCTKernAttributeName = CFSTR("CTKernAttributeName");
-const CFStringRef kCTLanguageAttributeName = CFSTR("CTLanguageAttributeName");
+// the string values of the next two are those of macOS 10.14.4 and 26.7.3 (printed from the constants)
+const CFStringRef kCTLanguageAttributeName = CFSTR("NSLanguage");
 const CFStringRef kCTTypesetterOptionForcedEmbeddingLevel = CFSTR("CTTypesetterOptionForcedEmbeddingLevel");
 // The same attribute as AppKit's NSVerticalGlyphFormAttributeName (so documented), whose string,
 // "CTVerticalForms", was read on macOS 26.7.3 and 10.14 (see appkit-attribute-name-constants.m).

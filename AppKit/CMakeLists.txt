@@ -112,6 +112,7 @@ set(AppKit_sources
 	NSMutableAttributedString.m
 	NSRuleEditor.m
 	NSWorkspace.m
+	NSWorkspaceVolumeEvents.m
 	NSBezierPath.m
 	NSWindowAnimationContext.m
 	NSCellUndoManager.m
@@ -295,6 +296,7 @@ set(AppKit_sources
 	NSStatusItem.m
 	NSStatusItemNotifier.m
 	NSDBusMenu.m
+	NSMenuBarController.m
 	NSPathComponentCell.m
 	NSCachedImageRep.m
 	NSWindow-Drag.m
@@ -307,6 +309,7 @@ set(AppKit_sources
 	NSFontDescriptor.m
 	UIFontNames.m
 	NSDisplay.m
+	NSEventQueue.m
 	DarlingDisplay.m
 
 	NSOpenGL/NSOpenGLView.m
@@ -523,6 +526,10 @@ set(AppKit_resources
 	NSApplicationIcon.tiff NSSystemInfoPanel/NSApplicationIcon.tiff
 
 	NSComputer.png SystemImages/NSComputer.png
+	NSDiskImage.png SystemImages/NSDiskImage.png
+	NSMultipleDocuments.png SystemImages/NSMultipleDocuments.png
+	NSVolumeInternal.png SystemImages/NSVolumeInternal.png
+	NSVolumeRemovable.png SystemImages/NSVolumeRemovable.png
 	NSFolder.png SystemImages/NSFolder.png
 	NSNetwork.png SystemImages/NSNetwork.png
 	NSTrashEmpty.png SystemImages/NSTrashEmpty.png
@@ -615,6 +622,7 @@ add_framework(AppKit
 		compression
 		UIFoundation
 		dbus
+		DiskArbitration
 )
 
 # Applications bind the NSCollectionLayout* names to AppKit, so AppKit re-exports the framework that defines them.
@@ -674,6 +682,7 @@ add_backend(X11
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
 		X11.backend/X11Touch.m
+		X11.backend/X11Gesture.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES
@@ -712,7 +721,6 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Wayland.backend/WaylandAppMenu.m
 			Wayland.backend/WaylandCursor.m
 			Wayland.backend/WaylandDisplay.m
-			Wayland.backend/WaylandOutputManager.m
 			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit.
 			../CoreGraphics/WaylandSupport/WaylandLibrary.m
 			Wayland.backend/WaylandDropSession.m
@@ -720,6 +728,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Wayland.backend/WaylandDragIcon.m
 			Wayland.backend/WaylandPasteboard.m
 			Wayland.backend/WaylandWindow.m
+			Wayland.backend/WaylandToplevelIcon.m
 			Wayland.backend/WaylandSubWindow.m
 			${WAYLAND_PROTOCOL_SOURCES}
 		INFO_PLIST

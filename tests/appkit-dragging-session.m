@@ -1,63 +1,55 @@
-/*
- * Copyright (C) 2026 Lubos Dolezel
- *
- * The drag API of macOS 10.7 (NSDraggingItem, NSDraggingImageComponent,
- * -[NSView beginDraggingSessionWithItems:event:source:], NSDraggingSession)
- * and the file promises of 10.12 (NSFilePromiseProvider,
- * NSFilePromiseReceiver), as observed on macOS 26.7.3:
- *  - an item keeps its object; its frame starts empty and it has no image
- *    components until it is given some; -setDraggingFrame:contents: makes one
- *    icon component with the contents that fills the frame;
- *  - a session is returned before its source hears of the drag, with the
- *    defaults its header gives (no formation, animates back, a sequence
- *    number), the items written to the drag pasteboard, and items enumerated
- *    as new NSDraggingItems holding what the classes read;
- *  - quirk (see the QUIRK comment in NSDraggingSession.m): while a session
- *    waits for the run loop, another one is not begun and nil is returned;
- *  - a provider writes a promise as the metadata, name, suggested name,
- *    content type and ID types (the names promised), and the pasteboard adds
- *    the legacy promise type; a receiver reads such an item, and nothing else,
- *    with the provider's file type, and no file names until asked for them.
- *    (Receiving the file could not be observed outside a real drag.)
- * Needs a window server (the session's view is in a window), but the drag is
- * never run: the test ends without returning to the run loop.
- */
+// CFLAGS: -framework Foundation -framework AppKit
+// Copyright (C) 2026 Lubos Dolezel
+//
+// The dragging object model: NSDraggingItem, NSDraggingImageComponent and the
+// NSDraggingSession -[NSView beginDraggingSessionWithItems:event:source:]
+// returns before the drag runs. Observed on macOS 26.7.3 and 10.14.4
+// (darling's tests/collection-view.md, "Dragging sessions"). It returns before
+// the run loop runs, so no drag takes place.
+// Also, as observed on macOS 26.7.3:
+//  - the component -setDraggingFrame:contents: makes is the same one each time
+//    the item is asked for its components;
+//  - quirk (see the QUIRK comment in -[NSView beginDraggingSessionWithItems:
+//    event:source:]): while a session waits for the run loop, another one is
+//    not begun and nil is returned (an item without a frame still raises);
+//  - the file promises of 10.12: a provider writes a promise as the metadata,
+//    name, suggested name, content type and ID types (the names promised), and
+//    the pasteboard adds the legacy promise type; a receiver reads such an
+//    item, and nothing else, with the provider's file type, and no file names
+//    until asked for them. (Receiving the file could not be observed outside a
+//    real drag.)
+//
+// Prints PASS or FAIL lines, then ALL PASSED or FAILED n.
 #import <AppKit/AppKit.h>
+#include <stdarg.h>
 #include <stdio.h>
 
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-
 static int failures;
-
-static void expect(BOOL ok, const char *what)
+static void expect(BOOL ok, const char *format, ...) __attribute__((format(printf, 2, 3)));
+static void expect(BOOL ok, const char *format, ...)
 {
-    if (!ok) {
-        fprintf(stderr, "FAIL: %s\n", what);
+    va_list ap;
+    va_start(ap, format);
+    printf("%s ", ok ? "PASS" : "FAIL");
+    vprintf(format, ap);
+    printf("\n");
+    va_end(ap);
+    if (!ok)
         failures++;
-    }
 }
 
-@interface Source : NSView <NSDraggingSource> {
-  @public
-    int calls;
+static const char *rectString(NSRect rect)
+{
+    return [NSStringFromRect(rect) UTF8String];
 }
+
+@interface Source : NSObject <NSDraggingSource>
 @end
-
 @implementation Source
 - (NSDragOperation) draggingSession: (NSDraggingSession *) session
     sourceOperationMaskForDraggingContext: (NSDraggingContext) context
 {
-    calls++;
     return NSDragOperationCopy;
-}
-- (void) draggingSession: (NSDraggingSession *) session willBeginAtPoint: (NSPoint) point {
-    calls++;
-}
-- (void) draggingSession: (NSDraggingSession *) session
-            endedAtPoint: (NSPoint) point
-               operation: (NSDragOperation) operation
-{
-    calls++;
 }
 @end
 
@@ -76,105 +68,141 @@ static void expect(BOOL ok, const char *what)
 }
 @end
 
-static void testItems(void)
+static void test_dragging_item_frame_and_components(void)
 {
-    NSString *object = @"hello";
-    NSDraggingItem *item = [[NSDraggingItem alloc] initWithPasteboardWriter: object];
-    expect(item.item == object, "an item keeps its object");
-    expect(NSEqualRects(item.draggingFrame, NSZeroRect), "an item's frame starts empty");
-    expect(item.imageComponentsProvider == nil && item.imageComponents == nil,
-           "an item has no image components until it is given some");
+    NSImage *image = [[[NSImage alloc] initWithSize: NSMakeSize(10, 20)] autorelease];
+    NSDraggingItem *item = [[[NSDraggingItem alloc] initWithPasteboardWriter: @"hello"] autorelease];
+    expect([[item item] isEqual: @"hello"], "the item is the writer");
+    expect(NSEqualRects([item draggingFrame], NSZeroRect), "a new item's frame is zero (%s)", rectString([item draggingFrame]));
+    expect([item imageComponentsProvider] == nil && [[item imageComponents] count] == 0,
+           "a new item has no provider and no components (%lu)", (unsigned long) [[item imageComponents] count]);
 
-    NSImage *image = [[NSImage alloc] initWithSize: NSMakeSize(10, 20)];
     [item setDraggingFrame: NSMakeRect(5, 6, 30, 40) contents: image];
-    expect(NSEqualRects(item.draggingFrame, NSMakeRect(5, 6, 30, 40)), "setDraggingFrame:contents: sets the frame");
-    expect(item.imageComponentsProvider != nil, "setDraggingFrame:contents: sets a provider");
-    NSArray<NSDraggingImageComponent *> *components = item.imageComponents;
-    expect(components.count == 1, "setDraggingFrame:contents: makes one component");
-    NSDraggingImageComponent *icon = components.firstObject;
-    expect([icon.key isEqualToString: NSDraggingImageComponentIconKey], "the component is the icon");
-    expect(icon.contents == image, "the component shows the contents");
-    expect(NSEqualRects(icon.frame, NSMakeRect(0, 0, 30, 40)), "the component fills the item");
+    expect(NSEqualRects([item draggingFrame], NSMakeRect(5, 6, 30, 40)), "setDraggingFrame:contents: sets the frame (%s)",
+           rectString([item draggingFrame]));
+    expect([item imageComponentsProvider] != nil, "and a provider");
+    NSArray *components = [item imageComponents];
+    NSDraggingImageComponent *icon = [components firstObject];
+    expect([components count] == 1 && [[icon key] isEqual: NSDraggingImageComponentIconKey] &&
+               [icon contents] == image && NSEqualRects([icon frame], NSMakeRect(0, 0, 30, 40)),
+           "whose one component is the icon, the contents, at the origin with the frame's size (%lu, %s, %s)",
+           (unsigned long) [components count], [[icon key] UTF8String], rectString([icon frame]));
+    expect([[item imageComponents] firstObject] == icon, "the provider gives the same component each time");
 
-    NSDraggingImageComponent *component = [[NSDraggingImageComponent alloc] initWithKey: @"custom"];
-    expect([component.key isEqualToString: @"custom"], "a component keeps its key");
-    expect(component.contents == nil && NSEqualRects(component.frame, NSZeroRect),
-           "a component starts without contents or frame");
-    expect([NSDraggingImageComponentIconKey isEqualToString: @"icon"]
-           && [NSDraggingImageComponentLabelKey isEqualToString: @"label"], "the component keys");
+    NSDraggingItem *provided = [[[NSDraggingItem alloc] initWithPasteboardWriter: @"other"] autorelease];
+    __block int calls = 0;
+    [provided setImageComponentsProvider: ^NSArray * {
+        calls++;
+        return [NSArray arrayWithObject: [NSDraggingImageComponent
+                                             draggingImageComponentWithKey: NSDraggingImageComponentLabelKey]];
+    }];
+    components = [provided imageComponents];
+    expect(calls == 1 && [components count] == 1 &&
+               [[[components firstObject] key] isEqual: NSDraggingImageComponentLabelKey],
+           "imageComponents asks a provider (%d calls, %lu components)", calls, (unsigned long) [components count]);
+
+    NSDraggingImageComponent *component = [NSDraggingImageComponent draggingImageComponentWithKey: @"k"];
+    expect([[component key] isEqual: @"k"] && [component contents] == nil && NSEqualRects([component frame], NSZeroRect),
+           "a new component has its key, no contents and a zero frame");
+    expect([NSDraggingImageComponentIconKey isEqual: @"icon"] && [NSDraggingImageComponentLabelKey isEqual: @"label"],
+           "the component keys are icon and label");
 }
 
-static void testSession(void)
+static NSArray *draggingItems(NSArray *writers)
 {
-    NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 200, 200)
-                                                   styleMask: NSWindowStyleMaskTitled
-                                                     backing: NSBackingStoreBuffered
-                                                       defer: NO];
-    Source *view = [[Source alloc] initWithFrame: NSMakeRect(0, 0, 200, 200)];
-    window.contentView = view;
-    [window orderFront: nil];
-    NSEvent *event = [NSEvent mouseEventWithType: NSEventTypeLeftMouseDown
-                                        location: NSMakePoint(50, 50)
-                                   modifierFlags: 0
-                                       timestamp: 0
-                                    windowNumber: window.windowNumber
-                                         context: nil
-                                     eventNumber: 0
-                                      clickCount: 1
-                                        pressure: 1];
-
-    NSDraggingItem *item = [[NSDraggingItem alloc] initWithPasteboardWriter: @"dragged"];
-    [item setDraggingFrame: NSMakeRect(40, 40, 10, 10)
-                  contents: [[NSImage alloc] initWithSize: NSMakeSize(10, 10)]];
-    NSDraggingSession *session = [view beginDraggingSessionWithItems: @[ item ] event: event source: view];
-    expect(session != nil, "a session is returned");
-    expect(view->calls == 0, "the source hears of the drag only after the method returns");
-    expect(session.draggingFormation == NSDraggingFormationNone, "the default formation is none");
-    expect(session.animatesToStartingPositionsOnCancelOrFail, "a session animates back by default");
-    expect(session.draggingLeaderIndex == 0, "the leader is the item under the event");
-    expect(session.draggingSequenceNumber > 0, "a session has a sequence number");
-
-    NSPasteboard *pasteboard = session.draggingPasteboard;
-    expect([pasteboard.name isEqualToString: NSPasteboardNameDrag], "a session uses the drag pasteboard");
-    expect([[pasteboard stringForType: NSPasteboardTypeString] isEqualToString: @"dragged"],
-           "the items are written to the pasteboard");
-
-    __block int strings = 0;
-    [session enumerateDraggingItemsWithOptions: 0 forView: view classes: @[ [NSString class] ]
-                                 searchOptions: @{} usingBlock: ^(NSDraggingItem *found, NSInteger idx, BOOL *stop) {
-        strings++;
-        expect(idx == 0, "the index of the item");
-        expect(found != item, "the enumeration gives a new item");
-        expect([found.item isEqual: @"dragged"], "the new item holds what the class read");
-        expect(NSEqualSizes(found.draggingFrame.size, NSMakeSize(10, 10)), "the new item has the item's size");
-    }];
-    expect(strings == 1, "the string item is enumerated");
-
-    __block int urls = 0;
-    [session enumerateDraggingItemsWithOptions: 0 forView: view classes: @[ [NSURL class] ]
-                                 searchOptions: @{} usingBlock: ^(NSDraggingItem *found, NSInteger idx, BOOL *stop) {
-        urls++;
-    }];
-    expect(urls == 0, "an item no class can read is skipped");
-
-    __block int items = 0;
-    [session enumerateDraggingItemsWithOptions: 0 forView: nil classes: @[ [NSPasteboardItem class] ]
-                                 searchOptions: @{} usingBlock: ^(NSDraggingItem *found, NSInteger idx, BOOL *stop) {
-        items++;
-        expect([found.item isKindOfClass: [NSPasteboardItem class]], "NSPasteboardItem reads any item");
-    }];
-    expect(items == 1, "the pasteboard item is enumerated");
-
-    NSDraggingItem *second = [[NSDraggingItem alloc] initWithPasteboardWriter: @"second"];
-    second.draggingFrame = NSMakeRect(0, 0, 10, 10);
-    NSDraggingSession *next = [view beginDraggingSessionWithItems: @[ second ] event: event source: view];
-    expect(next == nil, "quirk: a second session waits for none, it is not begun");
-
-    session.draggingFormation = NSDraggingFormationStack;
-    expect(session.draggingFormation == NSDraggingFormationStack, "the formation can be set");
+    NSImage *image = [[[NSImage alloc] initWithSize: NSMakeSize(32, 32)] autorelease];
+    NSMutableArray *items = [NSMutableArray array];
+    for (NSUInteger i = 0; i < [writers count]; i++) {
+        NSDraggingItem *item = [[[NSDraggingItem alloc] initWithPasteboardWriter: [writers objectAtIndex: i]] autorelease];
+        [item setDraggingFrame: NSMakeRect(10 + 40 * i, 10, 32, 32) contents: image];
+        [items addObject: item];
+    }
+    return items;
 }
 
-static void testFilePromises(void)
+static void test_begin_returns_session_with_pasteboard_items(NSView *view, NSEvent *down)
+{
+    NSArray *writers = [NSArray arrayWithObjects: [NSURL fileURLWithPath: @"/etc/hosts"], @"text",
+                                                  [NSURL URLWithString: @"https://example.com/"], nil];
+    Source *source = [[[Source alloc] init] autorelease];
+    NSDraggingSession *session = [view beginDraggingSessionWithItems: draggingItems(writers) event: down source: source];
+    expect(session != nil, "beginDraggingSessionWithItems: returns a session at once");
+    expect([session draggingFormation] == NSDraggingFormationNone, "its formation is none (%ld)",
+           (long) [session draggingFormation]);
+    expect([session animatesToStartingPositionsOnCancelOrFail], "it animates back on cancel or failure");
+    expect([session draggingSequenceNumber] != 0, "it has a sequence number");
+    NSPasteboard *drag = [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
+    expect([session draggingPasteboard] == drag, "its pasteboard is the drag pasteboard");
+    NSArray *items = [drag pasteboardItems];
+    BOOL inOrder = [items count] == 3 && [[[items objectAtIndex: 0] types] containsObject: NSPasteboardTypeFileURL] &&
+                   [[[items objectAtIndex: 1] types] containsObject: NSPasteboardTypeString] &&
+                   [[[items objectAtIndex: 2] types] containsObject: NSPasteboardTypeURL] &&
+                   ![[[items objectAtIndex: 2] types] containsObject: NSPasteboardTypeFileURL];
+    expect(inOrder, "each writer is its own pasteboard item, in order (%lu items)", (unsigned long) [items count]);
+
+    NSMutableArray *seen = [NSMutableArray array];
+    [session enumerateDraggingItemsWithOptions: 0
+                                       forView: view
+                                       classes: [NSArray arrayWithObject: [NSPasteboardItem class]]
+                                 searchOptions: [NSDictionary dictionary]
+                                    usingBlock: ^(NSDraggingItem *item, NSInteger index, BOOL *stop) {
+                                        if ([[item item] isKindOfClass: [NSPasteboardItem class]] &&
+                                            NSEqualSizes([item draggingFrame].size, NSMakeSize(32, 32)) &&
+                                            [[item imageComponents] count] == 1)
+                                            [seen addObject: [NSNumber numberWithInteger: index]];
+                                    }];
+    expect([[seen componentsJoinedByString: @","] isEqual: @"0,1,2"],
+           "enumerating as pasteboard items gives every item with its frame's size and image (%s)",
+           [[seen componentsJoinedByString: @","] UTF8String]);
+
+    [seen removeAllObjects];
+    [session enumerateDraggingItemsWithOptions: 0
+                                       forView: view
+                                       classes: [NSArray arrayWithObject: [NSURL class]]
+                                 searchOptions: [NSDictionary dictionary]
+                                    usingBlock: ^(NSDraggingItem *item, NSInteger index, BOOL *stop) {
+                                        [seen addObject: [NSString stringWithFormat: @"%ld %@", (long) index, [item item]]];
+                                    }];
+    NSString *urls = [seen componentsJoinedByString: @", "];
+    expect([urls isEqual: @"0 file:///etc/hosts, 2 https://example.com/"],
+           "enumerating as URLs gives the items that are URLs, as URLs (%s)", [urls UTF8String]);
+
+    [seen removeAllObjects];
+    [session enumerateDraggingItemsWithOptions: 0
+                                       forView: nil
+                                       classes: [NSArray arrayWithObject: [NSString class]]
+                                 searchOptions: [NSDictionary dictionary]
+                                    usingBlock: ^(NSDraggingItem *item, NSInteger index, BOOL *stop) {
+                                        [seen addObject: [NSString stringWithFormat: @"%ld %@", (long) index, [item item]]];
+                                    }];
+    NSString *strings = [seen componentsJoinedByString: @", "];
+    expect([strings isEqual: @"1 text"], "enumerating as strings gives the string (%s)", [strings UTF8String]);
+
+    [session setDraggingFormation: NSDraggingFormationList];
+    [session setAnimatesToStartingPositionsOnCancelOrFail: NO];
+    [session setDraggingLeaderIndex: 2];
+    expect([session draggingFormation] == NSDraggingFormationList && ![session animatesToStartingPositionsOnCancelOrFail] &&
+               [session draggingLeaderIndex] == 2,
+           "the formation, animation and leader can be set");
+
+    NSDraggingSession *another = [view beginDraggingSessionWithItems: draggingItems([NSArray arrayWithObject: @"x"])
+                                                               event: down
+                                                              source: source];
+    expect(another == nil, "quirk: a second session waits for none, it is not begun");
+
+    BOOL raised = NO;
+    @try {
+        [view beginDraggingSessionWithItems:
+                  [NSArray arrayWithObject: [[[NSDraggingItem alloc] initWithPasteboardWriter: @"x"] autorelease]]
+                                      event: down
+                                     source: source];
+    } @catch (NSException *exception) {
+        raised = [[exception name] isEqual: NSRangeException];
+    }
+    expect(raised, "an item without a frame raises NSRangeException");
+}
+
+static void test_file_promises(void)
 {
     NSArray *readable = [NSFilePromiseReceiver readableDraggedTypes];
     expect(readable.count == 3 && [readable containsObject: @"com.apple.NSFilePromiseItemMetaData"]
@@ -227,14 +255,33 @@ static void testFilePromises(void)
 
 int main(void)
 {
-    @autoreleasepool {
-        [NSApplication sharedApplication];
-        testItems();
-        testFilePromises();
-        // last: it leaves the drags waiting for the run loop
-        testSession();
-    }
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    [NSApplication sharedApplication];
+    test_dragging_item_frame_and_components();
+    test_file_promises();
 
-    printf("%s\n", failures ? "FAILED" : "ALL PASSED");
+    NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 300, 200)
+                                                   styleMask: NSWindowStyleMaskTitled
+                                                     backing: NSBackingStoreBuffered
+                                                       defer: NO];
+    NSView *view = [[[NSView alloc] initWithFrame: NSMakeRect(0, 0, 300, 200)] autorelease];
+    [[window contentView] addSubview: view];
+    [window makeKeyAndOrderFront: nil];
+    NSEvent *down = [NSEvent mouseEventWithType: NSEventTypeLeftMouseDown
+                                       location: NSMakePoint(50, 50)
+                                  modifierFlags: 0
+                                      timestamp: [[NSProcessInfo processInfo] systemUptime]
+                                   windowNumber: [window windowNumber]
+                                        context: nil
+                                    eventNumber: 0
+                                     clickCount: 1
+                                       pressure: 1];
+    test_begin_returns_session_with_pasteboard_items(view, down);
+
+    [pool release];
+    if (failures)
+        printf("FAILED %d\n", failures);
+    else
+        printf("ALL PASSED\n");
     return failures != 0;
 }
