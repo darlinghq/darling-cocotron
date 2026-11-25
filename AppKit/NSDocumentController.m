@@ -1029,8 +1029,13 @@ static NSError *UntitledDocumentError(void) {
 
     // QUIRK: the "Recent items" setting of System Preferences is the MaxAmount of the Documents
     // dictionary of the com.apple.recentitems preferences domain (0 keeps none).
-    // Evidence: widely reported `defaults write com.apple.recentitems Documents -dict MaxAmount N`
-    // (tier 4, for example Apple Support Communities threads about clearing Recent Items).
+    // Evidence: the domain and the MaxAmount key are reported by several independent public scripts for the
+    // Applications list (`defaults write com.apple.recentitems Applications -dict MaxAmount 0`, with 0, 5, 10,
+    // 15, 20, 30 and 50 as the values the pane offers; tier 4:
+    // https://gist.github.com/kipyegonmark/5e9fc40b1b76712b6521, https://gist.github.com/midore/9271077).
+    // That the Documents list is kept the same way is an inference from that sibling list and from the pane
+    // having one popup for applications, documents and servers (tier 5, no public source names the Documents
+    // key); it needs maintainer approval. The pane offers the count in System Preferences > General.
     // Test: tests/appkit-recent-documents-limit.m (test_quirk_recentitems_max_amount)
     CFPreferencesAppSynchronize(CFSTR("com.apple.recentitems"));
     CFPropertyListRef documents = CFPreferencesCopyAppValue(CFSTR("Documents"), CFSTR("com.apple.recentitems"));

@@ -939,8 +939,11 @@ static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
 // Full keyboard access is on when the user lets the keyboard move the focus between all controls.
 // QUIRK: the AppleKeyboardUIMode global default holds it: 0 moves the focus between text boxes and
 // lists only, 2 and 3 between all controls (the Keyboard pane of System Preferences writes 3).
-// Evidence: widely reported `defaults write -g AppleKeyboardUIMode -int 3` to enable it (tier 4), for
-// example the macOS defaults lists of developers' dotfiles; the documented property only says whether
+// Evidence: independent public sources give `defaults write -g AppleKeyboardUIMode -int 3` as "full
+// keyboard access for all controls" (tier 4): https://eclecticlight.co/2019/08/15/global-defaults-in-macos-mojave
+// (lists it with 2 as the normal value), https://community.jamf.com/t5/jamf-pro/script-to-enable-keyboard-gt-shortcuts-gt-full-keyboard-access/td-p/165672
+// (reported working on Mojave). Apple's own page only describes the setting in the Keyboard pane
+// (https://support.apple.com/guide/mac-help/mchlc06d1059); the documented property only says whether
 // full keyboard access is on. Test: tests/appkit-full-keyboard-access.m (test_quirk_keyboard_ui_mode)
 - (BOOL) isFullKeyboardAccessEnabled {
     CFPreferencesAppSynchronize(kCFPreferencesAnyApplication);
