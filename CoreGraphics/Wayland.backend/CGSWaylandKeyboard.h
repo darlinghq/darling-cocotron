@@ -35,6 +35,7 @@
 @class CGSConnectionWayland;
 @class CGSWaylandKeymap;
 @class NSMutableDictionary;
+@class NSMutableSet;
 struct wl_proxy;
 
 @interface CGSWaylandKeyboard : NSObject {
@@ -44,6 +45,7 @@ struct wl_proxy;
     struct wl_proxy *_focus;           // the surface with the keyboard focus, compared by value only
     NSMutableDictionary *_heldKeyIdentities;
     NSMutableDictionary *_heldHotKeys; // keycode -> uids of the hot keys its press selected
+    NSMutableSet *_composingKeys;      // keycodes held down whose press went into a dead key or compose sequence
     struct wl_proxy *_modifierSync;
     int _modifierKeycode;
     BOOL _hasModifierKeycode, _syncModifierFlags, _classifyHeldKeys;
