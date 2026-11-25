@@ -51,9 +51,6 @@
 
 #import <OpenGL/CGLInternal.h>
 
-#import "../private-include/AppKit/CarbonKeys.h"
-#import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
-#import "X11KeyEvent.h"
 #import "X11Touch.h"
 #import "X11Gesture.h"
 #import "X11Occlusion.h"
@@ -108,7 +105,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         CGLRegisterNativeDisplay(_display);
 
         _windowsByID = [NSMutableDictionary new];
-        [self _enableDetectableAutoRepeat];
 
         [[NSNotificationCenter defaultCenter]
                 addObserver: self
@@ -140,7 +136,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         lastFocusedWindow = nil;
         _confinesPointer = appKitPreference(CFSTR("ConfinePointerToFullscreenWindows"));
         _controlActsAsCommand = appKitPreference(CFSTR("ControlKeyActsAsCommand"));
-        _modifierFlags = 0;
 
         // The general pasteboard and the CLIPBOARD selection show the same contents.
         NSPasteboardRegisterHostClipboard([X11Pasteboard hostClipboardOfDisplay: self]);
@@ -227,19 +222,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 
     _backingScale = (CGFloat) _CGSDisplayBackingScaleFactor(CGMainDisplayID());
     return _backingScale;
-}
-
-- (void) _enableDetectableAutoRepeat {
-    int major = XkbMajorVersion, minor = XkbMinorVersion;
-    XkbStateRec state;
-
-    if (!XkbLibraryVersion(&major, &minor))
-        return;
-    if (!XkbQueryExtension(_display, NULL, NULL, &major, &minor, NULL))
-        return;
-    
-    Bool supported;
-    XkbSetDetectableAutoRepeat(_display, TRUE, &supported);
 }
 
 // The layout of the monitors changed. The displays are CoreGraphics', which reads RandR on the shared
@@ -776,148 +758,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     return ret;
 }
 
-// A modifier key reaches AppKit as an NSFlagsChanged and never as a key down or
-// up, so each modifier keysym is mapped to the virtual keycode the event must
-// carry and the X mask bit it drives. `toggle` marks the lock keys, whose press
-// flips the bit and whose release changes nothing. A carbon keycode of -1 means
-// the keysym is not a modifier at all.
-typedef struct {
-    int carbonKeyCode;
-    unsigned int xMask;
-    BOOL toggle;
-} X11ModifierKey;
-
-static X11ModifierKey modifierKeyForKeysym(KeySym keySym) {
-    X11ModifierKey notAModifier = {-1, 0, NO};
-    switch (keySym) {
-    case XK_Shift_L: return (X11ModifierKey){kVK_Shift, ShiftMask, NO};
-    case XK_Shift_R: return (X11ModifierKey){kVK_RightShift, ShiftMask, NO};
-    case XK_Control_L: return (X11ModifierKey){kVK_Control, ControlMask, NO};
-    case XK_Control_R: return (X11ModifierKey){kVK_RightControl, ControlMask, NO};
-    case XK_Alt_L: return (X11ModifierKey){kVK_Option, Mod1Mask, NO};
-    case XK_Alt_R: return (X11ModifierKey){kVK_RightOption, Mod1Mask, NO};
-    case XK_Super_L: case XK_Meta_L:
-        return (X11ModifierKey){kVK_Command, Mod4Mask, NO};
-    case XK_Super_R: case XK_Meta_R:
-        return (X11ModifierKey){0x36, Mod4Mask, NO};
-    case XK_ISO_Level3_Shift: case XK_Mode_switch:
-        return (X11ModifierKey){kVK_Function, Mod5Mask, NO};
-    case XK_Caps_Lock:
-        return (X11ModifierKey){kVK_CapsLock, LockMask, YES};
-    case XK_Num_Lock:
-        return (X11ModifierKey){kVK_ANSI_KeypadClear, Mod2Mask, NO};
-    default: return notAModifier;
-    }
-}
-
-// The X server fills `state` with the modifier and button state as it was
-// *before* the event, so the key's own contribution has to be applied to reach
-// the state the event leaves behind. Verified against an Xvfb server: a
-// Shift_L press carries state 0 and its release carries ShiftMask.
-static unsigned int x11StateAfterKeyEvent(const X11ModifierKey *key,
-                                          unsigned int state,
-                                          BOOL pressed) {
-    if (pressed)
-        return key->toggle ? (state ^ key->xMask) : (state | key->xMask);
-    if (key->toggle)
-        return state;
-    return state & ~key->xMask;
-}
-
-static BOOL isModifierKeyHeld(const unsigned char *held, unsigned int keycode) {
-    return keycode < 256 && (held[keycode / 8] & (1 << (keycode % 8)));
-}
-
-static void setModifierKeyHeld(unsigned char *held, unsigned int keycode, BOOL down) {
-    if (keycode >= 256)
-        return;
-    if (down)
-        held[keycode / 8] |= 1 << (keycode % 8);
-    else
-        held[keycode / 8] &= ~(1 << (keycode % 8));
-}
-
-// The X masks still driven by held modifier keys other than `keycode`. A key
-// event only carries the state from before it, so this is what tells whether
-// releasing one Shift key leaves Shift down because the other one is held.
-- (unsigned int) maskOfHeldModifierKeysExcept: (unsigned int) keycode {
-    unsigned int mask = 0;
-    for (unsigned int code = 0; code < 256; code++) {
-        if (code == keycode || !isModifierKeyHeld(_heldModifierKeys, code))
-            continue;
-        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
-        if (key.carbonKeyCode >= 0 && !key.toggle)
-            mask |= key.xMask;
-    }
-    return mask;
-}
-
-// Cocoa has no event for "a modifier's aggregate changed without a key": the
-// same flagsChanged carries a sentinel keycode, which is what macOS sends when
-// a modifier is released while another app holds the focus and the next key
-// event is the first this process sees of the new mask.
-- (void) postFlagsChanged: (unsigned short) keyCode
-                    flags: (NSEventModifierFlags) flags
-                 inWindow: (X11Window *) window {
-    NSWindow *delegate = [window delegate];
-    if (delegate == nil)
-        return;
-    [self postEvent: [NSEvent keyEventWithType: NSFlagsChanged
-            location: [window mouseLocationOutsideOfEventStream]
-            modifierFlags: flags
-            timestamp: NSEventCurrentTime()
-            windowNumber: [delegate windowNumber]
-            context: nil
-            characters: @""
-            charactersIgnoringModifiers: @""
-            isARepeat: NO
-            keyCode: keyCode]
-             atStart: NO];
-}
-
-// Every input event carries the modifier state the server holds. A modifier
-// that went up while another client had the keyboard, or whose release a
-// compositor kept for itself, therefore shows up as a difference here, and
-// is reported the way macOS reports it, with a flagsChanged that names no key.
-- (void) resyncModifierFlagsWithState: (unsigned int) state
-                               window: (X11Window *) window {
-    NSEventModifierFlags flags = [self modifierFlagsForState: state];
-    if (flags == _modifierFlags)
-        return;
-
-    for (unsigned int code = 0; code < 256; code++) {
-        if (!isModifierKeyHeld(_heldModifierKeys, code))
-            continue;
-        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
-        if (key.carbonKeyCode < 0 || !(state & key.xMask))
-            setModifierKeyHeld(_heldModifierKeys, code, NO);
-    }
-
-    _modifierFlags = flags;
-    [self postFlagsChanged: 0xFFFF flags: flags inWindow: window];
-}
-
-// Keys pressed or released while another client had the focus never reached
-// us, so on getting the focus back the held keys are read from the server.
-- (void) resyncModifierKeysOnFocusIn: (X11Window *) window {
-    char keys[32];
-    Window root, child;
-    int rootX, rootY, winX, winY;
-    unsigned int state;
-
-    XQueryKeymap(_display, keys);
-    for (unsigned int code = 0; code < 256; code++) {
-        BOOL down = (keys[code / 8] & (1 << (code % 8))) != 0;
-        X11ModifierKey key = modifierKeyForKeysym(XKeycodeToKeysym(_display, code, 0));
-        setModifierKeyHeld(_heldModifierKeys, code,
-                           down && key.carbonKeyCode >= 0 && !key.toggle);
-    }
-
-    if (XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
-                      &rootX, &rootY, &winX, &winY, &state))
-        [self resyncModifierFlagsWithState: state window: window];
-}
-
 // Cocoa groups clicks only within its double-click interval and four logical
 // points of the preceding press, and only for the same button in the same
 // window. Without the button and the window, a left click followed by a right
@@ -1290,6 +1130,7 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 - (void) postXEvent: (XEvent *) ev {
     id event = nil;
     NSEventType type;
+    NSPoint pos;
     X11Window* window = (X11Window*) [self windowForID: ev->xany.window];
 
     if ([self noteOcclusionEvent: ev window: window])
@@ -1301,22 +1142,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
     id delegate = [window delegate];
 
-    // Events another client sent carry whatever state it chose.
-    if (!ev->xany.send_event) {
-        switch (ev->type) {
-        case ButtonPress:
-        case ButtonRelease:
-            [self resyncModifierFlagsWithState: ev->xbutton.state window: window];
-            break;
-        case MotionNotify:
-            [self resyncModifierFlagsWithState: ev->xmotion.state window: window];
-            break;
-        case EnterNotify:
-        case LeaveNotify:
-            [self resyncModifierFlagsWithState: ev->xcrossing.state window: window];
-            break;
-        }
-    }
     [self trackPointerForEvent: ev];
 
     // Expected warp echoes are among the events queued when the warp was
@@ -1326,172 +1151,9 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
 
     switch (ev->type) {
     case KeyPress:
-    case KeyRelease:;
-
-        // Xlib wants every event through XFilterEvent(), key events included, and an input method only sees
-        // a key that goes through it: one that is switched by a modifier alone (fcitx's Shift_L alternative
-        // trigger key, a pinyin engine's Shift) never hears of a modifier that is handled first.
-        BOOL filtered = XFilterEvent(ev, None) != False;
-
-        NSEventModifierFlags modifierFlags = [self modifierFlagsForState: ev->xkey.state];
-        char buf[20] = {0};
-        char *text = buf;
-        KeySym keySym = NoSymbol;
-        int strLen;
-
-        // A modifier is not text. One the input method took is left alone (X11KeyEvent.h): the unfiltered
-        // copy it forwards back updates the flags and is posted as a flagsChanged, and one it keeps is
-        // corrected by the modifier state of the next key or pointer event, with the keycode macOS uses when
-        // no single key is responsible.
-        {
-            BOOL pressed = ev->type == KeyPress;
-            unsigned int keycode = ev->xkey.keycode;
-            X11ModifierKey modifier = modifierKeyForKeysym(
-                    XKeycodeToKeysym(_display, keycode, 0));
-            X11KeyEventPlan plan = X11KeyEventPlanFor(modifier.carbonKeyCode >= 0, filtered,
-                                                      ev->xany.send_event);
-            if (modifier.carbonKeyCode >= 0) {
-                if (!plan.trackModifier)
-                    break;
-                // A lock key changes the state on its press only.
-                if (modifier.toggle && !pressed)
-                    break;
-                unsigned int after = x11StateAfterKeyEvent(&modifier, ev->xkey.state, pressed);
-                if (!modifier.toggle) {
-                    setModifierKeyHeld(_heldModifierKeys, keycode, pressed);
-                    // The other key of a pair keeps the mask down.
-                    if (!pressed)
-                        after |= [self maskOfHeldModifierKeysExcept: keycode] & modifier.xMask;
-                }
-                _modifierFlags = [self modifierFlagsForState: after];
-                [self postFlagsChanged: (unsigned short) modifier.carbonKeyCode
-                                 flags: _modifierFlags
-                              inWindow: window];
-                break; // Modifiers are neither text nor repeatable keys.
-            }
-            if (plan.resyncFromState)
-                [self resyncModifierFlagsWithState: ev->xkey.state window: window];
-            if (!plan.lookUpText)
-                break; // The input method took the key; what it commits comes back as another event.
-        }
-
-        // A window has no input context when the display couldn't open an input method or
-        // XCreateIC() failed, and Xutf8LookupString() dereferences its XIC unconditionally.
-        if (ev->type == KeyPress && window != nil && window->_xic != NULL) {
-            Status status;
-            strLen = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) ev, buf, sizeof(buf) - 1, &keySym, &status);
-            if (status == XBufferOverflow) {
-                // Composed and input method text can be longer than buf. Nothing was copied and
-                // strLen is the size needed; Xlib says to repeat the lookup with a large enough buffer.
-                char *larger = malloc(strLen + 1);
-                if (larger != NULL) {
-                    text = larger;
-                    strLen = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) ev, text, strLen, &keySym, &status);
-                }
-            }
-            // The text and keySym are only valid for the statuses that report them.
-            if (status != XLookupChars && status != XLookupBoth)
-                strLen = 0;
-            if (status != XLookupKeySym && status != XLookupBoth)
-                keySym = NoSymbol;
-            text[strLen] = 0;
-        } else {
-            // Xutf8LookupString() may not be used with KeyRelease
-            strLen = XLookupString((XKeyEvent*) ev, buf, sizeof(buf) - 1, &keySym, NULL);
-            buf[strLen] = 0;
-        }
-
-        // Shortcut characters ignore modifiers other than Shift.
-        KeySym shortcutKeySym = X11KeySymIgnoringModifiers(&ev->xkey);
-
-        // With ControlKeyActsAsCommand set, the copy, paste and cut shortcuts
-        // of other systems work as macOS's: Control+C, V and X, without
-        // Command or Option, arrive as Command+C, V and X, whose characters
-        // are the letters rather than control codes. Other Control
-        // combinations are left alone.
-        KeySym lower = shortcutKeySym;
-        if (lower >= XK_A && lower <= XK_Z)
-            lower += XK_a - XK_A;
-        if (lower < 0x100 && [self controlStandsInForCommand: modifierFlags
-                                                keyEquivalent: (unichar) lower]) {
-            modifierFlags = (modifierFlags & ~NSControlKeyMask) | NSCommandKeyMask;
-            if (text != buf)
-                free(text);
-            text = buf;
-            buf[0] = (char) shortcutKeySym;
-            buf[1] = 0;
-        }
-
-        // Arrow, function and editing keys produce no text; AppKit reports
-        // them as the NS*FunctionKey private-use characters, as macOS and the
-        // Wayland backend do.
-        if (text[0] == 0) {
-            uint32_t functionKey = CGSKeySymToUnicode(keySym != NoSymbol ? keySym : shortcutKeySym);
-            if (functionKey >= 0xF700 && functionKey <= 0xF8FF) {
-                unichar functionKeyChar = (unichar) functionKey;
-                id functionKeyStr = [[NSString alloc] initWithCharacters: &functionKeyChar length: 1];
-                if (text != buf)
-                    free(text);
-                text = buf;
-                [functionKeyStr getCString: buf maxLength: sizeof(buf) encoding: NSUTF8StringEncoding];
-                [functionKeyStr release];
-            }
-        }
-
-        id str = [[NSString alloc] initWithCString: text
-                                          encoding: NSUTF8StringEncoding];
-        if (text != buf)
-            free(text);
-        NSPoint pos =
-                [window logicalPoint: NSMakePoint(ev->xkey.x, ev->xkey.y)];
-
-        // The text above retains normal XIM/keyboard modifier behavior.
-        uint16_t shortcutCode = (uint16_t) CGSKeySymToUnicode(shortcutKeySym);
-        NSString* strIg = [NSString stringWithCharacters: &shortcutCode length: 1];
-
-        // If there's an app that uses constants from HIToolbox/Events.h (e.g.
-        // kVK_ANSI_A), this gives it a chance to work. x11ToCarbon is 256 wide
-        // and the protocol's keycode is 8 bits, but the field is a full word.
-        const int carbonKeyCode = ev->xkey.keycode < 256
-                ? x11ToCarbon[ev->xkey.keycode] : 0;
-
-        // Key events belong to the key window whichever window of the application holds the X focus.
-        // That matters when the key window is one with alpha 0, which does not get the focus once the
-        // window manager moves it to a window that was ordered in. Menus and pop-ups that hold the
-        // focus keep the keys.
-        NSInteger keyEventWindowNumber = [delegate windowNumber];
-        {
-            NSWindow *keyWindow = [NSApp keyWindow];
-            id keyPlatformWindow = [keyWindow platformWindow];
-            if (window != nil && ![window isMenuOrPopup] && keyPlatformWindow != window &&
-                [keyPlatformWindow isKindOfClass: [X11Window class]] && [keyPlatformWindow isMapped])
-                keyEventWindowNumber = [keyWindow windowNumber];
-        }
-
-        BOOL isARepeat = NO;
-
-        if (ev->type == KeyPress) {
-            isARepeat = _lastKeySym == keySym;
-            _lastKeySym = keySym;
-        } else {
-            _lastKeySym = 0;
-        }
-
-        id event = [NSEvent keyEventWithType: ev->type == KeyPress ? NSKeyDown
-                                                                   : NSKeyUp
-                                    location: pos
-                               modifierFlags: modifierFlags
-                                   timestamp: NSEventCurrentTime()
-                                windowNumber: keyEventWindowNumber
-                                     context: nil
-                                  characters: str
-                 charactersIgnoringModifiers: strIg
-                                   isARepeat: isARepeat
-                                     keyCode: carbonKeyCode];
-
-        [self postEvent: event atStart: NO];
-
-        [str release];
+    case KeyRelease:
+        // CoreGraphics decodes the keyboard and posts the keys as CGEvents (and the modifier state the
+        // pointer events carry); the NSEvents are made from those (-windowNumber:location:forKeyEvent:).
         break;
 
     case ButtonPress:;
@@ -1761,7 +1423,6 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             break;
         }
         [self windowHoldsFocus: window];
-        [self resyncModifierKeysOnFocusIn: window];
         // Losing the focus released the pointer grab; the application still
         // wants relative mode.
         if (_relativeRequested && !_relativeMouse.active)
@@ -1998,6 +1659,94 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
     if (e->type != KeyPress && e->type != KeyRelease && XFilterEvent(e, None))
         return;
     [self postXEvent: e];
+}
+
+// The text of a key press as the input method of its window composes it (CoreGraphics decodes the key and
+// asks, since the input contexts are this display's: the input method stays in the application). nil when
+// the window has no input context (no input method could be opened, or XCreateIC() failed), which makes
+// CoreGraphics look the key up in the keymap itself.
+- (NSString *) nativeConnectionComposedTextForKeyEvent: (void *) event keySym: (unsigned long *) keySym {
+    XKeyEvent *keyEvent = event;
+    X11Window *window = (X11Window *) [self windowForID: keyEvent->window];
+
+    if (![window isKindOfClass: [X11Window class]] || window->_xic == NULL)
+        return nil;
+
+    char buf[64];
+    char *text = buf;
+    KeySym symbol = NoSymbol;
+    Status status;
+    int length = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) keyEvent, buf, sizeof(buf) - 1, &symbol, &status);
+    if (status == XBufferOverflow) {
+        // Composed and input method text can be longer than buf. Nothing was copied and length is the
+        // size needed; Xlib says to repeat the lookup with a large enough buffer.
+        char *larger = malloc(length + 1);
+        if (larger != NULL) {
+            text = larger;
+            length = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) keyEvent, text, length, &symbol, &status);
+        }
+    }
+    // The text and the keysym are only valid for the statuses that report them.
+    if ((status != XLookupChars && status != XLookupBoth) || length < 0)
+        length = 0;
+    if (status != XLookupKeySym && status != XLookupBoth)
+        symbol = NoSymbol;
+    NSString *result = [[[NSString alloc] initWithBytes: text length: length encoding: NSUTF8StringEncoding] autorelease];
+    if (text != buf)
+        free(text);
+    *keySym = symbol;
+    return result != nil ? result : @"";
+}
+
+// The window a key event is for, and where the pointer is in it (the NSEvent made from a CGEvent of the
+// keyboard). Key events belong to the key window whichever window of the application holds the X focus.
+// That matters when the key window is one with alpha 0, which does not get the focus once the window manager
+// moves it to a window that was ordered in. Menus and pop-ups that hold the focus keep the keys.
+- (BOOL) windowNumber: (NSInteger *) windowNumber location: (NSPoint *) location forKeyEvent: (CGEventRef) event {
+    // An event the application or Carbon posted names no window: it is for the key window.
+    Window native = (Window) CGEventGetIntegerValueField(event, kCGSEventNativeWindow);
+    if (native == None)
+        return [super windowNumber: windowNumber location: location forKeyEvent: event];
+
+    // A window of a display overlay (or one that is gone) is no NSWindow: the event has no window.
+    X11Window *window = (X11Window *) [self windowForID: native];
+    if (![window isKindOfClass: [X11Window class]])
+        window = nil;
+    NSWindow *keyWindow = [NSApp keyWindow];
+    id keyPlatformWindow = [keyWindow platformWindow];
+    if (window != nil && ![window isMenuOrPopup] && keyPlatformWindow != window &&
+        [keyPlatformWindow isKindOfClass: [X11Window class]] && [keyPlatformWindow isMapped])
+        window = keyPlatformWindow;
+
+    *windowNumber = [[window delegate] windowNumber];
+    *location = window != nil ? [window mouseLocationOutsideOfEventStream] : NSZeroPoint;
+    return YES;
+}
+
+// ControlKeyActsAsCommand: the copy, paste and cut shortcuts of other systems work as macOS's. Control+C, V and
+// X, without Command or Option, arrive as Command+C, V and X, whose characters are the letters rather than
+// control codes. Other Control combinations are left alone.
+- (NSEvent *) keyEventCreated: (NSEvent *) event fromCGEvent: (CGEventRef) cgEvent {
+    if (!_controlActsAsCommand || ([event type] != NSKeyDown && [event type] != NSKeyUp))
+        return event;
+    NSString *letters = [event charactersIgnoringModifiers];
+    if ([letters length] != 1)
+        return event;
+    unichar key = [letters characterAtIndex: 0];
+    unichar lower = (key >= 'A' && key <= 'Z') ? key + ('a' - 'A') : key;
+    NSEventModifierFlags flags = [event modifierFlags];
+    if (lower >= 0x100 || ![self controlStandsInForCommand: flags keyEquivalent: lower])
+        return event;
+    return [NSEvent keyEventWithType: [event type]
+                            location: [event locationInWindow]
+                       modifierFlags: (flags & ~NSControlKeyMask) | NSCommandKeyMask
+                           timestamp: [event timestamp]
+                        windowNumber: [event windowNumber]
+                             context: nil
+                          characters: letters
+         charactersIgnoringModifiers: letters
+                           isARepeat: [event isARepeat]
+                             keyCode: [event keyCode]];
 }
 
 - (void) nativeConnectionDidProcessEvents {

@@ -442,7 +442,8 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     return YES;
 }
 
-- (void) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent {
+- (NSEvent *) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent {
+    return event;
 }
 
 - (void) willWaitForEvents {

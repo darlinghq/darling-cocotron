@@ -96,8 +96,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (BOOL) windowNumber: (NSInteger *) windowNumber
              location: (NSPoint *) location
           forKeyEvent: (struct __CGEvent *) event;
-// The NSEvent made for such a CGEvent, before it is handed to the application. The default does nothing.
-- (void) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent;
+// The NSEvent made for such a CGEvent, before it is handed to the application: the event to hand over,
+// which a display may replace. The default is the event.
+- (NSEvent *) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent;
 
 // The events are those of HIToolbox's main event queue (NSEventQueue.m). These wait for the next one,
 // as -[NSApplication nextEventMatchingMask:...] does but with an NSAppKitSystem event when there is
