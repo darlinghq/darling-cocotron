@@ -107,6 +107,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
              location: (NSPoint *) location
           hasLocation: (BOOL *) hasLocation
       forPointerEvent: (struct __CGEvent *) event;
+// The NSEvent made for a mouse event CGEvent (not scroll wheel), before it is handed to the application.
+- (void) pointerEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent;
 
 // The events are those of HIToolbox's main event queue (NSEventQueue.m). These wait for the next one,
 // as -[NSApplication nextEventMatchingMask:...] does but with an NSAppKitSystem event when there is

@@ -26,7 +26,7 @@
 
 // A CGEvent keeps its fields in a fixed array indexed by CGEventField: no allocation, no
 // boxing and no hashing per field. Indexes at or above this limit do not exist.
-#define CGEVENT_FIELD_COUNT 192
+#define CGEVENT_FIELD_COUNT 256
 
 // What kind of event a type is, which decides what fields it has.
 typedef enum {

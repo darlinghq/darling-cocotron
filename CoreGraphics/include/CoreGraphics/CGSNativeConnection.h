@@ -20,6 +20,8 @@
 #define CGSNATIVECONNECTION_H
 #import <Foundation/NSObject.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <CoreGraphics/CGGeometry.h>
 
 // A process has one connection to the window system (X11 or Wayland), and CoreGraphics owns it:
 // it opens it, reads its socket on the main run loop and keeps the state that belongs to the
@@ -74,6 +76,34 @@ typedef enum {
 // event stream gets the event: NO when the window it is for does not take it (a mouse moved event for a
 // window that did not ask for them); the event taps see it either way.
 - (BOOL) nativeConnectionWillPostPointerEvent: (struct __CGEvent *) cgEvent forXEvent: (void *) event;
+
+// The Wayland pointer (a wl_pointer of the process' one seat, which CoreGraphics binds and decodes into
+// mouse, scroll and gesture CGEvents). Surfaces are wl_surface pointers, compared by value only.
+// The pointer entered a surface of the process (serial: the compositor's, which a cursor request needs;
+// x, y: surface-local points).
+- (void) nativeConnectionPointerEntered: (void *) surface serial: (uint32_t) serial x: (double) x y: (double) y;
+// The pointer left the surface it was in.
+- (void) nativeConnectionPointerLeft;
+// The pointer moved to x, y of the surface it is in (also while no surface of the process has it). Returns
+// YES when the observer used the motion itself (the pointer is over a window decoration), so that
+// CoreGraphics posts no event for it.
+- (BOOL) nativeConnectionPointerMovedToX: (double) x y: (double) y;
+// A pointer button (a Linux input event code) was pressed or released. Returns YES when the observer used
+// the button itself (a window decoration), so that CoreGraphics posts no event for it.
+- (BOOL) nativeConnectionPointerButton: (uint32_t) button pressed: (BOOL) pressed serial: (uint32_t) serial;
+// CoreGraphics has decoded a pointer event (button, motion or scroll) and is about to post it, with the
+// native window, the pointer location in it and, for a press, the serial (CGEvent fields of
+// CoreGraphicsPrivate.h). The observer may add what only it knows (kCGSMouseEventWindowKeyState).
+// Returns whether the process' event stream gets the event: NO when the window it is for does not take
+// it (an unknown surface, a mouse moved event for a window that did not ask for them); the event
+// taps see it either way.
+- (BOOL) nativeConnectionWillPostWaylandPointerEvent: (struct __CGEvent *) cgEvent;
+// The global location (top-left origin, points) of a point of one of the observer's surfaces; NO when
+// the observer does not know the surface.
+- (BOOL) nativeConnectionGlobalLocation: (CGPoint *) location ofSurface: (void *) surface point: (CGPoint) point;
+// The seat gained or lost its pointer. The compositor objects that need it (cursor, locked pointer)
+// are reached through _CGSNativeConnectionPointer().
+- (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available;
 @end
 
 // The kind of the process' connection to the window system, opening it if needed.
@@ -97,5 +127,12 @@ extern void _CGSNativeConnectionObjectDestroyed(void *object);
 extern void _CGSNativeConnectionFlushPendingKeyboardEvents(void);
 // The index and name of the keyboard layout group in effect. -1 and NULL when there is none.
 extern int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef *name);
+
+// The seat's wl_pointer (a struct wl_proxy *) on Wayland, the process' only one: it is the argument of the
+// requests that need it (cursor image, pointer constraints). NULL while the seat has no pointer and on X11.
+extern void *_CGSNativeConnectionPointer(void);
+// Where the pointer is in the surface that has it, when the framework above moved it without the compositor
+// saying so (a warp while the pointer is locked). The next events start from there.
+extern void _CGSNativeConnectionSetPointerSurfacePoint(double x, double y);
 
 #endif

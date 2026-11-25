@@ -20,6 +20,7 @@
 
 #import "CGSConnectionWayland.h"
 #import "CGSWaylandKeyboard.h"
+#import "CGSWaylandPointer.h"
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
@@ -113,6 +114,12 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                                                                      proxy: proxy
                                                                  arguments: args];
                 break;
+            case CGSWaylandObjectPointer:
+                [(CGSWaylandPointer *) object pointerEvent: opcode arguments: args];
+                break;
+            case CGSWaylandObjectPinchGesture:
+                [(CGSWaylandPointer *) object pinchEvent: opcode arguments: args];
+                break;
             case CGSWaylandObjectKeyboardSync:
                 if (opcode == WP_CALLBACK_EV_DONE)
                     [(CGSWaylandKeyboard *) object modifierSyncDone: (struct wl_proxy *) proxy];
@@ -197,6 +204,7 @@ static const CGEventFlags kHotKeyModifierMask =
     _keymap = [[CGSWaylandKeymap alloc] init];
     if (_keymap != nil)
         _keyboardDecoder = [[CGSWaylandKeyboard alloc] initWithConnection: self keymap: _keymap];
+    _pointerDecoder = [[CGSWaylandPointer alloc] initWithConnection: self];
 
     _wlDisplay = WL.wl_display_connect(NULL);
     if (_wlDisplay == NULL) {
@@ -298,6 +306,10 @@ static const CGEventFlags kHotKeyModifierMask =
     [_outputManager release];
     [self releaseKeyboard];
     [_keyboardDecoder release];
+    [(CGSWaylandPointer *) _pointerDecoder stop];
+    [_pointerDecoder release];
+    if (_pointerGestures != NULL)
+        WL.wl_proxy_destroy(_pointerGestures);
     [_hotKeys release];
     if (_seat != NULL)
         WL.wl_proxy_destroy(_seat);
@@ -439,10 +451,17 @@ static const CGEventFlags kHotKeyModifierMask =
                            version: MIN(version, 2u)
                               kind: CGSWaylandObjectWmBase object: self];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
-        // Version 4 adds wl_keyboard.repeat_info.
+        // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame and 8 wl_pointer.axis_value120. A
+        // protocol table older than that offers less.
         _seat = [self bindGlobal: name interface: &wl_seat_interface
-                         version: MIN(version, 5u)
+                         version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
                             kind: CGSWaylandObjectSeat object: self];
+    } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
+        // Version 2 adds the release request.
+        _pointerGesturesName = name;
+        _pointerGestures = [self bindGlobal: name interface: &zwp_pointer_gestures_v1_interface
+                                    version: MIN(version, 2u) kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandPointer *) _pointerDecoder pointerGesturesChanged];
     } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
         _logicalOutputManagerName = name;
         _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
@@ -511,6 +530,18 @@ static const CGEventFlags kHotKeyModifierMask =
 }
 
 - (void) registryGlobalRemove: (uint32_t) name {
+    if (_pointerGestures != NULL && name == _pointerGesturesName) {
+        struct wl_proxy *gestures = _pointerGestures;
+        _pointerGestures = NULL;
+        _pointerGesturesName = 0;
+        [(CGSWaylandPointer *) _pointerDecoder pointerGesturesChanged];
+        // wl_pointer_gestures.release exists from version 2.
+        if (WL.wl_proxy_get_version(gestures) >= 2)
+            WaylandMarshal(gestures, WP_GESTURES_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        else
+            WL.wl_proxy_destroy(gestures);
+        return;
+    }
     if (_outputManager != nil && name == _outputManagerName) {
         [_outputManager release];
         _outputManager = nil;
@@ -705,6 +736,7 @@ static const CGEventFlags kHotKeyModifierMask =
 #pragma mark - Keyboard
 
 - (void) seatCapabilities: (uint32_t) capabilities {
+    [(CGSWaylandPointer *) _pointerDecoder seatCapabilities: capabilities seat: _seat];
     if ((capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard == NULL) {
         union wl_argument args[1] = {{.o = NULL}};
         _keyboard = [self createObject: _seat
@@ -754,7 +786,48 @@ static const CGEventFlags kHotKeyModifierMask =
 }
 
 - (void) nativeObjectDestroyed: (void *) object {
+    [(CGSWaylandPointer *) _pointerDecoder surfaceDestroyed: (struct wl_proxy *) object];
     [(CGSWaylandKeyboard *) _keyboardDecoder surfaceDestroyed: (struct wl_proxy *) object];
+}
+
+- (void *) nativePointer {
+    return [(CGSWaylandPointer *) _pointerDecoder pointerProxy];
+}
+
+- (void) setPointerSurfacePointX: (double) x y: (double) y {
+    [(CGSWaylandPointer *) _pointerDecoder setSurfacePointX: x y: y];
+}
+
+- (void) flushPendingPointerEvents {
+    [(CGSWaylandPointer *) _pointerDecoder flushPending];
+}
+
+- (struct wl_proxy *) pointerGestures {
+    return _pointerGestures;
+}
+
+- (uint32_t) windowIDForSurface: (struct wl_proxy *) surface {
+    if (surface == NULL)
+        return 0;
+    @synchronized (_windows) {
+        for (NSNumber *key in _windows) {
+            CGSWindow *window = [_windows objectForKey: key];
+
+            if ([window isKindOfClass: [CGSWindowWayland class]] && ((CGSWindowWayland *) window)->_surface == surface)
+                return (uint32_t) [key intValue];
+        }
+    }
+    return 0;
+}
+
+- (BOOL) globalLocation: (CGPoint *) location ofSurface: (struct wl_proxy *) surface point: (CGPoint) point {
+    uint32_t windowID = [self windowIDForSurface: surface];
+    CGSWindowWayland *window = windowID != 0 ? (CGSWindowWayland *) [self windowForId: (CGSWindowID) windowID] : nil;
+
+    if (window == nil)
+        return NO;
+    *location = CGPointMake([window frameOrigin].x + point.x, [window frameOrigin].y + point.y);
+    return YES;
 }
 
 - (void) flushPendingKeyboardEvents {

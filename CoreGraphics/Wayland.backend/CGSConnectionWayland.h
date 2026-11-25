@@ -67,6 +67,8 @@ typedef enum {
     CGSWaylandObjectSeat,
     CGSWaylandObjectKeyboard,
     CGSWaylandObjectKeyboardSync,
+    CGSWaylandObjectPointer,
+    CGSWaylandObjectPinchGesture,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -96,6 +98,11 @@ typedef enum {
     id _keymap;
     // Decodes the keyboard into CGEvents (CGSWaylandKeyboard).
     id _keyboardDecoder;
+    // The seat's pointer, which decodes the pointer into CGEvents (CGSWaylandPointer), and the pinch
+    // gesture factory it makes the pinch object from.
+    id _pointerDecoder;
+    struct wl_proxy *_pointerGestures;
+    uint32_t _pointerGesturesName;
     // The registered global hot keys (CGSWaylandHotKeyEntry), guarded by @synchronized(self).
     NSMutableArray *_hotKeys;
     // Set when the setup roundtrips are over; an output that is described before that is
@@ -110,6 +117,14 @@ typedef enum {
 
 - (void) flush;
 
+// The pointer gestures global, NULL when the compositor offers none.
+- (struct wl_proxy *) pointerGestures;
+// Posts what the pointer decoder holds back until the compositor ends it (a scroll frame).
+- (void) flushPendingPointerEvents;
+// The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
+- (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
+// Where a point of the surface is in global coordinates, when it is a surface of this connection's windows.
+- (BOOL) globalLocation: (CGPoint *) location ofSurface: (struct wl_proxy *) surface point: (CGPoint) point;
 // The uids of the active hot keys that a press of the virtual key keyCode, with the given modifier flags
 // in effect, selects: a hot key matches when its key code is the key's and its Shift, Control, Option and
 // Command flags are exactly those of the flags (other bits, such as Caps Lock, do not count). Empty while hot

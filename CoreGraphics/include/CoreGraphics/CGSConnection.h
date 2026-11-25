@@ -161,6 +161,10 @@
 -(uint64_t) modifierFlags;
 -(void) nativeObjectDestroyed:(void*)object;
 -(void) flushPendingKeyboardEvents;
+// The pointer: the seat's wl_pointer (Wayland), and where the pointer is in its surface, set by the
+// framework that moved it without the compositor saying so. The defaults know nothing.
+-(void*) nativePointer;
+-(void) setPointerSurfacePointX:(double)x y:(double)y;
 -(int) keyboardLayoutGroup;
 -(NSString*) keyboardLayoutName;
 // Reads what the window system has sent and handles it: this is what the run loop calls when the

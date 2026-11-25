@@ -54,7 +54,6 @@ typedef enum {
     WaylandObjectRegistry = 1,
     WaylandObjectWmBase,
     WaylandObjectSeat,
-    WaylandObjectPointer,
     WaylandObjectOutput,
     WaylandObjectSurface,
     WaylandObjectXdgSurface,
@@ -63,7 +62,6 @@ typedef enum {
     WaylandObjectDecoration,
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
-    WaylandObjectPinchGesture,
     WaylandObjectTextInput,
     WaylandObjectDataDevice,
     WaylandObjectDataOffer,
@@ -134,7 +132,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 @protected
     struct wl_proxy *_seat;
     struct wl_proxy *_pointer;
-    struct wl_proxy *_pointerGestures, *_pinchGesture;
     // text-input-v3: the input method's composition and commits for the focused text input
     // client. The text input object exists once the manager and the seat are both bound.
     struct wl_proxy *_textInputManager, *_textInput;
@@ -145,8 +142,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSString *_textInputPendingPreedit, *_textInputPendingCommit;
     int _textInputPendingCursorBegin, _textInputPendingCursorEnd;
     NSString *_textInputPreedit;     // the composition the client currently shows
-    uint32_t _pointerGesturesName;
-    WaylandWindow *_pinchWindow;
     struct wl_proxy *_pointerConstraints, *_relativePointerManager;
     uint32_t _pointerConstraintsName, _relativePointerManagerName;
     // CGAssociateMouseAndMouseCursorPosition(false) was asked for; the lock
@@ -155,7 +150,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     BOOL _pointerLockRequested, _pointerLocked;
     struct wl_proxy *_lockedPointer, *_relativePointer;
     WaylandWindow *_lockWindow; // Nonretained; cleared on unmap.
-    CGFloat _pinchScale;
     struct wl_proxy *_touch;
     // Finger id -> WaylandWindow it went down on (up and motion name no surface).
     NSMutableDictionary *_touchWindows;
@@ -174,20 +168,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSPoint _lastMouseLocation;
     uint32_t _pointerEnterSerial;
     NSUInteger _pressedButtons;
-    CGFloat _pendingScrollX, _pendingScrollY; // Sums of -value over the frame, in axis units.
-    WaylandWindow *_pendingScrollWindow;
-    CGPoint _pendingScrollSurfacePoint;
-    NSUInteger _pendingScrollModifiers;
-    BOOL _pendingScrollActive;
-    BOOL _pendingScrollFinger, _pendingScrollSourceNamed;
-    uint32_t _pendingScrollStoppedAxes; // Bit per wl_pointer axis, set by axis_stop.
-    BOOL _fingerScrollActive;
-    WaylandWindow *_fingerScrollWindow; // Nonretained; the window that got the began phase.
-    CGPoint _fingerScrollSurfacePoint;
-    uint32_t _wlLastClickTime; // Compositor milliseconds, wraps modulo 2^32.
-    uint32_t _wlLastClickButton;
-    WaylandWindow *_wlLastClickWindow; // Nonretained; cleared on unmap/device loss.
-    CGPoint _wlLastClickPoint;
+    // The serial of the press that was the first of a group of buttons: its NSEvent is the one a drag starts from.
+    uint32_t _firstPressSerial;
     uint32_t _inputSerial;
     NSEvent *_inputEvent;
     WaylandWindow *_inputWindow;
