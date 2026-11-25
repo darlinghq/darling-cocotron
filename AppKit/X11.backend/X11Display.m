@@ -1200,6 +1200,11 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
             break;
         }
 
+        // CoreGraphics decodes the buttons into CGEvents (click state, button number, flags, window) and
+        // the NSEvents are made from those; the relative mouse and the overlay windows are decoded here.
+        if (![self observerHandlesPointerEvent: ev])
+            break;
+
         switch (ev->xbutton.button) {
         case Button1:
             type = NSLeftMouseDown;
@@ -1237,6 +1242,9 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         // The wheel's other half of the pair; the press already scrolled.
         if (ev->xbutton.button >= Button4 &&
             ev->xbutton.button <= HorizontalScrollRightButton)
+            break;
+
+        if (![self observerHandlesPointerEvent: ev])
             break;
 
         pos = overlay ? [self screenPointFromRootX: ev->xbutton.x_root
@@ -1283,9 +1291,20 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         break;
 
     case MotionNotify:; {
-            // NSLog(@"MotionNotify, x=%d, y=%d, xroot=%d, yroot=%d\n",
-            // ev->xmotion.x, ev->xmotion.y, ev->xmotion.x_root,
-            // ev->xmotion.y_root);
+            if (![self observerHandlesPointerEvent: ev]) {
+                // CoreGraphics decoded the motion into a CGEvent (the deltas are added to the pointer's
+                // total when it is about to be posted, see -nativeConnectionWillPostPointerEvent:forXEvent:).
+                // What stays here is what depends on the windows: where the pointer is in the window,
+                // the cursor and the tracking areas.
+                [window setLastKnownCursorPosition:
+                                [window logicalPoint: NSMakePoint(ev->xmotion.x, ev->xmotion.y)]];
+                [self pointerMoved];
+                BOOL moved = !(ev->xmotion.state & (Button1Mask | Button2Mask | Button3Mask));
+                if (moved && ![delegate acceptsMouseMovedEvents])
+                    break;
+                [delegate platformWindowSetCursorEvent: window];
+                break;
+            }
 
             CGPoint lastMotionPos = [window mouseLocationOutsideOfEventStream];
             pos = overlay ? [self screenPointFromRootX: ev->xmotion.x_root
@@ -1696,6 +1715,70 @@ static BOOL relativeEventPoint(Display *dpy, X11Window *window, const X11Relativ
         free(text);
     *keySym = symbol;
     return result != nil ? result : @"";
+}
+
+// Whether the pointer event is made here and not by CoreGraphics: while the relative mouse holds the pointer
+// (its events report the frozen cursor and the deltas of the physical motion), and for the windows of a display
+// overlay, which belong to no NSWindow and report screen coordinates.
+- (BOOL) observerHandlesPointerEvent: (XEvent *) ev {
+    if (_relativeMouse.active)
+        return YES;
+    return [self windowForID: ev->xany.window] == nil &&
+           [_overlayWindows containsObject: @((unsigned long) ev->xany.window)];
+}
+
+- (BOOL) nativeConnectionObserverHandlesPointerEvent: (void *) event {
+    return [self observerHandlesPointerEvent: (XEvent *) event];
+}
+
+// CoreGraphics decoded a pointer event and is about to post it. What AppKit knows when the event arrives is
+// added: whether a pressed button's window was the key window (the window manager may focus it for this very
+// click before or after the press reaches us, so the press is judged by what we knew at its arrival), and the
+// motion is added to the total CGGetLastMouseDelta reports. A mouse moved event for a window that did not ask
+// for them goes to the event taps only.
+- (BOOL) nativeConnectionWillPostPointerEvent: (CGEventRef) event forXEvent: (void *) xEvent {
+    XEvent *ev = (XEvent *) xEvent;
+    X11Window *window = (X11Window *) [self windowForID: ev->xany.window];
+    id delegate = [window delegate];
+
+    switch (CGEventGetType(event)) {
+    case kCGEventLeftMouseDown:
+    case kCGEventRightMouseDown:
+    case kCGEventOtherMouseDown:
+        CGEventSetIntegerValueField(event, kCGSMouseEventWindowKeyState, [delegate isKeyWindow] ? 1 : 2);
+        return YES;
+    case kCGEventMouseMoved:
+    case kCGEventLeftMouseDragged:
+    case kCGEventRightMouseDragged:
+    case kCGEventOtherMouseDragged:
+        [self accumulateMouseDeltaX: (CGFloat) CGEventGetIntegerValueField(event, kCGMouseEventDeltaX)
+                                  y: (CGFloat) CGEventGetIntegerValueField(event, kCGMouseEventDeltaY)];
+        return CGEventGetType(event) != kCGEventMouseMoved || [delegate acceptsMouseMovedEvents];
+    default:
+        return YES;
+    }
+}
+
+// The window a pointer event is for and where the pointer was in it, from the X window and the position
+// CoreGraphics read from the server. They apply only while no event tap has moved the event.
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          hasLocation: (BOOL *) hasLocation
+      forPointerEvent: (CGEventRef) event {
+    Window native = (Window) CGEventGetIntegerValueField(event, kCGSEventNativeWindow);
+    X11Window *window = (X11Window *) [self windowForID: native];
+
+    if (![window isKindOfClass: [X11Window class]])
+        return NO;
+    *windowNumber = [[window delegate] windowNumber];
+    CGPoint global = CGEventGetLocation(event);
+    if (llround(global.x * 1024) == CGEventGetIntegerValueField(event, kCGSEventPostedLocationX) &&
+        llround(global.y * 1024) == CGEventGetIntegerValueField(event, kCGSEventPostedLocationY)) {
+        *location = [window logicalPoint: NSMakePoint(CGEventGetIntegerValueField(event, kCGSEventNativeLocationX),
+                                                      CGEventGetIntegerValueField(event, kCGSEventNativeLocationY))];
+        *hasLocation = YES;
+    }
+    return YES;
 }
 
 // The window a key event is for, and where the pointer is in it (the NSEvent made from a CGEvent of the

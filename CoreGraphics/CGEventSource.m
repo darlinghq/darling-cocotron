@@ -419,3 +419,22 @@ uint32_t CGEventSourceCounterForEventType(CGEventSourceStateID stateID,
     _CGEventStateCounter(stateID, eventType, &count);
     return count;
 }
+
+// The user's double-click interval is the "com.apple.mouse.doubleClickThreshold" setting of the global
+// domain, in seconds. Without one it is one second, which is what AppKit's NSEvent doubleClickInterval
+// reported before the window system's pointer was decoded here, and what clicks were grouped by.
+double _CGSDoubleClickInterval(void)
+{
+	double interval = 1.0;
+	CFTypeRef value = CFPreferencesCopyAppValue(CFSTR("com.apple.mouse.doubleClickThreshold"), kCFPreferencesAnyApplication);
+
+	if (value != NULL)
+	{
+		double number = 0;
+
+		if (CFGetTypeID(value) == CFNumberGetTypeID() && CFNumberGetValue(value, kCFNumberDoubleType, &number) && number > 0)
+			interval = number;
+		CFRelease(value);
+	}
+	return interval;
+}

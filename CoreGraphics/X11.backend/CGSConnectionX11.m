@@ -19,6 +19,7 @@
 #import "CGSConnectionX11.h"
 #import "CGSWindowX11.h"
 #import "CGSX11Keyboard.h"
+#import "CGSX11Pointer.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -189,6 +190,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 	}
 
 	_keyboard = [[CGSX11Keyboard alloc] initWithConnection: self];
+	_pointer = [[CGSX11Pointer alloc] initWithConnection: self];
 
 	return self;
 }
@@ -229,6 +231,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 		CFRelease(_cfSocket);
 
 	[_keyboardLayout release];
+	[_pointer release];
 	[_keyboard release];
 
 	[super dealloc];
@@ -602,6 +605,21 @@ static double windowOpacity(Display* display, Window window)
 	return result;
 }
 
+-(CGSWindowID) _windowIDForNativeWindow:(Window)native
+{
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if ([window isKindOfClass: [CGSWindowX11 class]] && ((CGSWindowX11*) window)->_window == native)
+				return (CGSWindowID) [key intValue];
+		}
+	}
+	return 0;
+}
+
 -(void*) nativeDisplay
 {
 	// EGLNativeDisplayType on X11 is the Display itself.
@@ -693,22 +711,27 @@ static double windowOpacity(Display* display, Window window)
 		// The events of the pointer carry the modifier state the server holds. The keyboard reports
 		// a difference from what the keys said before the observer builds the pointer event, so
 		// that the events keep their order. Events another client sent carry whatever state it chose.
+		// The buttons and the motion are decoded into CGEvents after that (the observer is still told of
+		// them: it keeps the pointer state and the crossings, and makes what it holds for itself).
 		case ButtonPress:
 		case ButtonRelease:
 			if (!event->xany.send_event)
 				[_keyboard resyncWithState: event->xbutton.state window: event->xbutton.window
 					root: CGPointMake(event->xbutton.x_root, event->xbutton.y_root)];
+			[_pointer pointerEvent: event];
 			break;
 		case MotionNotify:
 			if (!event->xany.send_event)
 				[_keyboard resyncWithState: event->xmotion.state window: event->xmotion.window
 					root: CGPointMake(event->xmotion.x_root, event->xmotion.y_root)];
+			[_pointer pointerEvent: event];
 			break;
 		case EnterNotify:
 		case LeaveNotify:
 			if (!event->xany.send_event)
 				[_keyboard resyncWithState: event->xcrossing.state window: event->xcrossing.window
 					root: CGPointMake(event->xcrossing.x_root, event->xcrossing.y_root)];
+			[_pointer crossingEvent: event];
 			break;
 		case FocusIn:
 			// Focus changes caused by a grab, or by the pointer entering the window or one of its

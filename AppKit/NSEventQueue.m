@@ -361,10 +361,22 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
         NSInteger windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent);
         if (windowNumber == 0)
             windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGMouseEventWindowUnderMousePointer);
+        // An event of the window system's pointer names the window by its native handle: the display knows
+        // the window it belongs to, and where the pointer was in it.
+        NSPoint windowLocation = NSZeroPoint;
+        BOOL hasWindowLocation = NO;
+        if (type != kCGEventScrollWheel && CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0) {
+            NSInteger nativeNumber = 0;
+            if ([[NSDisplay currentDisplay] windowNumber: &nativeNumber
+                                                location: &windowLocation
+                                             hasLocation: &hasWindowLocation
+                                         forPointerEvent: cgEvent])
+                windowNumber = nativeNumber;
+        }
         NSWindow *window = windowNumber != 0 ? [NSApp windowWithWindowNumber: windowNumber] : nil;
         NSPoint location = screenLocation(cgEvent);
         if (window != nil)
-            location = [window convertScreenToBase: location];
+            location = hasWindowLocation ? windowLocation : [window convertScreenToBase: location];
         else
             windowNumber = 0;
 
@@ -394,6 +406,11 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
             [mouse _setButtonNumber: CGEventGetIntegerValueField(cgEvent, kCGMouseEventButtonNumber)];
             [mouse _setDeltaX: CGEventGetIntegerValueField(cgEvent, kCGMouseEventDeltaX)
                        deltaY: CGEventGetIntegerValueField(cgEvent, kCGMouseEventDeltaY)];
+            // Whether the window was the key window when the press arrived, as the window system's
+            // framework judged it then.
+            int64_t keyState = CGEventGetIntegerValueField(cgEvent, kCGSMouseEventWindowKeyState);
+            if (keyState != 0)
+                [mouse _setWindowWasKeyOnArrival: keyState == 1];
         }
         result = mouse;
         break;

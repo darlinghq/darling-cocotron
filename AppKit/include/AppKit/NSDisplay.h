@@ -99,6 +99,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // The NSEvent made for such a CGEvent, before it is handed to the application: the event to hand over,
 // which a display may replace. The default is the event.
 - (NSEvent *) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent;
+// The window and the pointer location of a mouse event CGEvent that names a window system window
+// (kCGSEventNativeWindow): YES when the display knows the window, which is then the window number; the
+// location (in the window, in points) only when it also knows it more exactly than the event's global
+// location says (*hasLocation).
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          hasLocation: (BOOL *) hasLocation
+      forPointerEvent: (struct __CGEvent *) event;
 
 // The events are those of HIToolbox's main event queue (NSEventQueue.m). These wait for the next one,
 // as -[NSApplication nextEventMatchingMask:...] does but with an NSAppKitSystem event when there is
