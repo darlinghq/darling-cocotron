@@ -365,7 +365,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
         // the key that completes it, and the release of a key that was not delivered is not either.
         NSString *composed = nil;
         if (pressed) {
-            if ([_keymap composeKeycode: keycode text: &composed] == CGSWaylandComposeConsumed) {
+            if ([_keymap composeKeycode: keycode text: &composed] == CGSKeyComposeConsumed) {
                 [_composingKeys addObject: @(keycode)];
                 break;
             }

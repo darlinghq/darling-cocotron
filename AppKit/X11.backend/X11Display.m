@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "X11Display.h"
+#include <string.h>
 #import "NSEvent_mouse.h"
 #import "X11Cursor.h"
 #import "X11DraggingManager.h"
@@ -79,6 +80,19 @@ static BOOL appKitPreference(CFStringRef key) {
     return valid && value;
 }
 
+// Whether the locale modifiers (XMODIFIERS, as XSetLocaleModifiers("") returns them) name an input method other
+// than Xlib's own: "@im=none" and "@im=local" are the built-in one, and so is no @im at all.
+static BOOL modifiersNameInputMethod(const char *modifiers) {
+    const char *name = modifiers != NULL ? strstr(modifiers, "@im=") : NULL;
+    if (name == NULL)
+        return NO;
+    name += 4;
+    size_t length = strcspn(name, "@");
+    if (length == 0)
+        return NO;
+    return !(length == 4 && strncmp(name, "none", 4) == 0) && !(length == 5 && strncmp(name, "local", 5) == 0);
+}
+
 @implementation X11Display
 
 static int errorHandler(Display *display, XErrorEvent *errorEvent) {
@@ -112,8 +126,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
                        name: (NSString *) _kCGSDisplayOverlayWindowCreated
                      object: nil];
 
-        XSetLocaleModifiers("");
+        const char *modifiers = XSetLocaleModifiers("");
         _xim = XOpenIM(_display, NULL, NULL, NULL);
+        _inputMethodComposes = _xim != NULL && modifiersNameInputMethod(modifiers);
 
         if (!_xim) {
             NSLog(@"Failed to open XIM, falling back to im=none\n");
@@ -1645,6 +1660,10 @@ enum {
     if (e->type != KeyPress && e->type != KeyRelease && XFilterEvent(e, None))
         return;
     [self postXEvent: e];
+}
+
+- (BOOL) nativeConnectionInputMethodComposes {
+    return _inputMethodComposes;
 }
 
 // The text of a key press as the input method of its window composes it (CoreGraphics decodes the key and

@@ -829,6 +829,11 @@ static double windowOpacity(Display* display, Window window)
 			[_pointer focusEvent: event];
 			break;
 		case FocusOut:
+			// Like FocusIn: grabs and the pointer entering the window do not move the keyboard focus.
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				[_keyboard resetComposition];
 			[_pointer focusEvent: event];
 			break;
 		case KeymapNotify:
@@ -864,6 +869,8 @@ static double windowOpacity(Display* display, Window window)
 			// Invalidate cached keyboard layout information
 			if (keymapChanged || groupChanged)
 			{
+				// A sequence in progress ends with the keymap that started it.
+				[_keyboard resetComposition];
 				// TODO: Emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 
 				@synchronized (self)
