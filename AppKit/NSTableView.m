@@ -1716,6 +1716,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
+// A click makes the table the first responder (NSControl answers with the selectability of its cell, which a table
+// does not have).
+- (BOOL) needsPanelToBecomeKey {
+    return YES;
+}
+
 - (BOOL) becomeFirstResponder {
     [self setNeedsDisplay: YES];
     return [super becomeFirstResponder];
