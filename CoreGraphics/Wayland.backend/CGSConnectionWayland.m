@@ -120,6 +120,11 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectPinchGesture:
                 [(CGSWaylandPointer *) object pinchEvent: opcode arguments: args];
                 break;
+            case CGSWaylandObjectLockedPointer:
+            case CGSWaylandObjectRelativePointer:
+            case CGSWaylandObjectWarpLock:
+                [(CGSWaylandPointer *) object lockEvent: opcode kind: objectKind proxy: (struct wl_proxy *) proxy arguments: args];
+                break;
             case CGSWaylandObjectKeyboardSync:
                 if (opcode == WP_CALLBACK_EV_DONE)
                     [(CGSWaylandKeyboard *) object modifierSyncDone: (struct wl_proxy *) proxy];
@@ -456,6 +461,16 @@ static const CGEventFlags kHotKeyModifierMask =
         _seat = [self bindGlobal: name interface: &wl_seat_interface
                          version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
                             kind: CGSWaylandObjectSeat object: self];
+    } else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0 && _pointerConstraints == NULL) {
+        _pointerConstraintsName = name;
+        _pointerConstraints = [self bindGlobal: name interface: &zwp_pointer_constraints_v1_interface
+                                       version: 1 kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+    } else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0 && _relativePointerManager == NULL) {
+        _relativePointerManagerName = name;
+        _relativePointerManager = [self bindGlobal: name interface: &zwp_relative_pointer_manager_v1_interface
+                                           version: 1 kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
     } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
         // Version 2 adds the release request.
         _pointerGesturesName = name;
@@ -530,6 +545,20 @@ static const CGEventFlags kHotKeyModifierMask =
 }
 
 - (void) registryGlobalRemove: (uint32_t) name {
+    if ((_pointerConstraints != NULL && name == _pointerConstraintsName) ||
+        (_relativePointerManager != NULL && name == _relativePointerManagerName)) {
+        // The lock objects go before the global that made them.
+        [(CGSWaylandPointer *) _pointerDecoder releasePointerLockObjects];
+        struct wl_proxy **global = name == _pointerConstraintsName ? &_pointerConstraints : &_relativePointerManager;
+        WL.wl_proxy_destroy(*global);
+        *global = NULL;
+        if (name == _pointerConstraintsName)
+            _pointerConstraintsName = 0;
+        else
+            _relativePointerManagerName = 0;
+        [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+        return;
+    }
     if (_pointerGestures != NULL && name == _pointerGesturesName) {
         struct wl_proxy *gestures = _pointerGestures;
         _pointerGestures = NULL;
@@ -804,6 +833,74 @@ static const CGEventFlags kHotKeyModifierMask =
 
 - (struct wl_proxy *) pointerGestures {
     return _pointerGestures;
+}
+
+- (struct wl_proxy *) pointerConstraints {
+    return _pointerConstraints;
+}
+
+- (struct wl_proxy *) relativePointerManager {
+    return _relativePointerManager;
+}
+
+#pragma mark - Pointer state
+
+- (BOOL) managesPointer {
+    return YES;
+}
+
+- (BOOL) cancelsHiddenUntilMouseMoves {
+    return YES;
+}
+
+// Wayland requests are made on the main thread, where the connection is read.
+- (void) cursorHiddenStateChanged: (BOOL) hidden {
+    if ([NSThread isMainThread])
+        [(CGSWaylandPointer *) _pointerDecoder cursorHiddenChanged];
+    else
+        [_pointerDecoder performSelectorOnMainThread: @selector(cursorHiddenChanged) withObject: nil waitUntilDone: NO];
+}
+
+- (void) mouseAssociationChanged: (BOOL) associated {
+    if ([NSThread isMainThread])
+        [(CGSWaylandPointer *) _pointerDecoder updatePointerLock];
+    else
+        [_pointerDecoder performSelectorOnMainThread: @selector(updatePointerLock) withObject: nil waitUntilDone: NO];
+}
+
+- (CGError) warpPointerToPoint: (CGPoint) point {
+    if ([NSThread isMainThread])
+        return [(CGSWaylandPointer *) _pointerDecoder warpToGlobalPoint: point];
+    // A warp of another thread is carried out by the main one; whether it could be is not reported back.
+    [self performSelectorOnMainThread: @selector(warpOnMainThread:)
+                           withObject: [NSValue valueWithBytes: &point objCType: @encode(CGPoint)]
+                        waitUntilDone: YES];
+    return kCGErrorSuccess;
+}
+
+- (void) warpOnMainThread: (NSValue *) value {
+    CGPoint point;
+    [value getValue: &point];
+    [(CGSWaylandPointer *) _pointerDecoder warpToGlobalPoint: point];
+}
+
+- (void) pointerLockTargetMayHaveChanged {
+    [(CGSWaylandPointer *) _pointerDecoder updatePointerLock];
+}
+
+- (BOOL) pointerLocked {
+    return [(CGSWaylandPointer *) _pointerDecoder pointerLocked];
+}
+
+// The point of a window of this connection that is at a global location, when that is one of its own.
+- (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface {
+    uint32_t windowID = [self windowIDForSurface: surface];
+    CGSWindowWayland *window = windowID != 0 ? (CGSWindowWayland *) [self windowForId: (CGSWindowID) windowID] : nil;
+
+    if (window == nil)
+        return NO;
+    *point = CGPointMake(location.x - [window frameOrigin].x, location.y - [window frameOrigin].y);
+    return YES;
 }
 
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface {

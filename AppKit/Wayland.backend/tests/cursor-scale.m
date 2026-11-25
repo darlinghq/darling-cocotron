@@ -4,6 +4,7 @@
 // pointer into the window and changes the scale when "WAIT-RESCALE" appears.
 // Needs DARLING_APPKIT_BACKEND=wayland.
 #import <AppKit/AppKit.h>
+#import <ApplicationServices/ApplicationServices.h>
 #import <objc/runtime.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +15,6 @@
 - (id) cursorWithName: (NSString *) name;
 - (void) setCursor: (id) cursor;
 - (uint32_t) cursorRenderScale120;
-- (void) hideCursor;
 @end
 
 static id display;
@@ -54,10 +54,11 @@ static uint32_t field(const char *name) {
         printf("STAGE arrow render=%u theme=%u\n", [display cursorRenderScale120], field("_cursorThemeScale120"));
         break;
     case 2:
-        [display hideCursor];
+        CGDisplayHideCursor(CGMainDisplayID());
         puts("STAGE hidden");
         break;
     case 3:
+        CGDisplayShowCursor(CGMainDisplayID());
         [display setCursor: arrow];
         printf("STAGE shown-again render=%u\n", [display cursorRenderScale120]);
         // The runner now changes the output scale (2 to 1) while the arrow is shown; the backend

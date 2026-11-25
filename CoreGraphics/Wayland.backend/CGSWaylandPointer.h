@@ -27,14 +27,18 @@
 // The surface the pointer is over is a wl_surface that the framework that created the window maps to its
 // window: the events name it by value (kCGSEventNativeWindow) and carry the pointer's position in it
 // (kCGSEventNativeLocationX/Y). Entering and leaving a surface are not CGEvent types; the observer is told.
-// The relative pointer and the pointer lock stay with that framework (they are made on the wl_pointer this
-// object gives out, _CGSNativeConnectionPointer()).
+// The pointer lock is this object's too: CGAssociateMouseAndMouseCursorPosition(false) locks the pointer to a
+// surface of the process and the relative pointer's motion makes the mouse events (the cursor stays where it
+// was, the events carry the deltas), CGWarpMouseCursorPosition() moves where the cursor is while it is locked
+// and asks the compositor for the position through a short lock otherwise, and the hide count of the cursor
+// is applied to the pointer's cursor (CGDisplayHideCursor()).
 
 #ifndef CGSWAYLANDPOINTER_H
 #define CGSWAYLANDPOINTER_H
 
 #import <Foundation/NSObject.h>
 #include <CoreGraphics/CGGeometry.h>
+#include <CoreGraphics/CGError.h>
 #include <stdint.h>
 #include <wayland-util.h>
 
@@ -85,6 +89,17 @@ struct wl_proxy;
     struct wl_proxy *_pinchSurface;
     BOOL _pinchActive;
     double _pinchScale;
+    // The pointer lock of the relative mouse mode: the lock and relative pointer objects, the surface locked
+    // and whether the compositor has activated the lock; the part of the relative motion that the whole
+    // deltas did not carry.
+    struct wl_proxy *_lock, *_relative, *_lockSurface;
+    BOOL _lockActive, _loggedLockMissing;
+    double _relativeRemainderX, _relativeRemainderY;
+    // A warp of the unlocked pointer: the short lock that gives the compositor the new position, the surface
+    // and the point.
+    struct wl_proxy *_warpLock, *_warpSurface;
+    CGPoint _warpPoint;
+    BOOL _cursorHiddenApplied;
 }
 
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection;
@@ -104,6 +119,20 @@ struct wl_proxy;
 - (void) surfaceDestroyed: (struct wl_proxy *) surface;
 // The framework above moved the pointer within its surface: the next events start from there.
 - (void) setSurfacePointX: (double) x y: (double) y;
+
+// The lock globals appeared or went away; the relative mouse mode wanted by the connection changed or the
+// surface to lock may be another one; the lock objects go (the globals or the pointer go away).
+- (void) pointerLockGlobalsChanged;
+- (void) updatePointerLock;
+- (void) releasePointerLockObjects;
+- (BOOL) pointerLocked;
+// An event of a lock object (the locked pointer, the relative pointer, the lock of a warp).
+- (void) lockEvent: (uint32_t) opcode kind: (int) kind proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args;
+// CGWarpMouseCursorPosition(): the global point; kCGErrorCannotComplete when there is no surface or the
+// compositor offers no lock.
+- (CGError) warpToGlobalPoint: (CGPoint) point;
+// The hide count of the cursor changed.
+- (void) cursorHiddenChanged;
 
 @property (readonly) struct wl_proxy *pointerProxy;
 

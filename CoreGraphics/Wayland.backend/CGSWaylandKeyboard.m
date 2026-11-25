@@ -297,6 +297,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
         _syncModifierFlags = YES;
         if ([observer respondsToSelector: @selector(nativeConnectionKeyboardFocusChanged:)])
             [observer nativeConnectionKeyboardFocusChanged: _focus];
+        [_connection pointerLockTargetMayHaveChanged];
         break;
     }
 
