@@ -29,7 +29,12 @@
 #import "../DarlingUnicodeKeyLayout.h"
 #import <CoreGraphics/CGSNativeConnection.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <Foundation/NSSet.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSValue.h>
+#ifdef CGS_HAVE_KEY_COMPOSE
+#import "../CGSKeyCompose.h"
+#endif
 #include <X11/XKBlib.h>
 #include <X11/Xutil.h>
 #include <X11/keysym.h>
@@ -108,6 +113,10 @@ static unsigned int stateAfterKeyEvent(const ModifierKey *key, unsigned int stat
 }
 
 - (void) dealloc {
+#ifdef CGS_HAVE_KEY_COMPOSE
+    CGSKeyComposeDestroy(_compose);
+#endif
+    [_composingKeys release];
     if (_source != NULL)
         CFRelease((CFTypeRef) _source);
     [super dealloc];
@@ -228,6 +237,7 @@ static unsigned int stateAfterKeyEvent(const ModifierKey *key, unsigned int stat
 }
 
 - (void) focusGainedInWindow: (Window) window {
+    [self resetComposition];
     char keys[32];
     Window rootWindow, child;
     int rootX, rootY, winX, winY;
@@ -269,11 +279,74 @@ static unsigned int stateAfterKeyEvent(const ModifierKey *key, unsigned int stat
     return [[[NSString alloc] initWithBytes: buffer length: length encoding: NSISOLatin1StringEncoding] autorelease];
 }
 
+#pragma mark - Dead keys and Compose sequences
+
+// Whether CoreGraphics composes dead keys and Compose sequences: when no input method of the application does
+// (Xlib's built-in one, which the application gets without XMODIFIERS, composes by itself but drops what it was
+// typed when no table entry continues a sequence) and libxkbcommon is there to read the Compose table.
+- (BOOL) composesKeys {
+#ifdef CGS_HAVE_KEY_COMPOSE
+    if (!_composeLoaded) {
+        _composeLoaded = YES;
+        id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
+        BOOL inputMethod = [observer respondsToSelector: @selector(nativeConnectionInputMethodComposes)] &&
+                           [observer nativeConnectionInputMethodComposes];
+        if (!inputMethod) {
+            _compose = CGSKeyComposeCreate();
+            _composingKeys = [NSMutableSet new];
+        }
+    }
+    return _compose != NULL;
+#else
+    return NO;
+#endif
+}
+
+- (void) resetComposition {
+#ifdef CGS_HAVE_KEY_COMPOSE
+    if (_compose != NULL) {
+        CGSKeyComposeReset(_compose);
+        [_composingKeys removeAllObjects];
+    }
+#endif
+}
+
+// Feeds a key press or release to the sequence in progress. YES when the key makes no event: it started or
+// continued a sequence, or it is the release (or a repeat) of such a key. A key that ends a sequence returns
+// the text of the sequence in `text`; any other key is the keymap's.
+- (BOOL) composeKeyEvent: (XKeyEvent *) event text: (NSString **) text {
+#ifdef CGS_HAVE_KEY_COMPOSE
+    NSNumber *key = @(event->keycode);
+    if ([_composingKeys containsObject: key]) {
+        // A key of the sequence that stays down repeats: the repeat is not a step of the sequence.
+        if (event->type == KeyRelease)
+            [_composingKeys removeObject: key];
+        return YES;
+    }
+    if (event->type != KeyPress)
+        return NO;
+
+    KeySym symbol = NoSymbol;
+    char ignored[32];
+    XLookupString(event, ignored, sizeof(ignored), &symbol, NULL);
+    // A shortcut is not text: a key with Control or Command is no part of a sequence and ends one.
+    BOOL shortcut = (event->state & (ControlMask | Mod4Mask)) != 0;
+    if (CGSKeyComposeFeed(_compose, (uint32_t) symbol, shortcut, text) != CGSKeyComposeConsumed)
+        return NO;
+    [_composingKeys addObject: key];
+    return YES;
+#else
+    return NO;
+#endif
+}
+
 - (void) keyEvent: (XEvent *) ev {
     // Xlib wants every event through XFilterEvent(), key events included, and an input method only sees
     // a key that goes through it: one that is switched by a modifier alone (an input method's Shift
-    // trigger key) never hears of a modifier that is handled first.
-    BOOL filtered = XFilterEvent(ev, None) != False;
+    // trigger key) never hears of a modifier that is handled first. Xlib's own compose handling is not wanted
+    // when CoreGraphics composes (see -composesKeys): it would take the keys of a sequence away.
+    BOOL composing = [self composesKeys];
+    BOOL filtered = !composing && XFilterEvent(ev, None) != False;
     BOOL pressed = ev->type == KeyPress;
     unsigned int keycode = ev->xkey.keycode;
     CGPoint root = CGPointMake(ev->xkey.x_root, ev->xkey.y_root);
@@ -310,8 +383,12 @@ static unsigned int stateAfterKeyEvent(const ModifierKey *key, unsigned int stat
     if (!plan.lookUpText)
         return; // The input method took the key; what it commits comes back as another event.
 
+    NSString *composed = nil;
+    if (composing && [self composeKeyEvent: &ev->xkey text: &composed])
+        return; // a step of a sequence; what it makes comes with the key that completes it
+
     KeySym keySym = NoSymbol;
-    NSString *text = [self textForKeyEvent: &ev->xkey keySym: &keySym];
+    NSString *text = composed != nil ? composed : [self textForKeyEvent: &ev->xkey keySym: &keySym];
 
     // Shortcut characters ignore modifiers other than Shift.
     KeySym shortcutKeySym = X11KeySymIgnoringModifiers(&ev->xkey);

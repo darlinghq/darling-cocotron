@@ -26,10 +26,15 @@ SOCKET = "darling-dead-keys-test"
 # evdev key codes of a PC keyboard; X key codes are these plus 8
 A_E, A_Q, A_S, A_Z = 18, 16, 31, 44
 APOSTROPHE, SPACE, RETURN, RIGHT_ALT = 40, 57, 28, 100
+GRAVE, SIX, LEFT_SHIFT = 41, 7, 42
 
 
 def tap(*codes):
     return ["%d:%d" % (code, state) for code in codes for state in (1, 0)]
+
+
+def shifted(code):
+    return ["%d:1" % LEFT_SHIFT] + tap(code) + ["%d:0" % LEFT_SHIFT]
 
 
 SEQUENCES = [
@@ -39,6 +44,11 @@ SEQUENCES = [
     tap(APOSTROPHE, A_Q, RETURN),
     tap(RIGHT_ALT, A_S, A_S, RETURN),
     tap(RIGHT_ALT, A_Z, A_Q, RETURN),
+    shifted(APOSTROPHE) + tap(SPACE, RETURN),
+    shifted(APOSTROPHE) + tap(A_E, RETURN),
+    tap(GRAVE, SPACE, RETURN),
+    shifted(GRAVE) + tap(SPACE, RETURN),
+    shifted(SIX) + tap(SPACE, RETURN),
 ]
 
 
