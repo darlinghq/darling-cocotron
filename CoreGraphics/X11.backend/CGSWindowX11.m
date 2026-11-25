@@ -21,6 +21,9 @@
 #import "CGSSurfaceX11.h"
 
 #import <Foundation/NSString.h>
+#import <X11/Xutil.h>
+#import <X11/Xatom.h>
+#import <X11/extensions/shape.h>
 
 // X11's stacking requests need both windows mapped, which is the only precondition
 // XConfigureWindow() does not check for us.
@@ -73,7 +76,14 @@ static BOOL isViewable(Display* display, Window window)
 	// pointer's motion the pointer's: they decode them into CGEvents (see CGSX11Keyboard.h and
 	// CGSX11Pointer.h) whichever framework asked for the window.
 	XSelectInput(_display, _window, KeyPressMask | KeyReleaseMask | FocusChangeMask | ButtonPressMask |
-		ButtonReleaseMask | PointerMotionMask | EnterWindowMask | LeaveWindowMask);
+		ButtonReleaseMask | PointerMotionMask | EnterWindowMask | LeaveWindowMask | ExposureMask |
+		StructureNotifyMask);
+
+	// The window manager asks the window to close (a client message) instead of destroying it
+	Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
+	XSetWMProtocols(_display, _window, &deleteWindow, 1);
+
+	[self _setSizeHints];
 
 	// Left unmapped: this backend cannot put pixels into a CGS window, so mapping it
 	// here would drop an empty window on the host desktop. CGSOrderWindow() maps it
@@ -92,6 +102,8 @@ static BOOL isViewable(Display* display, Window window)
 
 	[_title release];
 
+	if (_display != NULL && _gc != None)
+		XFreeGC(_display, _gc);
 	if (_display != NULL && _window != None)
 		XDestroyWindow(_display, _window);
 
@@ -157,6 +169,7 @@ static BOOL isViewable(Display* display, Window window)
 			XMapWindow(_display, _window);
 			return kCGSErrorSuccess;
 		case kCGSOrderAbove:
+			// The window system asks for the contents with an expose event once it is shown
 			XMapRaised(_display, _window);
 			// Another connection (the application's UI layer) grabs the
 			// pointer on the window once it is announced, so it must be
@@ -199,6 +212,7 @@ static BOOL isViewable(Display* display, Window window)
 		return kCGErrorIllegalArgument;
 
 	XMoveWindow(_display, _window, lround(point->x), lround(point->y));
+	[self _setSizeHints];
 	return kCGSErrorSuccess;
 }
 
@@ -215,6 +229,10 @@ static BOOL isViewable(Display* display, Window window)
 
 	XMoveResizeWindow(_display, _window, lround(frame.origin.x), lround(frame.origin.y),
 		lround(frame.size.width), lround(frame.size.height));
+	[self _setSizeHints];
+	// The server needs the request before the contents are put on the resized window
+	XSync(_display, False);
+	[self resizeContentsTo: frame.size];
 	return kCGSErrorSuccess;
 }
 
@@ -294,6 +312,214 @@ static BOOL isViewable(Display* display, Window window)
 	NSLog(@"CoreGraphics X11 backend: CGS window property %@ is not supported",
 		(NSString*) key);
 	return kCGErrorNotImplemented;
+}
+
+#pragma mark - Contents and style
+
+-(void) presentRect:(CGRect) rect
+{
+	[self withContents: ^(const void* bytes, size_t rowBytes, CGSize size) {
+		if (_gc == None)
+			_gc = XCreateGC(_display, _window, 0, NULL);
+
+		int screen = DefaultScreen(_display);
+		XImage* image = XCreateImage(_display, DefaultVisual(_display, screen), DefaultDepth(_display, screen),
+			ZPixmap, 0, (char*) bytes, (unsigned) size.width, (unsigned) size.height, 32, (int) rowBytes);
+		if (image == NULL)
+			return;
+
+		CGRect part = CGRectIntersection(CGRectIntegral(rect), CGRectMake(0, 0, size.width, size.height));
+		if (!CGRectIsNull(part) && part.size.width >= 1 && part.size.height >= 1)
+			XPutImage(_display, _window, _gc, image, (int) part.origin.x, (int) part.origin.y,
+				(int) part.origin.x, (int) part.origin.y, (unsigned) part.size.width, (unsigned) part.size.height);
+
+		if (_styleFlags & kCGSWindowStyleTransparent)
+			[self _shapeWindowToAlpha: (const uint8_t*) bytes rowBytes: rowBytes size: size];
+
+		// The pixels belong to the window's contents
+		image->data = NULL;
+		XDestroyImage(image);
+		XFlush(_display);
+	}];
+}
+
+// Without a compositor an X11 window cannot be translucent: the window takes the outline of what
+// has any alpha, so a transparent window does not block what is below where it draws nothing.
+-(void) _shapeWindowToAlpha:(const uint8_t*) bytes rowBytes:(size_t) rowBytes size:(CGSize) size
+{
+	int width = (int) size.width, height = (int) size.height;
+	size_t capacity = 64, count = 0;
+	XRectangle* rects = malloc(capacity * sizeof(XRectangle));
+	if (rects == NULL)
+		return;
+
+	for (int y = 0; y < height; y++)
+	{
+		const uint8_t* row = bytes + (size_t) y * rowBytes;
+		int x = 0;
+		while (x < width)
+		{
+			while (x < width && row[x * 4 + 3] == 0)
+				x++;
+			int start = x;
+			while (x < width && row[x * 4 + 3] != 0)
+				x++;
+			if (x > start)
+			{
+				if (count == capacity)
+				{
+					XRectangle* grown = realloc(rects, capacity * 2 * sizeof(XRectangle));
+					if (grown == NULL)
+					{
+						free(rects);
+						return;
+					}
+					rects = grown;
+					capacity *= 2;
+				}
+				rects[count++] = (XRectangle) { (short) start, (short) y, (unsigned short) (x - start), 1 };
+			}
+		}
+	}
+
+	XShapeCombineRectangles(_display, _window, ShapeBounding, 0, 0, rects, (int) count, ShapeSet, YXBanded);
+	_contentsShaped = YES;
+	free(rects);
+}
+
+-(void) windowSystemDidExpose:(const XExposeEvent*) event
+{
+	[self presentRect: CGRectMake(event->x, event->y, event->width, event->height)];
+}
+
+-(void) windowSystemDidConfigure
+{
+	CGRect frame;
+	if ([self getRect: &frame] != kCGSErrorSuccess)
+		return;
+	[self resizeContentsTo: frame.size];
+	_CGSPostWindowEvent(kCGSWindowEventBounds, self.windowId, frame);
+}
+
+// The position and size are the program's (a window manager places a window that has no such hint
+// where it likes); a window that is not to be resized by the user has them as its only size
+-(void) _setSizeHints
+{
+	CGRect frame;
+	if ([self getRect: &frame] != kCGSErrorSuccess)
+		return;
+	XSizeHints hints = {0};
+	hints.flags = USPosition | USSize;
+	hints.x = (int) frame.origin.x;
+	hints.y = (int) frame.origin.y;
+	hints.width = (int) frame.size.width;
+	hints.height = (int) frame.size.height;
+	if (_styleFlags & kCGSWindowStyleFixedSize)
+	{
+		hints.flags |= PMinSize | PMaxSize;
+		hints.min_width = hints.max_width = (int) frame.size.width;
+		hints.min_height = hints.max_height = (int) frame.size.height;
+	}
+	XSetWMNormalHints(_display, _window, &hints);
+}
+
+// The window manager's states of the window, set before it is mapped; once mapped they are requested of
+// the window manager with a message to the root window.
+-(void) _setNetWmState:(Atom) state on:(BOOL) on
+{
+	Atom netWmState = XInternAtom(_display, "_NET_WM_STATE", False);
+	XWindowAttributes attributes;
+	if (XGetWindowAttributes(_display, _window, &attributes) && attributes.map_state != IsUnmapped)
+	{
+		XEvent event = {0};
+		event.xclient.type = ClientMessage;
+		event.xclient.window = _window;
+		event.xclient.message_type = netWmState;
+		event.xclient.format = 32;
+		event.xclient.data.l[0] = on ? 1 : 0;
+		event.xclient.data.l[1] = (long) state;
+		event.xclient.data.l[3] = 1;
+		XSendEvent(_display, DefaultRootWindow(_display), False,
+			SubstructureNotifyMask | SubstructureRedirectMask, &event);
+	}
+	else if (on)
+	{
+		XChangeProperty(_display, _window, netWmState, XA_ATOM, 32, PropModeAppend,
+			(const unsigned char*) &state, 1);
+	}
+}
+
+-(CGError) setStyle:(uint32_t) styleFlags
+{
+	uint32_t previous = _styleFlags;
+	uint32_t changed = previous ^ styleFlags;
+	[super setStyle: styleFlags];
+
+	if (changed & kCGSWindowStyleFloating)
+		[self _setNetWmState: XInternAtom(_display, "_NET_WM_STATE_ABOVE", False)
+			on: (styleFlags & kCGSWindowStyleFloating) != 0];
+
+	if (changed & kCGSWindowStyleUtility)
+	{
+		Atom type = XInternAtom(_display, "_NET_WM_WINDOW_TYPE", False);
+		Atom value = XInternAtom(_display, (styleFlags & kCGSWindowStyleUtility) ?
+			"_NET_WM_WINDOW_TYPE_UTILITY" : "_NET_WM_WINDOW_TYPE_NORMAL", False);
+		XChangeProperty(_display, _window, type, XA_ATOM, 32, PropModeReplace, (const unsigned char*) &value, 1);
+		[self _setNetWmState: XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False)
+			on: (styleFlags & kCGSWindowStyleUtility) != 0];
+	}
+
+	if (changed & (kCGSWindowStyleBorderless | kCGSWindowStyleNoClose))
+	{
+		// _MOTIF_WM_HINTS: flags 1 = functions, 2 = decorations. Functions 1 (all) | 32 (but close).
+		unsigned long hints[5] = {0, 0, 1, 0, 0};
+		if (styleFlags & kCGSWindowStyleNoClose)
+		{
+			hints[0] |= 1;
+			hints[1] = 1 | 32;
+		}
+		if (styleFlags & kCGSWindowStyleBorderless)
+		{
+			hints[0] |= 2;
+			hints[2] = 0;
+		}
+		Atom motif = XInternAtom(_display, "_MOTIF_WM_HINTS", False);
+		XChangeProperty(_display, _window, motif, motif, 32, PropModeReplace, (const unsigned char*) hints, 5);
+	}
+
+	if (changed & kCGSWindowStyleUnmanaged)
+	{
+		XSetWindowAttributes attributes = { .override_redirect = (styleFlags & kCGSWindowStyleUnmanaged) ? True : False };
+		XChangeWindowAttributes(_display, _window, CWOverrideRedirect, &attributes);
+	}
+
+	if (changed & kCGSWindowStyleIgnoresMouse)
+	{
+		if (styleFlags & kCGSWindowStyleIgnoresMouse)
+			XShapeCombineRectangles(_display, _window, ShapeInput, 0, 0, NULL, 0, ShapeSet, Unsorted);
+		else
+			XShapeCombineMask(_display, _window, ShapeInput, 0, 0, None, ShapeSet);
+	}
+
+	if (changed & kCGSWindowStyleFixedSize)
+		[self _setSizeHints];
+
+	if (changed & kCGSWindowStyleNoFocus)
+	{
+		XWMHints wmHints = {0};
+		wmHints.flags = InputHint;
+		wmHints.input = (styleFlags & kCGSWindowStyleNoFocus) ? False : True;
+		XSetWMHints(_display, _window, &wmHints);
+	}
+
+	if ((changed & kCGSWindowStyleTransparent) && !(styleFlags & kCGSWindowStyleTransparent) && _contentsShaped)
+	{
+		XShapeCombineMask(_display, _window, ShapeBounding, 0, 0, None, ShapeSet);
+		_contentsShaped = NO;
+	}
+
+	XFlush(_display);
+	return kCGSErrorSuccess;
 }
 
 @end

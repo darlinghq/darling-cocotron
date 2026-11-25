@@ -613,6 +613,72 @@ static double windowOpacity(Display* display, Window window)
 	return pointer;
 }
 
+-(CGSWindowX11*) _cgsWindowForNativeWindow:(Window)native
+{
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if ([window isKindOfClass: [CGSWindowX11 class]] && ((CGSWindowX11*) window)->_window == native)
+				return [[(CGSWindowX11*) window retain] autorelease];
+		}
+	}
+	return nil;
+}
+
+// What the window system says about the CGS windows of this process: repaints (the window's own
+// pixels are put on it again), and the close request, focus and bounds changes, which are reported
+// to whoever asked for them (_CGSSetWindowEventProc).
+-(void) _windowSystemEvent:(XEvent*) event
+{
+	switch (event->type)
+	{
+		case Expose:
+		case ConfigureNotify:
+		case FocusIn:
+		case FocusOut:
+		case ClientMessage:
+			break;
+		default:
+			return;
+	}
+
+	CGSWindowX11* window = [self _cgsWindowForNativeWindow: event->xany.window];
+	if (window == nil)
+		return;
+
+	switch (event->type)
+	{
+		case Expose:
+			[window windowSystemDidExpose: &event->xexpose];
+			break;
+		case ConfigureNotify:
+			[window windowSystemDidConfigure];
+			break;
+		case FocusIn:
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				_CGSPostWindowEvent(kCGSWindowEventActivated, window.windowId, CGRectNull);
+			break;
+		case FocusOut:
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				_CGSPostWindowEvent(kCGSWindowEventDeactivated, window.windowId, CGRectNull);
+			break;
+		case ClientMessage:
+		{
+			Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
+			if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == deleteWindow)
+				_CGSPostWindowEvent(kCGSWindowEventCloseRequested, window.windowId, CGRectNull);
+			break;
+		}
+	}
+}
+
 -(CGSWindowID) _windowIDForNativeWindow:(Window)native
 {
 	@synchronized (_windows)
@@ -706,6 +772,7 @@ static double windowOpacity(Display* display, Window window)
 // on to the observer.
 -(BOOL) processXEvent:(XEvent*) event
 {
+	[self _windowSystemEvent: event];
 	[_pointer willHandleEvent: event];
 	switch (event->type)
 	{
