@@ -163,6 +163,7 @@ add_separated_framework(CoreGraphics
 		Onyx2D
 		GL
 		IOKit
+		ColorSync
 )
 
 # NSBundle finds the backends through the framework's Resources link.
