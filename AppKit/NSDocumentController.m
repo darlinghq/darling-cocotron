@@ -1024,7 +1024,27 @@ static NSError *UntitledDocumentError(void) {
     NSString *value = [[NSUserDefaults standardUserDefaults]
             stringForKey: @"NSRecentDocumentMaximum"];
 
-    return (value == nil) ? 10 : [value intValue];
+    if (value != nil)
+        return [value intValue];
+
+    // QUIRK: the "Recent items" setting of System Preferences is the MaxAmount of the Documents
+    // dictionary of the com.apple.recentitems preferences domain (0 keeps none).
+    // Evidence: widely reported `defaults write com.apple.recentitems Documents -dict MaxAmount N`
+    // (tier 4, for example Apple Support Communities threads about clearing Recent Items).
+    // Test: tests/appkit-recent-documents-limit.m (test_quirk_recentitems_max_amount)
+    CFPreferencesAppSynchronize(CFSTR("com.apple.recentitems"));
+    CFPropertyListRef documents = CFPreferencesCopyAppValue(CFSTR("Documents"), CFSTR("com.apple.recentitems"));
+    unsigned count = 10;
+    if (documents != NULL) {
+        if (CFGetTypeID(documents) == CFDictionaryGetTypeID()) {
+            CFTypeRef amount = CFDictionaryGetValue((CFDictionaryRef) documents, CFSTR("MaxAmount"));
+            int number;
+            if (amount != NULL && CFGetTypeID(amount) == CFNumberGetTypeID() && CFNumberGetValue(amount, kCFNumberIntType, &number) && number >= 0)
+                count = number;
+        }
+        CFRelease(documents);
+    }
+    return count;
 }
 
 - (void) _noteNewRecentDocumentURL: (NSURL *) url forKey: (NSString *) key {
