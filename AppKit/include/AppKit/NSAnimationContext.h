@@ -21,6 +21,8 @@
 #import <AppKit/AppKitIvarLayout.h>
 #import <Foundation/NSObject.h>
 
+@class CAMediaTimingFunction;
+
 // Animations aren't run: changes made in a group take effect immediately.
 @interface NSAnimationContext : NSObject <NSCopying> {
     NSTimeInterval _duration;
@@ -28,6 +30,7 @@
     NS_EXTRA_IVARS_BEGIN(NSAnimationContext)
         void (^_completionHandler)(void);
         BOOL _allowsImplicitAnimation;
+        CAMediaTimingFunction *_timingFunction;
     NS_EXTRA_IVARS_END(NSAnimationContext)
 }
 
@@ -48,5 +51,6 @@
 // Called once the group's changes are over; a group applies its changes at once, so that is when it ends.
 @property(copy, nullable) void (^completionHandler)(void);
 @property BOOL allowsImplicitAnimation;
+@property(retain, nullable) CAMediaTimingFunction *timingFunction;
 
 @end
