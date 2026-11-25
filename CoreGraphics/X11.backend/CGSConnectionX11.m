@@ -888,7 +888,9 @@ static double windowOpacity(Display* display, Window window)
 				continue;
 
 			NSNumber* uid = [NSNumber numberWithInt: entry->uid];
-			if (pressed ? ([self _hotKeyIsActive: entry] && X11HotKeyMatches(event->state, entry->modifiers))
+			// A press of a key already held down is its autorepeat (the detectable form), which is no new press
+			if (pressed ? ([self _hotKeyIsActive: entry] && X11HotKeyMatches(event->state, entry->modifiers)
+					&& ![_pressedHotKeys containsObject: uid])
 				: [_pressedHotKeys containsObject: uid])
 			{
 				if (!uids)
