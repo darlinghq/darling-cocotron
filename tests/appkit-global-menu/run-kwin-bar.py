@@ -33,7 +33,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import Bus, build_registrar, check, finish, read, wait_for  # noqa: E402
+from common import Bus, build_registrar, check, finish, read, require_no_lockscreen, wait_for  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOCKET = "darling-menu-bar-test"
@@ -67,6 +67,7 @@ class Session:
         end = time.time() + 30
         while time.time() < end and not os.path.exists(os.path.join(self.runtime, SOCKET)):
             time.sleep(0.2)
+        require_no_lockscreen(self.kwin)
         # The pointer: KWin hands out a libei connection over D-Bus.
         import dbus
         self.connection = dbus.bus.BusConnection(self.bus.address)
