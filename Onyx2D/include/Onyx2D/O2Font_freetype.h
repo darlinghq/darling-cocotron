@@ -62,8 +62,8 @@
 - (NSDictionary *) copyVariationSettings;
 
 /* An owned font like this one with the given axes (tag to value) set on top of
- * the current settings. Tags that are not axes of the font are ignored and
- * values are clamped to the axis range. Returns nil when the font has no
+ * the current settings. Tags that are not axes of the font are ignored. A
+ * setting keeps the value it was given; the face uses it clamped to the axis range. Returns nil when the font has no
  * variation axes or cannot be reopened. */
 - (O2Font_freetype *) copyWithVariation: (NSDictionary *) variation;
 

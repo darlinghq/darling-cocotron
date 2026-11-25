@@ -47,6 +47,13 @@ CGDataProviderCreateWithData(void *info, const void *data, size_t size,
     return (CGDataProviderRef)O2DataProviderCreateWithData(info, data, size, releaseCallback);
 }
 
+// NULL for NULL callbacks, a callbacks version other than 0 and a missing getBytes callback
+// (observed on macOS 26.7.3 and 10.14.4); skipForward, rewind and releaseInfo may be NULL.
+// The callbacks structure has the layout of O2DataProviderSequentialCallbacks.
+CGDataProviderRef CGDataProviderCreateSequential(void *info, const CGDataProviderSequentialCallbacks *callbacks) {
+    return (CGDataProviderRef)O2DataProviderCreateSequential(info, (const O2DataProviderSequentialCallbacks *)callbacks);
+}
+
 COREGRAPHICS_EXPORT CFDataRef CGDataProviderCopyData(CGDataProviderRef self) {
     return (CFDataRef) O2DataProviderCopyData((O2DataProviderRef)self);
 }
