@@ -24,6 +24,7 @@
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "../X11.backend/CarbonKeys.h"
+#import "../X11.backend/CGSModifierKeys.h"
 #import <CoreGraphics/CGEvent.h>
 #import <CoreGraphics/CGEventSource.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -34,22 +35,6 @@
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
 #include <time.h>
-
-// The device-dependent bits of the modifier flags (IOKit's IOLLEvent.h) that say which key of a pair is
-// down. The flags that apply to the keyboard as a whole come only from the compositor's modifier mask.
-static uint64_t modifierDeviceMask(int code) {
-    switch (code) {
-    case kVK_Control: return 0x0001;
-    case kVK_Shift: return 0x0002;
-    case kVK_RightShift: return 0x0004;
-    case kVK_Command: return 0x0008;
-    case 0x36: return 0x0010; // The right Command key.
-    case kVK_Option: return 0x0020;
-    case kVK_RightOption: return 0x0040;
-    case kVK_RightControl: return 0x2000;
-    default: return 0;
-    }
-}
 
 // The public modifier flags: the device-dependent bits in the low half are not part of a hot key event.
 static const uint64_t kHotKeyEventFlagsMask = 0xFFFF0000;
@@ -104,7 +89,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 - (uint64_t) modifierFlags {
     uint64_t flags = [_keymap activeModifierFlags];
     for (NSNumber *identity in [_heldKeyIdentities allValues])
-        flags |= modifierDeviceMask([identity intValue]);
+        flags |= CGSModifierDeviceMask([identity intValue]);
     return flags;
 }
 

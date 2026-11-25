@@ -69,6 +69,12 @@ static BOOL isViewable(Display* display, Window window)
 		return nil;
 	}
 
+	// The keys typed into the window and the keyboard focus are the keyboard's, the buttons and the
+	// pointer's motion the pointer's: they decode them into CGEvents (see CGSX11Keyboard.h and
+	// CGSX11Pointer.h) whichever framework asked for the window.
+	XSelectInput(_display, _window, KeyPressMask | KeyReleaseMask | FocusChangeMask | ButtonPressMask |
+		ButtonReleaseMask | PointerMotionMask | EnterWindowMask | LeaveWindowMask);
+
 	// Left unmapped: this backend cannot put pixels into a CGS window, so mapping it
 	// here would drop an empty window on the host desktop. CGSOrderWindow() maps it
 	// when a caller asks for it to be shown.

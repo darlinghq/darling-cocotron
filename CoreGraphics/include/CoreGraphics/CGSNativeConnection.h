@@ -58,6 +58,22 @@ typedef enum {
 // Called before CoreGraphics posts the events a keyboard event of the window system makes, so that
 // the observer can send what it holds back from earlier input first (the order of the events).
 - (void) nativeConnectionWillPostKeyboardEvent;
+// X11: the text a key press (an XKeyEvent*) makes after the input method of the window it is for has
+// composed it. The input contexts belong to the framework that owns the windows (the input method
+// stays in the application); nil when the observer has no input context for the window, which makes
+// CoreGraphics look the key up in the keymap. The keysym is set when the lookup gives one (NoSymbol,
+// 0, otherwise).
+- (NSString *) nativeConnectionComposedTextForKeyEvent: (void *) event keySym: (unsigned long *) keySym;
+// X11: whether the observer makes the events of a pointer event (an XEvent*: button, motion) itself, so
+// that CoreGraphics posts nothing for it. The observer holds the pointer for itself (relative mouse
+// mode) or the window the event is for is one CoreGraphics does not decode input for (a display overlay).
+// Asked for every button and motion event, before it is decoded.
+- (BOOL) nativeConnectionObserverHandlesPointerEvent: (void *) event;
+// X11: CoreGraphics has decoded a pointer event (an XEvent*) into the CGEvent and is about to post it.
+// The observer may add what only it knows (kCGSMouseEventWindowKeyState). Returns whether the process'
+// event stream gets the event: NO when the window it is for does not take it (a mouse moved event for a
+// window that did not ask for them); the event taps see it either way.
+- (BOOL) nativeConnectionWillPostPointerEvent: (struct __CGEvent *) cgEvent forXEvent: (void *) event;
 @end
 
 // The kind of the process' connection to the window system, opening it if needed.

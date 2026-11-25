@@ -18,6 +18,8 @@
 */
 #import "CGSConnectionX11.h"
 #import "CGSWindowX11.h"
+#import "CGSX11Keyboard.h"
+#import "CGSX11Pointer.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -179,7 +181,16 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 	if (XkbLibraryVersion(&major, &minor) && XkbQueryExtension(_display, NULL, &_xkbEventBase, &major, &minor, NULL))
 	{
 		XkbSelectEvents(_display, XkbUseCoreKbd, XkbMapNotifyMask | XkbNewKeyboardNotifyMask | XkbStateNotifyMask, 1);
+
+		// A held key reports its repeats as key presses without a release in between, which is what
+		// tells the keyboard a press is a repeat (without it, every repeat is a release and a press).
+		Bool supported = False;
+		XkbSetDetectableAutoRepeat(_display, True, &supported);
+		_detectableAutoRepeat = supported;
 	}
+
+	_keyboard = [[CGSX11Keyboard alloc] initWithConnection: self];
+	_pointer = [[CGSX11Pointer alloc] initWithConnection: self];
 
 	return self;
 }
@@ -220,6 +231,8 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 		CFRelease(_cfSocket);
 
 	[_keyboardLayout release];
+	[_pointer release];
+	[_keyboard release];
 
 	[super dealloc];
 }
@@ -592,6 +605,29 @@ static double windowOpacity(Display* display, Window window)
 	return result;
 }
 
++(CGSX11Pointer*) _processPointer
+{
+	pthread_mutex_lock(&g_processConnectionLock);
+	CGSX11Pointer* pointer = g_processConnection != nil ? g_processConnection->_pointer : nil;
+	pthread_mutex_unlock(&g_processConnectionLock);
+	return pointer;
+}
+
+-(CGSWindowID) _windowIDForNativeWindow:(Window)native
+{
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if ([window isKindOfClass: [CGSWindowX11 class]] && ((CGSWindowX11*) window)->_window == native)
+				return (CGSWindowID) [key intValue];
+		}
+	}
+	return 0;
+}
+
 -(void*) nativeDisplay
 {
 	// EGLNativeDisplayType on X11 is the Display itself.
@@ -610,6 +646,11 @@ static double windowOpacity(Display* display, Window window)
 
 	CGPoint point = [self _cgPointFromRoot: CGPointMake(root_x, root_y)];
 	return CGPointMake(point.x, point.y);
+}
+
+-(uint64_t) modifierFlags
+{
+	return [_keyboard modifierFlags];
 }
 
 -(BOOL) isKeyDown:(CGKeyCode)keyCode
@@ -655,7 +696,9 @@ static double windowOpacity(Display* display, Window window)
 }
 
 // Handles an event of this connection. Returns YES when the event was this connection's own business
-// (a hot key, a keyboard layout or display layout change); the rest is the observer's.
+// (a hot key, a keyboard layout or display layout change); the rest is the observer's. The keyboard also
+// decodes the key events, the modifier state of the pointer events and the focus changes, and those go
+// on to the observer.
 -(BOOL) processXEvent:(XEvent*) event
 {
 	switch (event->type)
@@ -669,16 +712,47 @@ static double windowOpacity(Display* display, Window window)
 				[self _deliverHotKeyEvent: &event->xkey];
 				return YES;
 			}
+			// The keyboard posts the key as a CGEvent. The observer is still told of the event: the
+			// framework above keeps track of the events the server sent.
+			[_keyboard keyEvent: event];
 			break;
+		// The events of the pointer carry the modifier state the server holds. The keyboard reports
+		// a difference from what the keys said before the observer builds the pointer event, so
+		// that the events keep their order. Events another client sent carry whatever state it chose.
+		// The buttons and the motion are decoded into CGEvents after that (the observer is still told of
+		// them: it keeps the pointer state and the crossings, and makes what it holds for itself).
 		case ButtonPress:
-			break;
 		case ButtonRelease:
+			if (!event->xany.send_event)
+				[_keyboard resyncWithState: event->xbutton.state window: event->xbutton.window
+					root: CGPointMake(event->xbutton.x_root, event->xbutton.y_root)];
+			[_pointer pointerEvent: event];
 			break;
 		case MotionNotify:
+			if (!event->xany.send_event)
+				[_keyboard resyncWithState: event->xmotion.state window: event->xmotion.window
+					root: CGPointMake(event->xmotion.x_root, event->xmotion.y_root)];
+			[_pointer pointerEvent: event];
 			break;
 		case EnterNotify:
+		case LeaveNotify:
+			if (!event->xany.send_event)
+				[_keyboard resyncWithState: event->xcrossing.state window: event->xcrossing.window
+					root: CGPointMake(event->xcrossing.x_root, event->xcrossing.y_root)];
+			[_pointer crossingEvent: event];
+			break;
+		case GenericEvent:
+			// XInput2: the raw scroll valuators and the changes of the devices.
+			if ([_pointer inputExtensionEvent: event])
+				return YES;
 			break;
 		case FocusIn:
+			// Focus changes caused by a grab, or by the pointer entering the window or one of its
+			// children, do not move the keyboard focus.
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				[_keyboard focusGainedInWindow: event->xfocus.window];
 			break;
 		case FocusOut:
 			break;

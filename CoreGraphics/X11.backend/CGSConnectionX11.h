@@ -27,6 +27,9 @@
 #import <CoreFoundation/CFSocket.h>
 #import "X11Monitors.h"
 
+@class CGSX11Keyboard;
+@class CGSX11Pointer;
+
 @interface CGSConnectionX11 : CGSConnection {
 @public
 	// The X11 display, which the CGS windows and surfaces of this connection draw on.
@@ -57,6 +60,11 @@
 	NSMutableSet<NSNumber*>* _pressedHotKeys;
 	BOOL _detectableAutoRepeat;
 
+	// The keyboard of the connection: its key events become CGEvents (see CGSX11Keyboard.h).
+	CGSX11Keyboard* _keyboard;
+	// The pointer of the connection: its button and motion events become CGEvents (see CGSX11Pointer.h).
+	CGSX11Pointer* _pointer;
+
 @private
 	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
 	// @synchronized(self); the cache is dropped when XRandR reports a
@@ -72,9 +80,16 @@
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
 
 -(void) processPendingEvents;
+// A point in root coordinates (device pixels) in CoreGraphics' global space (points).
+-(CGPoint) _cgPointFromRoot:(CGPoint)root;
+// The CGS window that has this X window, 0 when none.
+-(CGSWindowID) _windowIDForNativeWindow:(Window)native;
 -(NSArray<NSDictionary*>*) copyWindowDescriptions;
 
 +(BOOL) isAvailable;
+// The pointer of the process' connection, nil without one. Not retained for the caller (a test of the pointer's
+// decoding uses it to give the decoder an event of its own).
++(CGSX11Pointer*) _processPointer;
 
 @end
 

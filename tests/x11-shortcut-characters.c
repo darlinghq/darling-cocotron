@@ -1,7 +1,7 @@
 /* cc tests/x11-shortcut-characters.c -lX11 -o /tmp/x11-shortcuts
  * xvfb-run -a /tmp/x11-shortcuts
  * Real Xlib fallback lookup, default US layout; not full AppKit dispatch. */
-#include "../AppKit/X11.backend/X11KeyEvent.h"
+#include "../CoreGraphics/X11.backend/X11KeyEvent.h"
 #include <X11/keysym.h>
 #include <assert.h>
 #include <stdio.h>

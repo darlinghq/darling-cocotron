@@ -361,10 +361,22 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
         NSInteger windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent);
         if (windowNumber == 0)
             windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGMouseEventWindowUnderMousePointer);
+        // An event of the window system's pointer names the window by its native handle: the display knows
+        // the window it belongs to, and where the pointer was in it.
+        NSPoint windowLocation = NSZeroPoint;
+        BOOL hasWindowLocation = NO;
+        if (CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0) {
+            NSInteger nativeNumber = 0;
+            if ([[NSDisplay currentDisplay] windowNumber: &nativeNumber
+                                                location: &windowLocation
+                                             hasLocation: &hasWindowLocation
+                                         forPointerEvent: cgEvent])
+                windowNumber = nativeNumber;
+        }
         NSWindow *window = windowNumber != 0 ? [NSApp windowWithWindowNumber: windowNumber] : nil;
         NSPoint location = screenLocation(cgEvent);
         if (window != nil)
-            location = [window convertScreenToBase: location];
+            location = hasWindowLocation ? windowLocation : [window convertScreenToBase: location];
         else
             windowNumber = 0;
 
@@ -375,8 +387,20 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
                                           modifierFlags: flags
                                                  window: window
                                                  deltaY: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1)];
-            [mouse _setDeltaX: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis2)
-                       deltaY: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1)];
+            double lineDeltaX = CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis2);
+            double lineDeltaY = CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1);
+            // QUIRK: with Shift held, the NSEvent of a wheel of whole lines (not a continuous scroll) moves
+            // the vertical delta to the horizontal axis (the horizontal delta when there is no vertical one)
+            // and has no vertical delta, so that Shift and the wheel scroll sideways. The CGEvent keeps the
+            // deltas it was made with, and a continuous scroll is not converted. Not documented. Evidence:
+            // black-box observation of CGEventCreateScrollWheelEvent2 + NSEvent eventWithCGEvent: on
+            // macOS 26.7.3 (tier 2): line (3,0), (3,2) and (0,3) with Shift give deltaX 3, deltaY 0; pixel
+            // (25,10) with Shift gives the unchanged (1, 2.5). Test: appkit-scroll-cgevents-x11
+            if ((flags & NSShiftKeyMask) && !CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventIsContinuous)) {
+                lineDeltaX = lineDeltaY != 0 ? lineDeltaY : lineDeltaX;
+                lineDeltaY = 0;
+            }
+            [mouse _setDeltaX: lineDeltaX deltaY: lineDeltaY];
             if (CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventIsContinuous))
                 [mouse _setPreciseScrollingDeltaX: CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventPointDeltaAxis2)
                                            deltaY: CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventPointDeltaAxis1)
@@ -394,6 +418,11 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
             [mouse _setButtonNumber: CGEventGetIntegerValueField(cgEvent, kCGMouseEventButtonNumber)];
             [mouse _setDeltaX: CGEventGetIntegerValueField(cgEvent, kCGMouseEventDeltaX)
                        deltaY: CGEventGetIntegerValueField(cgEvent, kCGMouseEventDeltaY)];
+            // Whether the window was the key window when the press arrived, as the window system's
+            // framework judged it then.
+            int64_t keyState = CGEventGetIntegerValueField(cgEvent, kCGSMouseEventWindowKeyState);
+            if (keyState != 0)
+                [mouse _setWindowWasKeyOnArrival: keyState == 1];
         }
         result = mouse;
         break;
@@ -456,8 +485,7 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
                 charactersIgnoringModifiers: unmodified
                                  isARepeat: CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventAutorepeat) != 0
                                    keyCode: (unsigned short) CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)];
-        [display keyEventCreated: result fromCGEvent: cgEvent];
-        return [result retain];
+        return [[display keyEventCreated: result fromCGEvent: cgEvent] retain];
     }
     case NSAppKitDefined:
     case NSSystemDefined:

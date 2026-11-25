@@ -85,15 +85,6 @@
     BOOL _pointerKnown;
     int _pointerRootX, _pointerRootY;
     unsigned int _pointerState;
-    KeySym _lastKeySym;
-    // The aggregate modifier mask as of the last key event, so a change that
-    // no modifier key reported (a modifier released while another app had the
-    // focus) is still noticed and corrected with a keycode-less flagsChanged.
-    NSEventModifierFlags _modifierFlags;
-    // The modifier keys currently held, one bit per X keycode. Both Shift keys
-    // (or both Control keys) drive the same mask, so releasing one of them only
-    // clears it if the other is up too.
-    unsigned char _heldModifierKeys[32];
     // See -primaryRootFrame. Device pixels, root coordinates.
     NSRect _primaryRootFrame;
     BOOL _primaryRootFrameValid;

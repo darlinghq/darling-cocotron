@@ -1,6 +1,8 @@
 add_backend(X11
 	SOURCES
 		CGSConnectionX11.m
+		CGSX11Keyboard.m
+		CGSX11Pointer.m
 		CGSWindowX11.m
 		CGSSurfaceX11.m
 	INFO_PLIST
@@ -14,6 +16,7 @@ add_backend(X11
 		OpenGL
 		# native libraries
 		X11
+		Xi
 		XRandR
 		Xcursor
 		fontconfig
