@@ -88,6 +88,7 @@ typedef enum {
     CGSSurfaceWayland *_surfaceObject; // Not retained; held by _surfaces.
     BOOL _activated;
     BOOL _usesContents; // a program draws into the window with -drawImage:atPoint: (it set a style)
+    BOOL _displayOverlay; // -becomeDisplayOverlay: made this window the cover of a display
 }
 
 - (void) handleEvent: (uint32_t) opcode
@@ -98,6 +99,9 @@ typedef enum {
 - (CGSWaylandRole) role;
 - (BOOL) isShown;
 - (BOOL) isActivated;
+// Whether the window is a display overlay (see -becomeDisplayOverlay:). Its input is the process' own but
+// belongs to no window of the application: its events name no window.
+- (BOOL) isDisplayOverlay;
 // Whether the window is one that other windows stay in front of: not floating, not a popup.
 - (BOOL) isDocumentLike;
 // Makes a floating window a child of the current document window when it has none.
