@@ -346,9 +346,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             return;
     }
 
-    if ([self drawsBackground]) {
+    if ([self drawsBackground] && _backgroundColor != nil) {
         [_backgroundColor setFill];
-        NSRectFill(rect);
+        NSRectFillUsingOperation(rect, NSCompositeSourceOver);
     }
 }
 

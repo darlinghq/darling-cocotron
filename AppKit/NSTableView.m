@@ -1899,8 +1899,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NSInteger colorCount = [rowColors count];
 
     if (colorCount == 0 || !NS_EXTRA(NSTableView, self)->_alternatingRowBackground) {
-        [_backgroundColor setFill];
-        NSRectFill(clipRect);
+        if (_backgroundColor != nil) {
+            [_backgroundColor setFill];
+            NSRectFillUsingOperation(clipRect, NSCompositeSourceOver);
+        }
     } else if (colorCount == 1) {
         [(NSColor *) [rowColors objectAtIndex: 0] setFill];
         NSRectFill(clipRect);
