@@ -10,37 +10,14 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #define NS_SWIFT_BRIDGED_TYPEDEF __attribute__((swift_bridged_typedef))
 #endif
 
-#ifdef __clang__
-#define APPKIT_DLLEXPORT
-#define APPKIT_DLLIMPORT
-#else
-#define APPKIT_DLLEXPORT __declspec(dllexport)
-#define APPKIT_DLLIMPORT __declspec(dllimport)
-#endif
 
 #ifdef __cplusplus
 
-#if defined(__WIN32__)
-#if defined(APPKIT_INSIDE_BUILD)
-#define APPKIT_EXPORT extern "C" APPKIT_DLLEXPORT
-#else
-#define APPKIT_EXPORT extern "C" APPKIT_DLLIMPORT
-#endif
-#else
 #define APPKIT_EXPORT extern "C"
-#endif
 
 #else
 
-#if defined(__WIN32__)
-#if defined(APPKIT_INSIDE_BUILD)
-#define APPKIT_EXPORT APPKIT_DLLEXPORT extern
-#else
-#define APPKIT_EXPORT APPKIT_DLLIMPORT extern
-#endif
-#else
 #define APPKIT_EXPORT extern
-#endif
 
 #endif // __cplusplus
 
