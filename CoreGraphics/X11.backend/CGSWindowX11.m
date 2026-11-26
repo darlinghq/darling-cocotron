@@ -25,6 +25,8 @@
 #import "X11RoundedShape.h"
 #import "X11InputShape.h"
 #import "X11InvisibleWindow.h"
+#import "X11Fullscreen.h"
+#import "X11WindowManager.h"
 
 #import <Foundation/NSString.h>
 #import <Foundation/NSData.h>
@@ -249,10 +251,21 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 		case kCGSOrderOut:
 			XUnmapWindow(_display, _window);
 			_toplevelShown = NO;
+			if (_toplevel)
+			{
+				// The manager drops the fullscreen state of a withdrawn window, and nothing covers it or
+				// holds it iconic; a focus request still waiting for the map is void.
+				_occluded = NO;
+				_miniaturizedKnown = NO;
+				_fullscreenRequested = NO;
+				_fullscreenReported = NO;
+				_wantsInputFocus = NO;
+			}
 			return kCGSErrorSuccess;
 		case kCGSOrderIn:
 			XMapWindow(_display, _window);
 			_toplevelShown = YES;
+			_miniaturizedKnown = NO;
 			return kCGSErrorSuccess;
 		case kCGSOrderAbove:
 			// The window system asks for the contents with an expose event once it is shown
@@ -878,8 +891,15 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	_shapeEmpty = NO;
 	_ignoresMouse = NO;
 	_skipsTaskList = NO;
+	_wantsInputFocus = NO;
+	_fullscreenRequested = NO;
+	_fullscreenReported = NO;
+	_miniaturizedKnown = NO;
+	_occluded = NO;
+	_configureKnown = NO;
 	[self _refreshToplevelShapes];
 	XFlush(_display);
+	[_x11Connection _toplevelWindowCreated];
 	return YES;
 }
 
@@ -1036,6 +1056,359 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	[self _placeToplevel];
 
 	CGSToplevelEvent report = {.kind = kCGSToplevelEventBackingScaleChanged, .rect = CGRectNull, .oldScale = oldScale};
+	[self postToplevelEvent: &report];
+}
+
+#pragma mark - Ordering, levels, focus, miniaturizing and fullscreen
+
+-(int) stackingLevel
+{
+	return _toplevelLevel;
+}
+
+-(BOOL) isUnmanaged
+{
+	return _toplevelUnmanaged;
+}
+
+// A menu and the menu bar are not stacked by level: they are shown by the window system as menus.
+-(BOOL) takesPartInLevelStacking
+{
+	return _toplevel && _toplevelShown && _toplevelStacksByLevel && _window != None;
+}
+
+-(CGError) setToplevelLevel:(int) level
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if (level == _toplevelLevel)
+		return kCGSErrorSuccess;
+	_toplevelLevel = level;
+	return [self restackToplevelForLevels];
+}
+
+-(CGError) setToplevelStacksByLevel:(BOOL) stacks
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	_toplevelStacksByLevel = stacks;
+	return kCGSErrorSuccess;
+}
+
+-(CGError) restackToplevelForLevels
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if ([self takesPartInLevelStacking])
+		[_x11Connection _restackToplevelWindowsForLevelsAround: self];
+	return kCGSErrorSuccess;
+}
+
+// With a window manager the two client windows live in frames of their own and are not siblings, so a plain
+// stacking request naming the other window as sibling is a BadMatch; XReconfigureWMWindow makes the ICCCM
+// request for that case (a ConfigureRequest sent to the root window, which the window manager carries out for
+// the frames).
+-(CGError) _stackRelativeTo:(CGSWindow*) sibling mode:(int) mode
+{
+	if (![sibling isKindOfClass: [CGSWindowX11 class]] || ((CGSWindowX11*) sibling)->_window == None)
+		return kCGErrorIllegalArgument;
+	XWindowChanges changes;
+	changes.sibling = ((CGSWindowX11*) sibling)->_window;
+	changes.stack_mode = mode;
+	XReconfigureWMWindow(_display, _window, DefaultScreen(_display), CWSibling | CWStackMode, &changes);
+	return kCGSErrorSuccess;
+}
+
+-(CGError) orderToplevelAbove:(CGSWindow*) sibling
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if (sibling == nil)
+		XRaiseWindow(_display, _window);
+	else if ([self _stackRelativeTo: sibling mode: Above] != kCGSErrorSuccess)
+		return kCGErrorIllegalArgument;
+	return [self restackToplevelForLevels];
+}
+
+-(CGError) orderToplevelBelow:(CGSWindow*) sibling
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if (sibling == nil)
+	{
+		XLowerWindow(_display, _window);
+		return kCGSErrorSuccess;
+	}
+	return [self _stackRelativeTo: sibling mode: Below];
+}
+
+// Without a window manager nothing moves X input focus: it stays PointerRoot, so key events went to whichever
+// window was under the pointer and no window ever received FocusIn. Ask for focus explicitly: through the EWMH
+// _NET_ACTIVE_WINDOW request when a window manager is running, otherwise with XSetInputFocus once the window
+// is viewable.
+-(void) _requestInputFocus
+{
+	Window focused;
+	int revert;
+	XGetInputFocus(_display, &focused, &revert);
+	if (focused == _window)
+	{
+		_wantsInputFocus = NO;
+		return;
+	}
+
+	if (X11WindowManagerIsRunning(_display))
+	{
+		XEvent event;
+		memset(&event, 0, sizeof(event));
+		event.xclient.type = ClientMessage;
+		event.xclient.window = _window;
+		event.xclient.message_type = XInternAtom(_display, "_NET_ACTIVE_WINDOW", False);
+		event.xclient.format = 32;
+		event.xclient.data.l[0] = 1; // source indication: application
+		event.xclient.data.l[1] = CurrentTime;
+		XSendEvent(_display, DefaultRootWindow(_display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
+		XFlush(_display);
+		_wantsInputFocus = NO;
+		return;
+	}
+
+	XWindowAttributes attributes;
+	if (XGetWindowAttributes(_display, _window, &attributes) && attributes.map_state == IsViewable)
+	{
+		XSetInputFocus(_display, _window, RevertToPointerRoot, CurrentTime);
+		// Send it now: an idle run loop may not flush Xlib's output buffer until the next event, so key
+		// events typed meanwhile would still go to the old window.
+		XFlush(_display);
+		_wantsInputFocus = NO;
+	}
+	else
+	{
+		// Not viewable yet (the map request is still pending): retry on MapNotify.
+		_wantsInputFocus = YES;
+	}
+}
+
+-(CGError) requestToplevelKeyboardFocus
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	XRaiseWindow(_display, _window);
+	[self restackToplevelForLevels];
+	[self _requestInputFocus];
+	return kCGSErrorSuccess;
+}
+
+-(void) cancelToplevelKeyboardFocusRequest
+{
+	_wantsInputFocus = NO;
+}
+
+-(BOOL) toplevelHoldsKeyboardFocus
+{
+	if (!_toplevel || _window == None)
+		return NO;
+	Window focused;
+	int revert;
+	XGetInputFocus(_display, &focused, &revert);
+	return focused == _window;
+}
+
+-(void) windowSystemFocusChanged:(BOOL) gained
+{
+	CGSToplevelEvent report = {
+		.kind = gained ? kCGSToplevelEventFocusGained : kCGSToplevelEventFocusLost,
+		.rect = CGRectNull,
+	};
+	[self postToplevelEvent: &report];
+}
+
+-(void) windowSystemDidMap
+{
+	// The window manager has stacked the frame by now.
+	[self restackToplevelForLevels];
+	if (_wantsInputFocus)
+		[self _requestInputFocus];
+}
+
+-(void) windowSystemDidReparent
+{
+	// A new frame is stacked by the window manager as it sees fit: the unmanaged windows that are meant to be
+	// below it are put where they belong.
+	[self restackToplevelForLevels];
+}
+
+-(CGError) miniaturizeToplevel
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	XIconifyWindow(_display, _window, DefaultScreen(_display));
+	return kCGSErrorSuccess;
+}
+
+// ICCCM: a client asks to leave the iconic state by mapping its window again (raising an iconified window does
+// not restore it).
+-(CGError) deminiaturizeToplevel
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	XMapRaised(_display, _window);
+	return kCGSErrorSuccess;
+}
+
+// The UI layer asks this of every window on each pass of the event loop, and reading the property is a round
+// trip. The window selects PropertyChangeMask, so a change of _NET_WM_STATE, whoever makes it, arrives as an
+// event that drops what was read.
+-(BOOL) toplevelIsMiniaturized
+{
+	if (!_toplevel || _window == None)
+		return NO;
+	if (!_miniaturizedKnown)
+	{
+		_miniaturized = [self _readMiniaturized];
+		_miniaturizedKnown = YES;
+	}
+	return _miniaturized;
+}
+
+-(BOOL) _readMiniaturized
+{
+	Atom wmState = XInternAtom(_display, "_NET_WM_STATE", False);
+	Atom hiddenState = XInternAtom(_display, "_NET_WM_STATE_HIDDEN", False);
+
+	Atom type;
+	int format;
+	unsigned long count, bytesAfter;
+	unsigned char* properties = NULL;
+	BOOL hidden = NO;
+
+	if (XGetWindowProperty(_display, _window, wmState, 0, (~0L), False, XA_ATOM, &type, &format, &count, &bytesAfter,
+		&properties) == Success)
+	{
+		Atom* atoms = (Atom*) properties;
+		for (unsigned long i = 0; i < count; i++)
+		{
+			if (atoms[i] == hiddenState)
+			{
+				hidden = YES;
+				break;
+			}
+		}
+		XFree(properties);
+	}
+	return hidden;
+}
+
+-(BOOL) toplevelFrameCoversDisplay:(CGRect) frame
+{
+	if (!_toplevel)
+		return NO;
+	CGRect device = [self toplevelDeviceRectForFrame: frame];
+	X11FullscreenRect rect = {(int) device.origin.x, (int) device.origin.y,
+		(unsigned int) device.size.width, (unsigned int) device.size.height};
+	return X11FullscreenRectIsMonitor(_display, rect);
+}
+
+-(CGError) setToplevelFullscreen:(BOOL) fullscreen force:(BOOL) force
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if (!_toplevelShown)
+	{
+		// A withdrawn window has no _NET_WM_STATE (EWMH): the window says, before it is mapped, what it is.
+		long states[4];
+		int count = 0;
+		if (_skipsTaskList)
+		{
+			states[count++] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False);
+			states[count++] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False);
+		}
+		if (_toplevelKind == kCGSToplevelKindDialog)
+			states[count++] = (long) XInternAtom(_display, "_NET_WM_STATE_MODAL", False);
+		if (fullscreen)
+			states[count++] = (long) XInternAtom(_display, "_NET_WM_STATE_FULLSCREEN", False);
+		XChangeProperty(_display, _window, XInternAtom(_display, "_NET_WM_STATE", False), XA_ATOM, 32, PropModeReplace,
+			(const unsigned char*) states, count);
+	}
+	else if (force || fullscreen != _fullscreenRequested)
+	{
+		X11FullscreenRequest(_display, _window, fullscreen);
+	}
+	_fullscreenRequested = fullscreen;
+	return kCGSErrorSuccess;
+}
+
+-(BOOL) toplevelFullscreenRequested
+{
+	return _fullscreenRequested;
+}
+
+-(BOOL) toplevelIsFullscreen
+{
+	return _toplevelShown && _fullscreenReported;
+}
+
+-(BOOL) toplevelIsOccluded
+{
+	return _occluded;
+}
+
+// The window manager changes _NET_WM_STATE on its own too (it leaves fullscreen on a keybinding), so it is
+// followed: a later move onto the same monitor then asks again instead of trusting the last request. While the
+// window is not shown the property is ours.
+-(void) windowSystemStateChanged
+{
+	_miniaturizedKnown = NO;
+	// The manager may have hidden or restored the window (_NET_WM_STATE_HIDDEN), whoever asked.
+	BOOL miniaturized = [self toplevelIsMiniaturized];
+	if (miniaturized != _miniaturizedReported)
+	{
+		_miniaturizedReported = miniaturized;
+		CGSToplevelEvent report = {
+			.kind = miniaturized ? kCGSToplevelEventMiniaturized : kCGSToplevelEventDeminiaturized,
+			.rect = CGRectNull,
+		};
+		[self postToplevelEvent: &report];
+	}
+	CGSToplevelEvent occlusion = {.kind = kCGSToplevelEventOcclusionChanged, .rect = CGRectNull, .state = _occluded};
+	[self postToplevelEvent: &occlusion];
+	if (_toplevelShown)
+	{
+		_fullscreenRequested = X11FullscreenIsSet(_display, _window);
+		CGSToplevelEvent state = {.kind = kCGSToplevelEventStateChanged, .rect = CGRectNull};
+		[self postToplevelEvent: &state];
+		if (_fullscreenRequested != _fullscreenReported)
+		{
+			_fullscreenReported = _fullscreenRequested;
+			CGSToplevelEvent report = {
+				.kind = kCGSToplevelEventFullscreenChanged,
+				.rect = CGRectNull,
+				.state = _fullscreenReported,
+			};
+			[self postToplevelEvent: &report];
+		}
+	}
+}
+
+-(BOOL) noteConfigureGeometryChanged:(const XConfigureEvent*) event
+{
+	if (_configureKnown && event->x == _configureX && event->y == _configureY &&
+		event->width == _configureWidth && event->height == _configureHeight)
+		return NO;
+	_configureKnown = YES;
+	_configureX = event->x;
+	_configureY = event->y;
+	_configureWidth = event->width;
+	_configureHeight = event->height;
+	return YES;
+}
+
+-(void) setOccludedByWindowSystem:(BOOL) occluded
+{
+	if (occluded == _occluded)
+		return;
+	_occluded = occluded;
+	CGSToplevelEvent report = {.kind = kCGSToplevelEventOcclusionChanged, .rect = CGRectNull, .state = occluded};
 	[self postToplevelEvent: &report];
 }
 
@@ -1211,6 +1584,7 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	if (!_toplevel || hints == NULL)
 		return kCGErrorIllegalArgument;
 
+	_toplevelKind = hints->kind;
 	const char* windowType = "_NET_WM_WINDOW_TYPE_NORMAL";
 	switch (hints->kind)
 	{

@@ -1188,6 +1188,11 @@ CGSWindow* _CGSNewToplevelWindow(const CGSToplevelAttributes* attributes)
 	return attributes != NULL ? [c newToplevelWindowWithAttributes: attributes] : nil;
 }
 
+NSArray<NSNumber*>* _CGSOrderedToplevelWindowIDs(void)
+{
+	return [nativeConnection() orderedToplevelWindowIDs];
+}
+
 BOOL _CGSToplevelWindowsSupportTranslucency(void)
 {
 	return [nativeConnection() supportsTranslucentToplevels];
