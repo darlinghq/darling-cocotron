@@ -635,14 +635,21 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     if (drawable == NULL)
         return kCGErrorIllegalArgument;
 
-    // The overlay is a toplevel that covers the output, whatever level it has
-    if (_role == CGSWaylandRoleNone) {
+    // The overlay is a toplevel that covers the output, whatever level it has. The compositor draws no
+    // frame for it: a toplevel that asks for server-side decoration keeps its title bar above the content
+    // on some compositors even when fullscreen, which puts the surface below the output's origin by the
+    // height of the bar and shifts the pointer's surface coordinates with it.
+    BOOL hadRole = _role != CGSWaylandRoleNone;
+    _styleFlags |= kCGSWindowStyleBorderless | kCGSWindowStyleUnmanaged;
+    if (!hadRole) {
         _level = kCGNormalWindowLevel;
         if (![self ensureRole])
             return kCGErrorFailure;
     }
     if (_toplevel == NULL)
         return kCGErrorFailure;
+    if (hadRole)
+        [self applyToplevelStyle: kCGSWindowStyleBorderless | kCGSWindowStyleUnmanaged];
 
     // The surface keeps the default input region (all of it): the overlay takes the pointer and the keys of
     // the display it covers. The pointer decoder makes events of them like those of any window,

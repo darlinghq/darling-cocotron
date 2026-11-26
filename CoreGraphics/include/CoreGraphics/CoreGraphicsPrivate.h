@@ -435,11 +435,15 @@ bool _CGSWindowSurfaceForNativeWindow(void* nativeWindow, CGSConnectionID* connI
 // Creates a window covering `bounds` (global display coordinates), above ordinary
 // windows and shown, so that a GL context can fill a display (CGLSetFullScreen).
 // The window is not one of the application's own: its keyboard and pointer input
-// is the application's, delivered as events with no window: the connection to
-// the window system decodes the keys and the pointer (and the relative mouse
-// grab, which is taken on the overlay) into CGEvents, as it does for any
-// window. *drawable is the native window handle a GL surface is created on.
-// Release it with CGSReleaseWindow.
+// is the application's, delivered as events that name no window. On X11 it is an
+// override-redirect window that takes the keys and the pointer; on Wayland it is a
+// fullscreen toplevel without a frame of the compositor, whose input region is its
+// whole surface. On both, the connection to the window system decodes the keys and
+// the pointer (and the relative mouse grab, which is taken on the overlay) into
+// CGEvents with screen coordinates, as it does for any window, and
+// _CGSNativeConnectionIsDisplayOverlayWindow() tells the overlay's native window
+// from the others. *drawable is the native window handle a GL surface is created
+// on. Release it with CGSReleaseWindow.
 //
 // Once the window is shown, _kCGSDisplayOverlayWindowCreated is posted to the
 // default notification center, with the drawable as the NSNumber
