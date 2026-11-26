@@ -155,6 +155,13 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
 }
 
 - (void) dealloc {
+    // Releasing a PDF context finishes its document, as CGPDFContextClose() does: a context that is released with
+    // the document not closed still has the trailer written (and an open page ended)
+    if (_dataConsumer != nil) {
+        if (_page != nil)
+            [self endPage];
+        [self close];
+    }
     [_dataConsumer release];
     [_outline release];
     [_fontCache release];
