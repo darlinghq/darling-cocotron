@@ -104,6 +104,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) sizeLimitsChanged;
 @end
 
+// Sent by NSWindow when the color space of its content changes.
+@interface NSObject (NSWindow_colorSpace)
+- (void) colorSpaceChanged;
+@end
+
 @interface NSApplication (NSApplication_private)
 // Posts NSApplicationDidChangeOcclusionStateNotification when -occlusionState changed.
 - (void) _updateOcclusionState;

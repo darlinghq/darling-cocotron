@@ -25,9 +25,83 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSWindow-Private.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #include <math.h>
 
 NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenColorSpaceDidChangeNotification";
+
+// The color description CoreGraphics read from the window system, as an autoreleased NSDictionary.
+static NSDictionary *screenColorInfo(NSScreen *screen) {
+    CFDictionaryRef info = _CGSDisplayCopyColorInfo([screen cgDirectDisplayID]);
+
+    return [(NSDictionary *) info autorelease];
+}
+
+static NSNumber *screenColorNumber(NSDictionary *info, CFStringRef key) {
+    id value = info != nil ? [info objectForKey: (id) key] : nil;
+
+    return [value isKindOfClass: [NSNumber class]] ? value : nil;
+}
+
+static uint32_t screenColorEnum(NSDictionary *info, CFStringRef key, uint32_t fallback) {
+    NSNumber *value = screenColorNumber(info, key);
+
+    return value != nil ? [value unsignedIntValue] : fallback;
+}
+
+static CGFloat screenColorLuminance(NSDictionary *info, CFStringRef key, CGFloat fallback) {
+    NSNumber *value = screenColorNumber(info, key);
+
+    return value != nil ? [value doubleValue] : fallback;
+}
+
+// The named CoreGraphics space that describes the output's primaries and transfer function, or
+// NULL when the pair has no name CoreGraphics knows. An ICC profile is preferred by -colorSpace.
+static CGColorSpaceRef screenColorSpaceForDescription(NSDictionary *info) {
+    uint32_t primaries = screenColorEnum(info, kCGSDisplayColorPrimariesKey,
+                                         kCGSDisplayColorPrimariesSRGB);
+    uint32_t transfer = screenColorEnum(info, kCGSDisplayColorTransferFunctionKey,
+                                        kCGSDisplayColorTransferFunctionSRGB);
+    CFStringRef name = NULL;
+
+    switch (primaries) {
+    case kCGSDisplayColorPrimariesSRGB:
+        if (transfer == kCGSDisplayColorTransferFunctionExtendedSRGB)
+            name = kCGColorSpaceExtendedSRGB;
+        else if (transfer == kCGSDisplayColorTransferFunctionExtendedLinear)
+            name = kCGColorSpaceExtendedLinearSRGB;
+        else
+            name = kCGColorSpaceSRGB;
+        break;
+    case kCGSDisplayColorPrimariesDisplayP3:
+        if (transfer == kCGSDisplayColorTransferFunctionExtendedSRGB)
+            name = kCGColorSpaceExtendedDisplayP3;
+        else if (transfer == kCGSDisplayColorTransferFunctionExtendedLinear)
+            name = kCGColorSpaceExtendedLinearDisplayP3;
+        else
+            name = kCGColorSpaceDisplayP3;
+        break;
+    case kCGSDisplayColorPrimariesDCIP3:
+        name = kCGColorSpaceDCIP3;
+        break;
+    case kCGSDisplayColorPrimariesAdobeRGB:
+        name = kCGColorSpaceAdobeRGB1998;
+        break;
+    case kCGSDisplayColorPrimariesBT2020:
+        if (transfer == kCGSDisplayColorTransferFunctionPQ)
+            name = kCGColorSpaceITUR_2100_PQ;
+        else if (transfer == kCGSDisplayColorTransferFunctionHLG)
+            name = kCGColorSpaceITUR_2100_HLG;
+        else if (transfer == kCGSDisplayColorTransferFunctionExtendedLinear)
+            name = kCGColorSpaceExtendedLinearITUR_2020;
+        else
+            name = kCGColorSpaceITUR_2020;
+        break;
+    default:
+        break;
+    }
+    return name != NULL ? CGColorSpaceCreateWithName(name) : NULL;
+}
 
 // The monitor name of an EDID base block: the display product name descriptor (tag 0xFC) among the four 18-byte
 // descriptors that start at offset 54. Its text is at most 13 characters, ended by a line feed and padded with
@@ -107,10 +181,20 @@ static NSString *monitorNameFromEDID(NSData *edid) {
     return scale >= 1.0 ? scale : 1.0;
 }
 
-// Whether the screen can show the gamut. Screens are described as sRGB (see -colorSpace), so only
-// the sRGB gamut is representable; wider ones are not.
+// Whether the output's primaries contain the gamut. The window system reports them in the color
+// description; without one the screen is sRGB.
 - (BOOL) canRepresentDisplayGamut: (NSDisplayGamut) displayGamut {
-    return displayGamut == NSDisplayGamutSRGB;
+    if (displayGamut == NSDisplayGamutSRGB)
+        return YES;
+    if (displayGamut != NSDisplayGamutP3)
+        return NO;
+    uint32_t primaries = screenColorEnum(screenColorInfo(self),
+                                         kCGSDisplayColorPrimariesKey,
+                                         kCGSDisplayColorPrimariesSRGB);
+    return primaries == kCGSDisplayColorPrimariesDisplayP3 ||
+           primaries == kCGSDisplayColorPrimariesDCIP3 ||
+           primaries == kCGSDisplayColorPrimariesAdobeRGB ||
+           primaries == kCGSDisplayColorPrimariesBT2020;
 }
 
 // The backing store of a screen has -backingScaleFactor pixels per point; the conversions scale the
@@ -137,9 +221,23 @@ static NSString *monitorNameFromEDID(NSData *edid) {
                          _NSAlignRectToPixelGrid([self convertRectToBacking: rect], options)];
 }
 
-// No ICC profile is read from the display, so the screen is described as sRGB.
+// The output's color description, as an NSColorSpace. The ICC profile from the compositor wins;
+// otherwise the reported primaries and transfer function name a color space. The sRGB space is the
+// fallback for a display the compositor does not describe.
 - (NSColorSpace *) colorSpace {
-    return [NSColorSpace sRGBColorSpace];
+    NSDictionary *info = screenColorInfo(self);
+    NSData *icc = [info objectForKey: (id) kCGSDisplayColorICCProfileKey];
+    if ([icc isKindOfClass: [NSData class]]) {
+        NSColorSpace *profile = [[[NSColorSpace alloc] initWithICCProfileData: icc] autorelease];
+        if (profile != nil)
+            return profile;
+    }
+    CGColorSpaceRef space = screenColorSpaceForDescription(info);
+    if (space == NULL)
+        return [NSColorSpace sRGBColorSpace];
+    NSColorSpace *result = [[[NSColorSpace alloc] initWithCGColorSpace: space] autorelease];
+    CGColorSpaceRelease(space);
+    return result != nil ? result : [NSColorSpace sRGBColorSpace];
 }
 
 // The name the monitor reports in its EDID when the display has one. Without an EDID the name the window
@@ -156,18 +254,38 @@ static NSString *monitorNameFromEDID(NSData *edid) {
                                        (unsigned) [self cgDirectDisplayID]];
 }
 
-// Screens are driven as standard dynamic range: no component value above 1.0
-// is displayable, and reference rendering is not supported.
+// The headroom above SDR white is the output's maximum luminance divided by the luminance of its
+// reference white. Without a description, the screen is standard dynamic range.
 - (CGFloat) maximumExtendedDynamicRangeColorComponentValue {
-    return 1.0;
+    NSDictionary *info = screenColorInfo(self);
+    CGFloat reference = screenColorLuminance(info, kCGSDisplayColorReferenceLuminanceKey, 0);
+    CGFloat maximum = screenColorLuminance(info, kCGSDisplayColorMaxLuminanceKey, 0);
+
+    if (reference <= 0 || maximum <= reference)
+        return 1.0;
+    return maximum / reference;
 }
 
 - (CGFloat) maximumPotentialExtendedDynamicRangeColorComponentValue {
-    return 1.0;
+    NSDictionary *info = screenColorInfo(self);
+    CGFloat reference = screenColorLuminance(info, kCGSDisplayColorReferenceLuminanceKey, 0);
+    CGFloat maximum = screenColorLuminance(info, kCGSDisplayColorTargetMaxLuminanceKey, 0);
+    if (maximum <= 0)
+        maximum = screenColorLuminance(info, kCGSDisplayColorMaxLuminanceKey, 0);
+
+    if (reference <= 0 || maximum <= reference)
+        return 1.0;
+    return maximum / reference;
 }
 
 - (CGFloat) maximumReferenceExtendedDynamicRangeColorComponentValue {
-    return 0.0;
+    NSDictionary *info = screenColorInfo(self);
+    CGFloat reference = screenColorLuminance(info, kCGSDisplayColorReferenceLuminanceKey, 0);
+    CGFloat maximum = screenColorLuminance(info, kCGSDisplayColorTargetMaxLuminanceKey, 0);
+
+    if (reference <= 0 || maximum <= reference)
+        return 0.0;
+    return maximum / reference;
 }
 
 // No screen here has a camera housing or any other region the system reserves

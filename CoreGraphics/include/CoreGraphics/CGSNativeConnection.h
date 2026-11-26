@@ -49,6 +49,10 @@ typedef enum {
 // The displays changed. CoreGraphics has read the new layout and reported it to the display
 // reconfiguration callbacks.
 - (void) nativeConnectionDisplayLayoutChanged;
+// An output's color description changed. CoreGraphics has dropped the screens so the next
+// -createScreens rebuilds them with the new description; the observer posts the color change
+// notification.
+- (void) nativeConnectionDisplayColorSpaceChanged;
 // Another process asked for the windows of this one to be activated and the window system offers
 // no request for that, so only the process can do it (Wayland). Called on the main thread.
 - (void) nativeConnectionActivationRequested;

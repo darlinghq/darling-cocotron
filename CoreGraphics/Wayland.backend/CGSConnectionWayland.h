@@ -48,6 +48,7 @@ struct wl_display;
 struct wl_proxy;
 
 @class CGSWindowWayland;
+@class WaylandColorManager;
 
 // Identifies the object a dispatched event belongs to, the way AppKit's backend
 // does: libwayland listener structs are unusable across the Darwin/Linux
@@ -100,6 +101,8 @@ typedef enum {
     CFSocketRef _cfSocket;
     CFRunLoopSourceRef _source;
     NSMutableArray *_outputs;
+    // Color management and representation, when the compositor offers them (WaylandColorManager).
+    id _color;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
     id _outputManager;
@@ -132,6 +135,10 @@ typedef enum {
 }
 
 - (void) flush;
+// The shared color manager, or nil when the compositor offers neither color protocol.
+- (WaylandColorManager *) colorManager;
+// Tells the windows that a color global arrived after they were created.
+- (void) notifyWindowsColorManagerAvailable;
 
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;

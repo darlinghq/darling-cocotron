@@ -2280,17 +2280,21 @@ static NSString *menuBarStylePreference(void) {
 }
 
 // The color space the window's content is in. Without one set (or after setting
-// nil) it is that of the window's screen. The setting is only stored: no color
-// management is applied to the content.
+// nil) it is that of the window's screen. The platform window is told so a backend
+// can describe the content to the window system.
 - (NSColorSpace *) colorSpace {
     NSColorSpace *colorSpace = NS_EXTRA(NSWindow, self)->_colorSpace;
     return colorSpace != nil ? colorSpace : [[self screen] colorSpace];
 }
 
 - (void) setColorSpace: (NSColorSpace *) newColorSpace {
+    if (newColorSpace == NS_EXTRA(NSWindow, self)->_colorSpace)
+        return;
     NSColorSpace *old = NS_EXTRA(NSWindow, self)->_colorSpace;
     NS_EXTRA(NSWindow, self)->_colorSpace = [newColorSpace retain];
     [old release];
+    if ([_platformWindow respondsToSelector: @selector(colorSpaceChanged)])
+        [_platformWindow colorSpaceChanged];
 }
 
 // There is a single space, so every window is on the active one.

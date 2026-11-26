@@ -24,6 +24,7 @@
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
+#import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -91,6 +92,14 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
     // An exception can't unwind through libwayland's native frames.
     @autoreleasepool {
         @try {
+            if (objectKind >= WaylandColorObjectManager &&
+                objectKind <= WaylandColorObjectLast) {
+                [(WaylandColorManager *) object handleEvent: opcode
+                                                       kind: (WaylandColorObjectKind) objectKind
+                                                      proxy: (struct wl_proxy *) proxy
+                                                  arguments: args];
+                return 0;
+            }
             switch (objectKind) {
             case CGSWaylandObjectXdgSurface:
             case CGSWaylandObjectToplevel:
@@ -210,6 +219,7 @@ static const CGEventFlags kHotKeyModifierMask =
         return nil;
 
     _outputs = [NSMutableArray new];
+    _color = [[WaylandColorManager alloc] initWithDispatcher: CGSWaylandDispatch owner: self];
     // The keyboard layout is described from the system default until the compositor's keymap arrives.
     _keymap = [[CGSWaylandKeymap alloc] init];
     if (_keymap != nil)
@@ -314,6 +324,8 @@ static const CGEventFlags kHotKeyModifierMask =
     }
 
     [_outputManager release];
+    [(WaylandColorManager *) _color shutdown];
+    [_color release];
     [self releaseKeyboard];
     [_keyboardDecoder release];
     [(CGSWaylandPointer *) _pointerDecoder stop];
@@ -397,6 +409,20 @@ static const CGEventFlags kHotKeyModifierMask =
         WL.wl_display_flush(_wlDisplay);
 }
 
+- (WaylandColorManager *) colorManager {
+    return _color;
+}
+
+- (void) notifyWindowsColorManagerAvailable {
+    @synchronized (_windows) {
+        for (NSNumber *key in _windows) {
+            CGSWindow *window = [_windows objectForKey: key];
+            if ([window isKindOfClass: [CGSWindowWayland class]])
+                [(CGSWindowWayland *) window colorManagerAvailable];
+        }
+    }
+}
+
 - (void) connectionFailed {
     // Matches AppKit's backend: a lost compositor connection leaves every proxy
     // unusable, and there is nothing to fall back to at this point.
@@ -478,6 +504,25 @@ static const CGEventFlags kHotKeyModifierMask =
         _decorationManager = [self bindGlobal: name interface: &zxdg_decoration_manager_v1_interface
                                       version: 1
                                          kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
+               ((WaylandColorManager *) _color)->_colorManager == NULL) {
+        uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
+        struct wl_proxy *proxy = [self bindGlobal: name interface: &wp_color_manager_v1_interface
+                                          version: managerVersion
+                                             kind: (CGSWaylandObjectKind) WaylandColorObjectManager
+                                           object: _color];
+        [(WaylandColorManager *) _color bindColorManager: proxy
+                                                 version: managerVersion name: name];
+        [self notifyWindowsColorManagerAvailable];
+    } else if (strcmp(interface, "wp_color_representation_manager_v1") == 0 &&
+               ((WaylandColorManager *) _color)->_representationManager == NULL) {
+        struct wl_proxy *proxy = [self bindGlobal: name
+                                         interface: &wp_color_representation_manager_v1_interface
+                                          version: 1
+                                             kind: (CGSWaylandObjectKind) WaylandColorObjectRepresentationManager
+                                           object: _color];
+        [(WaylandColorManager *) _color bindRepresentationManager: proxy version: 1 name: name];
+        [self notifyWindowsColorManagerAvailable];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame and 8 wl_pointer.axis_value120. A
         // protocol table older than that offers less.
@@ -535,6 +580,7 @@ static const CGEventFlags kHotKeyModifierMask =
         @synchronized (self) {
             [_outputs addObject: output];
             [self attachLogicalOutput: output];
+            [(WaylandColorManager *) _color observeOutput: output->_proxy];
         }
         [output release];
     }
@@ -568,6 +614,7 @@ static const CGEventFlags kHotKeyModifierMask =
 }
 
 - (void) registryGlobalRemove: (uint32_t) name {
+    [(WaylandColorManager *) _color globalRemoved: name];
     if ((_pointerConstraints != NULL && name == _pointerConstraintsName) ||
         (_relativePointerManager != NULL && name == _relativePointerManagerName)) {
         // The lock objects go before the global that made them.
@@ -629,6 +676,24 @@ static const CGEventFlags kHotKeyModifierMask =
     }
     if (removed)
         [self outputsChanged];
+}
+
+// An output's image description (primaries, transfer function, luminances) changed. The screens are
+// rebuilt with the new values; the observer is told separately so it can post
+// NSScreenColorSpaceDidChangeNotification.
+- (void) waylandColorManagerOutputInfoChanged: (WaylandColorManager *) manager {
+    (void) manager;
+    [self invalidateScreens];
+    [self displayLayoutChanged];
+    id observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionDisplayColorSpaceChanged)])
+        [observer nativeConnectionDisplayColorSpaceChanged];
+}
+
+// A color manager global went away: the cached descriptions are gone, so rebuild the screens
+// the same way as when an output's description changes.
+- (void) waylandColorManagerDidLoseGlobal: (WaylandColorManager *) manager {
+    [self waylandColorManagerOutputInfoChanged: manager];
 }
 
 // What changed in the outputs is a change of the displays, for the callbacks once the setup is over.
@@ -1144,6 +1209,7 @@ static NSDictionary *modeDictionary(int32_t width, int32_t height, double refres
         screen.backingScale = scale;
         NSString *outputName = [output->_outputDescription length] > 0 ? output->_outputDescription : output->_outputName;
         screen.name = [outputName length] > 0 ? outputName : nil;
+        screen.colorInfo = [(WaylandColorManager *) _color infoForOutput: output->_proxy];
 
         // The output-management heads list every mode the output can be set to; wl_output lists only what the
         // compositor chooses to announce.

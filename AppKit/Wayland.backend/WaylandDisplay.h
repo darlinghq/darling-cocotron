@@ -43,7 +43,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons;
+@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -150,6 +150,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // A change of the outputs waits for the end of the pass over the events.
     BOOL _outputsChangePending;
     NSMutableArray *_outputs;
+    // Color management and representation shared with the CoreGraphics backend (WaylandColorManager).
+    id _color;
     // WaylandWindows, not retained, most recently activated first.
     CFMutableArrayRef _windows;
     NSMutableArray *_afterDispatch;
@@ -195,6 +197,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (uint32_t) dragSerialForEvent: (NSEvent *) event;
 - (void) consumeDragPress;
 - (void) flush;
+// The shared color manager, or nil when the compositor offers neither protocol.
+- (WaylandColorManager *) colorManager;
 // Gives every window the current application icon (see WaylandToplevelIcon.h).
 - (void) updateWindowIcons;
 - (void) processPendingEvents;

@@ -31,6 +31,7 @@
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <OpenGL/CGLInternal.h>
 #include <dlfcn.h>
+#import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
@@ -96,6 +97,14 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
     // An exception can't unwind through libwayland's native frames.
     @autoreleasepool {
         @try {
+            if (objectKind >= WaylandColorObjectManager &&
+                objectKind <= WaylandColorObjectLast) {
+                [(WaylandColorManager *) object handleEvent: opcode
+                                                       kind: (WaylandColorObjectKind) objectKind
+                                                      proxy: (struct wl_proxy *) proxy
+                                                  arguments: args];
+                return 0;
+            }
             switch (objectKind) {
             case WaylandObjectSurface:
             case WaylandObjectXdgSurface:
@@ -194,6 +203,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         return nil;
 
     _outputs = [NSMutableArray new];
+    _color = [[WaylandColorManager alloc] initWithDispatcher: WaylandDispatch owner: self];
     _afterDispatch = [NSMutableArray new];
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
 
@@ -306,6 +316,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     _toplevelIcons = nil;
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
+        [(WaylandColorManager *) _color shutdown];
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
@@ -320,6 +331,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     [_cursor release];
     [_inputEvent release];
+    [_color release];
     [_outputs release];
     [_afterDispatch release];
     if (_windows != NULL)
@@ -333,6 +345,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) flush {
     if (_wlDisplay != NULL)
         WL.wl_display_flush(_wlDisplay);
+}
+
+- (WaylandColorManager *) colorManager {
+    return _color;
 }
 
 // The windows carry the application icon (see WaylandToplevelIcon.h): when the application sets another
@@ -411,6 +427,28 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [self outputsDidChange];
 }
 
+// CoreGraphics has rebuilt the screens with an output's new color description.
+- (void) nativeConnectionDisplayColorSpaceChanged {
+    // Windows without an explicit color space follow the screen, so their surface descriptions
+    // have to be sent again.
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) colorManagerAvailable];
+    [self flush];
+    [[NSNotificationQueue defaultQueue]
+            enqueueNotification: [NSNotification notificationWithName: NSScreenColorSpaceDidChangeNotification
+                                                               object: NSApp]
+                   postingStyle: NSPostASAP
+                   coalesceMask: NSNotificationCoalescingOnName | NSNotificationCoalescingOnSender
+                       forModes: nil];
+}
+
+// A color manager global went away: its surface descriptions are inert, so let the windows
+// refresh theirs and let the screens drop the compositor's color space.
+- (void) waylandColorManagerDidLoseGlobal: (WaylandColorManager *) manager {
+    (void) manager;
+    [self nativeConnectionDisplayColorSpaceChanged];
+}
+
 // Another process asked for the activation of this one's windows (see _CGSActivateProcess).
 - (void) nativeConnectionActivationRequested {
     [self requestActivation];
@@ -452,7 +490,29 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
               interface: (const char *) interface
                 version: (uint32_t) version
 {
-    if (strcmp(interface, "wl_compositor") == 0 && _compositor == NULL) {
+    if (strcmp(interface, "wp_color_manager_v1") == 0 &&
+        ((WaylandColorManager *) _color)->_colorManager == NULL) {
+        uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
+        struct wl_proxy *proxy = [self bindGlobal: name
+                                         interface: &wp_color_manager_v1_interface
+                                          version: managerVersion
+                                             kind: (WaylandObjectKind) WaylandColorObjectManager
+                                           object: _color];
+        [(WaylandColorManager *) _color bindColorManager: proxy
+                                                 version: managerVersion name: name];
+        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) colorManagerAvailable];
+    } else if (strcmp(interface, "wp_color_representation_manager_v1") == 0 &&
+               ((WaylandColorManager *) _color)->_representationManager == NULL) {
+        struct wl_proxy *proxy = [self bindGlobal: name
+                                         interface: &wp_color_representation_manager_v1_interface
+                                          version: 1
+                                             kind: (WaylandObjectKind) WaylandColorObjectRepresentationManager
+                                           object: _color];
+        [(WaylandColorManager *) _color bindRepresentationManager: proxy version: 1 name: name];
+        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) colorManagerAvailable];
+    } else if (strcmp(interface, "wl_compositor") == 0 && _compositor == NULL) {
         // Version 4 has wl_surface.damage_buffer.
         _compositorVersion = MIN(version, 4);
         _compositor = [self bindGlobal: name
@@ -549,6 +609,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                    object: output];
         if (output->_proxy != NULL) {
             [_outputs addObject: output];
+            [(WaylandColorManager *) _color observeOutput: output->_proxy];
         }
     }
 }
@@ -561,6 +622,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 }
 
 - (void) registryGlobalRemoved: (uint32_t) name {
+    [(WaylandColorManager *) _color globalRemoved: name];
     if (_textInputManager && name == _textInputManagerName) {
         [self detachTextInput];
         WaylandMarshal(_textInputManager, WP_TEXT_INPUT_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);

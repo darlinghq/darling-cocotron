@@ -69,3 +69,27 @@ here so that systems with an older release still build the backend.
 
 The AppKit Wayland backend uses it to show the application icon (`-[NSApplication applicationIconImage]`) on every
 toplevel, so compositors do not have to guess an icon from the `app_id`. See `WaylandToplevelIcon.m`.
+
+## color-management
+
+`color-management-v1.xml` is the staging `wp_color_manager_v1` family. The backends use it to describe the
+colorimetry of window contents, including extended dynamic range and HDR metadata, and to observe the preferred
+description of a surface and the descriptions of outputs.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/color-management/color-management-v1.xml`
+  (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2019 Sebastian Wick, 2019 Erwin Burema, 2020 AMD, 2020-2024 Collabora, Ltd., 2024 Xaver Hugl,
+  2022-2025 Red Hat, Inc.
+- Licence: the MIT permission notice at the top of the file.
+
+## color-representation
+
+`color-representation-v1.xml` is the staging `wp_color_representation_manager_v1` family. The backends use it to
+declare alpha mode and YUV coefficients/range/chroma for surfaces.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/color-representation/color-representation-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2022 Simon Ser, 2022 Red Hat, Inc., 2022 Collabora, Ltd., 2022-2025 Red Hat, Inc.
+- Licence: the MIT permission notice at the top of the file.

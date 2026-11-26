@@ -19,11 +19,14 @@
 #import "WaylandWindow.h"
 #import "WaylandSubWindow.h"
 #import "WaylandToplevelIcon.h"
+#import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindowLevel.h"
 #import "../DarlingWindowPresentation.h"
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSColorSpace.h>
+#import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
 #import "../NSWindow-Private.h"
 #import <AppKit/NSGraphicsContext.h>
@@ -155,12 +158,59 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _viewport = WaylandCreateObject(_display->_viewporter, WP_VIEWPORTER_GET_VIEWPORT,
                 &wp_viewport_interface, viewportArgs, 0, nil);
         }
+        [self updateSurfaceColorIfNeeded];
     }
     return _surface;
 }
 
+// The color space of the content the window draws, or sRGB when neither the window nor a screen
+// reports one (a display the compositor has not described yet).
+- (NSColorSpace *) contentColorSpace {
+    NSColorSpace *space = [_delegate respondsToSelector: @selector(colorSpace)]
+                          ? [_delegate colorSpace] : nil;
+    if (space == nil)
+        space = [[NSScreen screens] count] > 0 ? [[NSScreen mainScreen] colorSpace] : nil;
+    return space != nil ? space : [NSColorSpace sRGBColorSpace];
+}
+
+- (void) updateSurfaceColor {
+    if (_surface == NULL)
+        return;
+    WaylandColorManager *color = [_display colorManager];
+    if (color == nil)
+        return;
+    if (_colorSurface == NULL)
+        _colorSurface = [color newColorSurfaceForSurface: _surface];
+    if (_representationSurface == NULL)
+        _representationSurface = [color newRepresentationSurfaceForSurface: _surface];
+    CGColorSpaceRef space = [[self contentColorSpace] CGColorSpace];
+    if (space != NULL)
+        [color setColorSpace: space onSurface: _colorSurface];
+}
+
+- (void) updateSurfaceColorIfNeeded {
+    WaylandColorManager *color = [_display colorManager];
+    if (_surface == NULL || color == nil)
+        return;
+    if (color->_colorManager != NULL || color->_representationManager != NULL)
+        [self updateSurfaceColor];
+}
+
+- (void) colorSpaceChanged {
+    [self updateSurfaceColor];
+    [_display flush];
+}
+
+- (void) colorManagerAvailable {
+    [self updateSurfaceColorIfNeeded];
+}
+
 // The surface with the objects that are tied to it. The role objects must be gone first.
 - (void) destroySurface {
+    WaylandColorManager *color = [_display colorManager];
+    [color destroyColorSurface: _colorSurface];
+    [color destroyRepresentationSurface: _representationSurface];
+    _colorSurface = _representationSurface = NULL;
     if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_surface)
