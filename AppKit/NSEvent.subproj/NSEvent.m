@@ -94,6 +94,10 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
     return event;
 }
 
+@interface NSDisplay (DarlingDoubleClick)
+- (CGFloat) doubleClickInterval;
+@end
+
 @implementation NSEvent
 
 // The mouse motion is coalesced in HIToolbox's event queue, which holds AppKit's events
@@ -208,6 +212,14 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
             buttons |= (NSUInteger) 1 << button;
     }
     return buttons;
+}
+
++ (NSTimeInterval) doubleClickInterval {
+    NSDisplay *display = [NSDisplay currentDisplay];
+    if ([display respondsToSelector: @selector(doubleClickInterval)]) {
+        return [display doubleClickInterval];
+    }
+    return 0.5;
 }
 
 - (instancetype) initWithType: (NSEventType) type
