@@ -63,13 +63,10 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _menuWindow; // a menu or pop-up window
     BOOL _skipTaskbar; // not an application window: no task-bar or pager entry (see -updateWindowManagerHints)
     X11Window *_transientParent; // the window named by WM_TRANSIENT_FOR (retained)
-    BOOL _fullscreenRequested;
-    BOOL _fullscreenReported; // what the window manager last said, told to the delegate
     BOOL _isOpaque;
     BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
     BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
-    BOOL _wantsInputFocus;
     BOOL _keyRequested; // the application asked for this window to become key and the focus has not answered yet
     CGFloat _appliedAlpha; // the window's alpha value as last applied to the X window
     BOOL _alphaIsZero; // _appliedAlpha is 0
@@ -94,17 +91,6 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     int _preeditCaret;
     // YES while X11Display delivers FocusIn for this window (see -makeKey).
     BOOL _receivingFocus;
-    // -isMiniaturized as last read from _NET_WM_STATE; PropertyNotify on that
-    // property, mapping and unmapping make it read again.
-    BOOL _miniaturizedKnown;
-    BOOL _miniaturized;
-    // The state the delegate was last told of (platformWindowMiniaturized: and platformWindowDeminiaturized:).
-    BOOL _miniaturizedReported;
-    // Whether X11Display found the window covered (see X11Occlusion.h).
-    BOOL _occluded;
-    // Geometry of the last ConfigureNotify (see -noteConfigureGeometryChanged:).
-    BOOL _configureKnown;
-    int _configureX, _configureY, _configureWidth, _configureHeight;
 }
 
 - (instancetype) initWithDelegate: (NSWindow *) delegate;
@@ -142,19 +128,7 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 - (O2ImageRef) createBackingImageInDeviceRect: (O2Rect) rect;
 
 - (Window) windowHandle;
-// What the stacking of unmanaged and managed windows by level looks at (see
-// X11LevelStacking.h). A menu, pop-up and the menu bar are not stacked by
-// level: they are above the windows they belong to by their own means.
-- (int) stackingLevel;
-- (BOOL) isUnmanaged;
-- (BOOL) takesPartInLevelStacking;
-// Restacks the windows of the other kind around this one after it was
-// ordered to the front, mapped or given another level.
-- (void) restackForLevels;
 - (BOOL) isMapped;
-- (void) setOccluded: (BOOL) occluded;
-// Records the geometry of a ConfigureNotify; NO when it repeats the previous one.
-- (BOOL) noteConfigureGeometryChanged: (XConfigureEvent *) event;
 // Whether the window is fullscreen (_NET_WM_STATE_FULLSCREEN), as last asked
 // for or as the window manager last set it.
 - (BOOL) isFullscreen;
@@ -170,19 +144,13 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 
 - (void) setStyleMaskInternal: (NSUInteger) styleMask force: (BOOL) force;
 
-- (void) requestInputFocus;
 - (BOOL) isFullyTransparent;
 - (BOOL) takeKeyRequest;
 - (BOOL) isMenuOrPopup;
-- (void) mapNotified;
 
 // What the window system said about the window (see CGSToplevelEvent), passed on to the delegate.
 - (void) toplevelEvent: (const CGSToplevelEvent *) event;
 @end
-
-// Whether an EWMH window manager is running on the display.
-__attribute__((visibility("hidden"))) BOOL
-X11WindowManagerIsRunning(Display *display);
 
 void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
                                        CGFloat *left, CGFloat *bottom,
