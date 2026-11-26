@@ -55,9 +55,10 @@
 // Turns this (not yet ordered in) window into a display overlay: it covers
 // the display it is placed on, stays above ordinary windows, and is not managed
 // by the window system's window manager. Its key and pointer input is not for
-// any window of the application: the application's UI layer takes it up after
-// _kCGSDisplayOverlayWindowCreated (a backend that cannot yet do so for the
-// pointer lets it fall through to the windows below instead). *drawable
+// any window of the application: the connection to the window system posts the
+// events it makes of it with no window, located on the screen (a backend that
+// cannot yet do so for the pointer lets it fall through to the windows below
+// instead). *drawable
 // receives the native handle a GL surface can be created on. Backends that
 // cannot do this keep the default, which refuses.
 -(CGError) becomeDisplayOverlay:(void**) drawable;
