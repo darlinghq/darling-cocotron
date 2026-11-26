@@ -2863,13 +2863,11 @@ static BOOL resignForced;
 
 - (void) _windowDidBecomeActive: (NSWindow *) window {
     resignPending = NO;
-    // A window of this process has the input focus, which is what makes it the front process.
-    // CoreGraphics keeps it for the display servers that cannot be asked who has the focus and
-    // tells the other processes (NSWorkspace's frontmostApplication follows it).
-    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited) {
-        _CGSSetFrontProcess(getpid());
+    // A window of this process has the input focus, which makes the process the front process:
+    // CoreGraphics reports that itself from the window system's focus (and tells the other processes;
+    // NSWorkspace's frontmostApplication follows it).
+    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited)
         [self _publishActivation];
-    }
     if (!NS_EXTRA(NSApplication, self)->_isActive) {
         NS_EXTRA(NSApplication, self)->_isActive = YES;
         [[NSNotificationCenter defaultCenter]

@@ -343,6 +343,9 @@ static double repeatPreferenceMilliseconds(CFStringRef key) {
         // presses for keys held before focus arrived.
         _classifyHeldKeys = YES;
         _syncModifierFlags = YES;
+        // A surface of the process has the keyboard focus: the process is the front process (before the
+        // framework that owns the surfaces hears of it).
+        _CGSNativeFocusReport(YES);
         if ([observer respondsToSelector: @selector(nativeConnectionKeyboardFocusChanged:)])
             [observer nativeConnectionKeyboardFocusChanged: _focus];
         [_connection pointerLockTargetMayHaveChanged];
@@ -356,6 +359,12 @@ static double repeatPreferenceMilliseconds(CFStringRef key) {
         [self resetKeyboardModifiers];
         if ([observer respondsToSelector: @selector(nativeConnectionKeyboardFocusChanged:)])
             [observer nativeConnectionKeyboardFocusChanged: NULL];
+        // The focus moving from one surface of the process to another arrives as a leave and an enter in
+        // the same dispatch; a leave that no enter follows means another client has the focus.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (_CGSNativeConnectionKeyboardFocus() == NULL)
+                _CGSNativeFocusReport(NO);
+        });
         break;
 
     case WP_KEYBOARD_EV_KEY: {
