@@ -362,6 +362,41 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     [_waylandConnection flush];
 }
 
+// A compositor that follows the xdg-shell rule that an unmapped toplevel goes back to its initial state
+// (wlroots ones, sway) has forgotten the title, the size limits and the parent when the window is
+// shown again: they are said again before its next buffer maps it.
+- (void) restoreToplevelState {
+    _unmappedToplevel = NO;
+    if (_toplevel == NULL)
+        return;
+    if (_title != nil) {
+        union wl_argument args[1] = {{.s = [_title UTF8String]}};
+        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_TITLE, NULL, 0, args);
+    }
+    [self applyToplevelStyle: kCGSWindowStyleFixedSize];
+    _levelParent = nil;
+    [self updateLevelParent];
+    [_waylandConnection flush];
+}
+
+// Compositors that stack toplevels in the order they were mapped (wlroots ones, sway) do not move a child
+// that was mapped before its parent in front of it when it is given that parent. The floating windows
+// that are shown when a document window is shown for the first time are therefore mapped again, after it,
+// which is also what keeps them in front of a document window that is opened later. This is done only for
+// windows whose pixels the backend keeps and can put on the screen again (what a program draws into
+// a window), as a window that renders through a GL surface has nothing to show after it was unmapped.
+- (void) mapFloatingWindowsAgain: (NSArray *) windows {
+    for (CGSWindowWayland *window in windows) {
+        if (window == self || window->_role != CGSWaylandRoleToplevel || !window->_shown ||
+            ![window isFloating] || window->_levelParent != self)
+            continue;
+        if (![window withContents: ^(const void *bytes, size_t rowBytes, CGSize size) {}])
+            continue;
+        [window orderWindow: kCGSOrderOut relativeTo: nil];
+        [window orderWindow: kCGSOrderIn relativeTo: nil];
+    }
+}
+
 // Where the window asked to be, for a compositor whose plasma shell lets a client say so; the other
 // compositors place a toplevel themselves. The window is also kept out of task lists when it is a
 // utility window.
@@ -577,6 +612,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         if (WL.wl_display_roundtrip(_waylandConnection->_wlDisplay) < 0)
             return kCGErrorFailure;
         _unmapping = YES;
+        _unmappedToplevel = YES;
         WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, attach);
         WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
         WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
@@ -598,7 +634,11 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     case kCGSOrderAbove:
         if (![self ensureRole])
             return kCGErrorFailure;
+        BOOL wasShown = _shown;
         _shown = YES;
+        BOOL restored = _unmappedToplevel;
+        if (restored)
+            [self restoreToplevelState];
         // A floating window that was shown before the window it floats over gets that parent now.
         if ([self isDocumentLike]) {
             NSArray *windows = [_waylandConnection copyAllWindows];
@@ -612,6 +652,21 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         // their surface swaps.
         if (_usesContents)
             [self _showBlankContentsIfNone];
+        if (restored) {
+            // KWin takes the parent of a shown-again toplevel only when it changes
+            CGSWindowWayland *parent = _levelParent;
+            if (parent != nil && _toplevel != NULL) {
+                union wl_argument none[1] = {{.o = NULL}};
+                WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_PARENT, NULL, 0, none);
+                _levelParent = nil;
+                [self updateLevelParent];
+            }
+        }
+        if (!wasShown && [self isDocumentLike] && _usesContents) {
+            NSArray *windows = [_waylandConnection copyAllWindows];
+            [self mapFloatingWindowsAgain: windows];
+            [windows release];
+        }
         return kCGSErrorSuccess;
 
     case kCGSOrderBelow:

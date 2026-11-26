@@ -76,6 +76,8 @@ typedef enum {
     // before it saw the unmapping, and acknowledging those is a protocol error: only the last one, the
     // answer to the empty commit, is acknowledged, when the unmapping is over.
     BOOL _unmapping;
+    // The toplevel was unmapped by ordering it out; the compositor forgets its title, size limits and parent then.
+    BOOL _unmappedToplevel;
     BOOL _hasPendingConfigure;
     uint32_t _pendingConfigureSerial;
     // Per-surface color objects, when the compositor offers the protocols.
@@ -102,6 +104,8 @@ typedef enum {
 - (BOOL) isDocumentLike;
 // Makes a floating window a child of the current document window when it has none.
 - (void) updateLevelParent;
+- (void) mapFloatingWindowsAgain: (NSArray *) windows;
+- (void) restoreToplevelState;
 
 - (void) surfaceDestroyed: (CGSSurfaceWayland *) surface;
 // A wl_buffer of the window's contents was released (or not used any more) by the compositor.
