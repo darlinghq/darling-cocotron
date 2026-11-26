@@ -164,6 +164,7 @@ add_framework(Onyx2D
 		system
 		CoreFoundation
 		Foundation
+		ColorSync
 		z
 		# native libraries
 		FreeType
