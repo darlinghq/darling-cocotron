@@ -3,19 +3,13 @@
 // An exception raised while a column's bindings are applied to its data cell reaches the caller of
 // -[NSTableView preparedCellAtColumn:row:] (https://developer.apple.com/documentation/appkit/nstableview/preparedcell(atcolumn:row:),
 // which says nothing about errors).
-// Observed on macOS 26.1 arm64, one Mac, black-box probe 661 cases 18, 25 and 30 (plain key-value-coding source
-// returning the whole key, not one value per row): a getter that throws NSGenericException, and NSNull in a BOOL
-// binding (NSInternalInconsistencyException, "Cannot create BOOL from object null of class NSNull"), were raised
-// out of preparedCellAtColumn:row: on both calls made (row 0, then row 1), and the column was unchanged afterwards
-// (hidden=0 editable=1 numberOfColumns=1). Those are the pinned checks (marked "observed" below).
-// Everything marked "inferred" comes from this implementation's design, not from the Mac: the per-row source
-// (rows.fontBold), row 1 preparing normally when only row 0 is bad, numberOfRows being 2 (the Mac reported 0 for
-// its source), and recovery once the value is fixed.
-// Not covered: an NSArrayController source (there the process ended in the run-loop turn after reloadData;
-// propagation is only inferred and the termination is not copied) and the editable binding of case 25 (this test
-// uses fontBold, which takes the same path and raises the same exception in this implementation).
+// Observed on macOS 26.7.3 (black-box, tier 2; this file was run there): a getter that throws NSGenericException
+// while the bound key path is read, and NSNull in a BOOL binding (NSInternalInconsistencyException, "Cannot create
+// BOOL from object null of class NSNull"), are raised out of preparedCellAtColumn:row: on every call, the other row
+// of the table still prepares, the column is unchanged, and a row whose value is made valid prepares again.
+// The columns are bound to an NSArrayController (arrangedObjects.<key>), which gives one value per row; bound to a
+// plain model object, the key path yields the whole array for every row.
 // The table is never displayed and the run loop never runs.
-// Written from the observations; not yet run in a guest or on a Mac.
 // Build: clang -framework AppKit appkit-table-column-binding-exceptions.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -57,6 +51,7 @@ static int failures;
 @end
 
 static Model *model;
+static NSArrayController *controller;
 static NSTableView *table;
 static NSTableColumn *column;
 
@@ -75,13 +70,15 @@ static void setup(id firstFontBold)
         [rows addObject:row];
     }
     [model setRows:rows];
+    controller = [[[NSArrayController alloc] init] autorelease];
+    [controller setContent:rows];
 
     table = [[[NSTableView alloc] initWithFrame:NSMakeRect(0, 0, 300, 100)] autorelease];
     column = [[[NSTableColumn alloc] initWithIdentifier:@"name"] autorelease];
     [column setWidth:200];
     [table addTableColumn:column];
-    [column bind:@"value" toObject:model withKeyPath:@"rows.name" options:nil];
-    [column bind:NSFontBoldBinding toObject:model withKeyPath:@"rows.fontBold" options:nil];
+    [column bind:@"value" toObject:controller withKeyPath:@"arrangedObjects.name" options:nil];
+    [column bind:NSFontBoldBinding toObject:controller withKeyPath:@"arrangedObjects.fontBold" options:nil];
     [table reloadData];
 }
 
@@ -102,20 +99,20 @@ static NSString *raisedBy(NSInteger row, NSString **reason)
 
 static void check_column_unchanged(void)
 {
-    // observed (cases 18, 25): numberOfColumns=1, hidden=0 after the raises
+    // observed on macOS 26.7.3: the column is unchanged after the raises
     CHECK([table numberOfColumns] == 1);
     CHECK(![column isHidden]);
 }
 
 static void check_other_row_prepares(void)
 {
-    // inferred, not observed: here only row 0 is bad, the Mac's source was bad for every row
+    // observed on macOS 26.7.3: only row 0 is bad, row 1 prepares normally
     CHECK([table numberOfRows] == 2);
     CHECK(raisedBy(1, NULL) == nil);
     CHECK([[[table preparedCellAtColumn:0 row:1] objectValue] isEqual:@"beta"]);
 }
 
-// probe 661 case 18: NSGenericException from a getter, raised on two successive calls (observed)
+// NSGenericException from a getter, raised on two successive calls (observed on macOS 26.7.3)
 static void test_raising_getter_propagates(void)
 {
     setup([NSNumber numberWithBool:YES]);
@@ -129,13 +126,13 @@ static void test_raising_getter_propagates(void)
     check_column_unchanged();
     check_other_row_prepares();
 
-    // inferred: recovery once the getter stops throwing
+    // observed on macOS 26.7.3: recovery once the getter stops throwing
     [[[model rows] objectAtIndex:0] setRaises:NO];
     CHECK(raisedBy(0, NULL) == nil);
     CHECK([[[table preparedCellAtColumn:0 row:0] objectValue] isEqual:@"alpha"]);
 }
 
-// probe 661 case 25: NSNull in a BOOL binding, raised on two successive calls (observed)
+// NSNull in a BOOL binding, raised on two successive calls (observed on macOS 26.7.3)
 static void test_null_in_bool_binding_propagates(void)
 {
     setup([NSNull null]);
@@ -147,7 +144,7 @@ static void test_null_in_bool_binding_propagates(void)
     check_column_unchanged();
     check_other_row_prepares();
 
-    // inferred: recovery once the value is valid
+    // observed on macOS 26.7.3: recovery once the value is valid
     [[[model rows] objectAtIndex:0] setFontBold:[NSNumber numberWithBool:NO]];
     CHECK(raisedBy(0, NULL) == nil);
     CHECK([[[table preparedCellAtColumn:0 row:0] objectValue] isEqual:@"alpha"]);
