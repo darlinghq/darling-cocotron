@@ -20,8 +20,14 @@
 #import "CGSConnectionX11.h"
 #import "CGSSurfaceX11.h"
 #import "X11WindowOwner.h"
+#import "X11Monitors.h"
+#import "X11OpaqueRegion.h"
+#import "X11RoundedShape.h"
+#import "X11InputShape.h"
+#import "X11InvisibleWindow.h"
 
 #import <Foundation/NSString.h>
+#import <Foundation/NSData.h>
 #import <Foundation/NSThread.h>
 #import <Foundation/NSProcessInfo.h>
 #import <X11/Xutil.h>
@@ -242,13 +248,16 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 	{
 		case kCGSOrderOut:
 			XUnmapWindow(_display, _window);
+			_toplevelShown = NO;
 			return kCGSErrorSuccess;
 		case kCGSOrderIn:
 			XMapWindow(_display, _window);
+			_toplevelShown = YES;
 			return kCGSErrorSuccess;
 		case kCGSOrderAbove:
 			// The window system asks for the contents with an expose event once it is shown
 			XMapRaised(_display, _window);
+			_toplevelShown = YES;
 			// Another connection (the application's UI layer) grabs the
 			// pointer on the window once it is announced, so it must be
 			// mapped on the server by then.
@@ -497,11 +506,50 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 
 -(void) windowSystemDidExpose:(const XExposeEvent*) event
 {
-	[self presentRect: CGRectMake(event->x, event->y, event->width, event->height)];
+	if (!_toplevel)
+	{
+		[self presentRect: CGRectMake(event->x, event->y, event->width, event->height)];
+		return;
+	}
+
+	// The UI layer draws the window itself: it hears of the repaint once the window system has reported all of
+	// the areas of a series, as their union.
+	CGRect area = CGRectMake(event->x, event->y, event->width, event->height);
+	if (_hasPendingExpose)
+		area = CGRectUnion(_pendingExpose, area);
+	if (event->count != 0)
+	{
+		_pendingExpose = area;
+		_hasPendingExpose = YES;
+		return;
+	}
+	_hasPendingExpose = NO;
+
+	CGFloat scale = _toplevelScale;
+	CGSToplevelEvent report = {
+		.kind = kCGSToplevelEventExposed,
+		.rect = CGRectMake(area.origin.x / scale, area.origin.y / scale, area.size.width / scale, area.size.height / scale),
+	};
+	[self postToplevelEvent: &report];
+}
+
+// The window can be destroyed while its configure event is handled.
+static XErrorHandler g_previousErrorHandler;
+static int ignoreBadWindow(Display* display, XErrorEvent* errorEvent)
+{
+	if (errorEvent->error_code == BadWindow || g_previousErrorHandler == NULL)
+		return 0;
+	return g_previousErrorHandler(display, errorEvent);
 }
 
 -(void) windowSystemDidConfigure
 {
+	if (_toplevel)
+	{
+		[self _toplevelDidConfigure];
+		return;
+	}
+
 	CGRect frame;
 	if ([self getRect: &frame] != kCGSErrorSuccess)
 		return;
@@ -660,6 +708,7 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 	_x11Connection = (CGSConnectionX11*) connection;
 	_display = _x11Connection->_display;
 	_toplevel = YES;
+	_toplevelScale = (CGFloat) _CGSDisplayBackingScaleFactor(CGMainDisplayID());
 
 	if (_display == NULL || ![self _makeNativeToplevelWithAttributes: attributes])
 	{
@@ -682,18 +731,70 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	return fmax(toplevelDeviceOrigin(points, scale), 1.0);
 }
 
-// The root-window rectangle in device pixels of a frame in the application's global space (points, y up, the
-// origin at the bottom left of the main display).
+// The main monitor's rectangle on the root window, in points.
+-(X11Frame) _primaryRootInPoints
+{
+	X11Frame primary = [_x11Connection _primaryRoot];
+	CGFloat scale = _toplevelScale;
+	return (X11Frame){primary.x / scale, primary.y / scale, primary.width / scale, primary.height / scale};
+}
+
+// A frame in the application's global space (points, y up, the origin at the bottom left of the main
+// display) as a rectangle on the root window (points, y down), at least a point in each extent.
+-(CGRect) _rootPointsForFrame:(CGRect) frame
+{
+	X11Frame root = X11FrameToRoot([self _primaryRootInPoints], (X11Frame){frame.origin.x, frame.origin.y,
+		frame.size.width, frame.size.height});
+	return CGRectMake(root.x, root.y, fmax(root.width, 1.0), fmax(root.height, 1.0));
+}
+
+// The inverse of -_rootPointsForFrame:.
+-(CGRect) _frameForRootPoints:(CGRect) root
+{
+	X11Frame frame = X11FrameFromRoot([self _primaryRootInPoints], (X11Frame){root.origin.x, root.origin.y,
+		root.size.width, root.size.height});
+	return CGRectMake(frame.x, frame.y, frame.width, frame.height);
+}
+
+// The rectangle on the root window in device pixels.
+-(CGRect) _deviceRectForRootPoints:(CGRect) root
+{
+	CGFloat scale = _toplevelScale;
+	return CGRectMake(toplevelDeviceOrigin(root.origin.x, scale), toplevelDeviceOrigin(root.origin.y, scale),
+		toplevelDeviceExtent(root.size.width, scale), toplevelDeviceExtent(root.size.height, scale));
+}
+
 -(CGRect) _deviceRectForToplevelFrame:(CGRect) frame
 {
-	CGFloat scale = (CGFloat) _CGSDisplayBackingScaleFactor(CGMainDisplayID());
-	X11Frame primary = [_x11Connection _primaryRoot];
-	X11Frame primaryPoints = {primary.x / scale, primary.y / scale, primary.width / scale, primary.height / scale};
-	X11Frame root = X11FrameToRoot(primaryPoints, (X11Frame){frame.origin.x, frame.origin.y,
-		frame.size.width, frame.size.height});
+	return [self _deviceRectForRootPoints: [self _rootPointsForFrame: frame]];
+}
 
-	return CGRectMake(toplevelDeviceOrigin(root.x, scale), toplevelDeviceOrigin(root.y, scale),
-		toplevelDeviceExtent(root.width, scale), toplevelDeviceExtent(root.height, scale));
+-(CGRect) toplevelFrame
+{
+	return _toplevel ? [self _frameForRootPoints: _toplevelRoot] : CGRectNull;
+}
+
+-(CGFloat) toplevelBackingScaleFactor
+{
+	return _toplevel ? _toplevelScale : 1;
+}
+
+-(CGRect) toplevelDeviceRectForFrame:(CGRect) frame
+{
+	return [self _deviceRectForToplevelFrame: frame];
+}
+
+-(CGSize) toplevelDeviceSizeForSize:(CGSize) size
+{
+	return CGSizeMake(toplevelDeviceExtent(size.width, _toplevelScale), toplevelDeviceExtent(size.height, _toplevelScale));
+}
+
+-(CGRect) toplevelDeviceRectForRect:(CGRect) rect
+{
+	CGFloat scale = _toplevelScale;
+	CGSize size = [self toplevelDeviceSizeForSize: rect.size];
+	return CGRectMake(toplevelDeviceOrigin(rect.origin.x, scale), toplevelDeviceOrigin(rect.origin.y, scale),
+		size.width, size.height);
 }
 
 // Makes the native window of the attributes, and when there is one already moves its children to the new one
@@ -713,10 +814,15 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	// BadMatch.
 	unsigned long mask = CWOverrideRedirect | CWColormap | (translucent ? CWBorderPixel : 0);
 
-	CGRect device = [self _deviceRectForToplevelFrame: attributes->frame];
+	CGRect root = [self _rootPointsForFrame: attributes->frame];
+	CGRect device = [self _deviceRectForRootPoints: root];
 	Window window = XCreateWindow(_display, DefaultRootWindow(_display), (int) device.origin.x, (int) device.origin.y,
 		(unsigned) device.size.width, (unsigned) device.size.height, 0, visualInfo->depth, InputOutput,
 		visualInfo->visual, mask, &xattr);
+
+	// The window's frame and the repaints it is asked for are reported to the UI layer (its own selection of
+	// input replaces this one, and includes it).
+	XSelectInput(_display, window, StructureNotifyMask | ExposureMask);
 
 	// The window manager asks the window to close with a message instead of destroying it.
 	Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
@@ -761,6 +867,18 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	_visualInfo = visualInfo;
 	_colormap = xattr.colormap;
 	_toplevelUnmanaged = attributes->unmanaged;
+	_toplevelRoot = root;
+
+	// The new window has no shape, opaque region, input region or manager hints yet, is not shown and has
+	// received no expose event.
+	_toplevelShown = NO;
+	_hasPendingExpose = NO;
+	_opaqueRegionSize = CGSizeZero;
+	_roundedShapeSet = NO;
+	_shapeEmpty = NO;
+	_ignoresMouse = NO;
+	_skipsTaskList = NO;
+	[self _refreshToplevelShapes];
 	XFlush(_display);
 	return YES;
 }
@@ -777,11 +895,19 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	if (!_toplevel)
 		return kCGErrorIllegalArgument;
 
-	CGRect device = [self _deviceRectForToplevelFrame: frame];
+	_toplevelRoot = [self _rootPointsForFrame: frame];
+	[self _placeToplevel];
+	return kCGSErrorSuccess;
+}
+
+// Puts the window on its frame (kept in points, so at the current scale), and what depends on its size with it.
+-(void) _placeToplevel
+{
+	CGRect device = [self _deviceRectForRootPoints: _toplevelRoot];
 	XMoveResizeWindow(_display, _window, (int) device.origin.x, (int) device.origin.y,
 		(unsigned) device.size.width, (unsigned) device.size.height);
+	[self _refreshToplevelShapes];
 	XFlush(_display);
-	return kCGSErrorSuccess;
 }
 
 // ICCCM 4.1.2.3 minimum and maximum sizes, in device pixels. A minimum of zero and a maximum of zero or too
@@ -792,7 +918,7 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 		return kCGErrorIllegalArgument;
 
 	const CGFloat largest = 65535;
-	CGFloat scale = (CGFloat) _CGSDisplayBackingScaleFactor(CGMainDisplayID());
+	CGFloat scale = _toplevelScale;
 	CGSize deviceMinimum = CGSizeMake(toplevelDeviceExtent(minimum.width, scale), toplevelDeviceExtent(minimum.height, scale));
 	CGSize deviceMaximum = CGSizeMake(toplevelDeviceExtent(maximum.width, scale), toplevelDeviceExtent(maximum.height, scale));
 
@@ -851,6 +977,326 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 			(unsigned char*) &cardinal, 1);
 	}
 	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
+#pragma mark - What the window system reports of a toplevel window
+
+-(void) windowSystemDidRequestClose
+{
+	CGSToplevelEvent report = {.kind = kCGSToplevelEventCloseRequested, .rect = CGRectNull};
+	[self postToplevelEvent: &report];
+}
+
+// The window system placed or sized the window: its frame is read again, and it is reported with whether the
+// size is another one.
+-(void) _toplevelDidConfigure
+{
+	if (_window == None)
+		return;
+
+	g_previousErrorHandler = XSetErrorHandler(ignoreBadWindow);
+	Window root, child;
+	int x, y, rootX = 0, rootY = 0;
+	unsigned int width, height, border, depth;
+	BOOL known = XGetGeometry(_display, _window, &root, &x, &y, &width, &height, &border, &depth) &&
+		XTranslateCoordinates(_display, _window, root, 0, 0, &rootX, &rootY, &child);
+	XSetErrorHandler(g_previousErrorHandler);
+	g_previousErrorHandler = NULL;
+	if (!known)
+		return;
+
+	// The window system's pixels are the window's device pixels: the frame is kept in points.
+	CGFloat scale = _toplevelScale;
+	CGRect frame = CGRectMake(rootX / scale, rootY / scale, width / scale, height / scale);
+	BOOL resized = !CGSizeEqualToSize(_toplevelRoot.size, frame.size);
+	_toplevelRoot = frame;
+	[self _refreshToplevelShapes];
+
+	CGSToplevelEvent report = {
+		.kind = kCGSToplevelEventFrameChanged,
+		.rect = [self toplevelFrame],
+		.resized = resized,
+	};
+	[self postToplevelEvent: &report];
+}
+
+// X11 has no event for a new backing scale: it is read again when the layout of the displays changed. The
+// window keeps its size in points, so its pixels follow.
+-(void) windowSystemLayoutChanged
+{
+	if (!_toplevel || _window == None)
+		return;
+	CGFloat scale = (CGFloat) _CGSDisplayBackingScaleFactor(CGMainDisplayID());
+	if (scale == _toplevelScale)
+		return;
+
+	CGFloat oldScale = _toplevelScale;
+	_toplevelScale = scale;
+	[self _placeToplevel];
+
+	CGSToplevelEvent report = {.kind = kCGSToplevelEventBackingScaleChanged, .rect = CGRectNull, .oldScale = oldScale};
+	[self postToplevelEvent: &report];
+}
+
+#pragma mark - How a toplevel window looks to the window system
+
+-(CGError) setToplevelHasShadow:(BOOL) hasShadow
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	// Only a compositing manager draws shadows, and it does so by its own rules.
+	_hasShadow = hasShadow;
+	return kCGSErrorSuccess;
+}
+
+// The window's rectangle in device pixels, which what is set on it follows.
+-(CGSize) _toplevelDeviceSize
+{
+	return [self toplevelDeviceSizeForSize: _toplevelRoot.size];
+}
+
+// The promise to a compositing manager that all of an opaque window with an alpha channel is opaque, asked
+// again when the opacity or the size changes; a request is made only for a change.
+-(void) _applyOpaqueRegion
+{
+	if (_window == None || _visualInfo == NULL)
+		return;
+	CGSize device = [self _toplevelDeviceSize];
+	CGSize wanted = X11OpaqueRegionApplies(_visualInfo->depth, _contentsOpaque) ? device : CGSizeZero;
+	if (CGSizeEqualToSize(wanted, _opaqueRegionSize))
+		return;
+	X11WindowSetOpaqueRegion(_display, _window, _visualInfo->depth, _contentsOpaque, (int) device.width,
+		(int) device.height);
+	_opaqueRegionSize = wanted;
+}
+
+// The bounding shape follows the window's size and whether it has rounded corners; a window that has an
+// empty shape keeps it.
+-(void) _applyCornerShape
+{
+	if (_window == None || _shapeEmpty || (_cornerRadius <= 0 && !_roundedShapeSet))
+		return;
+	CGSize device = [self _toplevelDeviceSize];
+	if (X11WindowSetRoundedCorners(_display, _window, (int) device.width, (int) device.height,
+			_cornerRadius > 0 ? (int) lround(_cornerRadius * _toplevelScale) : 0))
+		_roundedShapeSet = _cornerRadius > 0;
+}
+
+-(void) _refreshToplevelShapes
+{
+	[self _applyCornerShape];
+	[self _applyOpaqueRegion];
+}
+
+-(CGError) setToplevelContentsOpaque:(BOOL) opaque
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	_contentsOpaque = opaque;
+	[self _applyOpaqueRegion];
+	return kCGSErrorSuccess;
+}
+
+-(CGError) setToplevelCornerRadius:(CGFloat) radius
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	_cornerRadius = radius;
+	[self _applyCornerShape];
+	return kCGSErrorSuccess;
+}
+
+-(CGError) setToplevelShapeEmpty:(BOOL) empty
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if (empty == _shapeEmpty)
+		return kCGSErrorSuccess;
+	if (!X11WindowSetBoundingEmpty(_display, _window, empty))
+		return kCGErrorFailure;
+	_shapeEmpty = empty;
+	if (!empty)
+		[self _applyCornerShape];
+	return kCGSErrorSuccess;
+}
+
+-(BOOL) toplevelWindowSystemComposites
+{
+	return X11CompositorRunning(_display, DefaultScreen(_display));
+}
+
+-(CGError) setToplevelIgnoresMouseEvents:(BOOL) ignores
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if (ignores == _ignoresMouse)
+		return kCGSErrorSuccess;
+	if (!X11WindowSetIgnoresMouseEvents(_display, _window, ignores))
+		return kCGErrorFailure;
+	_ignoresMouse = ignores;
+	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
+// The frame of the window manager (the Motif hints' decorations; no hint leaves the choice to the manager).
+-(CGError) setToplevelDecorated:(BOOL) decorated
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	Atom motif = XInternAtom(_display, "_MOTIF_WM_HINTS", False);
+	if (decorated)
+	{
+		XDeleteProperty(_display, _window, motif);
+		return kCGSErrorSuccess;
+	}
+	// flags 2: the decorations are given, and there are none
+	long hints[5] = {2, 0, 0, 0, 0};
+	XChangeProperty(_display, _window, motif, motif, 32, PropModeReplace, (const unsigned char*) hints, 5);
+	return kCGSErrorSuccess;
+}
+
+// _NET_WM_ICON: for each icon its width and height and then its pixels, one long each, not premultiplied.
+-(CGError) setToplevelIcons:(NSArray<NSData*>*) icons
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+
+	NSMutableData* property = nil;
+	for (NSData* icon in icons)
+	{
+		size_t count = [icon length] / sizeof(uint32_t);
+		size_t side = (size_t) lround(sqrt((double) count));
+		if (side == 0 || side * side != count)
+			continue;
+		if (property == nil)
+			property = [NSMutableData data];
+
+		long header[2] = {(long) side, (long) side};
+		[property appendBytes: header length: sizeof(header)];
+		NSMutableData* pixels = [NSMutableData dataWithLength: count * sizeof(long)];
+		long* out = (long*) [pixels mutableBytes];
+		const uint32_t* in = (const uint32_t*) [icon bytes];
+		for (size_t p = 0; p < count; p++)
+		{
+			uint32_t argb = in[p];
+			uint32_t alpha = argb >> 24;
+			if (alpha != 0 && alpha != 255)
+			{
+				uint32_t red = MIN(255u, ((argb >> 16) & 0xff) * 255 / alpha);
+				uint32_t green = MIN(255u, ((argb >> 8) & 0xff) * 255 / alpha);
+				uint32_t blue = MIN(255u, (argb & 0xff) * 255 / alpha);
+				argb = (alpha << 24) | (red << 16) | (green << 8) | blue;
+			}
+			out[p] = argb;
+		}
+		[property appendData: pixels];
+	}
+
+	Atom icon = XInternAtom(_display, "_NET_WM_ICON", False);
+	if (property == nil)
+		XDeleteProperty(_display, _window, icon);
+	else
+		XChangeProperty(_display, _window, icon, XInternAtom(_display, "CARDINAL", False), 32, PropModeReplace,
+			(const unsigned char*) [property bytes], [property length] / sizeof(long));
+	return kCGSErrorSuccess;
+}
+
+// What the window manager is told about the window: its type, its input hint and whether showing it gives it
+// the focus (the user time 0 says no user action caused it, EWMH _NET_WM_USER_TIME), which window it belongs to,
+// and whether it is in the task lists. A manager reads these when the window is mapped, and a window whose
+// properties change while it is mapped is not asked to move or restack.
+-(CGError) setToplevelHints:(const CGSToplevelHints*) hints
+{
+	if (!_toplevel || hints == NULL)
+		return kCGErrorIllegalArgument;
+
+	const char* windowType = "_NET_WM_WINDOW_TYPE_NORMAL";
+	switch (hints->kind)
+	{
+		case kCGSToplevelKindUtility: windowType = "_NET_WM_WINDOW_TYPE_UTILITY"; break;
+		case kCGSToplevelKindDialog: windowType = "_NET_WM_WINDOW_TYPE_DIALOG"; break;
+		case kCGSToplevelKindDropdownMenu: windowType = "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU"; break;
+		case kCGSToplevelKindPopupMenu: windowType = "_NET_WM_WINDOW_TYPE_POPUP_MENU"; break;
+		case kCGSToplevelKindTooltip: windowType = "_NET_WM_WINDOW_TYPE_TOOLTIP"; break;
+		case kCGSToplevelKindDock: windowType = "_NET_WM_WINDOW_TYPE_DOCK"; break;
+		case kCGSToplevelKindNormal: break;
+	}
+	long windowTypeAtom = (long) XInternAtom(_display, windowType, False);
+	XChangeProperty(_display, _window, XInternAtom(_display, "_NET_WM_WINDOW_TYPE", False), XA_ATOM, 32,
+		PropModeReplace, (const unsigned char*) &windowTypeAtom, 1);
+
+	CGSWindow* parent = hints->transientFor;
+	if (parent != nil && [parent isKindOfClass: [CGSWindowX11 class]] && ((CGSWindowX11*) parent)->_window != None)
+		XSetTransientForHint(_display, _window, ((CGSWindowX11*) parent)->_window);
+	else
+		XDeleteProperty(_display, _window, XA_WM_TRANSIENT_FOR);
+
+	XWMHints wmHints = {0};
+	wmHints.flags = InputHint;
+	wmHints.input = hints->acceptsKeyboardInput ? True : False;
+	XSetWMHints(_display, _window, &wmHints);
+
+	Atom userTime = XInternAtom(_display, "_NET_WM_USER_TIME", False);
+	if (!hints->takesFocusWhenShown)
+	{
+		unsigned long zero = 0;
+		XChangeProperty(_display, _window, userTime, XA_CARDINAL, 32, PropModeReplace, (const unsigned char*) &zero, 1);
+	}
+	else
+	{
+		XDeleteProperty(_display, _window, userTime);
+	}
+
+	// The state of a window that is not shown yet is the UI layer's to write; the manager is asked to change
+	// the state of a shown one.
+	BOOL skip = hints->skipsTaskList;
+	if (_toplevelShown && skip != _skipsTaskList && hints->kind != kCGSToplevelKindDock)
+	{
+		XEvent event = {0};
+		event.xclient.type = ClientMessage;
+		event.xclient.window = _window;
+		event.xclient.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
+		event.xclient.format = 32;
+		event.xclient.data.l[0] = skip ? 1 : 0; // add or remove
+		event.xclient.data.l[1] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False);
+		event.xclient.data.l[2] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False);
+		event.xclient.data.l[3] = 1; // source indication: application
+		XSendEvent(_display, DefaultRootWindow(_display), False, SubstructureRedirectMask | SubstructureNotifyMask, &event);
+	}
+	_skipsTaskList = skip;
+	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
+// What a dock window tells the window manager before it is mapped: it is on every desktop, outside the
+// taskbar and pager, above other windows, and reserves the strip it covers along the top edge of the screen
+// (EWMH _NET_WM_STRUT_PARTIAL, and _NET_WM_STRUT for older managers).
+-(CGError) reserveToplevelDockStrip
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+
+	long state[4] = {
+		(long) XInternAtom(_display, "_NET_WM_STATE_STICKY", False),
+		(long) XInternAtom(_display, "_NET_WM_STATE_ABOVE", False),
+		(long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False),
+		(long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False)};
+	long desktop = (long) 0xFFFFFFFFul;
+	long top = (long) (_toplevelRoot.origin.y + _toplevelRoot.size.height);
+	long left = (long) _toplevelRoot.origin.x;
+	long right = (long) (_toplevelRoot.origin.x + _toplevelRoot.size.width) - 1;
+	long partial[12] = {0, 0, top, 0, 0, 0, 0, 0, left, right, 0, 0};
+	long strut[4] = {0, 0, top, 0};
+
+	XChangeProperty(_display, _window, XInternAtom(_display, "_NET_WM_STATE", False), XA_ATOM, 32, PropModeReplace,
+		(const unsigned char*) state, 4);
+	XChangeProperty(_display, _window, XInternAtom(_display, "_NET_WM_DESKTOP", False), XA_CARDINAL, 32,
+		PropModeReplace, (const unsigned char*) &desktop, 1);
+	XChangeProperty(_display, _window, XInternAtom(_display, "_NET_WM_STRUT_PARTIAL", False), XA_CARDINAL, 32,
+		PropModeReplace, (const unsigned char*) partial, 12);
+	XChangeProperty(_display, _window, XInternAtom(_display, "_NET_WM_STRUT", False), XA_CARDINAL, 32,
+		PropModeReplace, (const unsigned char*) strut, 4);
 	return kCGSErrorSuccess;
 }
 

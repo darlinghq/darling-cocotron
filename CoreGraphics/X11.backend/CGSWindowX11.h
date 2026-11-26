@@ -45,6 +45,19 @@
 	BOOL _toplevelUnmanaged;     // override-redirect: the window manager leaves the window alone
 	XVisualInfo* _visualInfo;    // the visual of the window (not owned)
 	Colormap _colormap;          // made with the window; freed with it
+	CGRect _toplevelRoot;        // the window's frame on the root window, in points (y down)
+	CGFloat _toplevelScale;      // device pixels per point the window is sized with
+	BOOL _toplevelShown;
+	BOOL _hasPendingExpose;      // an expose event of a series was received; _pendingExpose is their union (device pixels)
+	CGRect _pendingExpose;
+	BOOL _hasShadow;
+	BOOL _contentsOpaque;
+	CGSize _opaqueRegionSize;    // device size of the opaque region set on the window, zero for none
+	CGFloat _cornerRadius;       // in points
+	BOOL _roundedShapeSet;       // the bounding shape has rounded corners
+	BOOL _shapeEmpty;
+	BOOL _ignoresMouse;
+	BOOL _skipsTaskList;
 }
 
 // Whether the window is a toplevel window of the UI layer, which handles the window system's events for it.
@@ -60,6 +73,12 @@
 // Whether the window is a display overlay (see -becomeDisplayOverlay:). Its input is the process' own, but
 // belongs to no window of the application: its events name no window.
 -(BOOL) isDisplayOverlay;
+
+// A toplevel window's reports of the window system (see CGSToplevelEvent): the user asked to close it.
+-(void) windowSystemDidRequestClose;
+// The display layout changed: a toplevel window follows a change of the backing scale (the window keeps its
+// size in points) and reports it.
+-(void) windowSystemLayoutChanged;
 
 // The window system asked for the window to be painted again (an expose event): the contents are put on it.
 -(void) windowSystemDidExpose:(const XExposeEvent*) event;

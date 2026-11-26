@@ -645,7 +645,9 @@ static double windowOpacity(Display* display, Window window)
 
 // What the window system says about the CGS windows of this process: repaints (the window's own
 // pixels are put on it again), and the close request, focus and bounds changes, which are reported
-// to whoever asked for them (_CGSSetWindowEventProc).
+// to whoever asked for them (_CGSSetWindowEventProc). A toplevel window of the UI layer draws itself and
+// has its own handler for the repaints, the close request and the changes of its frame (see
+// -[CGSWindow setToplevelEventProc:info:]); its focus is the UI layer's.
 -(void) _windowSystemEvent:(XEvent*) event
 {
 	switch (event->type)
@@ -661,9 +663,9 @@ static double windowOpacity(Display* display, Window window)
 	}
 
 	CGSWindowX11* window = [self _cgsWindowForNativeWindow: event->xany.window];
-	// The window of the UI layer, which handles what the window system says about it.
-	if (window == nil || [window isToplevel])
+	if (window == nil)
 		return;
+	BOOL toplevel = [window isToplevel];
 
 	switch (event->type)
 	{
@@ -674,13 +676,13 @@ static double windowOpacity(Display* display, Window window)
 			[window windowSystemDidConfigure];
 			break;
 		case FocusIn:
-			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+			if (!toplevel && event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
 				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
 				event->xfocus.detail != NotifyInferior)
 				_CGSPostWindowEvent(kCGSWindowEventActivated, window.windowId, CGRectNull);
 			break;
 		case FocusOut:
-			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+			if (!toplevel && event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
 				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
 				event->xfocus.detail != NotifyInferior)
 				_CGSPostWindowEvent(kCGSWindowEventDeactivated, window.windowId, CGRectNull);
@@ -690,8 +692,13 @@ static double windowOpacity(Display* display, Window window)
 			Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
 			Atom ping = XInternAtom(_display, "_NET_WM_PING", False);
 			if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == deleteWindow)
-				_CGSPostWindowEvent(kCGSWindowEventCloseRequested, window.windowId, CGRectNull);
-			else if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == ping)
+			{
+				if (toplevel)
+					[window windowSystemDidRequestClose];
+				else
+					_CGSPostWindowEvent(kCGSWindowEventCloseRequested, window.windowId, CGRectNull);
+			}
+			else if (!toplevel && event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == ping)
 			{
 				// The window manager asks whether the window is alive; it answers by getting the message
 				// back on the root window. A window that does not answer is reported as not responding.
@@ -703,6 +710,23 @@ static double windowOpacity(Display* display, Window window)
 			break;
 		}
 	}
+}
+
+// The toplevel windows of the UI layer follow the backing scale the displays have now.
+-(void) _toplevelWindowsLayoutChanged
+{
+	NSMutableArray* toplevels = [NSMutableArray array];
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+			if ([window isKindOfClass: [CGSWindowX11 class]] && [(CGSWindowX11*) window isToplevel])
+				[toplevels addObject: window];
+		}
+	}
+	for (CGSWindowX11* window in toplevels)
+		[window windowSystemLayoutChanged];
 }
 
 // The display overlay shown last, nil when there is none. Window ids grow with creation.
@@ -1231,6 +1255,9 @@ static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
 		[_pointer displayLayoutChanged];
 		if ([observer respondsToSelector: @selector(nativeConnectionDisplayLayoutChanged)])
 			[observer nativeConnectionDisplayLayoutChanged];
+		// After the observer has taken the new layout into what it derives from it: the windows report the
+		// new scale to the UI layer then.
+		[self _toplevelWindowsLayoutChanged];
 	}
 	if ([observer respondsToSelector: @selector(nativeConnectionDidProcessEvents)])
 		[observer nativeConnectionDidProcessEvents];
