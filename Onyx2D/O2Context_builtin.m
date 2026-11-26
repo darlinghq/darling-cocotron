@@ -154,8 +154,23 @@ void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask);
 - (O2ContextRef) createCompatibleContextWithSize: (O2Size) size
                                           unused: (NSDictionary *) unused
 {
-    O2Surface *surface = [self createSurfaceWithWidth: ceil(size.width)
-                                               height: ceil(size.height)];
+    // A layer (a transparency layer, a CGLayer) holds content that is composited onto the context
+    // afterwards, so it needs an alpha channel even where the context's own surface has none.
+    O2BitmapInfo bitmapInfo = O2ImageGetBitmapInfo(_surface);
+    O2BitmapInfo alphaInfo = bitmapInfo & kO2BitmapAlphaInfoMask;
+
+    if (alphaInfo == kO2ImageAlphaNoneSkipFirst || alphaInfo == kO2ImageAlphaNone)
+        bitmapInfo = (bitmapInfo & ~kO2BitmapAlphaInfoMask) | kO2ImageAlphaPremultipliedFirst;
+    else if (alphaInfo == kO2ImageAlphaNoneSkipLast)
+        bitmapInfo = (bitmapInfo & ~kO2BitmapAlphaInfoMask) | kO2ImageAlphaPremultipliedLast;
+
+    O2Surface *surface = [[[self surfaceClass] alloc] initWithBytes: NULL
+                                                              width: ceil(size.width)
+                                                             height: ceil(size.height)
+                                                   bitsPerComponent: O2ImageGetBitsPerComponent(_surface)
+                                                        bytesPerRow: 0
+                                                         colorSpace: O2ImageGetColorSpace(_surface)
+                                                         bitmapInfo: bitmapInfo];
     O2ContextRef result = [[[self class] alloc] initWithSurface: surface
                                                         flipped: NO];
     [surface release];
