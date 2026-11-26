@@ -329,6 +329,10 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 {
 }
 
+-(void) selectTouchInputOnNativeWindow:(unsigned long)window
+{
+}
+
 -(BOOL) cancelsHiddenUntilMouseMoves
 {
 	return NO;

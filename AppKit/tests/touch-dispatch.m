@@ -14,8 +14,8 @@
 // Direct touch dispatch of the windowing backends, run on a real display
 // server or compositor. The fingers reach AppKit as touch CGEvents (E1 of
 // darlinghq/darling#937). Neither Xvfb nor a headless compositor has a touch
-// device, so the backend's own touch handlers are fed the events a device
-// would produce: XI_TouchBegin/Update/End for the X11 backend (build with
+// device, so the touch decoders of CoreGraphics' backends are fed the events a
+// device would produce: XI_TouchBegin/Update/End for the X11 backend (build with
 // -DTOUCH_X11) and wl_touch down/motion/up/cancel for the Wayland backend.
 // The test captures what the display is asked to post, hands it to the window
 // as the event loop would, and checks the NSEvents and NSTouch objects.
@@ -23,6 +23,7 @@
 #ifdef TOUCH_X11
 @interface NSObject (TouchFixture)
 + (id)currentDisplay;
++ (id)_processPointer;
 - (id)platformWindow;
 - (unsigned long)windowHandle;
 - (void)touchEventType:(int)type device:(int)deviceID detail:(unsigned int)detail window:(unsigned long)w
@@ -44,7 +45,7 @@ enum { WL_DOWN = 0, WL_UP = 1, WL_MOTION = 2, WL_CANCEL = 4 };
 static void (*cancelAll)(NSWindow *);
 
 static NSMutableArray *events;
-static id display;
+static id display, decoder;
 static NSWindow *window;
 static int failures, checks;
 static const CGFloat height = 200;
@@ -68,7 +69,7 @@ static void expect(BOOL ok, const char *what) {
 // Fingers are given in the backend's own coordinates: from the top left.
 static void fingerDown(int finger, double x, double y) {
 #ifdef TOUCH_X11
-    [display touchEventType:XI_TouchBegin device:11 detail:finger window:[[window platformWindow] windowHandle]
+    [decoder touchEventType:XI_TouchBegin device:11 detail:finger window:[[window platformWindow] windowHandle]
                           x:x y:y rootX:x rootY:y];
 #else
     union Argument a[6] = {{.u = 1}, {.u = 0}, {.o = [[window platformWindow] surface]}, {.i = finger},
@@ -79,7 +80,7 @@ static void fingerDown(int finger, double x, double y) {
 }
 static void fingerMove(int finger, double x, double y) {
 #ifdef TOUCH_X11
-    [display touchEventType:XI_TouchUpdate device:11 detail:finger window:[[window platformWindow] windowHandle]
+    [decoder touchEventType:XI_TouchUpdate device:11 detail:finger window:[[window platformWindow] windowHandle]
                           x:x y:y rootX:x rootY:y];
 #else
     union Argument a[4] = {{.u = 0}, {.i = finger}, {.f = (int32_t)(x * 256)}, {.f = (int32_t)(y * 256)}};
@@ -89,7 +90,7 @@ static void fingerMove(int finger, double x, double y) {
 }
 static void fingerUp(int finger, double x, double y) {
 #ifdef TOUCH_X11
-    [display touchEventType:XI_TouchEnd device:11 detail:finger window:[[window platformWindow] windowHandle]
+    [decoder touchEventType:XI_TouchEnd device:11 detail:finger window:[[window platformWindow] windowHandle]
                           x:x y:y rootX:x rootY:y];
 #else
     union Argument a[3] = {{.u = 1}, {.u = 0}, {.i = finger}};
@@ -130,11 +131,14 @@ static void deliver(void) {
     cancelAll = dlsym(RTLD_DEFAULT, "NSTouchCancelAll");
     display = [NSClassFromString(@"NSDisplay") currentDisplay];
 #ifdef TOUCH_X11
+    Class connection = NSClassFromString(@"CGSConnectionX11");
+    decoder = connection != nil && [connection respondsToSelector:@selector(_processPointer)]
+                      ? [connection _processPointer] : nil;
     SEL feed = @selector(touchEventType:device:detail:window:x:y:rootX:rootY:);
 #else
     SEL feed = @selector(touchEvent:arguments:);
 #endif
-    if (![display respondsToSelector:feed] || cancelAll == NULL) {
+    if (![decoder respondsToSelector:feed] || cancelAll == NULL) {
         expect(NO, "the backend handles touch events");
         printf("RESULT checks=%d failures=%d\n", checks, failures); fflush(stdout);
         exit(1);

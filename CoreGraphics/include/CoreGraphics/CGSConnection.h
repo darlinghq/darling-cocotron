@@ -176,6 +176,7 @@
 -(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot;
 // The windows the pointer could be confined to changed.
 -(void) pointerWindowsChanged;
+-(void) selectTouchInputOnNativeWindow:(unsigned long)window;
 // +[NSCursor setHiddenUntilMouseMoves:]: the flag is idempotent and counts as one hide; the backend that
 // answers YES to -cancelsHiddenUntilMouseMoves calls -pointerDidMove when the mouse moves, which clears it.
 // A backend that does not leaves the flag to the framework above (the default, NO).

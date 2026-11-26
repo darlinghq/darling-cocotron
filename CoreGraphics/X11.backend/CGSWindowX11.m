@@ -78,6 +78,8 @@ static BOOL isViewable(Display* display, Window window)
 	XSelectInput(_display, _window, KeyPressMask | KeyReleaseMask | FocusChangeMask | ButtonPressMask |
 		ButtonReleaseMask | PointerMotionMask | EnterWindowMask | LeaveWindowMask | ExposureMask |
 		StructureNotifyMask);
+	// Touch screens, and the touchpad pinch gestures of the server that has them.
+	_CGSNativeConnectionSelectTouchInput((unsigned long) _window);
 
 	// The window manager asks the window to close (a client message) instead of destroying it
 	// and asks whether the window is alive (_NET_WM_PING), which the connection answers

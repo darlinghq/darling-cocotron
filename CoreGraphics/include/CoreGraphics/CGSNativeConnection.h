@@ -160,6 +160,11 @@ extern BOOL _CGSNativeConnectionRelativeMouseState(BOOL *requested, CGPoint *fro
 // X11: the windows the pointer can be grabbed for changed (a display overlay appeared or went): a wanted
 // grab that is not held is retried.
 extern void _CGSNativeConnectionPointerWindowsChanged(void);
+// X11: a window the process made asks for its touch screen events (and the touchpad pinch gestures, where the server has
+// them), which CoreGraphics decodes into touch and gesture CGEvents (see CoreGraphicsPrivate.h). Called once the window
+// exists and again when its other input selection changes; the window is an X window. A server without XInput 2.2 has no
+// touches. Nothing on Wayland, where CoreGraphics reads the touch screen of the seat.
+extern void _CGSNativeConnectionSelectTouchInput(unsigned long window);
 // X11: mouse motion the framework made events for itself (a display overlay) that CGGetLastMouseDelta() reports too.
 extern void _CGSNativeConnectionAccumulateMouseDelta(double dx, double dy);
 // The index and name of the keyboard layout group in effect. -1 and NULL when there is none.
