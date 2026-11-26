@@ -230,6 +230,8 @@ typedef enum {
 - (void) dialogManagerAvailable;
 // Applies NSWindow.alphaValue to the surface when alpha-modifier-v1 is available.
 - (void) alphaModifierAvailable;
+// Sends the toplevel's stable tag and localized description when xdg-toplevel-tag-v1 is available.
+- (void) updateToplevelTags;
 
 // Overrides of CGWindow's window-system session hooks (see CGWindowPrivate.h).
 - (NSString *) ensureSessionToplevelName;

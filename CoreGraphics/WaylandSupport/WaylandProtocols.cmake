@@ -59,7 +59,8 @@ set(WAYLAND_PROTOCOL_FILES
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/cursor-shape-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-dialog-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-system-bell-v1.xml"
-	"${CMAKE_CURRENT_LIST_DIR}/protocols/alpha-modifier-v1.xml")
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/alpha-modifier-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-toplevel-tag-v1.xml")
 
 set(WAYLAND_PROTOCOLS_USABLE TRUE)
 foreach (protocol ${WAYLAND_PROTOCOL_FILES})

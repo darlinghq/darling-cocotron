@@ -1264,12 +1264,34 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self updateDialogForToplevel];
 }
 
+// The tag is configuration data, so it uses the untranslated process name. The description is what a
+// user sees, so it uses the localized window title. Both are sent before the first surface commit when
+// the manager is available; a title change updates the description in place.
+- (void) updateToplevelTags {
+    if (_toplevel == NULL || _display->_toplevelTagManager == NULL)
+        return;
+    NSString *process = [[NSProcessInfo processInfo] processName];
+    const char *tag = [process UTF8String];
+    if (tag == NULL)
+        tag = "window";
+    union wl_argument args[2] = {{.o = (struct wl_object *) _toplevel}, {.s = tag}};
+    WaylandMarshal(_display->_toplevelTagManager,
+                   XDG_TOPLEVEL_TAG_MANAGER_SET_TOPLEVEL_TAG, NULL, 0, args);
+    const char *description = [_title UTF8String];
+    if (description == NULL || *description == '\0')
+        description = tag;
+    args[1].s = description;
+    WaylandMarshal(_display->_toplevelTagManager,
+                   XDG_TOPLEVEL_TAG_MANAGER_SET_TOPLEVEL_DESCRIPTION, NULL, 0, args);
+}
+
 - (void) updateTitle {
     if (_toplevel == NULL)
         return;
     const char *title = [_title UTF8String];
     union wl_argument args[1] = {{.s = title ? title : ""}};
     WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_TITLE, NULL, 0, args);
+    [self updateToplevelTags];
 }
 
 - (void) setTitle: (NSString *) title {

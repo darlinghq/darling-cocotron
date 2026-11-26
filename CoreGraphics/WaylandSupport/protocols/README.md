@@ -160,3 +160,15 @@ where X11 has `XBell()` and the core protocol has no bell request.
 - Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
 - Copyright: 2024 Xaver Hugl
 - Licence: the MIT permission notice at the top of the file.
+
+## xdg-toplevel-tag
+
+`xdg-toplevel-tag-v1.xml` is the staging `xdg_toplevel_tag_manager_v1` protocol. AppKit sends a stable,
+untranslated tag and the localized window title as a description for each of its toplevels, so a compositor
+can remember window rules across launches.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/xdg-toplevel-tag/xdg-toplevel-tag-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2024 Xaver Hugl
+- Licence: the MIT permission notice at the top of the file.
