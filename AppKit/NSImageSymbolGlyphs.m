@@ -201,6 +201,7 @@ static const struct {
     { "stop", "media-playback-stop-symbolic" },
     { "tag", "bookmark-new-symbolic" },
     { "text.page", "document-new-symbolic" },
+    { "text.quote", "format-text-rich-symbolic" },
     { "trash", "user-trash-symbolic" },
     { "trash.fill", "user-trash-symbolic" },
     { "tray.and.arrow.down", "folder-download-symbolic" },
