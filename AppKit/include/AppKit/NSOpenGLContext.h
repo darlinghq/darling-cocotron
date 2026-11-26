@@ -27,7 +27,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #else
 #import <OpenGL/OpenGL.h>
 #endif
-#import <OpenGL/gl.h>
 
 @class NSOpenGLPixelFormat, NSOpenGLPixelBuffer, NSView;
 
