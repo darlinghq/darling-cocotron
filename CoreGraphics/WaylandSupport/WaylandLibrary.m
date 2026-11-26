@@ -209,6 +209,8 @@ bool WaylandCheckOpcodes(void) {
             {&xdg_dialog_v1_interface, false, XDG_DIALOG_DESTROY, "destroy"},
             {&xdg_dialog_v1_interface, false, XDG_DIALOG_SET_MODAL, "set_modal"},
             {&xdg_dialog_v1_interface, false, XDG_DIALOG_UNSET_MODAL, "unset_modal"},
+            {&xdg_system_bell_v1_interface, false, XDG_SYSTEM_BELL_DESTROY, "destroy"},
+            {&xdg_system_bell_v1_interface, false, XDG_SYSTEM_BELL_RING, "ring"},
             {&wp_fractional_scale_manager_v1_interface, false, WP_FRACTIONAL_MANAGER_DESTROY, "destroy"},
             {&wp_fractional_scale_manager_v1_interface, false, WP_FRACTIONAL_MANAGER_GET_SCALE, "get_fractional_scale"},
             {&wp_fractional_scale_v1_interface, false, WP_FRACTIONAL_DESTROY, "destroy"},

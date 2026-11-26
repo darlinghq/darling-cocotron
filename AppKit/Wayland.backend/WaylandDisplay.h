@@ -143,6 +143,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // xdg-dialog-v1: tells the compositor which toplevels are sheets or modal panels.
     struct wl_proxy *_dialogManager;
     uint32_t _dialogManagerName;
+    // xdg-system-bell-v1: the compositor's bell, used by NSBeep().
+    struct wl_proxy *_bell;
+    uint32_t _bellName;
 
 @protected
     struct wl_proxy *_seat;

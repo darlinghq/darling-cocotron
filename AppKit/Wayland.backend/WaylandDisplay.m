@@ -327,7 +327,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
             WaylandMarshal(_sessionManager, WP_SESSION_MANAGER_DESTROY,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
-                                      _cursorShapeDevice, _cursorShapeManager, _dialogManager,
+                                      _cursorShapeDevice, _cursorShapeManager, _dialogManager, _bell,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
@@ -609,6 +609,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                      kind: 0
                                    object: nil];
         [self dialogManagerAvailable];
+    } else if (strcmp(interface, "xdg_system_bell_v1") == 0 && _bell == NULL) {
+        _bellName = name;
+        _bell = [self bindGlobal: name
+                       interface: &xdg_system_bell_v1_interface
+                         version: 1
+                            kind: 0
+                          object: nil];
     } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
         ((WaylandColorManager *) _color)->_colorManager == NULL) {
         uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
@@ -765,6 +772,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        WL_MARSHAL_FLAG_DESTROY, NULL);
         _dialogManager = NULL;
         _dialogManagerName = 0;
+        return;
+    }
+    if (_bell != NULL && name == _bellName) {
+        WaylandMarshal(_bell, XDG_SYSTEM_BELL_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _bell = NULL;
+        _bellName = 0;
         return;
     }
     if (_cursorShapeManager != NULL && name == _cursorShapeManagerName) {
@@ -2356,6 +2370,17 @@ static uint32_t CursorShapeForCursor(WaylandCursor *cursor) {
 }
 
 - (void) beep {
+    if (_bell == NULL)
+        return;
+    // The bell is associated with the window that asked for it when there is one; a NULL surface is
+    // also valid and says there is no particular toplevel (NSBeep is often called without an event).
+    struct wl_proxy *surface = NULL;
+    id platformWindow = [[NSApp keyWindow] platformWindow];
+    if ([platformWindow isKindOfClass: [WaylandWindow class]])
+        surface = [(WaylandWindow *) platformWindow surface];
+    union wl_argument args[1] = {{.o = surface != NULL ? (struct wl_object *) surface : NULL}};
+    WaylandMarshal(_bell, XDG_SYSTEM_BELL_RING, NULL, 0, args);
+    [self flush];
 }
 
 - (NSUInteger) pressedMouseButtons {
