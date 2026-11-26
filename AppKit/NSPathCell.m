@@ -303,8 +303,10 @@
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) view {
-    [_backgroundColor set];
-    [NSBezierPath fillRect: frame];
+    if (_backgroundColor != nil) {
+        [_backgroundColor set];
+        [NSBezierPath fillRect: frame];
+    }
 
     // Draw them last to first to get the proper overlapping arrows drawing
 
