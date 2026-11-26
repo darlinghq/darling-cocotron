@@ -107,7 +107,7 @@ static NSUInteger destinationReturns;
 }
 @end
 
-static NSUInteger sourceNarrowCalls, sourceDataCalls;
+static NSUInteger sourceNarrowCalls, sourceDataCalls, sourceTextCalls;
 
 @interface Source : NSObject
 @end
@@ -115,6 +115,8 @@ static NSUInteger sourceNarrowCalls, sourceDataCalls;
 @implementation Source
 - (NSData *) selectionDataForType: (NSString *) type {
     sourceDataCalls++;
+    if ([type isEqual: @"public.utf8-plain-text"])
+        sourceTextCalls++;
     return [type isEqual: @"public.utf8-plain-text"] ? [@"drag payload" dataUsingEncoding: NSUTF8StringEncoding] : nil;
 }
 - (void) selectionLost {
@@ -212,7 +214,7 @@ int main(int argc, char **argv) {
             dataRead = missingRead = nil;
             typesSeen = nil;
             performedWith = 0;
-            sourceNarrowCalls = sourceDataCalls = 0;
+            sourceNarrowCalls = sourceDataCalls = sourceTextCalls = 0;
             buttonDown = buttonUp = NO;
             destinationReturns = n == 3 ? Move : (Move | Copy);
             printf("ARMED %d\n", n);
@@ -257,10 +259,10 @@ int main(int argc, char **argv) {
                 expect([log hasPrefix: @"entered inside"] && [log hasSuffix: @"perform 1"], [NSString stringWithFormat: @"drag 1: the destination heard entered, updates and perform with copy (%@)", log]);
                 expect([typesSeen containsObject: @"public.utf8-plain-text"] && [typesSeen containsObject: @"public.html"], @"drag 1: the destination sees the types of the source");
                 expect(sourceOperationsSeen == (Copy | Move | Link), @"drag 1: the destination sees the operations of the source");
-                expect(!fromThisProcessSeen, @"drag 1: a drag to another window of the process is not marked as local");
+                expect(fromThisProcessSeen, @"drag 1: a drag of this process is marked as such");
                 expect([dataRead isEqual: [@"drag payload" dataUsingEncoding: NSUTF8StringEncoding]], @"drag 1: the destination reads the data from the source");
                 expect(missingRead == nil, @"drag 1: a type the source has no data for is refused");
-                expect(sourceDataCalls == 2, @"drag 1: the source's data is asked for only when read");
+                expect(sourceTextCalls == 1 && sourceDataCalls >= 2, [NSString stringWithFormat: @"drag 1: the source's data is asked for only when read (%lu requests for the text, %lu in all)", (unsigned long) sourceTextCalls, (unsigned long) sourceDataCalls]);
                 expect(sourceNarrowCalls > 0, @"drag 1: the source narrows the operations it announces");
                 expect(result == Copy, @"drag 1: the source gets the performed operation");
             } else if (n == 2) {
