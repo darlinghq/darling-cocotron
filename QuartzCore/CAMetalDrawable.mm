@@ -1030,9 +1030,12 @@ static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
 						me->_presentedTime = me->_drawable->presentedTime();
 
 						// TODO: synchronize/lock this
-						for (MTLDrawablePresentedHandler handler in me->_presentedHandlers) {
+						NSArray* handlers = [me->_presentedHandlers copy];
+						[me->_presentedHandlers removeAllObjects];
+						for (MTLDrawablePresentedHandler handler in handlers) {
 							handler(me);
 						}
+						[handlers release];
 
 						// release the C++ drawable instance (and allow it to be recycled)
 						me->_drawable->release();
@@ -1055,6 +1058,16 @@ static void glDebugCallback(GLenum source, GLenum type, GLuint id, GLenum severi
 
 - (void)dealloc
 {
+	if ([_presentedHandlers count] > 0) {
+		_presentedTime = 0;
+		NSArray* handlers = [_presentedHandlers copy];
+		[_presentedHandlers removeAllObjects];
+		for (MTLDrawablePresentedHandler handler in handlers) {
+			handler(self);
+		}
+		[handlers release];
+	}
+
 	// explicitly release the drawable, in case it hasn't been released already.
 	// this occurs when the drawable is requested (via nextDrawable from CAMetalLayer) but never presented.
 	if (_drawable) {

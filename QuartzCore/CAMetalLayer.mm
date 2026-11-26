@@ -689,8 +689,18 @@ static BOOL forcesOpenGLPresentation(void) {
 // Sets up, keeps in step with the layer's properties, or drops the swapchain, and says whether the layer
 // presents through one. Called without the drawable lock held. It presents through a swapchain when the
 // layer may be on a plane of its own (nothing is drawn over it, see -prepareRender), the context's native
-// window can give it a surface of its own, the device can present to that, and the drawables are the size
-// of that surface (a swapchain cannot give any other size).
+// window can give it a surface of its own, and the device can present to that.
+static inline CGSize effectiveSwapchainSize(BOOL explicitSet, CGSize drawableSize, CGSize surfacePixelSize)
+{
+	if (explicitSet && drawableSize.width > 0 && drawableSize.height > 0) {
+		return drawableSize;
+	}
+	if (surfacePixelSize.width > 0 && surfacePixelSize.height > 0) {
+		return surfacePixelSize;
+	}
+	return drawableSize;
+}
+
 - (BOOL)updateSwapchain
 {
 	CALayerContext* context = NS_EXTRA(CALayer, self)->_context;
@@ -723,17 +733,6 @@ static BOOL forcesOpenGLPresentation(void) {
 
 	CGRect frame = [self frameInContext];
 
-	// A swapchain cannot give drawables of any other size than its window's, so a layer that asks for
-	// another (a drawableSize that differs from the view's size in pixels) is left to the OpenGL path.
-	CGSize pixelSize = [subwindow pixelSizeForMetalSurfaceFrame: frame];
-	if (fabs(pixelSize.width - _drawableSize.width) >= 1 || fabs(pixelSize.height - _drawableSize.height) >= 1) {
-		if (swapchain) {
-			swapchain.reset();
-			[self tearDownSwapchain];
-		}
-		return NO;
-	}
-
 	CANativeSurface surface = {};
 
 	if (swapchain) {
@@ -764,7 +763,8 @@ static BOOL forcesOpenGLPresentation(void) {
 		}
 
 		if (vulkanSurface != VK_NULL_HANDLE) {
-			swapchain = IndiumKit::Layer::make(vulkanSurface, device, surface.pixelSize.width, surface.pixelSize.height);
+			CGSize initSize = effectiveSwapchainSize(_drawableSizeExplicitlySet, _drawableSize, surface.pixelSize);
+			swapchain = IndiumKit::Layer::make(vulkanSurface, device, (uint32_t)initSize.width, (uint32_t)initSize.height);
 			if (!swapchain) {
 				// the layer takes the surface only when it succeeds
 				IndiumKit::destroySurface(vulkanSurface);
@@ -790,7 +790,8 @@ static BOOL forcesOpenGLPresentation(void) {
 		}
 	}
 
-	swapchain->setFramebufferSize(surface.pixelSize.width, surface.pixelSize.height);
+	CGSize fbSize = effectiveSwapchainSize(_drawableSizeExplicitlySet, _drawableSize, surface.pixelSize);
+	swapchain->setFramebufferSize(fbSize.width, fbSize.height);
 	swapchain->setImageCount(_maximumDrawableCount);
 	swapchain->setFramebufferOnly(_framebufferOnly);
 	swapchain->setDisplaySyncEnabled(_displaySyncEnabled);
