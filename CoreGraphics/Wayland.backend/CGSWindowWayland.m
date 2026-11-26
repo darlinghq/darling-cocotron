@@ -649,6 +649,13 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     // but they name no window of the application (a captured display's do not either).
     _displayOverlay = YES;
 
+    // The overlay has no frame: a compositor that decorates windows on the server side would otherwise put
+    // its title bar at the top of the covered display and shift the pointer's position in the surface.
+    if (_decoration != NULL) {
+        union wl_argument mode[1] = {{.u = WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE}};
+        WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, mode);
+    }
+
     // Let the compositor pick the output; the window covers it.
     union wl_argument fullscreenArgs[1] = {{.o = NULL}};
     WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_FULLSCREEN, NULL, 0, fullscreenArgs);
