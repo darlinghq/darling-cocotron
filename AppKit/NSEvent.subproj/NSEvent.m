@@ -26,6 +26,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEvent_other.h>
 #import <AppKit/NSEvent_periodic.h>
 #import <AppKit/NSWindow.h>
+#import <CoreGraphics/CGEventSource.h>
 #import <Foundation/NSDate.h>
 #import <Foundation/NSException.h>
 #import "../private-include/AppKit/NSEventTime.h"
@@ -180,16 +181,33 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
     return @[];
 }
 
+// The state queries are CoreGraphics', whose decoders of the window system's input hold it: the location of an
+// event made from nothing is where the pointer is, and the hardware state functions of the event source report
+// the modifier flags and the buttons that are held.
 + (NSPoint) mouseLocation {
-    return [[NSDisplay currentDisplay] mouseLocation];
+    CGEventRef event = CGEventCreate(NULL);
+    if (event == NULL)
+        return NSZeroPoint;
+    CGPoint point = CGEventGetLocation(event);
+    CFRelease(event);
+    // A window system that does not say where the pointer is (Wayland outside the process' surfaces, before it has
+    // been over one) gives no position.
+    if (point.x >= CGFLOAT_MAX / 2 || point.y >= CGFLOAT_MAX / 2)
+        return NSZeroPoint;
+    return NSMakePoint(point.x, _NSEventMainScreenMaxY() - point.y);
 }
 
 + (NSEventModifierFlags) modifierFlags {
-    return [[NSDisplay currentDisplay] currentModifierFlags];
+    return (NSEventModifierFlags) CGEventSourceFlagsState(kCGEventSourceStateCombinedSessionState);
 }
 
 + (NSUInteger) pressedMouseButtons {
-    return [[NSDisplay currentDisplay] pressedMouseButtons];
+    NSUInteger buttons = 0;
+    for (unsigned button = 0; button < 32; button++) {
+        if (CGEventSourceButtonState(kCGEventSourceStateCombinedSessionState, (CGMouseButton) button))
+            buttons |= (NSUInteger) 1 << button;
+    }
+    return buttons;
 }
 
 - (instancetype) initWithType: (NSEventType) type
