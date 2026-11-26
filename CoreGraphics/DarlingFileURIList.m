@@ -18,7 +18,7 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import "DarlingFileURIList.h"
+#import <CoreGraphics/DarlingFileURIList.h>
 #include <string.h>
 
 static const NSUInteger DarlingURITransferLimit = 16 * 1024 * 1024;

@@ -124,6 +124,10 @@ static unsigned int stateAfterKeyEvent(const ModifierKey *key, unsigned int stat
 
 #pragma mark - Modifier state
 
++ (uint64_t) flagsForState: (unsigned int) state {
+    return flagsForState(state);
+}
+
 - (uint64_t) modifierFlags {
     uint64_t flags = _flags;
     for (unsigned int code = 0; code < 256; code++) {

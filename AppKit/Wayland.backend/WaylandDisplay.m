@@ -23,7 +23,7 @@
 #import "NSEvent_mouse.h"
 #import "WaylandCursor.h"
 #import "WaylandScale.h"
-#import "WaylandPasteboard.h"
+#import "WaylandDataDevice.h"
 #import "WaylandDraggingManager.h"
 #import "WaylandAppMenu.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
@@ -114,7 +114,7 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectDataDevice:
             case WaylandObjectDataOffer:
             case WaylandObjectDataSource:
-                [(WaylandPasteboard *) object handleEvent: opcode kind: objectKind
+                [(WaylandDataDevice *) object handleEvent: opcode kind: objectKind
                                                      proxy: proxy arguments: args];
                 break;
             case WaylandObjectIconManager:
@@ -248,8 +248,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     if (!_eglAvailable)
         NSLog(@"Wayland backend: EGL subwindows unavailable; CPU drawing remains enabled");
 
-    _generalPasteboard = [[WaylandPasteboard alloc] initWithName: NSGeneralPboard display: self
-                                                      manager: _dataDeviceManager seat: _seat];
+    _dataDevice = [[WaylandDataDevice alloc] initWithDisplay: self manager: _dataDeviceManager seat: _seat];
 
     if (WL.hasCursor) {
         const char *sizeString = getenv("XCURSOR_SIZE");
@@ -280,9 +279,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [self runAfterDispatchBlocks];
     [self flush];
 
-    // The general pasteboard and the compositor's clipboard show the same contents.
-    NSPasteboardRegisterHostClipboard(_generalPasteboard);
-
     _setupDone = YES;
     _CGSSetNativeConnectionObserver(self);
     return self;
@@ -293,8 +289,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [_draggingManager invalidate];
     [_draggingManager release];
     [self consumeDragPress];
-    [_generalPasteboard invalidate];
-    [_generalPasteboard release];
+    [_dataDevice invalidate];
+    [_dataDevice release];
 
     _CGSSetNativeConnectionObserver(nil);
     [self cancelActivationRequest];
@@ -1090,7 +1086,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     _pressedButtons = 0;
     [self consumeDragPress];
-    _lastMouseLocation = [self mouseLocation];
     if (left != nil && !_CGSNativeConnectionPointerLocked())
         [self performAfterDispatch: ^{ [self pointerLeftWindow: left]; }];
     _pointerWindow = nil;
@@ -1185,7 +1180,6 @@ static NSUInteger buttonMaskForNumber(int64_t number) {
         uint32_t serial = (uint32_t) CGEventGetIntegerValueField(event, kCGSEventInputSerial);
         _pressedButtons |= buttonMaskForNumber(number);
         _inputSerial = serial;
-        [_generalPasteboard inputAvailable];
         [_inputEvent release];
         _inputEvent = nil;
         _inputWindow = nil;
@@ -1473,20 +1467,9 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     }
 }
 
-- (NSPoint) mouseLocation {
-    WaylandWindow *window = _pointerWindow;
-    if (window == nil)
-        return _lastMouseLocation;
-
-    // Global coordinates aren't available on Wayland: use the window's origin.
-    NSPoint location = [window transformPoint: _pointerSurfacePoint];
-    O2Rect frame = [window frame];
-    return NSMakePoint(frame.origin.x + location.x, frame.origin.y + location.y);
-}
-
 // Wayland clients can't move the pointer, but while it is locked the cursor is
 // the application's own and a warp only moves where it is. That position is
-// where mouseLocation reports it and where the pointer reappears on unlock.
+// where +[NSEvent mouseLocation] reports it and where the pointer reappears on unlock.
 // Without a lock the call does nothing, and nothing pretends otherwise.
 // position is in CoreGraphics' global space, as -[NSDisplay warpMouse:] documents.
 #pragma mark - Pointer lock
@@ -1517,7 +1500,7 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     return YES;
 }
 
-// The cursor of the application was moved within the surface: that is where mouseLocation reports it.
+// The cursor of the application was moved within the surface: that is where +[NSEvent mouseLocation] reports it.
 - (void) nativeConnectionPointerWarpedToX: (double) x y: (double) y {
     WaylandWindow *window = _pointerWindow != nil ? _pointerWindow : [self pointerLockTarget];
 
@@ -1584,7 +1567,6 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 
 - (void) nativeConnectionKeyPressedWithSerial: (uint32_t) serial {
     _inputSerial = serial;
-    [_generalPasteboard inputAvailable];
     [_inputEvent release];
     _inputEvent = nil;
     _inputWindow = nil;
@@ -1626,10 +1608,6 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     _inputEvent = [event retain];
     _inputWindow = window;
     return event;
-}
-
-- (NSUInteger) currentModifierFlags {
-    return (NSUInteger) _CGSNativeConnectionModifierFlags();
 }
 
 - (int) keyboardLayoutId {
@@ -2306,20 +2284,12 @@ static uint32_t CursorShapeForCursor(WaylandCursor *cursor) {
 
 #pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
-- (uint32_t) clipboardSerial {
-    if (_CGSNativeConnectionKeyboardFocus() != NULL)
-        return _inputSerial;
-    // A key or click still being handled entitles its writes to the selection even when the focus
-    // left right after it, as when a virtual keyboard is removed a few milliseconds after its key.
-    return _inputEvent != nil && [NSApp currentEvent] == _inputEvent ? _inputSerial : 0;
-}
-
 - (NSDraggingManager *) draggingManager {
     if (_draggingManager == nil)
         _draggingManager = [[WaylandDraggingManager alloc] initWithDisplay: self];
     return _draggingManager;
 }
-- (struct wl_proxy *) dragDataDevice { return [_generalPasteboard dataDevice]; }
+- (struct wl_proxy *) dragDataDevice { return [_dataDevice dataDevice]; }
 - (void) consumeDragPress {
     [_dragPressEvent release]; _dragPressEvent = nil;
     _dragPressWindow = nil; _dragPressSerial = 0;
@@ -2351,10 +2321,6 @@ static uint32_t CursorShapeForCursor(WaylandCursor *cursor) {
     union wl_argument args[1] = {{.o = surface != NULL ? (struct wl_object *) surface : NULL}};
     WaylandMarshal(_bell, XDG_SYSTEM_BELL_RING, NULL, 0, args);
     [self flush];
-}
-
-- (NSUInteger) pressedMouseButtons {
-    return _pressedButtons;
 }
 
 #pragma mark - Activation

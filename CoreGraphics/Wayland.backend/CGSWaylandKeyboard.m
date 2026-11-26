@@ -374,6 +374,8 @@ static double repeatPreferenceMilliseconds(CFStringRef key) {
         uint32_t keycode = args[2].u + 8;
         BOOL pressed = args[3].u == WP_KEYBOARD_KEY_STATE_PRESSED;
         uint32_t serial = args[0].u;
+        if (pressed)
+            [_connection inputPressedWithSerial: serial];
         if (pressed && [observer respondsToSelector: @selector(nativeConnectionKeyPressedWithSerial:)])
             [observer nativeConnectionKeyPressedWithSerial: serial];
 
