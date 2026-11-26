@@ -12,7 +12,8 @@
 #include <unistd.h>
 
 // Direct touch dispatch of the windowing backends, run on a real display
-// server or compositor. Neither Xvfb nor a headless compositor has a touch
+// server or compositor. The fingers reach AppKit as touch CGEvents (E1 of
+// darlinghq/darling#937). Neither Xvfb nor a headless compositor has a touch
 // device, so the backend's own touch handlers are fed the events a device
 // would produce: XI_TouchBegin/Update/End for the X11 backend (build with
 // -DTOUCH_X11) and wl_touch down/motion/up/cancel for the Wayland backend.
@@ -49,6 +50,16 @@ static int failures, checks;
 static const CGFloat height = 200;
 
 static void capture(id self, SEL cmd, NSEvent *event, BOOL atStart) { [events addObject:event]; }
+// The backends report fingers as touch CGEvents in the event stream: what AppKit makes of them is read from
+// the event queue (a cancel by a closing window is posted through the display, which the recorder has).
+static void pump(void) {
+    NSEvent *e;
+    while ((e = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]
+                                      inMode:NSDefaultRunLoopMode dequeue:YES]) != nil)
+        if ([e type] == NSEventTypeDirectTouch || [e type] == NSEventTypeLeftMouseDown ||
+            [e type] == NSEventTypeLeftMouseDragged || [e type] == NSEventTypeLeftMouseUp)
+            [events addObject:e];
+}
 static void expect(BOOL ok, const char *what) {
     ++checks; if (!ok) ++failures;
     printf("%s %s\n", ok ? "PASS" : "FAIL", what); fflush(stdout);
@@ -64,6 +75,7 @@ static void fingerDown(int finger, double x, double y) {
                            {.f = (int32_t)(x * 256)}, {.f = (int32_t)(y * 256)}};
     [display touchEvent:WL_DOWN arguments:a];
 #endif
+    pump();
 }
 static void fingerMove(int finger, double x, double y) {
 #ifdef TOUCH_X11
@@ -73,6 +85,7 @@ static void fingerMove(int finger, double x, double y) {
     union Argument a[4] = {{.u = 0}, {.i = finger}, {.f = (int32_t)(x * 256)}, {.f = (int32_t)(y * 256)}};
     [display touchEvent:WL_MOTION arguments:a];
 #endif
+    pump();
 }
 static void fingerUp(int finger, double x, double y) {
 #ifdef TOUCH_X11
@@ -82,6 +95,7 @@ static void fingerUp(int finger, double x, double y) {
     union Argument a[3] = {{.u = 1}, {.u = 0}, {.i = finger}};
     [display touchEvent:WL_UP arguments:a];
 #endif
+    pump();
 }
 
 @interface TouchView : NSView {
@@ -200,6 +214,7 @@ static void deliver(void) {
     union Argument none[1] = {{.u = 0}};
     [display touchEvent:WL_CANCEL arguments:none];
 #endif
+    pump();
     e = [events count] == 1 ? [events objectAtIndex:0] : nil;
     expect(e != nil && touchWithPhase(e, NSTouchPhaseCancelled) != nil, "cancel: Cancelled phase");
     deliver();

@@ -57,6 +57,8 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
     NSTouchPhase _phase;
     NSPoint _location;
     NSPoint _previousLocation;
+    NSPoint _normalizedPosition;
+    NSSize _deviceSize;
     NSView *_view;
     NSWindow *_window;
 @public
@@ -68,7 +70,7 @@ typedef NS_OPTIONS(NSUInteger, NSTouchTypeMask) {
 @property (readonly) NSTouchPhase phase;
 @property (readonly) NSTouchType type;
 @property (readonly) BOOL isResting;
-// Trackpad touches only; a direct touch has no normalized position.
+// Where the finger is on its device, when the source of the touch says (otherwise zero).
 @property (readonly) NSPoint normalizedPosition;
 @property (readonly) NSSize deviceSize;
 @property (readonly, assign) id device;
