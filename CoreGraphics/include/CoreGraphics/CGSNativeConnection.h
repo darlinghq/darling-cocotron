@@ -204,5 +204,8 @@ extern id _CGSNativeConnectionWaylandColorManager(void);
 extern bool _CGSNativeConnectionDisplaySleepPrevented(void);
 // The surface the lock should be made on may be another one (a window was mapped, unmapped or activated).
 extern void _CGSNativeConnectionPointerLockTargetChanged(void);
+// The native window an event names (kCGSEventNativeWindow) is a display overlay (_CGSCreateDisplayOverlayWindow):
+// the cover of a display, whose events belong to no window of the application.
+extern bool _CGSNativeConnectionIsDisplayOverlayWindow(void *nativeWindow);
 
 #endif

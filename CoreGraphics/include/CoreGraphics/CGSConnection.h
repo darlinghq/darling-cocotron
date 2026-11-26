@@ -187,6 +187,10 @@
 // lock may be another one now. The defaults say no and do nothing.
 -(BOOL) pointerLocked;
 -(void) pointerLockTargetMayHaveChanged;
+// Whether the native window (the handle the connection's events name a window by: an X window, a wl_surface)
+// is a display overlay (see -[CGSWindow becomeDisplayOverlay:]), whose input belongs to no window of the
+// application. The default is NO.
+-(BOOL) isDisplayOverlayNativeWindow:(void*)nativeWindow;
 // Whether this process holds a power assertion that keeps the display from sleeping on idle
 // (kIOPMAssertPreventUserIdleDisplaySleep, or the older kIOPMAssertionTypeNoDisplaySleep). Backends
 // whose window system has to be told learn it from IOKit (IOPMCopyAssertionsByProcess). The default is NO.

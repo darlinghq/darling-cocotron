@@ -219,8 +219,10 @@ static unsigned maskForCode(uint32_t code) {
 - (void) addCommonFieldsTo: (CGEventRef) event surface: (struct wl_proxy *) surface point: (CGPoint) point
                     global: (CGPoint) global flags: (uint64_t) flags {
     CGEventSetFlags(event, (CGEventFlags) flags);
+    // The events of a display overlay name no window: it covers the display, belonging to none of the
+    // application's windows, like a captured display.
     uint32_t windowID = [_connection windowIDForSurface: surface];
-    if (windowID != 0) {
+    if (windowID != 0 && ![_connection isDisplayOverlaySurface: surface]) {
         CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointer, windowID);
         CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent, windowID);
     }
@@ -235,8 +237,12 @@ static unsigned maskForCode(uint32_t code) {
 - (void) postEvent: (CGEventRef) event {
     id<CGSNativeConnectionObserver> observer = [self observer];
 
+    // The observer is asked even for the events of a display overlay (it keeps the state of the buttons), but
+    // no window can refuse them: the overlay's events always go to the process' event stream.
+    BOOL overlay = [_connection isDisplayOverlaySurface:
+                                         (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(event, kCGSEventNativeWindow)];
     if ([observer respondsToSelector: @selector(nativeConnectionWillPostWaylandPointerEvent:)] &&
-        ![observer nativeConnectionWillPostWaylandPointerEvent: (struct __CGEvent *) event])
+        ![observer nativeConnectionWillPostWaylandPointerEvent: (struct __CGEvent *) event] && !overlay)
         CGEventSetIntegerValueField(event, kCGSEventTapsOnly, 1);
     _CGSEventStreamPost(event);
     CFRelease(event);
@@ -473,14 +479,15 @@ static unsigned maskForCode(uint32_t code) {
 
 static const double kNothing = 0;
 
-// The surface the lock is to be made on: the one the framework above names (its window to lock), else the
+// The surface the lock is to be made on: a display overlay, which covers the screen above every window, so it
+// is the one while there is one; else the one the framework above names (its window to lock), else the
 // surface that has the pointer, else the one with the keyboard focus. The compositor activates the lock
 // when the surface has the pointer focus, which can be later.
 - (struct wl_proxy *) lockTargetSurface {
     id<CGSNativeConnectionObserver> observer = [self observer];
-    void *surface = NULL;
+    void *surface = [_connection displayOverlaySurface];
 
-    if ([observer respondsToSelector: @selector(nativeConnectionSurfaceForPointerLock)])
+    if (surface == NULL && [observer respondsToSelector: @selector(nativeConnectionSurfaceForPointerLock)])
         surface = [observer nativeConnectionSurfaceForPointerLock];
     if (surface == NULL)
         surface = _focus;

@@ -903,6 +903,11 @@ void _CGSNativeConnectionPointerLockTargetChanged(void)
 	[nativeConnection() pointerLockTargetMayHaveChanged];
 }
 
+bool _CGSNativeConnectionIsDisplayOverlayWindow(void* nativeWindow)
+{
+	return [nativeConnection() isDisplayOverlayNativeWindow: nativeWindow];
+}
+
 int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef* name)
 {
 	CGSConnection* connection = nativeConnection();
