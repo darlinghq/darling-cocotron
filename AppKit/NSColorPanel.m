@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSColorPickerSliders.h>
 #import <AppKit/NSColorPickerWheel.h>
 #import <AppKit/NSRaise.h>
+#import <objc/runtime.h>
 
 NSString *const NSColorPanelColorDidChangeNotification =
         @"NSColorPanelColorDidChangeNotification";
@@ -189,9 +190,10 @@ static NSUInteger _pickerMask = 0;
     return _continuous;
 }
 
+static const char accessoryViewKey;
+
 - (NSView *) accessoryView {
-    NSUnimplementedMethod();
-    return nil;
+    return objc_getAssociatedObject(self, &accessoryViewKey);
 }
 
 - (void) setColorButtonClicked: sender {
@@ -251,8 +253,50 @@ static NSUInteger _pickerMask = 0;
     _continuous = flag;
 }
 
+// The panel grows by the height of the view and shows it below the color pickers, at the bottom; the panel's
+// top edge, and the position of what it holds, stay where they are on the screen and in the window.
+- (void) _growByHeight: (CGFloat) delta excluding: (NSView *) accessory {
+    NSView *content = [self contentView];
+    NSRect frame = [self frame];
+    BOOL resizes = [content autoresizesSubviews];
+
+    frame.size.height += delta;
+    frame.origin.y -= delta;
+    [content setAutoresizesSubviews: NO];
+    [self setFrame: frame display: NO];
+    for (NSView *subview in [content subviews]) {
+        if (subview != accessory) {
+            NSPoint origin = [subview frame].origin;
+
+            [subview setFrameOrigin: NSMakePoint(origin.x, origin.y + delta)];
+        }
+    }
+    [content setAutoresizesSubviews: resizes];
+}
+
 - (void) setAccessoryView: (NSView *) view {
-    NSUnimplementedMethod();
+    NSView *previous = [self accessoryView];
+
+    if (view == previous)
+        return;
+    if (previous != nil) {
+        CGFloat height = [previous frame].size.height;
+
+        [previous removeFromSuperview];
+        [self _growByHeight: -height excluding: nil];
+    }
+    objc_setAssociatedObject(self, &accessoryViewKey, view, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if (view != nil) {
+        NSView *content = [self contentView];
+        CGFloat width = [content bounds].size.width;
+        NSRect frame = [view frame];
+
+        [self _growByHeight: frame.size.height excluding: nil];
+        frame.origin = NSMakePoint(MAX(0.0, (width - frame.size.width) / 2.0), 0.0);
+        [view setFrame: frame];
+        [view setAutoresizingMask: NSViewMinXMargin | NSViewMaxXMargin | NSViewMaxYMargin];
+        [content addSubview: view];
+    }
 }
 
 - (void) setAction: (SEL) action {
