@@ -2,7 +2,7 @@
 // Host test for AppKit/X11.backend/X11LevelStacking.h: the level rule and the restacking against real X stacking
 // order. Needs an X server; run on its own Xvfb (tests/x11-level-stacking.sh).
 // Build: cc x11-level-stacking.c -lX11
-#include "../AppKit/X11.backend/X11LevelStacking.h"
+#include "../CoreGraphics/X11.backend/X11LevelStacking.h"
 #include <stdio.h>
 
 static int failures;

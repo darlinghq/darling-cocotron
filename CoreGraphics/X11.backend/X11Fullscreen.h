@@ -1,4 +1,5 @@
-/* EWMH fullscreen decisions and requests for the X11 backend.
+/* EWMH fullscreen state and requests of the X11 backend (the decision is the UI layer's, see X11FullscreenPolicy.h of
+ * the AppKit X11 backend).
  *
  * A borderless window that exactly covers a monitor is the macOS idiom for borderless fullscreen. Under a window
  * manager such a window has to ask for _NET_WM_STATE_FULLSCREEN, or it is stacked below panels and docks. The
@@ -14,36 +15,10 @@
 #include <X11/extensions/Xrandr.h>
 #include <stdbool.h>
 
-#include "../DarlingFullscreenPolicy.h"
-
 typedef struct {
     int x, y; /* root coordinates, device pixels */
     unsigned int width, height;
 } X11FullscreenRect;
-
-/* An application window asks for fullscreen when the application did (the fullscreen style bit), or when it is
- * a managed, untitled window that covers a monitor. Titled windows are never promoted: a maximized titled
- * window is not fullscreen. Unmanaged (override-redirect) windows are not the window manager's to place. */
-static inline bool X11FullscreenWanted(bool overrideRedirect, bool styleFullScreen, bool titled, bool coversMonitor) {
-    if (overrideRedirect)
-        return false;
-    return DarlingFullscreenWanted(styleFullScreen, titled, coversMonitor);
-}
-
-/* Whether a style change takes the window out of fullscreen whatever its frame: the application cleared the
- * fullscreen style bit (-toggleFullScreen:). The window still covers its monitor then, but only because it was
- * fullscreen, so the monitor test must not hold it there; the window manager restores the frame it had before. */
-static inline bool X11FullscreenStyleLeft(bool wasStyleFullScreen, bool styleFullScreen) {
-    return wasStyleFullScreen && !styleFullScreen;
-}
-
-/* Whether a window that is already fullscreen has to leave fullscreen before setFrame: moves it. It does when it
- * should no longer be fullscreen, and also when it moves to another place (another monitor): a window manager
- * ignores configure requests for a fullscreen window, so a move between two monitors that are each exactly
- * covered would otherwise leave the window on the first one. The caller asks for fullscreen again after the move. */
-static inline bool X11FullscreenLeaveBeforeMove(bool wanted, bool requested, bool moved) {
-    return requested && (!wanted || moved);
-}
 
 /* Whether rect is exactly the geometry of an active monitor (a RandR CRTC with a mode). Without RandR the
  * root window is the only monitor. */

@@ -207,6 +207,69 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     return kCGErrorNotImplemented;
 }
 
+- (CGError) setToplevelLevel: (int) level {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelStacksByLevel: (BOOL) stacks {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) orderToplevelAbove: (CGSWindow *) sibling {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) orderToplevelBelow: (CGSWindow *) sibling {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) restackToplevelForLevels {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) requestToplevelKeyboardFocus {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelHoldsKeyboardFocus {
+    return NO;
+}
+
+- (CGError) miniaturizeToplevel {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) deminiaturizeToplevel {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelIsMiniaturized {
+    return NO;
+}
+
+- (BOOL) toplevelFrameCoversDisplay: (CGRect) frame {
+    return NO;
+}
+
+- (CGError) setToplevelFullscreen: (BOOL) fullscreen force: (BOOL) force {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelFullscreenRequested {
+    return NO;
+}
+
+- (BOOL) toplevelIsFullscreen {
+    return NO;
+}
+
+- (BOOL) toplevelIsOccluded {
+    return NO;
+}
+
+- (void) cancelToplevelKeyboardFocusRequest {
+}
+
 - (CGSSurface *) createSurface {
     NSInvalidAbstractInvocation();
 }

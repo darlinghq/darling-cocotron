@@ -45,6 +45,22 @@ typedef enum {
 	// The window's device pixels per point changed from oldScale; it already has the new frame size in
 	// pixels and answers the new scale from -toplevelBackingScaleFactor.
 	kCGSToplevelEventBackingScaleChanged,
+	// The window holds the keyboard focus of the window system, or no longer does. Only the changes of the
+	// window system's focus: a grab or the pointer passing over the window is not one.
+	kCGSToplevelEventFocusGained,
+	kCGSToplevelEventFocusLost,
+	// Whether another client's window covers this one changed (state: it is covered now). Also posted, with the
+	// state unchanged, whenever the window system's state of the window changed (see kCGSToplevelEventStateChanged),
+	// so that the UI layer judges what it derives from it again.
+	kCGSToplevelEventOcclusionChanged,
+	// The window system hid the window in its task list (miniaturized it), or showed it again, whoever asked.
+	kCGSToplevelEventMiniaturized,
+	kCGSToplevelEventDeminiaturized,
+	// The window system holds the window fullscreen (state: yes) or no longer does, whoever asked.
+	kCGSToplevelEventFullscreenChanged,
+	// The window system's state of the window (miniaturized, fullscreen) was read again. Follows the events above
+	// that the change caused, and is also posted when none applies.
+	kCGSToplevelEventStateChanged,
 } CGSToplevelEventKind;
 
 typedef struct {
@@ -52,6 +68,7 @@ typedef struct {
 	CGRect rect;       // see the kinds; CGRectNull for the others
 	bool resized;      // kCGSToplevelEventFrameChanged
 	CGFloat oldScale;  // kCGSToplevelEventBackingScaleChanged
+	bool state;        // kCGSToplevelEventOcclusionChanged, kCGSToplevelEventFullscreenChanged
 } CGSToplevelEvent;
 
 // Called on the thread that runs the main run loop.
@@ -204,6 +221,51 @@ typedef struct {
 -(id<CGSDragDestination>) dragDestination;
 -(void) dragDestinationChanged;
 
+// Ordering, levels, the keyboard focus, miniaturizing and fullscreen of a toplevel window. The UI layer decides
+// when; the window system's calls are made here. A backend that cannot do one of them keeps the default, which
+// refuses (the queries answer for a window that is not so: not miniaturized, not fullscreen, not covered, not
+// holding the focus). The window must be shown (-orderWindow:relativeTo:) before it is stacked or given the focus.
+//
+// The level the window is stacked at (see NSWindowLevel; larger is further front) and whether it takes part in
+// stacking by level. Windows that take part are put in front of those of a lower level and behind those of a
+// higher level, as far as the window system's manager lets this process arrange them: a window that the
+// manager does not manage (CGSToplevelAttributes.unmanaged) is restacked by the process, the managed ones
+// by the manager. A menu or the menu bar does not take part. The order is applied when the window is shown,
+// stacked or has its level changed, and again when the manager has stacked the window by itself.
+-(CGError) setToplevelLevel:(int) level;
+-(CGError) setToplevelStacksByLevel:(BOOL) stacks;
+// Puts the window in front of everything (sibling nil) or in front of or behind another shown toplevel
+// window, which belongs to the same connection. Stacking in front also applies the order by level.
+-(CGError) orderToplevelAbove:(CGSWindow*) sibling;
+-(CGError) orderToplevelBelow:(CGSWindow*) sibling;
+// Applies the order by level around this window again.
+-(CGError) restackToplevelForLevels;
+// Asks for the window to hold the keyboard focus: the window is put in front, then the window system is
+// asked to focus it. A request that cannot be made yet (the window is not on the screen yet) is repeated when
+// it is. The answer is kCGSToplevelEventFocusGained.
+-(CGError) requestToplevelKeyboardFocus;
+// Forgets a request that waits for the window to appear.
+-(void) cancelToplevelKeyboardFocusRequest;
+// Whether the window system's keyboard focus is in this window now.
+-(BOOL) toplevelHoldsKeyboardFocus;
+// Asks the window system to hide the window in its task list, or to show it again. The answer is
+// kCGSToplevelEventMiniaturized or kCGSToplevelEventDeminiaturized.
+-(CGError) miniaturizeToplevel;
+-(CGError) deminiaturizeToplevel;
+-(BOOL) toplevelIsMiniaturized;
+// Whether a frame (the space of -setToplevelFrame:) is exactly the area of one display.
+-(BOOL) toplevelFrameCoversDisplay:(CGRect) frame;
+// Asks the window system to hold the window fullscreen, or not. Asking for the state already asked for does
+// nothing unless force is set. A window that is not shown has the state written with the others it has, which
+// the window system reads when it shows the window. The answer is kCGSToplevelEventFullscreenChanged.
+-(CGError) setToplevelFullscreen:(BOOL) fullscreen force:(BOOL) force;
+// The state last asked for (or reported by the window system), and whether the window is shown and the window
+// system holds it fullscreen.
+-(BOOL) toplevelFullscreenRequested;
+-(BOOL) toplevelIsFullscreen;
+// Whether a window of another client covers this window (see kCGSToplevelEventOcclusionChanged).
+-(BOOL) toplevelIsOccluded;
+
 // The window's own pixels. A process that has no GL surface for the window draws into it with
 // -drawImage:atPoint: and the window shows them. The contents are kept by the window, so they
 // survive the window being covered, hidden and shown again, and can be read back (-copyContentsImage,
@@ -250,5 +312,8 @@ typedef struct {
 COREGRAPHICS_EXPORT CGSWindow* _CGSNewToplevelWindow(const CGSToplevelAttributes* attributes);
 // Whether the window system can show what is behind a toplevel window through its alpha.
 COREGRAPHICS_EXPORT BOOL _CGSToplevelWindowsSupportTranslucency(void);
+// The toplevel windows of the process' connection that are shown, front to back, as the numbers the UI layer
+// gave them (the order CGWindowListCopyWindowInfo() lists them in).
+COREGRAPHICS_EXPORT NSArray<NSNumber*>* _CGSOrderedToplevelWindowIDs(void);
 
 #endif
