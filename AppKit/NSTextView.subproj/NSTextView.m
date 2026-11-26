@@ -1334,6 +1334,7 @@ static NSTextView *s_targetTextView = nil;
                             isFinal: YES];
         return;
     }
+    [[self nextResponder] doCommandBySelector: _cmd];
 }
 
 - (void) _setAndScrollToRange: (NSRange) range upstream: (BOOL) upstream {

@@ -198,8 +198,18 @@ static NSMutableDictionary *cellClassDictionary = nil;
     return self;
 }
 
-- (void) dealloc {
+- (void) viewWillMoveToWindow: (NSWindow *) newWindow {
+    NSWindow *oldWindow = [self window];
+    if (oldWindow != nil && newWindow != oldWindow) {
+        if (NS_EXTRA(NSControl, self)->_currentEditor != nil)
+            [self abortEditing];
+        if ([oldWindow firstResponder] == self)
+            [oldWindow makeFirstResponder: nil];
+    }
+    [super viewWillMoveToWindow: newWindow];
+}
 
+- (void) dealloc {
     // Don't do anything with the cell until we've cleared the bindings!
     [self _unbindAllBindings];
     [_aux release];
