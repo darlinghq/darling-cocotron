@@ -175,6 +175,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
     _cellPrototype = nil;
 
     NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns = 1;
+    NS_EXTRA(NSBrowser, self)->_clickedColumn = -1;
+    NS_EXTRA(NSBrowser, self)->_clickedRow = -1;
     NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection = NO;
     NS_EXTRA(NSBrowser, self)->_allowsEmptySelection = NO;
     NS_EXTRA(NSBrowser, self)->_allowsBranchSelection = NO;
