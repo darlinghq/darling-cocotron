@@ -179,6 +179,10 @@ static void test_a_click_on_the_divider_sends_no_action(void)
     clickHeader(divider, 1);
     CHECK([calls(source) isEqualToString:@"mouseDown c0"]);
     [source->log removeAllObjects];
+    // A click on the divider ends in the column being sized (to the pointer, or to its contents), which moves the
+    // divider, so the second click goes to where it is now.
+    first = headerRect(0);
+    divider = NSMakePoint(NSMaxX(first) - 0.5, NSMidY(first));
     clickHeader(divider, 2);
     CHECK([calls(source) isEqualToString:@"mouseDown c0"]);
 }
