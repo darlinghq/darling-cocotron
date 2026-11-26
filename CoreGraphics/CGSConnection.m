@@ -329,6 +329,11 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 {
 }
 
+-(BOOL) displayIdle
+{
+	return NO;
+}
+
 -(BOOL) cancelsHiddenUntilMouseMoves
 {
 	return NO;

@@ -185,6 +185,8 @@ extern bool _CGSNativeConnectionCursorHidden(void);
 extern bool _CGSSetCursorHiddenUntilMouseMoves(bool flag);
 // The pointer is locked to a surface (Wayland: the lock of the disassociated mouse is active).
 extern bool _CGSNativeConnectionPointerLocked(void);
+// The compositor reports that the display is idle (Wayland: ext-idle-notify); false without such a backend.
+extern bool _CGSNativeConnectionDisplayIdle(void);
 // The surface the lock should be made on may be another one (a window was mapped, unmapped or activated).
 extern void _CGSNativeConnectionPointerLockTargetChanged(void);
 

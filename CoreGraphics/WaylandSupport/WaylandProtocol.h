@@ -109,6 +109,10 @@ extern const struct wl_interface xdg_system_bell_v1_interface;
 extern const struct wl_interface wp_alpha_modifier_v1_interface;
 extern const struct wl_interface wp_alpha_modifier_surface_v1_interface;
 extern const struct wl_interface xdg_toplevel_tag_manager_v1_interface;
+extern const struct wl_interface ext_idle_notifier_v1_interface;
+extern const struct wl_interface ext_idle_notification_v1_interface;
+extern const struct wl_interface zwp_idle_inhibit_manager_v1_interface;
+extern const struct wl_interface zwp_idle_inhibitor_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -271,6 +275,17 @@ enum {
     XDG_TOPLEVEL_TAG_MANAGER_DESTROY = 0,
     XDG_TOPLEVEL_TAG_MANAGER_SET_TOPLEVEL_TAG = 1,
     XDG_TOPLEVEL_TAG_MANAGER_SET_TOPLEVEL_DESCRIPTION = 2,
+
+    EXT_IDLE_NOTIFIER_DESTROY = 0,
+    EXT_IDLE_NOTIFIER_GET_IDLE_NOTIFICATION = 1,
+    EXT_IDLE_NOTIFIER_GET_INPUT_IDLE_NOTIFICATION = 2,
+    EXT_IDLE_NOTIFICATION_DESTROY = 0,
+    EXT_IDLE_NOTIFICATION_EV_IDLED = 0,
+    EXT_IDLE_NOTIFICATION_EV_RESUMED = 1,
+
+    ZWP_IDLE_INHIBIT_MANAGER_DESTROY = 0,
+    ZWP_IDLE_INHIBIT_MANAGER_CREATE_INHIBITOR = 1,
+    ZWP_IDLE_INHIBITOR_DESTROY = 0,
 
     WP_TOUCH_RELEASE = 0,
     WP_TOUCH_EV_DOWN = 0,

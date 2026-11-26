@@ -88,6 +88,8 @@ typedef enum {
     // xdg-dialog-v1: the dialog role of a sheet or modal panel, and its current modal hint.
     struct wl_proxy *_dialog;
     BOOL _dialogModal;
+    // idle-inhibit-unstable-v1: held while this toplevel is mapped and visible.
+    struct wl_proxy *_idleInhibitor;
     NSString *_sessionName;
     BOOL _restoringSessionToplevel;
     // Once a surface has committed, a saved session state can no longer be restored on it.
@@ -232,6 +234,8 @@ typedef enum {
 - (void) alphaModifierAvailable;
 // Sends the toplevel's stable tag and localized description when xdg-toplevel-tag-v1 is available.
 - (void) updateToplevelTags;
+// Creates or destroys the idle inhibitor as this toplevel becomes visible or occluded.
+- (void) updateIdleInhibitor;
 
 // Overrides of CGWindow's window-system session hooks (see CGWindowPrivate.h).
 - (NSString *) ensureSessionToplevelName;

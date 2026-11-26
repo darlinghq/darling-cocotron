@@ -161,6 +161,28 @@ where X11 has `XBell()` and the core protocol has no bell request.
 - Copyright: 2024 Xaver Hugl
 - Licence: the MIT permission notice at the top of the file.
 
+## ext-idle-notify
+
+`ext-idle-notify-v1.xml` is the staging `ext_idle_notifier_v1` protocol. The CoreGraphics Wayland backend uses
+its idle/resumed events as the display sleep state reported by `CGDisplayIsAsleep()`.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/ext-idle-notify/ext-idle-notify-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2015 Martin Gräßlin, 2022 Simon Ser
+- Licence: the MIT permission notice at the top of the file.
+
+## idle-inhibit
+
+`idle-inhibit-unstable-v1.xml` is the `zwp_idle_inhibit_manager_v1` protocol. The AppKit Wayland backend creates
+an inhibitor for each visible, unoccluded toplevel so a shown window keeps the display awake.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `unstable/idle-inhibit/idle-inhibit-unstable-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2015 Samsung Electronics Co., Ltd
+- Licence: the MIT permission notice at the top of the file.
+
 ## xdg-toplevel-tag
 
 `xdg-toplevel-tag-v1.xml` is the staging `xdg_toplevel_tag_manager_v1` protocol. AppKit sends a stable,
