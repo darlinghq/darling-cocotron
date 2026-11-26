@@ -3,6 +3,7 @@
 #include <CoreGraphics/CoreGraphics.h>
 #include <IOKit/hidsystem/IOLLEvent.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <mach/mach_types.h>
 #include <CoreGraphics/CGSServerSPI.h>
 
 __BEGIN_DECLS
@@ -42,6 +43,8 @@ extern CGError CGSNewConnection(_Nullable CGSDictionaryObj attribs, CGSConnectio
 extern CGError CGSReleaseConnection(CGSConnectionID connId);
 extern CGSConnectionID _CGSDefaultConnection(void);
 extern CGError CGSSetDenyWindowServerConnections(Boolean deny);
+// Whether CGSSetDenyWindowServerConnections() denied the process connections to the window system.
+extern Boolean _CGSWindowServerConnectionsDenied(void);
 extern void CGSShutdownServerConnections(void);
 
 // CGSRegion
@@ -112,6 +115,40 @@ extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
 extern CGError CGSSetWindowShape(CGSConnectionID cid, CGSWindowID wid, float x_offset, float y_offset, const CGSRegionRef shape);
 extern OSStatus CGSOrderWindow(CGSConnectionID cid, CGSWindowID wid, CGSWindowOrderingMode place, CGSWindowID relativeToWindow);
 extern CGError CGSMoveWindow(CGSConnectionID cid, CGSWindowID wid, const CGPoint *window_pos);
+// The pixels and the events of a CGS window, for a process that has no UI framework of its own above
+// CoreGraphics (the Window Manager of HIToolbox). See -[CGSWindow drawImage:atPoint:].
+// Replaces the part of the window's contents the image covers (top left origin, y down) and shows it.
+extern CGError _CGSWindowDrawImage(CGSConnectionID cid, CGSWindowID wid, CGImageRef image, CGPoint origin);
+// A snapshot of the window's contents, NULL for none.
+extern CGImageRef _CGSWindowCopyContents(CGSConnectionID cid, CGSWindowID wid);
+// Style bits of a window
+enum {
+	kCGSWindowStyleFloating = 1 << 0,     // stays above the ordinary windows
+	kCGSWindowStyleUtility = 1 << 1,      // a tool window: not in the task lists
+	kCGSWindowStyleBorderless = 1 << 2,   // no title bar and frame of the window system
+	kCGSWindowStyleIgnoresMouse = 1 << 3, // pointer input goes to the windows below
+	kCGSWindowStyleTransparent = 1 << 4,  // the pixels' alpha shows what is below
+	kCGSWindowStyleFixedSize = 1 << 5,    // the user cannot resize it
+	kCGSWindowStyleNoFocus = 1 << 6,      // never takes the keyboard focus
+	kCGSWindowStyleNoClose = 1 << 7,      // the window system offers no close control
+	kCGSWindowStyleUnmanaged = 1 << 8,    // the window system neither places nor decorates it
+};
+extern CGError _CGSWindowSetStyle(CGSConnectionID cid, CGSWindowID wid, uint32_t styleFlags);
+
+// What the window system tells about the windows, on the thread that runs the main run loop.
+// kCGSWindowEventBounds: the window's content rectangle in global coordinates (y down) changed.
+typedef enum {
+	kCGSWindowEventCloseRequested = 1, // the user asked the window system to close the window
+	kCGSWindowEventActivated = 2,      // the window got the keyboard focus
+	kCGSWindowEventDeactivated = 3,    // the window lost it
+	kCGSWindowEventBounds = 4,
+} CGSWindowEventKind;
+typedef void (*CGSWindowEventProc)(CGSWindowEventKind kind, CGSWindowID window, CGRect rect, void* info);
+// Sets the process' one handler of the window events (NULL removes it).
+extern void _CGSSetWindowEventProc(CGSWindowEventProc proc, void* info);
+// For the backends: reports a window event to that handler.
+extern void _CGSPostWindowEvent(CGSWindowEventKind kind, CGSWindowID window, CGRect rect);
+
 extern CGError CGSSetWindowOpacity(CGSConnectionID cid, CGSWindowID wid, bool isOpaque);
 extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level);
 extern CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAffineTransform transform);
@@ -152,6 +189,8 @@ extern CGError CGSAddTrackingRect(CGSConnectionID cid, CGSWindowID wid, CGRect r
 extern CGError CGSRemoveAllTrackingAreas(CGSConnectionID cid, CGSWindowID wid);
 extern CFStringRef CGSCopyManagedDisplayForWindow(const CGSConnectionID cid, CGSWindowID wid);
 extern CGError CGSGetScreenRectForWindow(CGSConnectionID cid, CGSWindowID wid, CGRect *outRect);
+// The IOHIDEvent an event was made from; Darling's events have none, so always NULL.
+extern CFTypeRef CGEventCopyIOHIDEvent(CGEventRef event);
 
 extern const CFStringRef kCGSWindowTitle;
 extern CGError CGSSetWindowTitle(CGSConnectionID cid, CGSWindowID wid, CFStringRef title);
@@ -210,10 +249,6 @@ extern CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display);
 // The name the window system gives the display's output (a description or a connector name), or NULL; the
 // caller releases it.
 extern CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display);
-// A caller that learns from its own connection to the window system that the displays changed asks
-// CoreGraphics to read what its connection has been sent, which reports the change to the display
-// reconfiguration callbacks, and to forget what it has cached about the displays.
-extern void _CGSRefreshDisplayLayout(void);
 
 // Darling extras, e.g. for CGL
 // Asks the window system to give the windows of a process the input focus and raise them,
@@ -234,10 +269,11 @@ CGError _CGSActivateProcess(pid_t pid, uint32_t options);
 // and system daemons, are not applications of the window system.
 Boolean _CGSProcessHasConnection(pid_t pid);
 #define kCGSProcessConnectionNotificationPrefix "org.darlinghq.process-connection."
-// The Darling process that has the input focus. The display server answers where it can (X11:
-// the owner of _NET_ACTIVE_WINDOW). A Wayland compositor does not tell clients, so the answer
-// is the process that most recently reported (through _CGSSetFrontProcess) that it was
-// activated, shared by all Darling processes. Returns kCGErrorSuccess and sets *pid,
+// The Darling process that has the input focus: the process that most recently reported (through
+// _CGSSetFrontProcess) or was requested (through _CGSRequestFrontProcess) to be the front process,
+// as long as it has not resigned since, shared by all Darling processes. When no process is
+// in that state, the display server is asked where it can answer (X11: the owner of
+// _NET_ACTIVE_WINDOW). Returns kCGErrorSuccess and sets *pid,
 // kCGErrorNoneAvailable when no process is known, kCGErrorIllegalArgument for a NULL pid.
 CGError _CGSGetFrontProcess(pid_t* pid);
 // Reports that the process with this pid got the input focus. A windowing backend calls it
@@ -250,6 +286,56 @@ CGError _CGSSetFrontProcess(pid_t pid);
 // asked, such as a Wayland compositor, has focus on a process that is not a Darling process, or on
 // none). Posts the same name as _CGSSetFrontProcess().
 CGError _CGSResignFrontProcess(pid_t pid);
+// Publishes the activation policy of the calling process' application (NSApplicationActivationPolicy:
+// 0 regular, 1 accessory, 2 prohibited) for the other processes; AppKit calls it when the application
+// object is made and when the policy changes.
+void _CGSSetProcessActivationPolicy(int policy);
+// The policy the process with this pid published. kCGErrorNoneAvailable for a process that is gone
+// or never published one (a program that is not an application of the window system),
+// kCGErrorIllegalArgument for a pid that is not positive or a NULL policy.
+CGError _CGSGetProcessActivationPolicy(pid_t pid, int* policy);
+// Makes the process with this pid the front process: what SetFrontProcess() of the Process Manager
+// asks for. The change is visible to every process when the call returns (_CGSGetFrontProcess(),
+// and what is built on it), and every process that watches the front process is notified; then
+// the window system is asked to give the process' windows the input focus (_CGSActivateProcess()),
+// which it may decline. kCGSRequestFrontProcessFrontWindowOnly is passed on to the activation;
+// kCGSRequestFrontProcessMenuBarOwner makes the process the menu bar owner too (for a
+// regular application; an agent keeps the owner that was). Returns kCGErrorIllegalArgument for a pid
+// that is not positive and kCGErrorSuccess otherwise.
+#define kCGSRequestFrontProcessFrontWindowOnly 1
+#define kCGSRequestFrontProcessMenuBarOwner 2
+CGError _CGSRequestFrontProcess(pid_t pid, uint32_t options);
+// The request SetFrontProcess() makes for an application: _CGSRequestFrontProcess() with the menu bar
+// owner chosen from the activation policy the process published (a regular application becomes the
+// owner, an agent does not). kCGErrorInvalidOperation for a process that published the prohibited
+// policy (it cannot be the front process, and nothing changes); a process that published none is
+// not refused. Only kCGSRequestFrontProcessFrontWindowOnly is accepted in options
+// (kCGErrorIllegalArgument otherwise); a pid that is not positive is kCGErrorIllegalArgument too.
+CGError _CGSRequestFrontApplication(pid_t pid, uint32_t options);
+// The CPS calls, the window system's per-process calls that the Process Manager is built on. A serial
+// number is (0, pid); the Process Manager's special values are accepted (1: the system
+// process, accepted and left alone by CPSSetFrontProcess; 2: the calling process). They return 0 on
+// success and a nonzero error otherwise: 1003 for a NULL serial number, else a CGError.
+typedef struct CPSProcessSerNum
+{
+	uint32_t hi;
+	uint32_t lo;
+} CPSProcessSerNum;
+int CPSGetCurrentProcess(CPSProcessSerNum* psn);
+// Makes the calling process a regular application of the window system (it publishes that activation
+// policy). kCGErrorCannotComplete for another process, whose policy only it can publish.
+int CPSEnableForegroundOperation(CPSProcessSerNum* psn, uint32_t flags1, uint32_t flags2, uint32_t flags3, uint32_t flags4);
+// _CGSRequestFrontApplication() for the process: its errors, kCGErrorNoneAvailable for a serial
+// number that names no live process.
+int CPSSetFrontProcess(CPSProcessSerNum* psn);
+// Called in this process when the front process changed (by any process), on the main thread, and
+// at once in the thread that reported or requested the change when it was this process. previous
+// and current are pids, 0 for none known (the focus is in another client of the window system).
+// Not called for a change that is undone before the observers looked. An observer is added once and
+// not removed; the first one makes the process watch the front process, and an observer added while
+// this process is the front process is called with a previous pid of 0.
+typedef void (*CGSFrontProcessObserver)(pid_t previous, pid_t current, void* info);
+void _CGSAddFrontProcessObserver(CGSFrontProcessObserver observer, void* info);
 // The name of the Darwin notification that asks the process with this pid to activate its
 // windows (see above); a windowing backend observes the name of its own process.
 #define kCGSProcessActivationNotificationPrefix "org.darlinghq.process-activation."
@@ -277,6 +363,21 @@ Boolean _CGSProcessIsHidden(pid_t pid);
 // The libnotify name whose state holds the pid _CGSSetFrontProcess() stored, and which is posted
 // whenever the front process may have changed.
 #define kCGSFrontProcessNotificationName "org.darlinghq.front-process"
+
+// The libnotify name whose state holds the pid of the process that owns the menu bar (see
+// _CGSSetMenuBarOwnerProcess()).
+#define kCGSMenuBarOwnerNotificationName "org.darlinghq.menubar-owner"
+// Reports that the process with this pid owns the menu bar from now on. A regular application
+// calls it with its own pid when it becomes active; an application that is not regular (an
+// agent or background application) never takes the menu bar over when it becomes active, so
+// the owner stays the application that had it. Posts kCGSFrontProcessNotificationName.
+CGError _CGSSetMenuBarOwnerProcess(pid_t pid);
+// The process that owns the menu bar: the last one that reported it, as long as it is alive and a
+// Darling process reports to have the input focus (_CGSSetFrontProcess() without a later
+// _CGSResignFrontProcess() of the same process). Returns kCGErrorNoneAvailable when there is none (nothing
+// was reported, the owner ended, or the focus is in another client of the display server, where
+// no Darling process shows a menu bar), kCGErrorIllegalArgument for a NULL pid.
+CGError _CGSGetMenuBarOwnerProcess(pid_t* pid);
 
 void* _CGSNativeDisplay(CGSConnectionID connId);
 void* _CGSNativeWindowForID(CGSConnectionID connId, CGSWindowID winId);
@@ -317,6 +418,7 @@ extern size_t CGContextGetLineDashCount(CGContextRef context);
 extern void CGContextGetLineDashPattern(CGContextRef context, CGFloat *phase, CGFloat *lengths, size_t capacity);
 extern int CGContextGetCompositeOperation(CGContextRef context);
 extern void CGContextSetCompositeOperation(CGContextRef context, int operation);
+extern void CGContextSetOwnerIdentity(CGContextRef context, task_id_token_t owner);
 
 // Private numeric helpers.
 extern bool CGFloatIsValid(CGFloat value);
@@ -352,13 +454,69 @@ extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef _Nullable source, C
 // part of the event: copies of the event do not have it, and an active event tap that changes the
 // event or replaces it with another drops it, so the reader then builds what it needs from the
 // event's fields. The event retains the object.
+// Fields of our own on the input events the window system backends post, for what a CGEvent has no
+// field for. They sit above the highest field CGEvent.h defines and belong to every event type.
+enum {
+	// The characters of a key event with the modifiers other than Shift ignored: up to four UTF-16
+	// units, the first in the lowest 16 bits, and the key code they were made for (they no longer apply
+	// when an event tap gives the event another key code).
+	kCGSKeyboardEventUnmodifiedUnicode = 180,
+	kCGSKeyboardEventUnmodifiedLength = 181,
+	kCGSKeyboardEventUnmodifiedKeyCode = 184,
+	// The window system handle of the window the event is for (the wl_surface of the keyboard focus
+	// on Wayland), compared by value only.
+	kCGSEventNativeWindow = 182,
+	// The window system serial of the input event (Wayland), 0 when it has none.
+	kCGSEventInputSerial = 183,
+	// Pointer events: where the pointer was in the window system's window the event is for
+	// (kCGSEventNativeWindow), from the window's top-left corner (X11: device pixels; Wayland: 1/1024
+	// of a surface-local point), and the global location the event was posted with (in 1/1024 points).
+	// The window location only applies while the event's location is still the posted one: an event
+	// tap that moves the event invalidates it.
+	kCGSEventNativeLocationX = 185,
+	kCGSEventNativeLocationY = 186,
+	kCGSEventPostedLocationX = 187,
+	kCGSEventPostedLocationY = 188,
+	// Not 0: the event goes to the event taps only, and not to the process' event stream (a window
+	// that has not asked for mouse moved events does not get them).
+	kCGSEventTapsOnly = 189,
+	// What the framework above the window system knew when a mouse button press arrived: 1 when the
+	// window it is for was the key window, 2 when it was not, 0 when nothing was said.
+	kCGSMouseEventWindowKeyState = 190,
+	// Pinch (magnify) and rotate gesture events: the phase (NSEventPhase bits), the change of the
+	// magnification since the previous event of the gesture and the rotation in degrees counter-clockwise
+	// since it, both in millionths. CGEvent.h has no field for them.
+	kCGSGesturePhase = 191,
+	kCGSGestureMagnification = 192,
+	kCGSGestureRotation = 193,
+};
+
+// The double-click interval of the user in seconds: the time within which a second press of a button
+// counts as a double click.
+extern double _CGSDoubleClickInterval(void);
+// The time local mouse motion is dropped after CGWarpMouseCursorPosition() (CGSetLocalEventsSuppressionInterval()).
+extern double _CGSLocalEventsSuppressionInterval(void);
+
 extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
 extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
 
-// Registers the 'uchr' keyboard layout (a UCKeyboardLayout blob of `length` bytes, copied) of the
-// window system's current keymap, for a backend that cannot read the keymap itself. The Text Input
-// Sources API returns it. NULL or a zero length removes it.
-extern void _CGSSetProvidedKeyboardLayout(const void* uchr, uint32_t length, CFStringRef name, CFStringRef fullName);
+
+// What a key code types, from the current keyboard layout and the keys that give the same on every layout.
+// kCGKeyCharactersDefault is the Unicode string CGEventCreateKeyboardEvent() gives an event (no modifiers),
+// kCGKeyCharactersWithModifiers NSEvent's characters with the flags applied, kCGKeyCharactersIgnoringModifiers
+// NSEvent's charactersIgnoringModifiers (Shift still counts). Returns the number of UTF-16 units written
+// to out (at most max), 0 for a key without characters.
+typedef enum {
+	kCGKeyCharactersDefault,
+	kCGKeyCharactersWithModifiers,
+	kCGKeyCharactersIgnoringModifiers,
+} CGKeyCharactersKind;
+extern size_t _CGKeyCharacters(CGKeyCode key, CGEventFlags flags, CGKeyCharactersKind kind, UniChar* out, size_t max);
+
+// The characters of a keyboard event as NSEvent reports them (see _CGKeyCharacters). A string set with
+// CGEventKeyboardSetUnicodeString() is returned as it is for both; otherwise the characters follow the
+// event's key code and flags. Returns the number of UTF-16 units written to out (at most max).
+extern size_t _CGEventGetKeyCharacters(CGEventRef event, bool ignoringModifiers, UniChar* out, size_t max);
 
 #ifdef __OBJC__
 @class CGSConnection;
@@ -366,6 +524,105 @@ CGSConnection* _CGSConnectionForID(CGSConnectionID connId);
 CGSConnection* _CGSConnectionFromEventRecord(const CGSEventRecordPtr record);
 #endif
 
+// Draws a PDF page like CGContextDrawPDFPage, asking the callback whether to
+// draw each of the page's annotations (NULL draws them all).
+typedef struct CGPDFAnnotation *CGPDFAnnotationRef;
+#if defined(__BLOCKS__)
+typedef bool (^CGPDFAnnotationDrawCallbackType)(CGContextRef context, CGPDFPageRef page, CGPDFAnnotationRef annotation);
+#else
+typedef void *CGPDFAnnotationDrawCallbackType;
+#endif
+extern void CGContextDrawPDFPageWithAnnotations(CGContextRef context, CGPDFPageRef page, CGPDFAnnotationDrawCallbackType callback);
+
+// More private context functions, as WebKit (BSD licensed,
+// Source/WebCore/PAL/pal/spi/cg/CoreGraphicsSPI.h) declares them.
+// The base CTM is the transform the CTM started from, kept in the graphics
+// state (identity for a new context); setting it leaves the CTM as it is, and
+// drawing does not depend on it.
+extern CGAffineTransform CGContextGetBaseCTM(CGContextRef context);
+extern void CGContextSetBaseCTM(CGContextRef context, CGAffineTransform transform);
+// The current fill and stroke colours, owned by the context.
+extern CGColorRef CGContextGetFillColorAsColor(CGContextRef context);
+extern CGColorRef CGContextGetStrokeColorAsColor(CGContextRef context);
+extern bool CGContextGetShouldAntialias(CGContextRef context);
+// Kept in the graphics state; Onyx2D antialiases glyphs either way.
+extern void CGContextSetShouldAntialiasFonts(CGContextRef context, bool shouldAntialiasFonts);
+extern bool CGContextGetShouldAntialiasFonts(CGContextRef context);
+// The colour space of the context's destination (a new reference), NULL for a
+// NULL context.
+extern CGColorSpaceRef CGContextCopyDeviceColorSpace(CGContextRef context);
+// Draws path as CGContextDrawPath would, without changing the current path.
+// boundingBox, when given, is a hint and is not used.
+extern void CGContextDrawPathDirect(CGContextRef context, CGPathDrawingMode mode, CGPathRef path, const CGRect *boundingBox);
+// Draws the gradient around center: its start location at angle radians, and
+// its locations going counterclockwise in user space (from the positive x axis
+// towards the positive y axis) for one full turn.
+extern void CGContextDrawConicGradient(CGContextRef context, CGGradientRef gradient, CGPoint center, CGFloat angle);
+// A shading that evaluates function as CGContextDrawConicGradient sweeps a
+// gradient; it covers the whole clip.
+extern CGShadingRef CGShadingCreateConic(CGColorSpaceRef space, CGPoint center, CGFloat angle, CGFunctionRef function);
+
+// Adds a rectangle with elliptical corners of their own sizes. Inferred order
+// (WebKit's use): the corners at (minX, maxY), (maxX, maxY), (maxX, minY) and
+// (minX, minY), each size the horizontal and vertical radius. NULL corners add
+// a plain rectangle.
+extern void CGPathAddUnevenCornersRoundedRect(CGMutablePathRef path, const CGAffineTransform *transform, CGRect rect, const CGSize corners[4]);
+
+// A colored pattern that tiles image, one copy every image width and height
+// in pattern space; transform maps pattern space to the default user space.
+extern CGPatternRef CGPatternCreateWithImage2(CGImageRef image, CGAffineTransform transform, CGPatternTiling tiling);
+
+// Hints on how long an image's decoded data is worth keeping. Inferred values.
+// Kept with the image and reported; Onyx2D does not cache by them.
+enum {
+    kCGImageCachingTransient = 1,
+    kCGImageCachingTemporary = 3,
+};
+typedef uint32_t CGImageCachingFlags;
+extern void CGImageSetCachingFlags(CGImageRef image, CGImageCachingFlags flags);
+extern CGImageCachingFlags CGImageGetCachingFlags(CGImageRef image);
+
+// Converts colours to the destination colour space it was created with.
+typedef const struct CGColorTransform *CGColorTransformRef;
+// NULL for a NULL space. The attributes are not used.
+extern CGColorTransformRef CGColorTransformCreate(CGColorSpaceRef destination, CFDictionaryRef attributes);
+extern CFTypeID CGColorTransformGetTypeID(void);
+// Converts the colour components (without alpha) of a colour in source to the
+// destination space's components (without alpha). False, and the destination
+// left as it was, when the colours cannot be converted.
+extern bool CGColorTransformConvertColorComponents(CGColorTransformRef transform, CGColorSpaceRef source, CGColorRenderingIntent intent, const CGFloat sourceComponents[], CGFloat destinationComponents[]);
+// The colour in the transform's destination space, alpha kept.
+extern CGColorRef CGColorTransformConvertColor(CGColorTransformRef transform, CGColorRef color, CGColorRenderingIntent intent);
+
+// Whether two spaces are the same space: the same object, equal spaces
+// (CFEqual), or spaces of one model with the same ICC data. False when only one
+// of them is NULL.
+extern bool CGColorSpaceEqualToColorSpace(CGColorSpaceRef space1, CGColorSpaceRef space2);
+// The description ('desc' tag) of the space's ICC profile, or NULL when it has
+// no profile or the profile has no readable description.
+extern CFStringRef CGColorSpaceCopyICCProfileDescription(CGColorSpaceRef space);
+
+// Gradient creation with options. With kCGGradientInterpolatesPremultiplied
+// true, the colours between the stops are interpolated with their alpha
+// premultiplied.
+extern const CFStringRef kCGGradientInterpolatesPremultiplied;
+extern CGGradientRef CGGradientCreateWithColorComponentsAndOptions(CGColorSpaceRef space, const CGFloat components[], const CGFloat locations[], size_t count, CFDictionaryRef options);
+
+// A provider of a copy of the bytes, made when it is created. NULL for NULL
+// data with a size other than 0.
+extern CGDataProviderRef CGDataProviderCreateWithCopyOfData(const void *data, size_t size);
+
+// Walks the rectangles of a region. Each CGSNextRect returns the next one
+// (owned by the enumerator) and NULL after the last.
+typedef struct CGSRegionEnumeratorObject *CGSRegionEnumeratorObj;
+extern CGSRegionEnumeratorObj CGSRegionEnumerator(CGSRegionRef region);
+extern CGRect *CGSNextRect(const CGSRegionEnumeratorObj enumerator);
+extern CGError CGSReleaseRegionEnumerator(const CGSRegionEnumeratorObj enumerator);
+extern CGError CGSReleaseRegion(const CGSRegionRef region);
+
 __END_DECLS
+
+#include <CoreGraphics/CGContextDelegatePrivate.h>
+#include <CoreGraphics/CGStylePrivate.h>
 
 #endif

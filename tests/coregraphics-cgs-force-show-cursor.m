@@ -46,6 +46,25 @@ int main(void) {
         }
 
         Class cls = [[displayClass currentDisplay] class];
+        // The Wayland connection keeps the hide count itself (the display is not asked to hide anything): the
+        // visibility CGCursorIsVisible() reports is what is checked.
+        if ([NSStringFromClass(cls) isEqualToString: @"WaylandDisplay"]) {
+            CGDisplayHideCursor(CGMainDisplayID());
+            CGDisplayHideCursor(CGMainDisplayID());
+            CHECK(!CGCursorIsVisible(), "two hides hide the cursor");
+            forceShow(1);
+            CHECK(CGCursorIsVisible(), "forcing shows the cursor");
+            CGDisplayShowCursor(CGMainDisplayID());
+            CHECK(CGCursorIsVisible(), "the forgotten hides leave nothing to undo");
+            CGDisplayHideCursor(CGMainDisplayID());
+            CHECK(!CGCursorIsVisible(), "a later hide hides again");
+            CGDisplayShowCursor(CGMainDisplayID());
+            CHECK(CGCursorIsVisible(), "and one show shows it");
+            forceShow(1);
+            CHECK(CGCursorIsVisible(), "forcing with nothing hidden changes nothing");
+            printf(failures ? "FAILED\n" : "PASS\n");
+            return failures ? 1 : 0;
+        }
         class_replaceMethod(cls, @selector(hideCursor), (IMP) countHide, "v@:");
         class_replaceMethod(cls, @selector(unhideCursor), (IMP) countUnhide, "v@:");
 

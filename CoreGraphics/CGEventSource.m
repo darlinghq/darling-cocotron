@@ -333,6 +333,21 @@ CGEventFlags CGEventSourceFlagsState(CGEventSourceStateID stateID) {
     return flags;
 }
 
+// The time the local mouse events are suppressed after CGWarpMouseCursorPosition(), for the whole session
+// (documented default 0.25 seconds). A negative one is refused (observed on macOS 26.7.3 and Mojave).
+static _Atomic(double) gLocalEventsSuppressionInterval = 0.25;
+
+CGError CGSetLocalEventsSuppressionInterval(CFTimeInterval seconds) {
+    if (!(seconds >= 0))
+        return kCGErrorRangeCheck;
+    __c11_atomic_store(&gLocalEventsSuppressionInterval, seconds, __ATOMIC_RELAXED);
+    return kCGErrorSuccess;
+}
+
+double _CGSLocalEventsSuppressionInterval(void) {
+    return __c11_atomic_load(&gLocalEventsSuppressionInterval, __ATOMIC_RELAXED);
+}
+
 void CGEventSourceSetLocalEventsSuppressionInterval(CGEventSourceRef source, CFTimeInterval seconds) {
     CGEventSource *src = (CGEventSource *) source;
 
@@ -418,4 +433,23 @@ uint32_t CGEventSourceCounterForEventType(CGEventSourceStateID stateID,
 
     _CGEventStateCounter(stateID, eventType, &count);
     return count;
+}
+
+// The user's double-click interval is the "com.apple.mouse.doubleClickThreshold" setting of the global
+// domain, in seconds. Without one it is one second, which is what AppKit's NSEvent doubleClickInterval
+// reported before the window system's pointer was decoded here, and what clicks were grouped by.
+double _CGSDoubleClickInterval(void)
+{
+	double interval = 1.0;
+	CFTypeRef value = CFPreferencesCopyAppValue(CFSTR("com.apple.mouse.doubleClickThreshold"), kCFPreferencesAnyApplication);
+
+	if (value != NULL)
+	{
+		double number = 0;
+
+		if (CFGetTypeID(value) == CFNumberGetTypeID() && CFNumberGetValue(value, kCFNumberDoubleType, &number) && number > 0)
+			interval = number;
+		CFRelease(value);
+	}
+	return interval;
 }

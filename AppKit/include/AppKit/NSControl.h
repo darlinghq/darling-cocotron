@@ -113,6 +113,7 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 
 - (void) calcSize;
 - (void) sizeToFit;
+- (NSSize) sizeThatFits: (NSSize) size;
 - (void) setNeedsDisplay;
 
 @end

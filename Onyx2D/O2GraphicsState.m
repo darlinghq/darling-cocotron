@@ -57,6 +57,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _shouldSmoothFonts = YES;
     _fontSmoothingStyle = 0x30;
     _alpha = 1.;
+    _baseCTM = O2AffineTransformIdentity;
+    _style = NULL;
+    _shouldAntialiasFonts = YES;
+    _focusRingColor = nil;
     return self;
 }
 
@@ -91,6 +95,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSZoneFree(NULL, _dashLengths);
     O2ColorRelease(_shadowColor);
     O2GaussianKernelRelease(_shadowKernel);
+    if (_style != NULL)
+        CFRelease(_style);
+    O2ColorRelease(_focusRingColor);
     NSDeallocateObject(self);
     return;
     [super dealloc];
@@ -120,6 +127,10 @@ O2GState *O2GStateCopyWithZone(O2GState *self, NSZone *zone) {
     copy->_shadowKernel = O2GaussianKernelRetain(self->_shadowKernel);
 
     copy->_alpha = self->_alpha;
+
+    if (self->_style != NULL)
+        CFRetain(self->_style);
+    O2ColorRetain(self->_focusRingColor);
 
     return copy;
 }
@@ -572,6 +583,36 @@ void O2GStateSetAlpha(O2GState *self, O2Float alpha) {
 
 - (void) setShouldAntialias: (BOOL) flag {
     _shouldAntialias = flag;
+}
+
+O2AffineTransform O2GStateGetBaseCTM(O2GState *self) {
+    return self->_baseCTM;
+}
+
+void O2GStateSetBaseCTM(O2GState *self, O2AffineTransform transform) {
+    self->_baseCTM = transform;
+}
+
+CFTypeRef O2GStateGetStyle(O2GState *self) {
+    return self->_style;
+}
+
+void O2GStateSetStyle(O2GState *self, CFTypeRef style) {
+    if (style != NULL)
+        CFRetain(style);
+    if (self->_style != NULL)
+        CFRelease(self->_style);
+    self->_style = style;
+}
+
+void O2GStateSetFocusRing(O2GState *self, O2ColorRef color, O2Float radius,
+                          int ordering)
+{
+    O2ColorRetain(color);
+    O2ColorRelease(self->_focusRingColor);
+    self->_focusRingColor = color;
+    self->_focusRingRadius = radius;
+    self->_focusRingOrdering = ordering;
 }
 
 // temporary

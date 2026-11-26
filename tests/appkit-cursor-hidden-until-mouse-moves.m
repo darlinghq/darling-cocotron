@@ -33,6 +33,13 @@ int main(void) {
         [NSApplication sharedApplication];
         NSDisplay *display = [NSDisplay currentDisplay];
         Class cls = [display class];
+        // On Wayland the hide count and the hidden-until-motion flag are CoreGraphics' (its connection has the
+        // pointer): the display is not asked to hide anything, and appkit-wayland-relative-mouse checks the
+        // cursor requests of the same calls.
+        if ([NSStringFromClass(cls) isEqualToString: @"WaylandDisplay"]) {
+            printf("SKIP: the hide count is CoreGraphics' on Wayland (see appkit-wayland-relative-mouse)\n");
+            return 0;
+        }
         class_replaceMethod(cls, @selector(hideCursor), (IMP) countHide, "v@:");
         class_replaceMethod(cls, @selector(unhideCursor), (IMP) countUnhide, "v@:");
 

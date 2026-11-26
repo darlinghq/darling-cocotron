@@ -35,6 +35,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd);
     NSDictionary *_sourceData;
     NSInteger _changeCount;
     NSUInteger _selectionGeneration;
+    uint32_t _changeSerial; // Serial of the input that made the pending change; 0 if none.
     BOOL _owned, _needsPublish, _publishQueued, _publishing;
     void (^_hostChangeHandler)(void);
 }

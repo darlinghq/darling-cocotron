@@ -58,23 +58,22 @@ typedef NS_ENUM(NSUInteger, NSCompositingOperation) {
 };
 
 // The pre-10.12 names of the first fourteen operations, kept for source
-// compatibility. They are plain constants, so Swift does not see them.
-enum {
-    NSCompositeClear = NSCompositingOperationClear,
-    NSCompositeCopy = NSCompositingOperationCopy,
-    NSCompositeSourceOver = NSCompositingOperationSourceOver,
-    NSCompositeSourceIn = NSCompositingOperationSourceIn,
-    NSCompositeSourceOut = NSCompositingOperationSourceOut,
-    NSCompositeSourceAtop = NSCompositingOperationSourceAtop,
-    NSCompositeDestinationOver = NSCompositingOperationDestinationOver,
-    NSCompositeDestinationIn = NSCompositingOperationDestinationIn,
-    NSCompositeDestinationOut = NSCompositingOperationDestinationOut,
-    NSCompositeDestinationAtop = NSCompositingOperationDestinationAtop,
-    NSCompositeXOR = NSCompositingOperationXOR,
-    NSCompositePlusDarker = NSCompositingOperationPlusDarker,
-    NSCompositeHighlight = NSCompositingOperationHighlight,
-    NSCompositePlusLighter = NSCompositingOperationPlusLighter
-};
+// compatibility. As in the macOS SDK they are typed constants, not enumerators,
+// so they convert to NSCompositingOperation without a cast.
+static const NSCompositingOperation NSCompositeClear = NSCompositingOperationClear;
+static const NSCompositingOperation NSCompositeCopy = NSCompositingOperationCopy;
+static const NSCompositingOperation NSCompositeSourceOver = NSCompositingOperationSourceOver;
+static const NSCompositingOperation NSCompositeSourceIn = NSCompositingOperationSourceIn;
+static const NSCompositingOperation NSCompositeSourceOut = NSCompositingOperationSourceOut;
+static const NSCompositingOperation NSCompositeSourceAtop = NSCompositingOperationSourceAtop;
+static const NSCompositingOperation NSCompositeDestinationOver = NSCompositingOperationDestinationOver;
+static const NSCompositingOperation NSCompositeDestinationIn = NSCompositingOperationDestinationIn;
+static const NSCompositingOperation NSCompositeDestinationOut = NSCompositingOperationDestinationOut;
+static const NSCompositingOperation NSCompositeDestinationAtop = NSCompositingOperationDestinationAtop;
+static const NSCompositingOperation NSCompositeXOR = NSCompositingOperationXOR;
+static const NSCompositingOperation NSCompositePlusDarker = NSCompositingOperationPlusDarker;
+static const NSCompositingOperation NSCompositeHighlight = NSCompositingOperationHighlight;
+static const NSCompositingOperation NSCompositePlusLighter = NSCompositingOperationPlusLighter;
 
 typedef NS_ENUM(NSInteger, NSWindowOrderingMode) {
     NSWindowBelow = -1,

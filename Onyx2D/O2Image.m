@@ -729,6 +729,15 @@ O2ImageRef O2ImageRetain(O2ImageRef self) {
     return (self != NULL) ? (O2ImageRef) CFRetain(self) : NULL;
 }
 
+uint32_t O2ImageGetCachingFlags(O2ImageRef self) {
+    return (self != NULL) ? self->_cachingFlags : 0;
+}
+
+void O2ImageSetCachingFlags(O2ImageRef self, uint32_t flags) {
+    if (self != NULL)
+        self->_cachingFlags = flags;
+}
+
 void O2ImageRelease(O2ImageRef self) {
     if (self != NULL)
         CFRelease(self);

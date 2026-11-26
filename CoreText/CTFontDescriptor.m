@@ -28,9 +28,13 @@ const CFStringRef kCTFontEnabledAttribute = CFSTR("NSCTFontEnabledAttribute");
 const CFStringRef kCTFontFormatAttribute = CFSTR("NSCTFontFormatAttribute");
 const CFStringRef kCTFontRegistrationScopeAttribute = CFSTR("NSCTFontRegistrationScopeAttribute");
 const CFStringRef kCTFontPriorityAttribute = CFSTR("NSCTFontPriorityAttribute");
+const CFStringRef kCTFontDownloadableAttribute = CFSTR("NSCTFontDownloadableAttribute");
+const CFStringRef kCTFontDownloadedAttribute = CFSTR("NSCTFontDownloadedAttribute");
 const CFStringRef kCTFontDescriptorLanguageAttribute = CFSTR("CTFontDescriptorLanguageAttribute");
 __attribute__((visibility("hidden")))
 const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
+__attribute__((visibility("hidden")))
+const CFStringRef KTFontUIFontTypeAttribute = CFSTR("KTFontUIFontTypeAttribute");
 
 @implementation KTFontDescriptor
 
@@ -41,12 +45,20 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
 - initWithAttributes: (NSDictionary *) attributes
             fontData: (NSData *) data
            faceIndex: (int) faceIndex {
+    return [self initWithAttributes: attributes fontData: data faceIndex: faceIndex options: 0];
+}
+
+- initWithAttributes: (NSDictionary *) attributes
+            fontData: (NSData *) data
+           faceIndex: (int) faceIndex
+             options: (uint32_t) options {
     self = [super init];
     if (self == nil)
         return nil;
     _attributes = attributes ? [attributes copy] : [[NSDictionary alloc] init];
     _fontData = [data copy];
     _faceIndex = faceIndex;
+    _options = options;
     return self;
 }
 
@@ -76,6 +88,10 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
     return _faceIndex;
 }
 
+- (uint32_t) options {
+    return _options;
+}
+
 - (BOOL) isEqual: (id) other {
     if (other == self)
         return YES;
@@ -83,7 +99,7 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
         return NO;
     KTFontDescriptor *descriptor = other;
     if (![_attributes isEqual: descriptor->_attributes] ||
-        _faceIndex != descriptor->_faceIndex)
+        _faceIndex != descriptor->_faceIndex || _options != descriptor->_options)
         return NO;
     if (_fontData == nil || descriptor->_fontData == nil)
         return _fontData == descriptor->_fontData;
@@ -103,8 +119,15 @@ const CFStringRef KTFontSystemUIAttribute = CFSTR("KTFontSystemUIAttribute");
 
 static NSString *stringAttribute(NSDictionary *attributes, CFStringRef key);
 
+// NSFontDescriptor and CTFontDescriptorRef are toll-free bridged, so the
+// functions may be given an NSFontDescriptor: AppKit gives the CoreText
+// descriptor with its attributes (as an NSFont gives its CTFont, see ktFont()).
 static KTFontDescriptor *descriptorObject(CTFontDescriptorRef descriptor) {
-    return (KTFontDescriptor *) descriptor;
+    id object = (id) descriptor;
+    if (object != nil && ![object isKindOfClass: [KTFontDescriptor class]] &&
+        [object respondsToSelector: @selector(_coreTextFontDescriptor)])
+        return (KTFontDescriptor *) [object performSelector: @selector(_coreTextFontDescriptor)];
+    return (KTFontDescriptor *) object;
 }
 
 CTFontDescriptorRef KTFontDescriptorCreateWithFontData(CFDictionaryRef attributes,
@@ -167,8 +190,11 @@ CTFontDescriptorRef CTFontDescriptorCreateCopyWithAttributes(CTFontDescriptorRef
     NSMutableDictionary *merged = [[descriptor attributes] mutableCopy];
     if (attributes != NULL)
         [merged addEntriesFromDictionary: (NSDictionary *) attributes];
-    CTFontDescriptorRef result = KTFontDescriptorCreateWithFontDataAndFaceIndex(
-            (CFDictionaryRef) merged, (CFDataRef) [descriptor fontData], [descriptor faceIndex]);
+    CTFontDescriptorRef result = (CTFontDescriptorRef) [[KTFontDescriptor alloc]
+            initWithAttributes: merged
+                      fontData: [descriptor fontData]
+                     faceIndex: [descriptor faceIndex]
+                       options: [descriptor options]];
     [merged release];
     return result;
 }
@@ -200,6 +226,8 @@ static id installedFaceAttribute(KTFontDescriptor *descriptor, CFStringRef attri
 
     NSString *name = stringAttribute([descriptor attributes], kCTFontNameAttribute);
     if (name == nil)
+        name = stringAttribute([descriptor attributes], kCTFontPostScriptNameAttribute);
+    if (name == nil)
         return nil;
     NSArray *faces = O2FontCopyInstalledFaces(nil, name, nil, nil);
     id value = nil;
@@ -211,13 +239,50 @@ static id installedFaceAttribute(KTFontDescriptor *descriptor, CFStringRef attri
     return value;
 }
 
+// Attributes that name the same property as another attribute: kCTFontNameAttribute is
+// documented as the PostScript name, which is what kCTFontPostScriptNameAttribute names too, and
+// the reference URL of a face is taken to be the URL of its font file (inferred: no public
+// source describes kCTFontReferenceURLAttribute). A descriptor may carry either key.
+static CFStringRef aliasOfAttribute(CFStringRef attribute)
+{
+    if (CFEqual(attribute, kCTFontNameAttribute))
+        return kCTFontPostScriptNameAttribute;
+    if (CFEqual(attribute, kCTFontPostScriptNameAttribute))
+        return kCTFontNameAttribute;
+    if (CFEqual(attribute, kCTFontReferenceURLAttribute))
+        return kCTFontURLAttribute;
+    return NULL;
+}
+
+// The value of an attribute in an attribute dictionary, or of its alias.
+static id attributeOrAlias(NSDictionary *attributes, CFStringRef attribute)
+{
+    id value = [attributes objectForKey: (NSString *) attribute];
+    CFStringRef alias = aliasOfAttribute(attribute);
+    if (value == nil && alias != NULL)
+        value = [attributes objectForKey: (NSString *) alias];
+    return value;
+}
+
 CFTypeRef CTFontDescriptorCopyAttribute(CTFontDescriptorRef descriptor, CFStringRef attribute)
 {
     if (descriptor == NULL || attribute == NULL)
         return NULL;
-    id value = [[descriptorObject(descriptor) attributes] objectForKey: (NSString *) attribute];
+    KTFontDescriptor *object = descriptorObject(descriptor);
+    id value = attributeOrAlias([object attributes], attribute);
     if (value == nil)
-        value = installedFaceAttribute(descriptorObject(descriptor), attribute);
+        value = installedFaceAttribute(object, attribute);
+    CFStringRef alias = aliasOfAttribute(attribute);
+    if (value == nil && alias != NULL)
+        value = installedFaceAttribute(object, alias);
+    // Darling's fonts are files it has: none can be or was downloaded on demand.
+    // QUIRK: the value is the CFNumber 0 (kCFNumberSInt32Type), not
+    // kCFBooleanFalse as the attributes' documentation suggests, so a comparison
+    // with kCFBooleanFalse is false. Evidence: black-box observation on macOS
+    // 26.7.3 (tier 2) of both attributes of an installed font.
+    // Test: tests/coretext-manager-register-font-urls.m (the quirk checks).
+    if (value == nil && (CFEqual(attribute, kCTFontDownloadableAttribute) || CFEqual(attribute, kCTFontDownloadedAttribute)))
+        value = [NSNumber numberWithInt: 0];
     return (CFTypeRef) [value retain];
 }
 
@@ -225,6 +290,11 @@ bool CTFontDescriptorIsSystemUIFont(CTFontDescriptorRef descriptor)
 {
     if (descriptor == NULL)
         return false;
+    // The option is taken to mark the descriptor as one of a system UI font,
+    // as its name says (inferred). CTFontDescriptorGetOptions() reports it for
+    // the descriptors of system UI fonts, so the two round-trip.
+    if ([descriptorObject(descriptor) options] & kCTFontDescriptorOptionSystemUIFont)
+        return true;
     id value = [[descriptorObject(descriptor) attributes] objectForKey: (NSString *) KTFontSystemUIAttribute];
     return [value isKindOfClass: [NSNumber class]] && [value boolValue];
 }
@@ -257,9 +327,12 @@ CFArrayRef CTFontDescriptorCreateMatchingFontDescriptors(CTFontDescriptorRef des
     // Helvetica, ...). Those are answered by the installed family that stands
     // in for them, which is also the family its faces and fonts report.
     NSString *family = stringAttribute(query, kCTFontFamilyNameAttribute);
+    NSString *postScriptName = stringAttribute(query, kCTFontNameAttribute);
+    if (postScriptName == nil)
+        postScriptName = stringAttribute(query, kCTFontPostScriptNameAttribute);
     NSArray *faces = O2FontCopyInstalledFaces(
             family,
-            stringAttribute(query, kCTFontNameAttribute),
+            postScriptName,
             stringAttribute(query, kCTFontStyleNameAttribute),
             stringAttribute(query, kCTFontDisplayNameAttribute));
     if (family != nil && [faces count] == 0) {
@@ -268,7 +341,7 @@ CFArrayRef CTFontDescriptorCreateMatchingFontDescriptors(CTFontDescriptorRef des
             [faces release];
             faces = O2FontCopyInstalledFaces(
                     installedFamily,
-                    stringAttribute(query, kCTFontNameAttribute),
+                    postScriptName,
                     stringAttribute(query, kCTFontStyleNameAttribute),
                     stringAttribute(query, kCTFontDisplayNameAttribute));
             [installedFamily release];
@@ -303,6 +376,11 @@ CFArrayRef CTFontDescriptorCreateMatchingFontDescriptors(CTFontDescriptorRef des
             if (slant != nil)
                 [traits setObject: slant forKey: (NSString *) kCTFontSlantTrait];
             [attributes setObject: traits forKey: (NSString *) kCTFontTraitsAttribute];
+            [attributes setObject: [NSNumber numberWithDouble: KTFontCSSWeightForWeightTrait([weight doubleValue])]
+                           forKey: (NSString *) kCTFontCSSWeightAttribute];
+            if (width != nil)
+                [attributes setObject: [NSNumber numberWithDouble: KTFontCSSWidthForWidthTrait([width doubleValue])]
+                               forKey: (NSString *) kCTFontCSSWidthAttribute];
         }
         if ((value = [face objectForKey: @"path"]) != nil)
             [attributes setObject: [NSURL fileURLWithPath: value]
@@ -315,8 +393,8 @@ CFArrayRef CTFontDescriptorCreateMatchingFontDescriptors(CTFontDescriptorRef des
 
         BOOL accepted = YES;
         for (id key in (NSSet *) mandatoryAttributes) {
-            id expected = [query objectForKey: key];
-            if (expected == nil || ![expected isEqual: [attributes objectForKey: key]]) {
+            id expected = attributeOrAlias(query, (CFStringRef) key);
+            if (expected == nil || ![expected isEqual: attributeOrAlias(attributes, (CFStringRef) key)]) {
                 accepted = NO;
                 break;
             }
@@ -439,4 +517,191 @@ CTFontDescriptorRef CTFontDescriptorCreateCopyWithVariation(CTFontDescriptorRef 
             CTFontDescriptorCreateCopyWithAttributes(original, (CFDictionaryRef) changes);
     [variations release];
     return result;
+}
+
+CTFontDescriptorRef CTFontDescriptorCreateWithAttributesAndOptions(CFDictionaryRef attributes,
+                                                                   CTFontDescriptorOptions options)
+{
+    if (attributes == NULL)
+        return NULL;
+    return (CTFontDescriptorRef) [[KTFontDescriptor alloc] initWithAttributes: (NSDictionary *) attributes
+                                                                     fontData: nil
+                                                                    faceIndex: 0
+                                                                      options: options];
+}
+
+CTFontDescriptorOptions CTFontDescriptorGetOptions(CTFontDescriptorRef descriptor)
+{
+    if (descriptor == NULL)
+        return 0;
+    CTFontDescriptorOptions options = [descriptorObject(descriptor) options];
+    if (CTFontDescriptorIsSystemUIFont(descriptor))
+        options |= kCTFontDescriptorOptionSystemUIFont;
+    return options;
+}
+
+// A copy of a descriptor with one more attribute. Consumes the descriptor.
+static CTFontDescriptorRef descriptorAddingAttribute(CTFontDescriptorRef descriptor,
+                                                     CFStringRef attribute, CFTypeRef value)
+{
+    if (descriptor == NULL || value == NULL)
+        return descriptor;
+    NSDictionary *change = [NSDictionary dictionaryWithObject: (id) value forKey: (NSString *) attribute];
+    CTFontDescriptorRef result = CTFontDescriptorCreateCopyWithAttributes(descriptor, (CFDictionaryRef) change);
+    CFRelease(descriptor);
+    return result;
+}
+
+CTFontDescriptorRef CTFontDescriptorCreateForUIType(CTFontUIFontType uiType, CGFloat size,
+                                                    CFStringRef language)
+{
+    // The descriptor describes the font CTFontCreateUIFontForLanguage() makes,
+    // so a font made from it is that font again (a system UI font of the type).
+    CTFontRef font = CTFontCreateUIFontForLanguage(uiType, size, language);
+    if (font == NULL)
+        return NULL;
+    CTFontDescriptorRef descriptor = CTFontCopyFontDescriptor(font);
+    CFRelease(font);
+    if (language != NULL && CFGetTypeID(language) == CFStringGetTypeID())
+        descriptor = descriptorAddingAttribute(descriptor, kCTFontDescriptorLanguageAttribute, language);
+    return descriptor;
+}
+
+// The metrics of the text styles: point size, weight and line height. Both
+// tables were read from CTFontDescriptorGetTextStyleSize() on macOS 26.7.3
+// (black-box observation): the first for kCTFontTextStylePlatformDefault and
+// kCTFontTextStylePlatformMac, which give the same values for every size
+// category; the second for the phone platform at the default category ("L").
+// On that system the watch, TV and vision platforms give the phone values, and
+// those platforms scale them by size category; Darling does not scale them.
+// Test: tests/coretext-spi-descriptors.c
+typedef struct {
+    const CFStringRef *style;
+    CGFloat macSize;
+    const CGFloat *macWeight;
+    CGFloat macLineHeight;
+    CGFloat phoneSize;
+    const CGFloat *phoneWeight;
+    CGFloat phoneLineHeight;
+} KTTextStyleMetrics;
+
+static const KTTextStyleMetrics *textStyleMetrics(CFStringRef style)
+{
+    static const KTTextStyleMetrics table[] = {
+        { &kCTUIFontTextStyleTitle0, 26, &kCTFontWeightRegular, 32, 34, &kCTFontWeightRegular, 41 },
+        { &kCTUIFontTextStyleTitle1, 22, &kCTFontWeightRegular, 26, 28, &kCTFontWeightRegular, 34 },
+        { &kCTUIFontTextStyleTitle2, 17, &kCTFontWeightRegular, 22, 22, &kCTFontWeightRegular, 28 },
+        { &kCTUIFontTextStyleTitle3, 15, &kCTFontWeightRegular, 20, 20, &kCTFontWeightRegular, 25 },
+        { &kCTUIFontTextStyleTitle4, 38, &kCTFontWeightHeavy, 48, 38, &kCTFontWeightHeavy, 48 },
+        { &kCTUIFontTextStyleHeadline, 13, &kCTFontWeightBold, 16, 17, &kCTFontWeightSemibold, 22 },
+        { &kCTUIFontTextStyleShortHeadline, 13, &kCTFontWeightBold, 14, 17, &kCTFontWeightSemibold, 20 },
+        { &kCTUIFontTextStyleBody, 13, &kCTFontWeightRegular, 16, 17, &kCTFontWeightRegular, 22 },
+        { &kCTUIFontTextStyleShortBody, 13, &kCTFontWeightRegular, 14, 17, &kCTFontWeightRegular, 20 },
+        { &kCTUIFontTextStyleTallBody, 13, &kCTFontWeightRegular, 18, 17, &kCTFontWeightRegular, 24 },
+        { &kCTUIFontTextStyleSubhead, 11, &kCTFontWeightRegular, 14, 15, &kCTFontWeightRegular, 20 },
+        { &kCTUIFontTextStyleShortSubhead, 11, &kCTFontWeightRegular, 12, 15, &kCTFontWeightRegular, 18 },
+        { &kCTUIFontTextStyleFootnote, 10, &kCTFontWeightRegular, 13, 13, &kCTFontWeightRegular, 18 },
+        { &kCTUIFontTextStyleShortFootnote, 10, &kCTFontWeightRegular, 11, 13, &kCTFontWeightRegular, 16 },
+        { &kCTUIFontTextStyleCaption1, 10, &kCTFontWeightRegular, 13, 12, &kCTFontWeightRegular, 16 },
+        { &kCTUIFontTextStyleShortCaption1, 10, &kCTFontWeightRegular, 11, 12, &kCTFontWeightRegular, 14 },
+        { &kCTUIFontTextStyleCaption2, 10, &kCTFontWeightMedium, 13, 11, &kCTFontWeightRegular, 13 },
+    };
+    if (style == NULL || CFGetTypeID(style) != CFStringGetTypeID())
+        return NULL;
+    for (size_t i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
+        if (CFEqual(style, *table[i].style))
+            return &table[i];
+    }
+    return NULL;
+}
+
+// Whether a platform gets the phone metrics (see above). The Touch Bar
+// platform was observed to give neither table; giving it the macOS one is
+// Darling's choice.
+static bool usesPhoneMetrics(CTFontTextStylePlatform platform)
+{
+    switch (platform) {
+    case kCTFontTextStylePlatformPhone:
+    case kCTFontTextStylePlatformWatch:
+    case kCTFontTextStylePlatformTV:
+    case kCTFontTextStylePlatformVision:
+    case kCTFontTextStylePlatformVisionLegacy:
+        return true;
+    default:
+        return false;
+    }
+}
+
+CGFloat CTFontDescriptorGetTextStyleSize(CFStringRef style, CFTypeRef sizeCategory,
+                                         CTFontTextStylePlatform platform,
+                                         CGFloat *weight, CGFloat *lineSpacing)
+{
+    const KTTextStyleMetrics *metrics = textStyleMetrics(style);
+    if (metrics == NULL)
+        return 0;
+    bool phone = usesPhoneMetrics(platform);
+    if (weight != NULL)
+        *weight = phone ? *metrics->phoneWeight : *metrics->macWeight;
+    if (lineSpacing != NULL)
+        *lineSpacing = phone ? metrics->phoneLineHeight : metrics->macLineHeight;
+    return phone ? metrics->phoneSize : metrics->macSize;
+}
+
+CTFontDescriptorRef CTFontDescriptorCreateWithTextStyle(CFStringRef style, CFStringRef sizeCategory,
+                                                        CFStringRef language)
+{
+    const KTTextStyleMetrics *metrics = textStyleMetrics(style);
+    if (metrics == NULL)
+        return NULL;
+    // Darling's system UI font has a regular and a bold face.
+    CTFontUIFontType type = *metrics->macWeight >= kCTFontWeightBold ? kCTFontUIFontEmphasizedSystem
+                                                                     : kCTFontUIFontSystem;
+    CTFontDescriptorRef descriptor = CTFontDescriptorCreateForUIType(type, metrics->macSize, language);
+    return descriptorAddingAttribute(descriptor, kCTFontDescriptorTextStyleAttribute, style);
+}
+
+// The descriptor of the face fontconfig resolves a name to, by family and
+// PostScript name. NULL when nothing is installed.
+static CTFontDescriptorRef createDescriptorForResolvedName(CFStringRef name, CGFloat size)
+{
+    CTFontRef font = CTFontCreateWithName(name, size, NULL);
+    if (font == NULL)
+        return NULL;
+    NSMutableDictionary *attributes = [NSMutableDictionary dictionary];
+    NSString *postScriptName = [(NSString *) CTFontCopyPostScriptName(font) autorelease];
+    NSString *family = [(NSString *) CTFontCopyFamilyName(font) autorelease];
+    CFRelease(font);
+    if (postScriptName != nil)
+        [attributes setObject: postScriptName forKey: (NSString *) kCTFontNameAttribute];
+    if (family != nil)
+        [attributes setObject: family forKey: (NSString *) kCTFontFamilyNameAttribute];
+    if ([attributes count] == 0)
+        return NULL;
+    return CTFontDescriptorCreateWithAttributes((CFDictionaryRef) attributes);
+}
+
+CTFontDescriptorRef CTFontDescriptorCreateForCSSFamily(CFStringRef cssFamily, CFStringRef language)
+{
+    static const CFStringRef *families[] = {
+        &kCTFontCSSFamilySerif, &kCTFontCSSFamilySansSerif, &kCTFontCSSFamilyCursive,
+        &kCTFontCSSFamilyFantasy, &kCTFontCSSFamilyMonospace,
+    };
+    if (cssFamily == NULL || CFGetTypeID(cssFamily) != CFStringGetTypeID())
+        return NULL;
+    for (size_t i = 0; i < sizeof(families) / sizeof(families[0]); i++) {
+        // The generic families are fontconfig's generic family names too, so
+        // fontconfig's configuration picks the face. The language does not
+        // take part: Darling's font lookup by name has no language.
+        if (CFStringCompare(cssFamily, *families[i], kCFCompareCaseInsensitive) == kCFCompareEqualTo)
+            return createDescriptorForResolvedName(*families[i], 0);
+    }
+    return NULL;
+}
+
+CTFontDescriptorRef CTFontDescriptorCreateLastResort(void)
+{
+    // Darling has no LastResort font. The face fontconfig falls back to for
+    // sans-serif text is the last resort here: some face always answers it
+    // where any font is installed.
+    return createDescriptorForResolvedName(kCTFontCSSFamilySansSerif, 0);
 }

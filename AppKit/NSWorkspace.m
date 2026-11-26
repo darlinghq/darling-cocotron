@@ -92,10 +92,11 @@ NSNotificationName NSWorkspaceWillUnmountNotification = @"NSWorkspaceWillUnmount
     return shared;
 }
 
-// The front application, as last seen by this process, and whether a refresh is under way (key-value
-// observing reads the old value through the getter, which must not start another one). Both are
-// guarded by @synchronized([NSWorkspace class]).
+// The front application and the menu bar owning application, as last seen by this process, and
+// whether a refresh is under way (key-value observing reads the old value through the getter,
+// which must not start another one). All are guarded by @synchronized([NSWorkspace class]).
 static NSRunningApplication *frontApplication;
+static NSRunningApplication *menuBarOwner;
 static BOOL refreshingFrontApplication;
 
 // The front process is kept by CoreGraphics (the display server answers where it can) and
@@ -108,41 +109,67 @@ static NSRunningApplication *QueryFrontApplication(void) {
     return [NSRunningApplication runningApplicationWithProcessIdentifier: pid];
 }
 
-// Compares the front application with the one seen last, and when it differs reports the
-// change: key-value observers, then the deactivation of the old and the activation of the new
-// application. Without notify, only the stored value is brought up to date.
+// The menu bar owner is kept by CoreGraphics as well (see _CGSSetMenuBarOwnerProcess).
+static NSRunningApplication *QueryMenuBarOwner(void) {
+    pid_t pid = 0;
+    if (_CGSGetMenuBarOwnerProcess(&pid) != kCGErrorSuccess || pid <= 0)
+        return nil;
+    return [NSRunningApplication runningApplicationWithProcessIdentifier: pid];
+}
+
+static BOOL SameApplication(NSRunningApplication *a, NSRunningApplication *b) {
+    return a == b || (a != nil && [a isEqual: b]);
+}
+
+// Compares the front application and the menu bar owner with the ones seen last, and when they
+// differ reports the change: key-value observers, then (for the front application) the
+// deactivation of the old and the activation of the new application. Without notify, only the
+// stored values are brought up to date.
 - (void) _refreshFrontApplicationPosting: (BOOL) post {
     @synchronized([NSWorkspace class]) {
         if (refreshingFrontApplication)
             return;
         NSRunningApplication *now = QueryFrontApplication();
         NSRunningApplication *old = frontApplication;
-        if (now == old || (now != nil && [now isEqual: old]))
+        NSRunningApplication *ownerNow = QueryMenuBarOwner();
+        NSRunningApplication *ownerOld = menuBarOwner;
+        BOOL frontChanged = !SameApplication(now, old);
+        BOOL ownerChanged = !SameApplication(ownerNow, ownerOld);
+        if (!frontChanged && !ownerChanged)
             return;
 
         if (!post) {
             frontApplication = [now retain];
+            menuBarOwner = [ownerNow retain];
             [old release];
+            [ownerOld release];
             return;
         }
 
         refreshingFrontApplication = YES;
-        [self willChangeValueForKey: @"frontmostApplication"];
-        [self willChangeValueForKey: @"menuBarOwningApplication"];
+        if (frontChanged)
+            [self willChangeValueForKey: @"frontmostApplication"];
+        if (ownerChanged)
+            [self willChangeValueForKey: @"menuBarOwningApplication"];
         frontApplication = [now retain];
-        [self didChangeValueForKey: @"menuBarOwningApplication"];
-        [self didChangeValueForKey: @"frontmostApplication"];
+        menuBarOwner = [ownerNow retain];
+        if (ownerChanged)
+            [self didChangeValueForKey: @"menuBarOwningApplication"];
+        if (frontChanged)
+            [self didChangeValueForKey: @"frontmostApplication"];
         refreshingFrontApplication = NO;
 
-        if (old != nil)
-            [_notificationCenter postNotificationName: NSWorkspaceDidDeactivateApplicationNotification
-                                               object: self
-                                             userInfo: @{NSWorkspaceApplicationKey : old}];
-        if (now != nil)
+        // The activation comes before the deactivation of the old front application, as on macOS.
+        if (frontChanged && now != nil)
             [_notificationCenter postNotificationName: NSWorkspaceDidActivateApplicationNotification
                                                object: self
                                              userInfo: @{NSWorkspaceApplicationKey : now}];
+        if (frontChanged && old != nil)
+            [_notificationCenter postNotificationName: NSWorkspaceDidDeactivateApplicationNotification
+                                               object: self
+                                             userInfo: @{NSWorkspaceApplicationKey : old}];
         [old release];
+        [ownerOld release];
     }
 }
 
@@ -168,10 +195,14 @@ static NSRunningApplication *QueryFrontApplication(void) {
     }
 }
 
-// Darling has no menu bar of its own that another application could own while it is not the
-// front application: the menu bar belongs to the application that has the focus.
+// The menu bar belongs to the last regular application that became active, which an application
+// that is not regular (an agent) taking the focus does not change, as long as a Darling
+// application has the focus (see _CGSGetMenuBarOwnerProcess).
 - (NSRunningApplication *) menuBarOwningApplication {
-    return [self frontmostApplication];
+    [self _refreshFrontApplicationPosting: YES];
+    @synchronized([NSWorkspace class]) {
+        return [[menuBarOwner retain] autorelease];
+    }
 }
 
 - (NSNotificationCenter *) notificationCenter {

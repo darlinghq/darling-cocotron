@@ -63,7 +63,7 @@ typedef NS_OPTIONS(NSUInteger, NSSpringLoadingOptions) {
     NSSpringLoadingNoHover = 1UL << 3,
 };
 
-@protocol NSDraggingInfo
+@protocol NSDraggingInfo <NSObject>
 - (NSPasteboard *) draggingPasteboard;
 - (NSDragOperation) draggingSourceOperationMask;
 - (NSPoint) draggingLocation;
@@ -72,7 +72,7 @@ typedef NS_OPTIONS(NSUInteger, NSSpringLoadingOptions) {
 - (NSWindow *) draggingDestinationWindow;
 - (id) draggingSource;
 - (void) slideDraggedImageTo: (NSPoint) point;
-- (int) draggingSequenceNumber;
+- (NSInteger) draggingSequenceNumber;
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination;
 
 // What a destination sees of the items, and may change for the rest of the drag

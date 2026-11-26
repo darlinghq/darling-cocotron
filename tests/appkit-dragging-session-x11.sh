@@ -4,7 +4,8 @@
 #
 # Drags from the "drag-source" window of tests/appkit-dragging-session-live.m to its "drag-target" window with XTest
 # (xdotool) on $DISPLAY, which must have a window manager: once plainly, once holding Option (Alt), and checks the
-# session callbacks, the mask the target saw and what it read. Usage:
+# session callbacks (only the session's: a pre-10.7 source message would show in their order as "legacy"), the mask
+# the target saw and what it read. Usage:
 #   appkit-dragging-session-x11.sh <command that runs "appkit-dragging-session-live <seconds>">
 # for example: appkit-dragging-session-x11.sh darling shell /path/appkit-dragging-session-live 30
 # Needs xdotool.

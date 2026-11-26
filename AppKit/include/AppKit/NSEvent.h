@@ -64,6 +64,10 @@ typedef NS_ENUM(NSUInteger, NSEventType) {
 
     NSEventTypeRotate = 18,
 
+    NSEventTypeBeginGesture = 19,
+
+    NSEventTypeEndGesture = 20,
+
     NSEventTypeScrollWheel = 22,
 
     NSEventTypeOtherMouseDown = 25,
@@ -72,7 +76,18 @@ typedef NS_ENUM(NSUInteger, NSEventType) {
 
     NSEventTypeOtherMouseDragged = 27,
 
+    NSEventTypeGesture = 29,
+
     NSEventTypeMagnify = 30,
+
+    NSEventTypeSwipe = 31,
+
+    NSEventTypeSmartMagnify = 32,
+
+    NSEventTypeQuickLook = 33,
+
+    // Force Touch trackpads (macOS 10.10.3); see -stage and -pressure.
+    NSEventTypePressure = 34,
 
     // A touch screen; see NSTouch.h.
     NSEventTypeDirectTouch = 37,
@@ -130,7 +145,13 @@ typedef NS_OPTIONS(unsigned long long, NSEventMask) {
     NSEventMaskOtherMouseUp = 1ULL << NSEventTypeOtherMouseUp,
     NSEventMaskOtherMouseDragged = 1ULL << NSEventTypeOtherMouseDragged,
     NSEventMaskRotate = 1ULL << NSEventTypeRotate,
+    NSEventMaskBeginGesture = 1ULL << NSEventTypeBeginGesture,
+    NSEventMaskEndGesture = 1ULL << NSEventTypeEndGesture,
+    NSEventMaskGesture = 1ULL << NSEventTypeGesture,
     NSEventMaskMagnify = 1ULL << NSEventTypeMagnify,
+    NSEventMaskSwipe = 1ULL << NSEventTypeSwipe,
+    NSEventMaskSmartMagnify = 1ULL << NSEventTypeSmartMagnify,
+    NSEventMaskPressure = 1ULL << NSEventTypePressure,
     NSEventMaskDirectTouch = 1ULL << NSEventTypeDirectTouch,
     NSEventMaskAny = NSUIntegerMax,
 };
@@ -273,6 +294,18 @@ enum {
     NSTabletPointEventSubtype = NSEventSubtypeTabletPoint,
     NSTabletProximityEventSubtype = NSEventSubtypeTabletProximity,
     NSTouchEventSubtype = NSEventSubtypeTouch,
+};
+
+// How a Force Touch trackpad's pressure gesture behaves (see
+// NSPressureConfiguration).
+typedef NS_ENUM(NSInteger, NSPressureBehavior) {
+    NSPressureBehaviorUnknown = -1,
+    NSPressureBehaviorPrimaryDefault = 0,
+    NSPressureBehaviorPrimaryClick = 1,
+    NSPressureBehaviorPrimaryGeneric = 2,
+    NSPressureBehaviorPrimaryAccelerator = 3,
+    NSPressureBehaviorPrimaryDeepClick = 5,
+    NSPressureBehaviorPrimaryDeepDrag = 6,
 };
 
 typedef NS_OPTIONS(NSUInteger, NSEventPhase) {
@@ -425,6 +458,9 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @property(nonatomic, readonly) NSEventPhase phase;
 @property(nonatomic, readonly) NSEventPhase momentumPhase;
 @property(nonatomic, readonly) CGFloat magnification;
+@property(readonly) float pressure;
+@property(readonly) NSInteger stage;
+@property(readonly) CGFloat stageTransition;
 @property(nonatomic, readonly) float rotation;
 @property(nonatomic, readonly) BOOL hasPreciseScrollingDeltas;
 @property(nonatomic, readonly) CGFloat scrollingDeltaX;

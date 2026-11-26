@@ -3,7 +3,14 @@
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
+// DARLING: SDK consumers get the type macOS's SDK has, a pointer to const,
+// which code that declares the type itself relies on; Darling's own build
+// keeps its own.
+#ifdef DARLING
 typedef struct __CTRun* CTRunRef;
+#else
+typedef const struct CF_BRIDGED_TYPE(id) __CTRun * CTRunRef;
+#endif
 
 typedef CF_OPTIONS(uint32_t, CTRunStatus)
 {

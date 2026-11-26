@@ -6,7 +6,7 @@
 #include <math.h>
 #include <stdio.h>
 
-// The warp glue of CGDirectDisplay.m against the real backend: argument checks,
+// The warp glue of CGDirectDisplay.m against the real backend: argument checks (non-finite coordinates),
 // clipping to the desktop, and the point CGEventGetLocation reports afterwards.
 // The conversion arithmetic itself is covered on the host by cg-warp-mouse.sh.
 // Needs a display (run on the X server of the guest).
@@ -29,15 +29,31 @@ int main(void) {
     if (bounds.size.width < 4 || bounds.size.height < 4)
         return 3;
 
-    // Non-finite points are rejected before anything moves.
-    CGPoint before = pointer();
-    if (CGWarpMouseCursorPosition(CGPointMake(NAN, 1)) != kCGErrorIllegalArgument)
-        return 10;
-    if (CGWarpMouseCursorPosition(CGPointMake(1, INFINITY)) != kCGErrorIllegalArgument)
-        return 11;
-    CGPoint after = pointer();
-    if (before.x != after.x || before.y != after.y)
-        return 12;
+    // A coordinate that is not a finite number is taken as 0 on its own axis, and the warp succeeds (QUIRK of
+    // CGDirectDisplay.m: the Macs do this, 26.7.3 and 10.14.4, also for infinity, which is not clamped to the far edge).
+    // The expectation is the global point, so the desktop is assumed to start at the origin.
+    struct { double x, y, wantX, wantY; } nonFinite[] = {
+        {NAN, 60, 0, 60}, {70, NAN, 70, 0}, {NAN, NAN, 0, 0},
+        {INFINITY, 60, 0, 60}, {-INFINITY, 60, 0, 60}, {70, INFINITY, 70, 0}, {70, -INFINITY, 70, 0},
+        {INFINITY, INFINITY, 0, 0},
+    };
+    for (unsigned i = 0; i < sizeof nonFinite / sizeof nonFinite[0]; i++) {
+        if (CGWarpMouseCursorPosition(CGPointMake(bounds.origin.x + 200, bounds.origin.y + 150)) != kCGErrorSuccess)
+            return 10;
+        if (CGWarpMouseCursorPosition(CGPointMake(nonFinite[i].x, nonFinite[i].y)) != kCGErrorSuccess) {
+            printf("non-finite case %u: not success\n", i);
+            return 11;
+        }
+        CGPoint at = pointer();
+        printf("non-finite case %u -> %g,%g\n", i, at.x, at.y);
+        if (fabs(at.x - nonFinite[i].wantX) > 1 || fabs(at.y - nonFinite[i].wantY) > 1)
+            return 12;
+    }
+    if (CGDisplayMoveCursorToPoint(display, CGPointMake(NAN, 45)) != kCGErrorSuccess)
+        return 14;
+    CGPoint nanMove = pointer();
+    if (fabs(nanMove.x - bounds.origin.x) > 1 || fabs(nanMove.y - (bounds.origin.y + 45)) > 1)
+        return 15;
 
     // An id no display owns has no corner to be relative to.
     if (CGDisplayMoveCursorToPoint(0x7ffffff0u, CGPointMake(5, 5)) != kCGErrorIllegalArgument)

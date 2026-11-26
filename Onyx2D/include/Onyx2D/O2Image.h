@@ -115,6 +115,9 @@ typedef O2Float *(*O2ImageFunction_read_a32f)(O2Image *self, int x, int y,
     O2ColorRenderingIntent _renderingIntent;
     O2Image *_mask;
     float _contentHeadroom;
+    // Hints from the client on how long decoded data is worth keeping; stored
+    // and reported, the image does not cache decoded data by them.
+    uint32_t _cachingFlags;
 
     NSData *_directData;
     const unsigned char *_directBytes;
@@ -198,6 +201,8 @@ O2ImageRef O2ImageCreateWithMaskingColors(O2ImageRef self,
                                           const O2Float *components);
 
 O2ImageRef O2ImageRetain(O2ImageRef self);
+uint32_t O2ImageGetCachingFlags(O2ImageRef self);
+void O2ImageSetCachingFlags(O2ImageRef self, uint32_t flags);
 void O2ImageRelease(O2ImageRef self);
 BOOL O2ImageIsMask(O2ImageRef self);
 

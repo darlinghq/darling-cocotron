@@ -381,7 +381,37 @@ CGEventRef CGEventCreateKeyboardEvent(CGEventSourceRef source, CGKeyCode virtual
 	// The events of a source nobody gave a keyboard type have type 3, not the type the source reports.
 	event->_fields[kCGKeyboardEventKeyboardType] = (src && src->_keyboardTypeSet) ? src->_keyboardType : kCGEventCreatedKeyboardType;
 
+	// QUIRK: the event carries a Unicode string without the client setting one: what the key types with no
+	// modifiers in the current keyboard layout (control characters for Return, Tab, Delete, the arrow and
+	// function keys, and so on). Flags set on the event afterwards do not change it; NSEvent applies them to
+	// the key code itself. A client's CGEventKeyboardSetUnicodeString() replaces the string. Not documented.
+	// Evidence: black-box observation on macOS 26.7.3 and 10.14.4, which agree (tier 2); the full tables are
+	// the probe results in mac-probes/cgevent-keyboard-unicode of the coordination repository.
+	// Test: tests/coregraphics-cgevent-keyboard-characters.m (quirk_ checks are all of it)
+	UniChar characters[16];
+	size_t count = _CGKeyCharacters(virtualKey, flags, kCGKeyCharactersDefault, characters, 16);
+	if (count > 0)
+	{
+		[event setUnicodeString: characters length: count];
+		event->_unicodeDerived = YES;
+	}
+
 	return (CGEventRef) event;
+}
+
+size_t _CGEventGetKeyCharacters(CGEventRef event, bool ignoringModifiers, UniChar* out, size_t max)
+{
+	CGEvent* e = (CGEvent*) event;
+	if (!e || !out || max == 0)
+		return 0;
+	if (e->_unicodeLength > 0 && !e->_unicodeDerived)
+	{
+		size_t count = e->_unicodeLength < max ? e->_unicodeLength : max;
+		memcpy(out, e->_unicodeString, count * sizeof(UniChar));
+		return count;
+	}
+	CGKeyCode key = (CGKeyCode) e->_fields[kCGKeyboardEventKeycode];
+	return _CGKeyCharacters(key, e->_flags, ignoringModifiers ? kCGKeyCharactersIgnoringModifiers : kCGKeyCharactersWithModifiers, out, max);
 }
 
 CGEventRef CGEventCreateMouseEvent(CGEventSourceRef source, CGEventType mouseType, CGPoint mouseCursorPosition, CGMouseButton mouseButton)
@@ -622,4 +652,12 @@ uint32_t CGEventGetEventRecordSize(CGEventRef event)
 {
 	CGEvent* e = (CGEvent*) event;
 	return e.eventRecordLength;
+}
+
+// The IOHIDEvent an event was made from. Events reach Darling from the display server rather
+// than from IOHIDFamily, and created events have none either (as observed on macOS 26.7.3), so
+// there is never one.
+CFTypeRef CGEventCopyIOHIDEvent(CGEventRef event)
+{
+    return NULL;
 }

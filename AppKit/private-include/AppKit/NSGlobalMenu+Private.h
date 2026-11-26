@@ -37,13 +37,19 @@
 // window frame is computed. The default is YES.
 - (BOOL) _showsMainMenuOutsideWindows;
 
+// Whether the desktop itself shows application menus (a global menu, which
+// the application exports its menu to). Asked once, before the first window
+// frame is computed. The default is NO.
+- (BOOL) _desktopShowsMainMenu;
+
 @end
 
 @interface NSWindow (NSInWindowMenuBar)
 
-// YES if the main menu is drawn as a strip inside titled windows (the
-// DarlingInWindowMenuBar preference, or a backend that has nowhere else to show
-// it) rather than shown globally.
+// YES if the main menu is drawn as a strip inside the windows that can carry
+// one (by default whenever the desktop has no global menu; the
+// DarlingMenuBarStyle and DarlingInWindowMenuBar preferences, or a backend that
+// has nowhere else to show it) rather than shown globally.
 + (BOOL) _usesInWindowMenuBar;
 
 @end

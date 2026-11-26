@@ -2,8 +2,9 @@
  * Copyright (C) 2026 Lubos Dolezel
  *
  * -[NSTextView replaceTextStorage:], writing direction over a range, stored
- * text view flags, the automatic substitution settings of NSSpellChecker and
- * the nil-selection quirk of -setSelectedRanges:. No window server needed.
+ * text view flags, the automatic substitution settings of NSSpellChecker,
+ * the names of their change notifications and the nil-selection quirk of
+ * -setSelectedRanges:. No window server needed.
  */
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -91,6 +92,14 @@ static void testSpellCheckerSettings(void)
     expect([NSSpellChecker isAutomaticTextCompletionEnabled], "completion follows the default");
     for (NSString *key in keys)
         [defaults removeObjectForKey: key];
+
+    // the notifications of the settings changing are named after themselves
+    expect([NSSpellCheckerDidChangeAutomaticQuoteSubstitutionNotification
+               isEqualToString: @"NSSpellCheckerDidChangeAutomaticQuoteSubstitutionNotification"],
+           "quote substitution notification name");
+    expect([NSSpellCheckerDidChangeAutomaticDashSubstitutionNotification
+               isEqualToString: @"NSSpellCheckerDidChangeAutomaticDashSubstitutionNotification"],
+           "dash substitution notification name");
 }
 
 int main(void)

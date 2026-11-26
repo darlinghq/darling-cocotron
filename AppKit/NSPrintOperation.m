@@ -37,10 +37,19 @@ enum {
 
 @implementation NSPrintOperation
 
-static NSPrintOperation *_currentOperation = nil;
+static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
 
+// Each thread has its own current operation.
 + (NSPrintOperation *) currentOperation {
-    return _currentOperation;
+    return [[[NSThread currentThread] threadDictionary] objectForKey: NSPrintOperationCurrentKey];
+}
+
++ (void) setCurrentOperation: (NSPrintOperation *) operation {
+    NSMutableDictionary *dictionary = [[NSThread currentThread] threadDictionary];
+    if (operation != nil)
+        [dictionary setObject: operation forKey: NSPrintOperationCurrentKey];
+    else
+        [dictionary removeObjectForKey: NSPrintOperationCurrentKey];
 }
 
 - initWithView: (NSView *) view
@@ -397,7 +406,7 @@ static NSPrintOperation *_currentOperation = nil;
     CGContextRef cgContext;
     NSMutableDictionary *dict = [NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary];
 
-    _currentOperation = self;
+    [NSPrintOperation setCurrentOperation: self];
 
     // Set the page range if not set yet
     knowsPageRange = [NS_EXTRA(NSPrintOperation, self)->_view knowsPageRange: &pageRange];
@@ -461,7 +470,7 @@ static NSPrintOperation *_currentOperation = nil;
 
     [self destroyContext];
 
-    _currentOperation = nil;
+    [NSPrintOperation setCurrentOperation: nil];
 
     if (NS_EXTRA(NSPrintOperation, self)->_path != nil)
         return [NS_EXTRA(NSPrintOperation, self)->_mutableData writeToFile: NS_EXTRA(NSPrintOperation, self)->_path atomically: YES];

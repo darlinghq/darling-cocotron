@@ -1,9 +1,13 @@
 
+// Everything here is Objective-C, so plain C and C++ code that includes this
+// header gets nothing from it.
+#ifdef __OBJC__
 #import <ApplicationServices/ApplicationServices.h>
 #import <QuartzCore/LegacyIvarLayout.h>
 #import <Foundation/Foundation.h>
 #import <QuartzCore/CAAction.h>
 #import <QuartzCore/CATransform3D.h>
+#import <QuartzCore/CAMediaTiming.h>
 
 @class CAAnimation, CALayerContext, CALayer;
 @protocol CALayoutManager;
@@ -97,7 +101,7 @@ CA_EXPORT CAToneMapMode const CAToneMapModeAutomatic;
 CA_EXPORT CAToneMapMode const CAToneMapModeNever;
 CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 
-@interface CALayer : NSObject <NSSecureCoding> {
+@interface CALayer : NSObject <NSSecureCoding, CAMediaTiming> {
     NS_LEGACY_IVAR_PAD(_legacyPadCALayer, 40)
     NS_EXTRA_IVARS_BEGIN(CALayer)
         CALayerContext *_context;
@@ -162,10 +166,19 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
         NSArray *_backgroundFilters;
         NSDictionary *_actions;
         NSDictionary *_style;
+        CFTimeInterval _beginTime;
+        CFTimeInterval _duration;
+        CFTimeInterval _timeOffset;
+        CFTimeInterval _repeatDuration;
+        float _speed;
+        float _repeatCount;
+        BOOL _autoreverses;
+        NSString *_fillMode;
+        BOOL _contentsOpaque;
     NS_EXTRA_IVARS_END(CALayer)
 }
 
-+ layer;
++ (instancetype) layer;
 
 @property(copy) NSString *name;
 @property(readonly) CALayer *superlayer;
@@ -293,6 +306,8 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 - (CGPoint) convertPoint: (CGPoint) point toLayer: (CALayer *) layer;
 - (CGRect) convertRect: (CGRect) rect fromLayer: (CALayer *) layer;
 - (CGRect) convertRect: (CGRect) rect toLayer: (CALayer *) layer;
+- (CFTimeInterval) convertTime: (CFTimeInterval) time fromLayer: (nullable CALayer *) layer;
+- (CFTimeInterval) convertTime: (CFTimeInterval) time toLayer: (nullable CALayer *) layer;
 
 - (void) addAnimation: (CAAnimation *) animation forKey: (NSString *) key;
 - (CAAnimation *) animationForKey: (NSString *) key;
@@ -305,6 +320,8 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 // the property. NSNull from any of these means no action.
 - (id<CAAction>) actionForKey: (NSString *) key;
 + (id<CAAction>) defaultActionForKey: (NSString *) key;
++ (id) defaultValueForKey: (NSString *) key;
++ (BOOL) needsDisplayForKey: (NSString *) key;
 
 @end
 
@@ -320,3 +337,5 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
 - (void) layoutSublayersOfLayer: (CALayer *) layer;
 
 @end
+
+#endif // __OBJC__

@@ -30,6 +30,8 @@
 @end
 
 CGError CGSNewRegionWithRect(const CGRect *rect, CGSRegionRef *newRegion) {
+    if (rect == NULL || newRegion == NULL)
+        return kCGErrorIllegalArgument;
     CGSRegion *reg = [CGSRegion new];
     reg.rect = *rect;
     *newRegion = (CGSRegionRef) reg;
@@ -65,3 +67,43 @@ CGRegionRef CGRegionCreateWithRect(CGRect rect) {
 void CGRegionRelease(CGRegionRef region) {
     CGSRegionRelease(region);
 }
+
+// CGSRegionRelease under the name WebKit uses; there is nothing to fail.
+CGError CGSReleaseRegion(const CGSRegionRef region) {
+    if (region != NULL)
+        CGSRegionRelease(region);
+    return kCGErrorSuccess;
+}
+
+// The regions here are single rectangles, so an enumerator holds at most one
+// rectangle; an empty region has none.
+struct CGSRegionEnumeratorObject {
+    CGRect rects[1];
+    size_t count;
+    size_t next;
+};
+
+CGSRegionEnumeratorObj CGSRegionEnumerator(CGSRegionRef region) {
+    if (region == NULL)
+        return NULL;
+    CGSRegionEnumeratorObj enumerator = calloc(1, sizeof(struct CGSRegionEnumeratorObject));
+    if (enumerator == NULL)
+        return NULL;
+    CGRect rect;
+    CGSRegionToRect(region, &rect);
+    if (!CGRectIsEmpty(rect))
+        enumerator->rects[enumerator->count++] = CGRectStandardize(rect);
+    return enumerator;
+}
+
+CGRect *CGSNextRect(const CGSRegionEnumeratorObj enumerator) {
+    if (enumerator == NULL || enumerator->next >= enumerator->count)
+        return NULL;
+    return &enumerator->rects[enumerator->next++];
+}
+
+CGError CGSReleaseRegionEnumerator(const CGSRegionEnumeratorObj enumerator) {
+    free(enumerator);
+    return kCGErrorSuccess;
+}
+

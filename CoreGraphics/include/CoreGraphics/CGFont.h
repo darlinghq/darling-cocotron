@@ -26,7 +26,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #include <CoreFoundation/CoreFoundation.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2Font *CGFontRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGFont *CGFontRef;
+#endif
 
 typedef uint16_t CGFontIndex;
 typedef CGFontIndex CGGlyph;
@@ -70,6 +76,15 @@ COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisName;
 COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisMinValue;
 COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisDefaultValue;
 COREGRAPHICS_EXPORT CFStringRef const kCGFontVariationAxisMaxValue;
+
+/* The variation axes of a variable font: an array of dictionaries with the kCGFontVariationAxis keys above (the
+ * name, and the minimum, default and maximum values as numbers). NULL for a font without variation axes. */
+COREGRAPHICS_EXPORT CFArrayRef CGFontCopyVariationAxes(CGFontRef font);
+/* The current variation settings: a dictionary from axis name to value; NULL for a font without variation axes. */
+COREGRAPHICS_EXPORT CFDictionaryRef CGFontCopyVariations(CGFontRef font);
+/* A font with the given axis values (a dictionary from axis name to number; unknown names are ignored). The font
+ * itself is returned (retained) when there is nothing to apply. */
+COREGRAPHICS_EXPORT CGFontRef CGFontCreateCopyWithVariations(CGFontRef font, CFDictionaryRef variations);
 
 CF_IMPLICIT_BRIDGING_DISABLED
 

@@ -24,7 +24,7 @@ CA_EXPORT CAMediaTimingFunctionName const kCAMediaTimingFunctionDefault;
                             :(float) c2x
                             :(float) c2y;
 
-+ functionWithControlPoints: (float)
++ (instancetype) functionWithControlPoints: (float)
                         c1x: (float) c1y
                            :(float) c2x
                            :(float) c2y;

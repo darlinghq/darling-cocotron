@@ -230,16 +230,47 @@ CGRect CGDisplayBounds(CGDirectDisplayID displayIndex) {
     return screen != nil ? [screen bounds] : CGRectZero;
 }
 
-// The cursor requests go to what owns the pointer (see CGSPointerController.h). A process
-// without one has no cursor of its own to hide.
+// The pointer's state is kept by the window system connection where the backend decodes the pointer itself
+// (X11); otherwise by what owns the pointer in this process (see CGSPointerController.h). A process with
+// neither has no cursor of its own to hide.
+static CGSConnection *pointerConnection(void) {
+    CGSConnection *connection = displayConnection();
+
+    return [connection managesPointer] ? connection : nil;
+}
+
+// Hides the cursor once more; each call is undone by one CGDisplayShowCursor(). The count is the
+// process', not the display's.
 CGError CGDisplayHideCursor(CGDirectDisplayID displayIndex) {
-    [pointerController() hideCursor];
+    CGSConnection *connection = pointerConnection();
+
+    if (connection != nil)
+        [connection hideCursor];
+    else
+        [pointerController() hideCursor];
     return kCGErrorSuccess;
 }
 
 CGError CGDisplayShowCursor(CGDirectDisplayID displayIndex) {
-    [pointerController() unhideCursor];
+    CGSConnection *connection = pointerConnection();
+
+    if (connection != nil)
+        [connection unhideCursor];
+    else
+        [pointerController() unhideCursor];
     return kCGErrorSuccess;
+}
+
+// Whether the cursor is visible: no hide is pending. A process with no pointer of its own has nothing hiding it.
+boolean_t CGCursorIsVisible(void) {
+    CGSConnection *connection = pointerConnection();
+
+    if (connection != nil)
+        return [connection cursorIsVisible];
+    id<CGSPointerController> controller = pointerController();
+    if ([controller respondsToSelector: @selector(cursorIsVisible)])
+        return [controller cursorIsVisible];
+    return true;
 }
 
 // Callers pass the connection id and nothing else, and do not use a result;
@@ -249,7 +280,12 @@ CGError CGDisplayShowCursor(CGDirectDisplayID displayIndex) {
 // from outside; this is the minimal reading of the name.
 // Test: coregraphics-cgs-force-show-cursor.m.
 void CGSForceShowCursor(CGSConnectionID cid) {
-    [pointerController() forceShowCursor];
+    CGSConnection *connection = pointerConnection();
+
+    if (connection != nil)
+        [connection forceShowCursor];
+    else
+        [pointerController() forceShowCursor];
 }
 
 // The image of a cursor the window server has registered under a name (for
@@ -364,10 +400,6 @@ CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display) {
     CGSScreen *screen = screenForDisplayID(activeScreens(NULL), display);
 
     return (CFStringRef) [[screen name] retain];
-}
-
-void _CGSRefreshDisplayLayout(void) {
-    [displayConnection() refreshDisplayLayout];
 }
 
 static NSData *edidForDisplay(CGDirectDisplayID displayId) {
@@ -538,12 +570,26 @@ static CGDisplayGeometryRect desktopBounds(NSArray<CGSScreen *> *screens) {
     return desktop;
 }
 
+// QUIRK: a coordinate that is not a finite number (NaN, +infinity, -infinity) is taken as 0, on its own axis, and the
+// warp succeeds: the cursor goes to 0 on that axis (and where it was asked to on the other one), it is not clamped to
+// the far edge for +infinity and no error is returned. Not documented. Evidence (tier 2, black-box): the return code
+// and the cursor position CGEventCreate(NULL) reports after CGWarpMouseCursorPosition and CGDisplayMoveCursorToPoint
+// with NaN, +infinity and -infinity as x, y or both on macOS 26.7.3 and 10.14.4 (x86_64, main display at the origin):
+// success every time, the position 0 on every non-finite axis. Probe: vd-upstream/mac-probes/937-b2c-warp-nonfinite.c.
+// Test: coregraphics-warp-mouse-glue (non-finite coordinates).
+static CGPoint warpTargetWithFiniteCoordinates(CGPoint point) {
+    if (!isfinite(point.x))
+        point.x = 0;
+    if (!isfinite(point.y))
+        point.y = 0;
+    return point;
+}
+
 // The one place CoreGraphics' global point meets the window system's: clip it to the
 // desktop and hand it on, in the same global space (the space CGEventGetLocation()
 // reports). The rules are written down in CGDisplayGeometry.h.
 static CGError warpToGlobalPoint(CGPoint point) {
-    if (!isfinite(point.x) || !isfinite(point.y))
-        return kCGErrorIllegalArgument;
+    point = warpTargetWithFiniteCoordinates(point);
 
     BOOL connected;
     NSArray<CGSScreen *> *screens = activeScreens(&connected);
@@ -562,9 +608,10 @@ static CGError warpToGlobalPoint(CGPoint point) {
             (CGDisplayGeometryPoint){point.x, point.y});
     CGPoint target = CGPointMake(clipped.x, clipped.y);
 
-    // Until this framework owns the connection that has the windows, what does owns the
-    // pointer state (the relative-mouse grab among it), so it is asked first.
-    id<CGSPointerController> controller = pointerController();
+    // The connection moves the pointer when it keeps the pointer's state itself; otherwise what owns the
+    // pointer state (the relative-mouse grab among it) is asked first, until this framework owns the
+    // connection that has the windows on every backend.
+    id<CGSPointerController> controller = [displayConnection() managesPointer] ? nil : pointerController();
     if (controller != nil) {
         [controller warpPointerToPoint: target];
         return kCGErrorSuccess;
@@ -595,7 +642,12 @@ CGError CGDisplayMoveCursorToPoint(CGDirectDisplayID displayID, CGPoint newCurso
 // controller there are none.
 void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY) {
     int32_t dx = 0, dy = 0;
-    [pointerController() takeMouseDeltaX: &dx y: &dy];
+    CGSConnection *connection = pointerConnection();
+
+    if (connection != nil)
+        [connection takeMouseDeltaX: &dx y: &dy];
+    else
+        [pointerController() takeMouseDeltaX: &dx y: &dy];
     if (deltaX)
         *deltaX = dx;
     if (deltaY)
@@ -605,7 +657,12 @@ void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY) {
 CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected) {
     // Disconnecting the mouse from the cursor: the cursor stays put and the mouse only
     // produces deltas.
-    [pointerController() setMouseAssociatedWithCursor: connected != 0];
+    CGSConnection *connection = pointerConnection();
+
+    if (connection != nil)
+        [connection setMouseAssociatedWithCursor: connected != 0];
+    else
+        [pointerController() setMouseAssociatedWithCursor: connected != 0];
     return kCGErrorSuccess;
 }
 

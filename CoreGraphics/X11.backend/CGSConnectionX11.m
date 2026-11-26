@@ -18,8 +18,11 @@
 */
 #import "CGSConnectionX11.h"
 #import "CGSWindowX11.h"
+#import "CGSX11Keyboard.h"
+#import "CGSX11Pointer.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
+#import <CoreGraphics/CGSNativeConnection.h>
 #include "CarbonKeys.h"
 #import "../DarlingUnicodeKeyLayout.h"
 #import "../DarlingUnicodeKeyLayoutCompose.h"
@@ -30,6 +33,7 @@
 #include <time.h>
 #include <stdatomic.h>
 #include <poll.h>
+#include <pthread.h>
 #import <X11/Xutil.h>
 #import <X11/extensions/Xrandr.h>
 #import <X11/XKBlib.h>
@@ -67,6 +71,19 @@ static NSNumber* grabKey(int keycode, unsigned modifiers)
 	return [NSNumber numberWithUnsignedLongLong: ((unsigned long long) keycode << 32) | modifiers];
 }
 
+// The connection of this process, for the class methods that act on its behalf (not retained: it is
+// cleared when the connection goes away).
+static CGSConnectionX11* g_processConnection;
+static pthread_mutex_t g_processConnectionLock = PTHREAD_MUTEX_INITIALIZER;
+
+static CGSConnectionX11* processConnection(void)
+{
+	pthread_mutex_lock(&g_processConnectionLock);
+	CGSConnectionX11* connection = [g_processConnection retain];
+	pthread_mutex_unlock(&g_processConnectionLock);
+	return [connection autorelease];
+}
+
 @implementation CGSConnectionX11
 
 static int errorHandler(Display* display, XErrorEvent* errorEvent)
@@ -79,6 +96,16 @@ static int errorHandler(Display* display, XErrorEvent* errorEvent)
 
 static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef address,
     const void *data, void *info)
+{
+    CGSConnectionX11* self = (CGSConnectionX11*) info;
+    [self processPendingEvents];
+}
+
+// Xlib reads events into its own queue whenever it waits for a reply, so events can be pending in
+// Xlib while the connection has nothing left to read and the socket source never fires. Requests may
+// also still sit in Xlib's output buffer. Flush and drain both before the main run loop goes to sleep;
+// handling an event that posts something wakes the run loop again.
+static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivity activity, void *info)
 {
     CGSConnectionX11* self = (CGSConnectionX11*) info;
     [self processPendingEvents];
@@ -114,6 +141,11 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 
 	XSetErrorHandler(errorHandler);
 
+	pthread_mutex_lock(&g_processConnectionLock);
+	if (g_processConnection == nil)
+		g_processConnection = self;
+	pthread_mutex_unlock(&g_processConnectionLock);
+
 	int fd = ConnectionNumber(_display);
 
 	// There's no need to retain/release the display,
@@ -131,6 +163,11 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
     _source = CFSocketCreateRunLoopSource(kCFAllocatorDefault, _cfSocket, 0);
     CFRunLoopAddSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
 
+	CFRunLoopObserverContext observerContext = { .version = 0, .info = self };
+	_beforeWaitingObserver = CFRunLoopObserverCreate(kCFAllocatorDefault, kCFRunLoopBeforeWaiting, true, 0,
+		beforeWaitingCallback, &observerContext);
+	CFRunLoopAddObserver(CFRunLoopGetMain(), _beforeWaitingObserver, kCFRunLoopCommonModes);
+
 	int errorBase;
 	if (XRRQueryExtension(_display, &_xrrEventBase, &errorBase))
 	{
@@ -144,13 +181,27 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 	if (XkbLibraryVersion(&major, &minor) && XkbQueryExtension(_display, NULL, &_xkbEventBase, &major, &minor, NULL))
 	{
 		XkbSelectEvents(_display, XkbUseCoreKbd, XkbMapNotifyMask | XkbNewKeyboardNotifyMask | XkbStateNotifyMask, 1);
+
+		// A held key reports its repeats as key presses without a release in between, which is what
+		// tells the keyboard a press is a repeat (without it, every repeat is a release and a press).
+		Bool supported = False;
+		XkbSetDetectableAutoRepeat(_display, True, &supported);
+		_detectableAutoRepeat = supported;
 	}
+
+	_keyboard = [[CGSX11Keyboard alloc] initWithConnection: self];
+	_pointer = [[CGSX11Pointer alloc] initWithConnection: self];
 
 	return self;
 }
 
 -(void) dealloc
 {
+	pthread_mutex_lock(&g_processConnectionLock);
+	if (g_processConnection == self)
+		g_processConnection = nil;
+	pthread_mutex_unlock(&g_processConnectionLock);
+
 	// The windows destroy X11 windows on our display, so they have to go first.
 	// -[CGSConnection dealloc] would only release _windows after this body.
 	@synchronized (_windows)
@@ -161,6 +212,13 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 	[_hotKeys release];
 	[_grabbedHotKeys release];
 	[_pressedHotKeys release];
+
+	// The observer uses the connection, so it goes before XCloseDisplay().
+	if (_beforeWaitingObserver != NULL)
+	{
+		CFRunLoopObserverInvalidate(_beforeWaitingObserver);
+		CFRelease(_beforeWaitingObserver);
+	}
 
 	if (_display)
 		XCloseDisplay(_display);
@@ -173,6 +231,8 @@ static void socketCallback(CFSocketRef s, CFSocketCallBackType type, CFDataRef a
 		CFRelease(_cfSocket);
 
 	[_keyboardLayout release];
+	[_pointer release];
+	[_keyboard release];
 
 	[super dealloc];
 }
@@ -545,6 +605,105 @@ static double windowOpacity(Display* display, Window window)
 	return result;
 }
 
++(CGSX11Pointer*) _processPointer
+{
+	pthread_mutex_lock(&g_processConnectionLock);
+	CGSX11Pointer* pointer = g_processConnection != nil ? g_processConnection->_pointer : nil;
+	pthread_mutex_unlock(&g_processConnectionLock);
+	return pointer;
+}
+
+-(CGSWindowX11*) _cgsWindowForNativeWindow:(Window)native
+{
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if ([window isKindOfClass: [CGSWindowX11 class]] && ((CGSWindowX11*) window)->_window == native)
+				return [[(CGSWindowX11*) window retain] autorelease];
+		}
+	}
+	return nil;
+}
+
+// What the window system says about the CGS windows of this process: repaints (the window's own
+// pixels are put on it again), and the close request, focus and bounds changes, which are reported
+// to whoever asked for them (_CGSSetWindowEventProc).
+-(void) _windowSystemEvent:(XEvent*) event
+{
+	switch (event->type)
+	{
+		case Expose:
+		case ConfigureNotify:
+		case FocusIn:
+		case FocusOut:
+		case ClientMessage:
+			break;
+		default:
+			return;
+	}
+
+	CGSWindowX11* window = [self _cgsWindowForNativeWindow: event->xany.window];
+	if (window == nil)
+		return;
+
+	switch (event->type)
+	{
+		case Expose:
+			[window windowSystemDidExpose: &event->xexpose];
+			break;
+		case ConfigureNotify:
+			[window windowSystemDidConfigure];
+			break;
+		case FocusIn:
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				_CGSPostWindowEvent(kCGSWindowEventActivated, window.windowId, CGRectNull);
+			break;
+		case FocusOut:
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				_CGSPostWindowEvent(kCGSWindowEventDeactivated, window.windowId, CGRectNull);
+			break;
+		case ClientMessage:
+		{
+			Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
+			Atom ping = XInternAtom(_display, "_NET_WM_PING", False);
+			if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == deleteWindow)
+				_CGSPostWindowEvent(kCGSWindowEventCloseRequested, window.windowId, CGRectNull);
+			else if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == ping)
+			{
+				// The window manager asks whether the window is alive; it answers by getting the message
+				// back on the root window. A window that does not answer is reported as not responding.
+				XEvent reply = *event;
+				reply.xclient.window = DefaultRootWindow(_display);
+				XSendEvent(_display, DefaultRootWindow(_display), False, SubstructureNotifyMask | SubstructureRedirectMask, &reply);
+				XFlush(_display);
+			}
+			break;
+		}
+	}
+}
+
+-(CGSWindowID) _windowIDForNativeWindow:(Window)native
+{
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if ([window isKindOfClass: [CGSWindowX11 class]] && ((CGSWindowX11*) window)->_window == native)
+				return (CGSWindowID) [key intValue];
+		}
+	}
+	return 0;
+}
+
 -(void*) nativeDisplay
 {
 	// EGLNativeDisplayType on X11 is the Display itself.
@@ -553,6 +712,11 @@ static double windowOpacity(Display* display, Window window)
 
 -(CGPoint) mouseLocation
 {
+	// While the cursor is frozen (the mouse is not associated with it) that is where the cursor is.
+	CGPoint frozen;
+	if ([_pointer relativeMouseRequested: NULL frozenRoot: &frozen])
+		return [self _cgPointFromRoot: frozen];
+
 	Window child, root = DefaultRootWindow(_display);
 
     int root_x, root_y;
@@ -563,6 +727,11 @@ static double windowOpacity(Display* display, Window window)
 
 	CGPoint point = [self _cgPointFromRoot: CGPointMake(root_x, root_y)];
 	return CGPointMake(point.x, point.y);
+}
+
+-(uint64_t) modifierFlags
+{
+	return [_keyboard modifierFlags];
 }
 
 -(BOOL) isKeyDown:(CGKeyCode)keyCode
@@ -607,31 +776,86 @@ static double windowOpacity(Display* display, Window window)
 	return (mask & buttonMask) != 0;
 }
 
--(void) processXEvent:(XEvent*) event
+// Handles an event of this connection. Returns YES when the event was this connection's own business
+// (a hot key, a keyboard layout or display layout change); the rest is the observer's. The keyboard also
+// decodes the key events, the modifier state of the pointer events and the focus changes, and those go
+// on to the observer.
+-(BOOL) processXEvent:(XEvent*) event
 {
+	[self _windowSystemEvent: event];
+	[_pointer willHandleEvent: event];
 	switch (event->type)
 	{
 		case KeyPress:
 		case KeyRelease:
-			[self _deliverHotKeyEvent: &event->xkey];
+			// The grabs of the hot keys are on the root window, and only they report key events
+			// to it; the keys of the other windows are the observer's.
+			if (event->xkey.window == DefaultRootWindow(_display))
+			{
+				[self _deliverHotKeyEvent: &event->xkey];
+				return YES;
+			}
+			// The keyboard posts the key as a CGEvent. The observer is still told of the event: the
+			// framework above keeps track of the events the server sent.
+			[_keyboard keyEvent: event];
 			break;
+		// The events of the pointer carry the modifier state the server holds. The keyboard reports
+		// a difference from what the keys said before the observer builds the pointer event, so
+		// that the events keep their order. Events another client sent carry whatever state it chose.
+		// The buttons and the motion are decoded into CGEvents after that (the observer is still told of
+		// them: it keeps the pointer state and the crossings, and makes what it holds for itself).
 		case ButtonPress:
-			break;
 		case ButtonRelease:
+			if (!event->xany.send_event)
+				[_keyboard resyncWithState: event->xbutton.state window: event->xbutton.window
+					root: CGPointMake(event->xbutton.x_root, event->xbutton.y_root)];
+			[_pointer pointerEvent: event];
 			break;
 		case MotionNotify:
+			if (!event->xany.send_event)
+				[_keyboard resyncWithState: event->xmotion.state window: event->xmotion.window
+					root: CGPointMake(event->xmotion.x_root, event->xmotion.y_root)];
+			[_pointer pointerEvent: event];
 			break;
 		case EnterNotify:
+		case LeaveNotify:
+			if (!event->xany.send_event)
+				[_keyboard resyncWithState: event->xcrossing.state window: event->xcrossing.window
+					root: CGPointMake(event->xcrossing.x_root, event->xcrossing.y_root)];
+			[_pointer crossingEvent: event];
+			break;
+		case GenericEvent:
+			// XInput2: the raw scroll valuators and the changes of the devices.
+			if ([_pointer inputExtensionEvent: event])
+				return YES;
 			break;
 		case FocusIn:
+			// Focus changes caused by a grab, or by the pointer entering the window or one of its
+			// children, do not move the keyboard focus.
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				[_keyboard focusGainedInWindow: event->xfocus.window];
+			[_pointer focusEvent: event];
 			break;
 		case FocusOut:
+			// Like FocusIn: grabs and the pointer entering the window do not move the keyboard focus.
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				[_keyboard resetComposition];
+			[_pointer focusEvent: event];
 			break;
 		case KeymapNotify:
 			break;
 		case Expose:
 			break;
 		case ConfigureNotify:
+		case UnmapNotify:
+			[_pointer windowEvent: event];
+			break;
+		case DestroyNotify:
+			[_pointer windowDestroyed: event->xdestroywindow.window];
 			break;
 		case ClientMessage:
 		{
@@ -655,6 +879,8 @@ static double windowOpacity(Display* display, Window window)
 			// Invalidate cached keyboard layout information
 			if (keymapChanged || groupChanged)
 			{
+				// A sequence in progress ends with the keymap that started it.
+				[_keyboard resetComposition];
 				// TODO: Emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 
 				@synchronized (self)
@@ -666,15 +892,17 @@ static double windowOpacity(Display* display, Window window)
 					_keyboardLayoutGroup = xkbevt->state.group;
 			}
 
-			break;
+			return YES;
 		}
 		else if (X11RandRHandleLayoutChange(event, _xrrEventBase))
 		{
 			// RandR reports one change as several events; -processPendingEvents
 			// looks at the layout once they are all read.
 			_layoutChanged = YES;
+			return YES;
 		}
 	}
+	return NO;
 }
 
 // A hot key reports while it is enabled and hot keys are not switched off
@@ -744,7 +972,9 @@ static double windowOpacity(Display* display, Window window)
 				continue;
 
 			NSNumber* uid = [NSNumber numberWithInt: entry->uid];
-			if (pressed ? ([self _hotKeyIsActive: entry] && X11HotKeyMatches(event->state, entry->modifiers))
+			// A press of a key already held down is its autorepeat (the detectable form), which is no new press
+			if (pressed ? ([self _hotKeyIsActive: entry] && X11HotKeyMatches(event->state, entry->modifiers)
+					&& ![_pressedHotKeys containsObject: uid])
 				: [_pressedHotKeys containsObject: uid])
 			{
 				if (!uids)
@@ -885,14 +1115,23 @@ static double windowOpacity(Display* display, Window window)
 	}
 }
 
+// Reads the events of the process' one connection to the X server and handles them in order: the ones
+// that are this connection's own (hot keys, keymap, display layout) here, the others by the
+// observer, which is AppKit's X11 backend for the windows it creates on this display.
 -(void) processPendingEvents
 {
+	id observer = [CGSConnection nativeObserver];
+	SEL eventSelector = @selector(nativeConnectionEvent:);
+	BOOL observesEvents = [observer respondsToSelector: eventSelector];
+
 	while (XPending(_display) > 0)
 	{
 		XEvent event;
 
-		if (XNextEvent(_display, &event) == Success)
-			[self processXEvent: &event];
+		if (XNextEvent(_display, &event) != Success)
+			continue;
+		if (![self processXEvent: &event] && observesEvents)
+			[observer nativeConnectionEvent: &event];
 	}
 
 	if (_layoutChanged)
@@ -900,7 +1139,17 @@ static double windowOpacity(Display* display, Window window)
 		_layoutChanged = NO;
 		// Reports the change to the display reconfiguration callbacks.
 		[self displayLayoutChanged];
+		[_pointer displayLayoutChanged];
+		if ([observer respondsToSelector: @selector(nativeConnectionDisplayLayoutChanged)])
+			[observer nativeConnectionDisplayLayoutChanged];
 	}
+	if ([observer respondsToSelector: @selector(nativeConnectionDidProcessEvents)])
+		[observer nativeConnectionDidProcessEvents];
+}
+
++(int) nativeConnectionKind
+{
+	return CGSNativeConnectionKindX11;
 }
 
 -(void) invalidateScreens
@@ -910,13 +1159,6 @@ static double windowOpacity(Display* display, Window window)
 		[super invalidateScreens];
 		_primaryRootValid = NO;
 	}
-}
-
-// The window system has sent what it has to say about the layout: read it, which reports a change.
--(void) refreshDisplayLayout
-{
-	[self processPendingEvents];
-	[self invalidateScreens];
 }
 
 // X11 has no scale protocol: the scale is the user's setting or the session's GDK_SCALE (see
@@ -1219,16 +1461,87 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	return ok;
 }
 
-// Moves the pointer on the X server, to a point in CoreGraphics' global space (points).
+// Moves the pointer on the X server, to a point in CoreGraphics' global space (points). The pointer
+// decoder knows what a warp means for the events that follow (see CGSX11Pointer.h).
 -(CGError) warpPointerToPoint:(CGPoint)point
+{
+	return [_pointer warpToPoint: point];
+}
+
+-(void) _getRootX:(int*)x y:(int*)y forPoint:(CGPoint)point
 {
 	X11Frame primary = [self _primaryRoot];
 	CGFloat scale = _primaryScale;
 	X11Point root = X11CGPointToRoot((X11Frame){primary.x / scale, primary.y / scale, primary.width / scale, primary.height / scale},
 		(X11Point){point.x, point.y});
-	XWarpPointer(_display, None, DefaultRootWindow(_display), 0, 0, 0, 0, (int) round(root.x * scale), (int) round(root.y * scale));
-	XSync(_display, False);
-	return kCGErrorSuccess;
+	*x = (int) round(root.x * scale);
+	*y = (int) round(root.y * scale);
+}
+
+-(BOOL) managesPointer
+{
+	return YES;
+}
+
+-(void) cursorHiddenStateChanged:(BOOL)hidden
+{
+	[_pointer cursorHiddenChanged];
+}
+
+-(void) mouseAssociationChanged:(BOOL)associated
+{
+	[_pointer setMouseAssociatedWithCursor: associated];
+}
+
+-(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot
+{
+	return [_pointer relativeMouseRequested: requested frozenRoot: frozenRoot];
+}
+
+-(void) pointerWindowsChanged
+{
+	[_pointer windowsChanged];
+}
+
+-(void) nativeObjectDestroyed:(void*)object
+{
+	[_pointer windowDestroyed: (Window) (uintptr_t) object];
+}
+
+// The blank cursor is made once.
+-(Cursor) _blankCursorMade
+{
+	if (_blankCursor == None)
+	{
+		char zero = 0;
+		XColor black = {0};
+		Pixmap pixmap = XCreateBitmapFromData(_display, DefaultRootWindow(_display), &zero, 1, 1);
+		_blankCursor = XCreatePixmapCursor(_display, pixmap, pixmap, &black, &black, 0, 0);
+		XFreePixmap(_display, pixmap);
+	}
+	return _blankCursor;
+}
+
+// The windows go back to their parent's cursor when the blank one is not wanted.
+-(void) _setBlankCursorOnWindows:(BOOL)blank
+{
+	Cursor cursor = blank ? [self _blankCursorMade] : None;
+
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if (![window isKindOfClass: [CGSWindowX11 class]])
+				continue;
+			if (blank)
+				XDefineCursor(_display, ((CGSWindowX11*) window)->_window, cursor);
+			else
+				XUndefineCursor(_display, ((CGSWindowX11*) window)->_window);
+		}
+	}
+	XFlush(_display);
 }
 
 -(CGSWindow*) newWindow:(CGSRegionRef)region
@@ -1245,6 +1558,12 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	@synchronized (_windows)
 	{
 		[_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
+	}
+	// A window made while the cursor is hidden shows the blank cursor like the others
+	if (![self cursorIsVisible])
+	{
+		XDefineCursor(_display, window->_window, [self _blankCursorMade]);
+		XFlush(_display);
 	}
 	[window release];
 	return window;
@@ -1306,11 +1625,14 @@ static Time currentServerTime(Display* display)
 
 +(CGError) activateWindowsOfProcess:(pid_t)pid options:(uint32_t)options
 {
-	// A connection of its own: this class method does not need a CGS connection, and the
-	// events of that one are consumed elsewhere.
-	Display* display = XOpenDisplay(NULL);
+	// The process' connection when it has one; a process that never opened one (a command line tool)
+	// asks through a connection of its own, which it closes again.
+	CGSConnectionX11* shared = [processConnection() retain];
+	Display* display = shared != nil ? shared->_display : XOpenDisplay(NULL);
 	if (display == NULL)
 		return kCGErrorCannotComplete;
+	BOOL owned = shared == nil;
+	CGError result = kCGErrorSuccess;
 
 	// EWMH: the clients are listed in the order of mapping, and, bottom to top, by stacking
 	// order. Without a window manager that supports them there is nothing to ask.
@@ -1326,7 +1648,9 @@ static Time currentServerTime(Display* display)
 	}
 	if ([targets count] == 0)
 	{
-		XCloseDisplay(display);
+		if (owned)
+			XCloseDisplay(display);
+		[shared release];
 		return kCGErrorNoneAvailable;
 	}
 	// The topmost one is the front window.
@@ -1352,8 +1676,10 @@ static Time currentServerTime(Display* display)
 			SubstructureRedirectMask | SubstructureNotifyMask, &event);
 	}
 	XSync(display, False);
-	XCloseDisplay(display);
-	return kCGErrorSuccess;
+	if (owned)
+		XCloseDisplay(display);
+	[shared release];
+	return result;
 }
 
 +(CGError) copyFrontProcessID:(pid_t*)pid

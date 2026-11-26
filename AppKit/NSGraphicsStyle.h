@@ -34,6 +34,9 @@ typedef struct _Margins {
     NSView *_view;
 }
 
+/* The style of a view; nil for drawing that belongs to no view. */
+- initWithView: (NSView *) view;
+
 @end
 
 @interface NSGraphicsStyle (NSMenu)

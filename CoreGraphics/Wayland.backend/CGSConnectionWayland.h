@@ -64,18 +64,35 @@ typedef enum {
     CGSWaylandObjectOutputHead,
     CGSWaylandObjectOutputHeadMode,
     CGSWaylandObjectOutputConfiguration,
+    CGSWaylandObjectSeat,
+    CGSWaylandObjectKeyboard,
+    CGSWaylandObjectKeyboardSync,
+    CGSWaylandObjectPointer,
+    CGSWaylandObjectPinchGesture,
+    CGSWaylandObjectLockedPointer,
+    CGSWaylandObjectRelativePointer,
+    CGSWaylandObjectWarpLock,
+    CGSWaylandObjectBuffer,
+    CGSWaylandObjectLayerSurface,
+    CGSWaylandObjectPopup,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
 // layout) and, where the compositor offers it, wlr-output-management, which also lets
-// -setMode:forScreen: change a mode. -createKeyboardLayout is not overridden: the keymap belongs to
-// the client that owns the wl_keyboard, which registers its layout with
-// _CGSSetProvidedKeyboardLayout().
+// -setMode:forScreen: change a mode. The keyboard layout is made from the keymap the compositor sends
+// to this connection's wl_keyboard (see CGSWaylandKeymap), which also decodes the key events into CGEvents
+// (see CGSWaylandKeyboard).
 @interface CGSConnectionWayland : CGSConnection {
 @public
     struct wl_display *_wlDisplay;
     struct wl_proxy *_compositor;
+    struct wl_proxy *_shm; // wl_shm, for the pixels of the windows that are drawn into
     struct wl_proxy *_wmBase;
+    // What places and frames the windows beyond xdg-shell, NULL when the compositor offers none:
+    // wlr-layer-shell (a surface along an edge of the output: the menu bar), the KDE plasma shell
+    // (a position for a toplevel), xdg-decoration (the frame is the compositor's).
+    struct wl_proxy *_layerShell, *_plasmaShell, *_decorationManager;
+    uint32_t _plasmaShellVersion;
 
 @protected
     struct wl_proxy *_registry;
@@ -87,12 +104,55 @@ typedef enum {
     uint32_t _logicalOutputManagerName;
     id _outputManager;
     uint32_t _outputManagerName;
+    // The seat and its keyboard, the process' only wl_keyboard: it provides the keymap (the keyboard
+    // layout is the connection's, see -createKeyboardLayout) and the key events.
+    struct wl_proxy *_seat, *_keyboard;
+    id _keymap;
+    // Decodes the keyboard into CGEvents (CGSWaylandKeyboard).
+    id _keyboardDecoder;
+    // The seat's pointer, which decodes the pointer into CGEvents (CGSWaylandPointer), and the pinch
+    // gesture factory it makes the pinch object from.
+    id _pointerDecoder;
+    struct wl_proxy *_pointerGestures;
+    uint32_t _pointerGesturesName;
+    // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers
+    // none.
+    struct wl_proxy *_pointerConstraints, *_relativePointerManager;
+    uint32_t _pointerConstraintsName, _relativePointerManagerName;
+    // The registered global hot keys (CGSWaylandHotKeyEntry), guarded by @synchronized(self).
+    NSMutableArray *_hotKeys;
     // Set when the setup roundtrips are over; an output that is described before that is
     // part of the displays the first look finds, not a change.
     BOOL _setupDone;
+    // The displays changed in this pass over the events; the observer is told when it is over.
+    BOOL _layoutChangedForObserver;
+    // libnotify registration for requests to activate this process' windows.
+    BOOL _activationRegistered;
+    int _activationNotifyToken;
 }
 
 - (void) flush;
+
+// The pointer gestures global, NULL when the compositor offers none.
+- (struct wl_proxy *) pointerGestures;
+// The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
+- (struct wl_proxy *) pointerConstraints;
+- (struct wl_proxy *) relativePointerManager;
+// The point of one of this connection's windows' surfaces at a global location (the inverse of
+// -globalLocation:ofSurface:point:); NO when the surface is not one of its windows.
+- (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface;
+// Posts what the pointer decoder holds back until the compositor ends it (a scroll frame).
+- (void) flushPendingPointerEvents;
+// The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
+- (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
+// Where a point of the surface is in global coordinates, when it is a surface of this connection's windows.
+- (BOOL) globalLocation: (CGPoint *) location ofSurface: (struct wl_proxy *) surface point: (CGPoint) point;
+// The uids of the active hot keys that a press of the virtual key keyCode, with the given modifier flags
+// in effect, selects: a hot key matches when its key code is the key's and its Shift, Control, Option and
+// Command flags are exactly those of the flags (other bits, such as Caps Lock, do not count). Empty while hot
+// keys are switched off (the global operating mode is not 0). The keyboard calls this for every key that is
+// not a modifier.
+- (NSArray *) activeHotKeyUIDsForKeyCode: (CGKeyCode) keyCode flags: (uint64_t) flags;
 
 // Sends a request that creates an object and installs the dispatcher on it.
 - (struct wl_proxy *) createObject: (struct wl_proxy *) proxy

@@ -95,6 +95,7 @@ set(Onyx2D_sources
 	O2MutablePath.m
 	O2Paint_axialGradient.m
 	O2Paint_color.m
+	O2Paint_conicGradient.m
 	O2Paint_image.m
 	O2Paint.m
 	O2Paint_pattern.m
@@ -163,6 +164,7 @@ add_framework(Onyx2D
 		system
 		CoreFoundation
 		Foundation
+		ColorSync
 		z
 		# native libraries
 		FreeType

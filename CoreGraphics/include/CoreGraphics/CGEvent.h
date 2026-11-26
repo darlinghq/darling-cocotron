@@ -24,7 +24,12 @@
 #include <CoreGraphics/CGGeometry.h>
 #include <CoreGraphics/CGError.h>
 #include <CoreGraphics/CGRemoteOperation.h>
+// Darling's own code gets the window server SPI with the public header; macOS
+// keeps it out of the SDK, and code built against the SDK declares the parts
+// it uses itself (with types of its choosing, which would conflict).
+#ifdef DARLING
 #include <CoreGraphics/CoreGraphicsPrivate.h>
+#endif
 
 __BEGIN_DECLS
 
