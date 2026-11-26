@@ -234,6 +234,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 // NSDisplay (NSSessionRestoration) hooks declared in NSWindow-Private.h.
 - (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier;
 - (NSString *) windowSessionIdentifier;
+- (BOOL) supportsWindowSessions;
 // Called by a WaylandWindow before the first commit of a toplevel surface.
 - (void) joinSessionForToplevel: (WaylandWindow *) window;
 // Gives every window the current application icon (see WaylandToplevelIcon.h).

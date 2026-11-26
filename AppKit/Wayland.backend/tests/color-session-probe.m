@@ -6,7 +6,10 @@
 // Guest side of wayland-color-session.sh. It exercises the compositor's color description (NSScreen),
 // the per-surface description and alpha mode (WaylandWindow), and the three ways a compositor session
 // can start: launch, recover after a crash, and restore saved state.
-// Usage: color-session-probe <color|launch|restore|recover> <seconds>
+// Usage: color-session-probe <color|launch|restore|recover|marker> <seconds>
+// The marker mode runs on any backend, only to report whether the running marker exists while the
+// application runs: it is expected with a window-system session (Wayland offering
+// xdg-session-management) and nowhere else.
 // The program re-executes itself from a small .app bundle so that the saved state has a bundle
 // identifier. It prints READY when the window is up, then PROBE done with a failure count.
 #import <AppKit/AppKit.h>
@@ -147,7 +150,9 @@ static void WriteRunningMarker(void) {
     double _seconds;
     int _failures;
     BOOL _ready;
+    BOOL _markerOnly;
 }
+- (void) setMarkerOnly: (BOOL) markerOnly;
 - (void) showWindows;
 - (void) run;
 - (int) failures;
@@ -163,6 +168,11 @@ static void WriteRunningMarker(void) {
     NSArray *windows = [_restored count] > 0 ? _restored : [NSArray arrayWithObject: _window];
     for (NSWindow *window in windows)
         [window makeKeyAndOrderFront: nil];
+    if (_markerOnly) {
+        printf("READY\n");
+        fflush(stdout);
+        return;
+    }
     NSScreen *screen = [NSScreen mainScreen];
     NSColorSpace *space = [screen colorSpace];
     BOOL p3 = [[space localizedName] isEqualToString: @"Display P3"];
@@ -189,6 +199,9 @@ static void WriteRunningMarker(void) {
         if (event != nil)
             [NSApp sendEvent: event];
     }
+    printf("BACKEND %s\n", [NSStringFromClass([[NSClassFromString(@"NSDisplay") currentDisplay] class]) UTF8String]);
+    printf("RUNNING_MARKER present=%d\n",
+           [[NSFileManager defaultManager] fileExistsAtPath: StatePath(@"running")] ? 1 : 0);
     printf("PROBE done failures=%d\n", _failures);
     fflush(stdout);
     [NSApp terminate: nil];
@@ -201,6 +214,10 @@ static void WriteRunningMarker(void) {
     if (!absent)
         _failures++;
     RemoveState();
+}
+
+- (void) setMarkerOnly: (BOOL) markerOnly {
+    _markerOnly = markerOnly;
 }
 
 - (void) setWindow: (NSWindow *) window {
@@ -269,7 +286,8 @@ static int RunBundled(const char *mode, double seconds) {
     [NSApplication sharedApplication];
     id display = [NSClassFromString(@"NSDisplay") currentDisplay];
     NSString *backend = NSStringFromClass([display class]);
-    if ([backend rangeOfString: @"Wayland"].location == NSNotFound) {
+    BOOL markerOnly = strcmp(mode, "marker") == 0;
+    if (!markerOnly && [backend rangeOfString: @"Wayland"].location == NSNotFound) {
         printf("SKIP backend=%s\n", [backend UTF8String]);
         RemoveState();
         return 2;
@@ -277,6 +295,7 @@ static int RunBundled(const char *mode, double seconds) {
 
     ProbeDelegate *delegate = [[ProbeDelegate alloc] init];
     [delegate setSeconds: seconds];
+    [delegate setMarkerOnly: markerOnly];
     [NSApp setDelegate: delegate];
     [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
     [NSApp finishLaunching];
@@ -305,12 +324,12 @@ static int RunBundled(const char *mode, double seconds) {
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        fprintf(stderr, "usage: color-session-probe <color|launch|restore|recover> <seconds>\n");
+        fprintf(stderr, "usage: color-session-probe <color|launch|restore|recover|marker> <seconds>\n");
         return 2;
     }
     const char *mode = argv[1];
     if (strcmp(mode, "color") != 0 && strcmp(mode, "launch") != 0 &&
-        strcmp(mode, "restore") != 0 && strcmp(mode, "recover") != 0) {
+        strcmp(mode, "restore") != 0 && strcmp(mode, "recover") != 0 && strcmp(mode, "marker") != 0) {
         fprintf(stderr, "unknown mode %s\n", mode);
         return 2;
     }

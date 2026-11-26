@@ -110,6 +110,7 @@ recover)
     expect_server '^SESSION reason=2 id=test-session-1 op=add name=darling-[^ ]+ before_commit=1$' "recovered session"
     ;;
 esac
+expect_guest '^RUNNING_MARKER present=1$' "running marker kept while the application runs (the compositor has sessions)"
 expect_guest '^MARKER absent=1$' "running marker removed on quit"
 expect_guest '^PROBE done failures=0$' "guest checks"
 [ $guest_status = 0 ] || fail "guest exited with status $guest_status"

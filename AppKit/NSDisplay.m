@@ -658,6 +658,10 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     return nil;
 }
 
+- (BOOL) supportsWindowSessions {
+    return NO;
+}
+
 @end
 
 void NSColorSetCatalogColor(NSString *catalogName, NSString *colorName,

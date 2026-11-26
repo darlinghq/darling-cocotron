@@ -21,9 +21,10 @@
 //                    restorable state is a nested archive under the key
 //                    "NSViewState:<view identifier>"
 //     WindowSession  string, the window's name in the compositor session
-// A "running" file beside state.plist holds the session identifier while the
-// application is alive. A leftover file means the previous instance did not exit
-// cleanly. The layout of these files is private to this AppKit.
+// Where the window system has sessions (Wayland with xdg-session-management), a "running" file
+// beside state.plist holds the session identifier while the application is alive. A leftover file
+// means the previous instance did not exit cleanly. Without sessions it is neither written nor
+// read. The layout of these files is private to this AppKit.
 
 #import <AppKit/AppKit.h>
 #import <AppKit/NSDisplay.h>
@@ -83,6 +84,9 @@ static NSString *SavedStateDirectory(BOOL ignoringSavedState) {
 // A marker left while the application is running. If it is still there at the next launch, the
 // previous instance did not finish saving its state, which is the window system's "recover" case.
 static NSString *RunningMarkerPath(void) {
+    // Only a window system with sessions has a use for it.
+    if (![[NSDisplay currentDisplay] supportsWindowSessions])
+        return nil;
     NSString *directory = SavedStateDirectory(NO);
 
     return directory == nil ? nil : [directory stringByAppendingPathComponent: StateRunningMarkerName];

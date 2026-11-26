@@ -138,6 +138,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier;
 // The identifier of the current session, for saving with the application state; nil if none.
 - (NSString *) windowSessionIdentifier;
+// Whether the window system offers sessions. The marker file of a running application (see
+// NSStateRestoration.m) is only written and read where it does.
+- (BOOL) supportsWindowSessions;
 @end
 
 // Persistent window state restoration, in NSStateRestoration.m.
@@ -151,7 +154,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) _completeStateRestoration;
 - (BOOL) _restorableStateUsesSecureCoding;
 // A marker left while the application is running lets the next launch distinguish a clean
-// exit from a crash, and carries the session identifier when no saved state was written.
+// exit from a crash, and carries the session identifier when no saved state was written. It exists
+// only where the window system has sessions (-[NSDisplay supportsWindowSessions]).
 - (void) _writeWindowSessionMarkerWithIdentifier: (NSString *) identifier;
 - (void) _removeWindowSessionMarker;
 @end

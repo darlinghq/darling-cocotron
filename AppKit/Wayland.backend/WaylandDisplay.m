@@ -379,6 +379,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     return _sessionIdentifier;
 }
 
+- (BOOL) supportsWindowSessions {
+    return _sessionManager != NULL;
+}
+
 // The manager and AppKit's reason can arrive in either order: the registry is read during -init,
 // while the reason comes from the saved state later in launching.
 - (void) startSessionIfPossible {
