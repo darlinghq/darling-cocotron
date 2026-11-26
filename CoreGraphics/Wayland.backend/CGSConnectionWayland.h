@@ -122,6 +122,10 @@ typedef enum {
     // none.
     struct wl_proxy *_pointerConstraints, *_relativePointerManager;
     uint32_t _pointerConstraintsName, _relativePointerManagerName;
+    // pointer-warp-v1, when the compositor offers it: CGWarpMouseCursorPosition() sends a warp request
+    // instead of asking for a short pointer lock.
+    struct wl_proxy *_pointerWarp;
+    uint32_t _pointerWarpName;
     // The registered global hot keys (CGSWaylandHotKeyEntry), guarded by @synchronized(self).
     NSMutableArray *_hotKeys;
     // Set when the setup roundtrips are over; an output that is described before that is
@@ -145,6 +149,8 @@ typedef enum {
 // The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerConstraints;
 - (struct wl_proxy *) relativePointerManager;
+// The pointer warp global, NULL when the compositor offers none.
+- (struct wl_proxy *) pointerWarp;
 // The point of one of this connection's windows' surfaces at a global location (the inverse of
 // -globalLocation:ofSurface:point:); NO when the surface is not one of its windows.
 - (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface;

@@ -196,6 +196,8 @@ bool WaylandCheckOpcodes(void) {
             {&zwp_locked_pointer_v1_interface, false, WP_LOCKED_POINTER_SET_CURSOR_POSITION_HINT, "set_cursor_position_hint"},
             {&zwp_locked_pointer_v1_interface, true, WP_LOCKED_POINTER_EV_LOCKED, "locked"},
             {&zwp_locked_pointer_v1_interface, true, WP_LOCKED_POINTER_EV_UNLOCKED, "unlocked"},
+            {&wp_pointer_warp_v1_interface, false, WP_POINTER_WARP_DESTROY, "destroy"},
+            {&wp_pointer_warp_v1_interface, false, WP_POINTER_WARP_WARP_POINTER, "warp_pointer"},
             {&wp_fractional_scale_manager_v1_interface, false, WP_FRACTIONAL_MANAGER_DESTROY, "destroy"},
             {&wp_fractional_scale_manager_v1_interface, false, WP_FRACTIONAL_MANAGER_GET_SCALE, "get_fractional_scale"},
             {&wp_fractional_scale_v1_interface, false, WP_FRACTIONAL_DESTROY, "destroy"},

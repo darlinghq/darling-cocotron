@@ -105,3 +105,14 @@ to restore its toplevels.
 - Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
 - Copyright: 2018 Mike Blumenkrantz, 2018 Samsung Electronics Co., Ltd, 2018 Red Hat Inc.
 - Licence: the MIT permission notice at the top of the file.
+
+## pointer-warp
+
+`pointer-warp-v1.xml` is the staging `wp_pointer_warp_v1` protocol. The CoreGraphics Wayland backend uses it to
+honour `CGWarpMouseCursorPosition()` when the compositor offers it, instead of asking for a short pointer lock.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/pointer-warp/pointer-warp-v1.xml`
+  (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2024 Neal Gompa, 2024 Xaver Hugl, 2024 Matthias Klumpp, 2024 Vlad Zahorodnii
+- Licence: the MIT permission notice at the top of the file.

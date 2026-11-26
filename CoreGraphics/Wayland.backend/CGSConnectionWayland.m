@@ -539,6 +539,10 @@ static const CGEventFlags kHotKeyModifierMask =
         _relativePointerManager = [self bindGlobal: name interface: &zwp_relative_pointer_manager_v1_interface
                                            version: 1 kind: CGSWaylandObjectNone object: nil];
         [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+    } else if (strcmp(interface, "wp_pointer_warp_v1") == 0 && _pointerWarp == NULL) {
+        _pointerWarpName = name;
+        _pointerWarp = [self bindGlobal: name interface: &wp_pointer_warp_v1_interface
+                                version: 1 kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
         // Version 2 adds the release request.
         _pointerGesturesName = name;
@@ -627,6 +631,12 @@ static const CGEventFlags kHotKeyModifierMask =
         else
             _relativePointerManagerName = 0;
         [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+        return;
+    }
+    if (_pointerWarp != NULL && name == _pointerWarpName) {
+        WaylandMarshal(_pointerWarp, WP_POINTER_WARP_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _pointerWarp = NULL;
+        _pointerWarpName = 0;
         return;
     }
     if (_pointerGestures != NULL && name == _pointerGesturesName) {
@@ -929,6 +939,10 @@ static const CGEventFlags kHotKeyModifierMask =
 
 - (struct wl_proxy *) relativePointerManager {
     return _relativePointerManager;
+}
+
+- (struct wl_proxy *) pointerWarp {
+    return _pointerWarp;
 }
 
 #pragma mark - Pointer state
