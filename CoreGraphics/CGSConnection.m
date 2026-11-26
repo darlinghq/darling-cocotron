@@ -329,6 +329,20 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 {
 }
 
+-(void) selectTouchInputOnNativeWindow:(unsigned long)window
+{
+}
+
+-(BOOL) displaySleepPrevented
+{
+	return NO;
+}
+
+-(id) waylandColorManager
+{
+	return nil;
+}
+
 -(BOOL) cancelsHiddenUntilMouseMoves
 {
 	return NO;

@@ -140,7 +140,7 @@ struct wl_proxy;
 // An event of a lock object (the locked pointer, the relative pointer, the lock of a warp).
 - (void) lockEvent: (uint32_t) opcode kind: (int) kind proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args;
 // CGWarpMouseCursorPosition(): the global point; kCGErrorCannotComplete when there is no surface or the
-// compositor offers no lock.
+// compositor offers neither pointer-warp nor a pointer lock.
 - (CGError) warpToGlobalPoint: (CGPoint) point;
 // The hide count of the cursor changed.
 - (void) cursorHiddenChanged;

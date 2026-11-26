@@ -20,7 +20,6 @@
 
 #import <AppKit/NSColor.h>
 #import <AppKit/NSGraphics.h>
-#import "X11Touch.h"
 #import <AppKit/NSMenuWindow.h>
 #import <AppKit/NSPanel.h>
 #import <AppKit/NSTextInput.h>
@@ -41,7 +40,6 @@
 #import <QuartzCore/CAWindowOpenGLContext.h>
 
 #import "X11Display.h"
-#import "X11Gesture.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "X11Fullscreen.h"
@@ -1365,7 +1363,8 @@ static const int X11ChromelessCornerRadius = 5;
             [_delegate acceptsMouseMovedEvents],
             [(X11Display *) [NSDisplay currentDisplay] cursorAwaitsPointerMotion]);
     XSelectInput(_display, _window, mask);
-    X11TouchSelectWindow(_display, _window);
+    // Touch screens and pinch gestures are CoreGraphics': it selects them and posts them as CGEvents.
+    _CGSNativeConnectionSelectTouchInput(_window);
 
     // Click-through windows (overlays, tooltips) must not take the pointer from
     // the window below. Only a change needs a request.
@@ -1439,7 +1438,7 @@ static const int X11ChromelessCornerRadius = 5;
 
     // An active pinch on this window ends while its delegate can still be told.
     if (_window != 0)
-        [(X11Display *) [NSDisplay currentDisplay] cancelPinchOnWindow: _window];
+        _CGSNativeConnectionObjectDestroyed((void *) (uintptr_t) _window);
 
     [_delegate platformWindowDidInvalidateCGContext: self];
     _delegate = nil;

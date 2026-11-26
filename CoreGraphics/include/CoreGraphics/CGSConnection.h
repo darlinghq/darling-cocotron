@@ -176,6 +176,7 @@
 -(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot;
 // The windows the pointer could be confined to changed.
 -(void) pointerWindowsChanged;
+-(void) selectTouchInputOnNativeWindow:(unsigned long)window;
 // +[NSCursor setHiddenUntilMouseMoves:]: the flag is idempotent and counts as one hide; the backend that
 // answers YES to -cancelsHiddenUntilMouseMoves calls -pointerDidMove when the mouse moves, which clears it.
 // A backend that does not leaves the flag to the framework above (the default, NO).
@@ -186,6 +187,14 @@
 // lock may be another one now. The defaults say no and do nothing.
 -(BOOL) pointerLocked;
 -(void) pointerLockTargetMayHaveChanged;
+// Whether this process holds a power assertion that keeps the display from sleeping on idle
+// (kIOPMAssertPreventUserIdleDisplaySleep, or the older kIOPMAssertionTypeNoDisplaySleep). Backends
+// whose window system has to be told learn it from IOKit (IOPMCopyAssertionsByProcess). The default is NO.
+-(BOOL) displaySleepPrevented;
+// The WaylandColorManager (see WaylandColor.h) of a Wayland connection, which the framework above
+// shares for the color management of its windows instead of binding the compositor's globals again.
+// The default is nil.
+-(id) waylandColorManager;
 
 // Implementations should also emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 // if layout changes.
@@ -230,6 +239,11 @@
 // system has no request for it: the observer is told. Backends call it on the main thread.
 -(void) activationRequested;
 @end
+
+// The window system's input focus moved to a window of this process (ours), or to another client; the
+// backends report it from their native focus events (-[CGSConnectionX11 _activeWindowChanged], the Wayland
+// keyboard enter and leave). The front process follows it: see CGS.m.
+extern void _CGSNativeFocusReport(BOOL ours);
 
 #endif
 

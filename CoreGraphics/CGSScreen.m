@@ -27,12 +27,14 @@
 @synthesize bounds = _bounds;
 @synthesize backingScale = _backingScale;
 @synthesize name = _name;
+@synthesize colorInfo = _colorInfo;
 
 -(void) dealloc
 {
 	[_edid release];
 	[_modes release];
 	[_name release];
+	[_colorInfo release];
 	[super dealloc];
 }
 

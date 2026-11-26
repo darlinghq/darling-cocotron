@@ -50,6 +50,7 @@
 #include <X11/extensions/XInput2.h>
 #include <stdint.h>
 #include "CGSX11RelativeMouseGrab.h"
+#include "X11InputMask.h"
 
 @class CGSConnectionX11;
 
@@ -101,6 +102,14 @@ typedef struct {
     // that it is hidden; the blank cursor the connection's own windows show while it is.
     BOOL _hiddenReported;
     BOOL _isXwayland;
+    // XInput2 touch screens and touchpad pinch gestures (CGSX11Touch.m): whether the server speaks the versions that
+    // have them (2.2 and 2.4), and the pinch in progress: its window, the scale it last reported and where its last
+    // event was (in the window, in device pixels, and on the root window).
+    BOOL _touchSelectable, _pinchSelectable;
+    BOOL _pinchActive;
+    Window _pinchWindow;
+    double _pinchScale;
+    double _pinchX, _pinchY, _pinchRootX, _pinchRootY;
     // After a warp: the request that made it, the number of events that were queued behind it (the one with the
     // request's serial is the warp's own motion, which is no mouse motion), and the time local mouse motion is
     // dropped until (CFAbsoluteTime).
@@ -160,6 +169,42 @@ typedef struct {
 - (void) setScrollAxes: (const CGSX11ScrollAxis *) axes count: (int) count;
 - (void) rawMotionEvent: (const XIRawEvent *) event;
 
+@end
+
+@interface CGSX11Pointer (Touch)
+// Touch screens and pinch gestures (CGSX11Touch.m). A window the process made asks for its touch events (and the pinch
+// gestures, where the server has them) with -selectTouchInputOnWindow:, which is a request for the whole XInput2 mask a
+// client has on the window, so it is made once the window exists. The events then arrive as XInput2 events: each change
+// of a finger of a touch screen is a touch CGEvent (type 29 with the fields kCGSTouchIdentifier to kCGSTouchWindowNumber
+// of CoreGraphicsPrivate.h), a pinch is a magnify and a rotate CGEvent. These are also the entry points a test of the
+// decoding uses with an event it made itself, as an X server that has a touch device cannot be started everywhere.
+- (void) selectTouchInputOnWindow: (Window) window;
+// One XI_TouchBegin, XI_TouchUpdate or XI_TouchEnd for the window it was selected on, with its position in that window
+// and on the root window (device pixels).
+- (void) touchEventType: (int) type
+                 device: (int) deviceID
+                 detail: (unsigned int) detail
+                 window: (Window) eventWindow
+                      x: (double) eventX
+                      y: (double) eventY
+                  rootX: (double) rootX
+                  rootY: (double) rootY;
+#ifdef X11_XI_GESTURES
+// One XI_GesturePinchBegin, Update or End: the pinch's scale since the fingers began (1 at the start), the rotation since
+// the previous update in degrees clockwise, and whether an end cancelled the gesture.
+- (void) pinchEventType: (int) type
+                 window: (Window) eventWindow
+                      x: (double) eventX
+                      y: (double) eventY
+                  rootX: (double) rootX
+                  rootY: (double) rootY
+                  scale: (double) scale
+             deltaAngle: (double) degrees
+              cancelled: (BOOL) cancelled;
+#endif
+// Ends a pinch in progress as cancelled (the window it is on is going away); nothing when there is none, or it is on
+// another window.
+- (void) cancelPinchOnWindow: (Window) window;
 @end
 
 #endif

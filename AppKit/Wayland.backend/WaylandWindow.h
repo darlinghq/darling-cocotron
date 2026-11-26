@@ -81,6 +81,19 @@ typedef enum {
     int32_t _pendingPopupX, _pendingPopupY;
     struct wl_proxy *_decoration;
     struct wl_proxy *_frameCallback;
+    // Per-surface color objects and the compositor session this toplevel belongs to.
+    struct wl_proxy *_colorSurface, *_representationSurface, *_toplevelSession;
+    // alpha-modifier-v1: how much of the surface alpha the compositor keeps (NSWindow.alphaValue).
+    struct wl_proxy *_alphaModifier;
+    // xdg-dialog-v1: the dialog role of a sheet or modal panel, and its current modal hint.
+    struct wl_proxy *_dialog;
+    BOOL _dialogModal;
+    // idle-inhibit-unstable-v1: held while this toplevel is mapped and visible.
+    struct wl_proxy *_idleInhibitor;
+    NSString *_sessionName;
+    BOOL _restoringSessionToplevel;
+    // Once a surface has committed, a saved session state can no longer be restored on it.
+    BOOL _surfaceCommitted;
     struct WaylandBuffer _buffers[2];
     int32_t _pendingWidth, _pendingHeight;
     BOOL _pendingActivated;
@@ -143,6 +156,7 @@ typedef enum {
 - (O2Rect) frame;
 - (O2Context *) cgContext;
 - (struct wl_proxy *) surface;
+- (struct wl_proxy *) toplevel;
 - (struct wl_proxy *) ensureSurface;
 - (WaylandDisplay *) waylandDisplay;
 - (void) addSubwindow: (WaylandSubWindow *) child;
@@ -203,5 +217,34 @@ typedef enum {
 
 // Gives the toplevel the application icon (xdg-toplevel-icon), when the compositor has the protocol.
 - (void) updateToplevelIcon;
+
+// Describes the surface's content color to the compositor, when it supports color management.
+- (void) updateSurfaceColor;
+// Creates the color objects once a surface exists and the manager has been bound.
+- (void) updateSurfaceColorIfNeeded;
+// Adds the toplevel to the compositor session, or restores its saved state. Must run before the
+// surface's first commit. Does nothing without a session.
+- (void) joinSessionBeforeCommit;
+// Callbacks from the display when the color manager or session manager arrives later than the window.
+- (void) colorManagerAvailable;
+- (void) sessionManagerAvailable;
+// Called when the dialog manager arrives later than the window.
+- (void) dialogManagerAvailable;
+// Applies NSWindow.alphaValue to the surface when alpha-modifier-v1 is available.
+- (void) alphaModifierAvailable;
+// Sends the toplevel's stable tag and localized description when xdg-toplevel-tag-v1 is available.
+- (void) updateToplevelTags;
+// Creates or destroys the idle inhibitor as this toplevel becomes visible or occluded.
+- (void) updateIdleInhibitor;
+
+// Overrides of CGWindow's window-system session hooks (see CGWindowPrivate.h).
+- (NSString *) ensureSessionToplevelName;
+- (void) setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring;
+- (BOOL) isRestoringSessionToplevel;
+- (BOOL) hasCommittedSurface;
+// Commits the surface and records that a session restore request is now too late.
+- (void) commitSurface;
+- (struct wl_proxy *) toplevelSession;
+- (void) setToplevelSession: (struct wl_proxy *) proxy;
 
 @end

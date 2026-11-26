@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "CGSX11Pointer.h"
+#import "X11InputMask.h"
 #import "CGSConnectionX11.h"
 #import <CoreGraphics/CGEvent.h>
 #import <CoreGraphics/CGEventSource.h>
@@ -825,6 +826,7 @@ static int64_t buttonNumberForX(unsigned int xButton) {
 }
 
 - (void) windowDestroyed: (Window) window {
+    [self cancelPinchOnWindow: window];
     if (_relative.active && _relativeWindow == window)
         [self suspendRelativeMouse];
 }
@@ -844,10 +846,18 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     int opcode, firstEvent, firstError;
     if (display == NULL || !XQueryExtension(display, "XInputExtension", &opcode, &firstEvent, &firstError))
         return;
-    int major = 2, minor = 1;
-    // 2.1 is the version that has smooth scrolling.
+    // The server answers with the highest version it has up to the one asked for. 2.1 is the version that has smooth
+    // scrolling, 2.2 adds touch screens and 2.4 the pinch gestures of touchpads, whose selection the framework above asks
+    // for (-selectTouchInputOnWindow:). A device reports touches or gestures, never both, and gestures only come from
+    // dependent devices such as touchpads: which one a device reports is a property of the device, not of the version
+    // asked for, so touch screens and servers without 2.4 are not affected by asking.
+    int major = 2, minor = 4;
     if (XIQueryVersion(display, &major, &minor) != Success || major < 2 || (major == 2 && minor < 1))
         return;
+    _touchSelectable = major > 2 || minor >= 2;
+#ifdef X11_XI_GESTURES
+    _pinchSelectable = major > 2 || minor >= 4;
+#endif
     _xiOpcode = opcode;
     [self selectInputExtensionEvents];
     [self queryScrollAxes];
@@ -947,6 +957,37 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     case XI_DeviceChanged:
         [self queryScrollAxes];
         break;
+    case XI_TouchBegin:
+    case XI_TouchUpdate:
+    case XI_TouchEnd: {
+        XIDeviceEvent *touch = event->xcookie.data;
+        [self touchEventType: event->xcookie.evtype
+                      device: touch->deviceid
+                      detail: touch->detail
+                      window: touch->event
+                           x: touch->event_x
+                           y: touch->event_y
+                       rootX: touch->root_x
+                       rootY: touch->root_y];
+        break;
+    }
+#ifdef X11_XI_GESTURES
+    case XI_GesturePinchBegin:
+    case XI_GesturePinchUpdate:
+    case XI_GesturePinchEnd: {
+        XIGesturePinchEvent *gesture = event->xcookie.data;
+        [self pinchEventType: event->xcookie.evtype
+                      window: gesture->event
+                           x: gesture->event_x
+                           y: gesture->event_y
+                       rootX: gesture->root_x
+                       rootY: gesture->root_y
+                       scale: gesture->scale
+                  deltaAngle: gesture->delta_angle
+                   cancelled: (gesture->flags & XIGesturePinchEventCancelled) != 0];
+        break;
+    }
+#endif
     }
     XFreeEventData(display, &event->xcookie);
     return YES;
