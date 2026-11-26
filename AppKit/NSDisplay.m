@@ -108,9 +108,17 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
 // The instance is published only after the backend has initialized, so a
 // backend that fails to start (or raises) leaves nothing behind and a later
 // call tries again.
+//
+// A process that has denied itself connections to the window system
+// (CGSSetDenyWindowServerConnections()) has no display: this returns nil
+// instead of raising, so that NSApplication still initializes and the
+// process sees no screens, as on macOS.
 + (NSDisplay *) currentDisplay {
     @synchronized([NSDisplay class]) {
         if (processDisplay == nil) {
+            if (_CGSWindowServerConnectionsDenied()) {
+                return nil;
+            }
             processDisplay = [[NSDisplay alloc] init];
         }
         return processDisplay;

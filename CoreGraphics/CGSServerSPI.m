@@ -37,7 +37,8 @@ CGSConnectionID CGSMainConnectionID(void)
         if (error == kCGErrorSuccess && created != 0 &&
             _CGSConnectionForID(created) != nil) {
             mainConnectionID = created;
-        } else if (!mainConnectionFailureLogged) {
+        } else if (!mainConnectionFailureLogged && !_CGSWindowServerConnectionsDenied()) {
+            // (a process that denied itself connections expects to have none)
             // GUESS: failure returns 0 and is not cached, so a later call retries.
             mainConnectionFailureLogged = YES;
             NSLog(@"CGSMainConnectionID: cannot create the default connection "
