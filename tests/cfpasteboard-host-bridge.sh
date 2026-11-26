@@ -29,7 +29,9 @@ if [ "$BACKEND" = wayland ]; then
 	# The seat has no keyboard until wtype makes a virtual one, which the compositor gives the focus window and which
 	# is removed when wtype exits: a key gives the client the keyboard focus (and with it the selection) and an input
 	# serial to publish with.
-	kick() { wtype -s 300 z; }
+	# KWin has no virtual keyboard protocol: with KWIN_KEYS naming the built tests/kwin-keys the key is injected through
+	# its fake input protocol instead (a private kwin_wayland --virtual with --no-lockscreen only).
+	kick() { if [ -n "${KWIN_KEYS:-}" ]; then "$KWIN_KEYS" 100 44:1 44:0; else wtype -s 300 z; fi; }
 else
 	GENV=(env DISPLAY="$DISPLAY")
 	host_set() { printf '%s' "$1" | xclip -selection clipboard ${2:+-t "$2"} -i; }
