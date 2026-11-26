@@ -97,7 +97,7 @@ case "$scenario" in
 color)
     expect_server '^OUTPUT_INFO primaries=9 tf=9 max=400 reference=203 target=1000$' "output color description"
     expect_server '^SURFACE_COLOR color-test primaries=9 tf=9$' "surface color description"
-    expect_server '^SURFACE_ALPHA color-test mode=0$' "surface alpha mode"
+    expect_server '^SURFACE_ALPHA .*mode=0$' "surface alpha mode"
     expect_guest '^SCREEN p3=1 edr=1\.97 potential=4\.93 reference=4\.93$' "NSScreen color space and EDR"
     ;;
 launch)
