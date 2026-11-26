@@ -73,6 +73,7 @@ typedef enum {
     CGSWaylandObjectLockedPointer,
     CGSWaylandObjectRelativePointer,
     CGSWaylandObjectWarpLock,
+    CGSWaylandObjectIdleNotification,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -117,6 +118,10 @@ typedef enum {
     // instead of asking for a short pointer lock.
     struct wl_proxy *_pointerWarp;
     uint32_t _pointerWarpName;
+    // ext-idle-notify-v1: the compositor's idle state, used for CGDisplayIsAsleep().
+    struct wl_proxy *_idleNotifier, *_idleNotification;
+    uint32_t _idleNotifierName, _idleNotifierVersion, _seatName;
+    BOOL _displayIdle;
     // The registered global hot keys (CGSWaylandHotKeyEntry), guarded by @synchronized(self).
     NSMutableArray *_hotKeys;
     // Set when the setup roundtrips are over; an output that is described before that is
@@ -142,6 +147,12 @@ typedef enum {
 - (struct wl_proxy *) relativePointerManager;
 // The pointer warp global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerWarp;
+// YES after ext-idle-notification's idled event and until resumed. The compositor decides what
+// inactivity means and when the display actually blanks; this is the closest core graphics has.
+- (BOOL) displayIdle;
+// Creates or drops the notification as the manager and wl_seat become available.
+- (void) updateIdleNotification;
+- (void) idleNotificationEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
 // The point of one of this connection's windows' surfaces at a global location (the inverse of
 // -globalLocation:ofSurface:point:); NO when the surface is not one of its windows.
 - (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface;

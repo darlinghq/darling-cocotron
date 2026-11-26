@@ -184,6 +184,8 @@
 // lock may be another one now. The defaults say no and do nothing.
 -(BOOL) pointerLocked;
 -(void) pointerLockTargetMayHaveChanged;
+// Whether the compositor reports the display as idle (Wayland: ext-idle-notify). The default is NO.
+-(BOOL) displayIdle;
 
 // Implementations should also emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 // if layout changes.

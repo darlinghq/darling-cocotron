@@ -299,6 +299,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_alphaModifier != NULL)
         sendRequest(_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _alphaModifier = NULL;
+    if (_idleInhibitor != NULL)
+        sendRequest(_idleInhibitor, ZWP_IDLE_INHIBITOR_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    _idleInhibitor = NULL;
     if (_toplevelSession != NULL)
         sendRequest(_toplevelSession, WP_TOPLEVEL_SESSION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _toplevelSession = NULL;
@@ -604,6 +607,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // The initial commit has no buffer; content follows the first configure.
     [self commitSurface];
     _mapped = YES;
+    [self updateIdleInhibitor];
     [self scheduleScaleUpdate];
     if (_subwindowRedrawNeeded) [self scheduleSubwindowRedraw];
     _configured = NO;
@@ -823,6 +827,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self destroyBuffers];
 
     _mapped = NO;
+    [self updateIdleInhibitor];
     // The toplevel is gone, and so is what the compositor did to it.
     [self endMinimized];
     _levelParent = nil;
@@ -1285,6 +1290,22 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                    XDG_TOPLEVEL_TAG_MANAGER_SET_TOPLEVEL_DESCRIPTION, NULL, 0, args);
 }
 
+// The inhibitor is only useful while the surface is mapped and visible. A compositor ignores it when
+// the surface is unmapped, occluded or already idle, so it is dropped as soon as any of those happens.
+- (void) updateIdleInhibitor {
+    BOOL inhibit = !_invalidated && _mapped && !_suspended && !_fullyTransparent &&
+                   _surface != NULL && _display->_idleInhibitManager != NULL;
+    if (inhibit && _idleInhibitor == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+        _idleInhibitor = WaylandCreateObject(_display->_idleInhibitManager,
+                                             ZWP_IDLE_INHIBIT_MANAGER_CREATE_INHIBITOR,
+                                             &zwp_idle_inhibitor_v1_interface, args, 0, nil);
+    } else if (!inhibit && _idleInhibitor != NULL) {
+        sendRequest(_idleInhibitor, ZWP_IDLE_INHIBITOR_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+        _idleInhibitor = NULL;
+    }
+}
+
 - (void) updateTitle {
     if (_toplevel == NULL)
         return;
@@ -1369,8 +1390,10 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
         } else if (_shouldBeMapped)
             [self ensureMapped];
     }
-    if (_mapped)
+    if (_mapped) {
         [self updateAlphaModifier];
+        [self updateIdleInhibitor];
+    }
 }
 
 - (void) setHasShadow: (BOOL) value {
@@ -1992,6 +2015,7 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
     BOOL suspendedChanged = _pendingSuspended != _suspended;
     _suspended = _pendingSuspended;
     if (suspendedChanged) {
+        [self updateIdleInhibitor];
         [_display performAfterDispatch: ^{
           if ([self->_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
               [self->_delegate platformWindowOcclusionChanged: self];

@@ -152,6 +152,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // xdg-toplevel-tag-v1: stable window tags for compositor-side window rules.
     struct wl_proxy *_toplevelTagManager;
     uint32_t _toplevelTagManagerName;
+    // idle-inhibit-unstable-v1: visible, unoccluded toplevels keep the display awake.
+    struct wl_proxy *_idleInhibitManager;
+    uint32_t _idleInhibitManagerName;
 
 @protected
     struct wl_proxy *_seat;
@@ -241,6 +244,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) alphaModifierManagerAvailable;
 // Tells windows that the toplevel tag manager arrived after their toplevels were created.
 - (void) toplevelTagManagerAvailable;
+// Tells mapped windows to create an inhibitor when the idle inhibit manager arrives.
+- (void) idleInhibitManagerAvailable;
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;

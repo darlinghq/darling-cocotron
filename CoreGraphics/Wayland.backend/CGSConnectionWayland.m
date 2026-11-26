@@ -138,6 +138,9 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                 if (opcode == WP_CALLBACK_EV_DONE)
                     [(CGSWaylandKeyboard *) object modifierSyncDone: (struct wl_proxy *) proxy];
                 break;
+            case CGSWaylandObjectIdleNotification:
+                [(CGSConnectionWayland *) object idleNotificationEvent: opcode arguments: args];
+                break;
             case CGSWaylandObjectSeat:
             case CGSWaylandObjectKeyboard:
             default:
@@ -328,6 +331,10 @@ static const CGEventFlags kHotKeyModifierMask =
     if (_pointerGestures != NULL)
         WL.wl_proxy_destroy(_pointerGestures);
     [_hotKeys release];
+    if (_idleNotification != NULL)
+        WL.wl_proxy_destroy(_idleNotification);
+    if (_idleNotifier != NULL)
+        WL.wl_proxy_destroy(_idleNotifier);
     if (_seat != NULL)
         WL.wl_proxy_destroy(_seat);
     [_keymap release];
@@ -506,6 +513,17 @@ static const CGEventFlags kHotKeyModifierMask =
         _seat = [self bindGlobal: name interface: &wl_seat_interface
                          version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
                             kind: CGSWaylandObjectSeat object: self];
+        _seatName = name;
+        [self updateIdleNotification];
+    } else if (strcmp(interface, "ext_idle_notifier_v1") == 0 && _idleNotifier == NULL) {
+        _idleNotifierName = name;
+        _idleNotifierVersion = MIN(version, (uint32_t) ext_idle_notifier_v1_interface.version);
+        _idleNotifier = [self bindGlobal: name
+                               interface: &ext_idle_notifier_v1_interface
+                                 version: _idleNotifierVersion
+                                    kind: CGSWaylandObjectNone
+                                  object: nil];
+        [self updateIdleNotification];
     } else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0 && _pointerConstraints == NULL) {
         _pointerConstraintsName = name;
         _pointerConstraints = [self bindGlobal: name interface: &zwp_pointer_constraints_v1_interface
@@ -614,6 +632,23 @@ static const CGEventFlags kHotKeyModifierMask =
         WaylandMarshal(_pointerWarp, WP_POINTER_WARP_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _pointerWarp = NULL;
         _pointerWarpName = 0;
+        return;
+    }
+    if (_idleNotification != NULL && _seat != NULL && name == _seatName) {
+        // The notification is tied to the seat, unlike the manager's other objects.
+        WaylandMarshal(_idleNotification, EXT_IDLE_NOTIFICATION_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _idleNotification = NULL;
+        _displayIdle = NO;
+        return;
+    }
+    if (_idleNotifier != NULL && name == _idleNotifierName) {
+        // ext-idle-notify says objects created with the manager remain valid.
+        WaylandMarshal(_idleNotifier, EXT_IDLE_NOTIFIER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _idleNotifier = NULL;
+        _idleNotifierName = 0;
+        _idleNotifierVersion = 0;
         return;
     }
     if (_pointerGestures != NULL && name == _pointerGesturesName) {
@@ -920,6 +955,35 @@ static const CGEventFlags kHotKeyModifierMask =
 
 - (struct wl_proxy *) pointerWarp {
     return _pointerWarp;
+}
+
+#pragma mark - Idle notification
+
+// The timeout is a minimum: the compositor may keep its own, longer inactivity policy. The regular
+// notification is used rather than the input-only one, so this application's visible windows (which
+// hold idle inhibitors) count as activity.
+- (void) updateIdleNotification {
+    if (_idleNotifier == NULL || _seat == NULL || _idleNotification != NULL)
+        return;
+    union wl_argument args[3] = {{.o = NULL}, {.u = 60000}, {.o = (struct wl_object *) _seat}};
+    _idleNotification = [self createObject: _idleNotifier
+                                   opcode: EXT_IDLE_NOTIFIER_GET_IDLE_NOTIFICATION
+                                interface: &ext_idle_notification_v1_interface
+                                arguments: args
+                                     kind: CGSWaylandObjectIdleNotification
+                                   object: self];
+}
+
+- (void) idleNotificationEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    (void) args;
+    if (opcode == EXT_IDLE_NOTIFICATION_EV_IDLED)
+        _displayIdle = YES;
+    else if (opcode == EXT_IDLE_NOTIFICATION_EV_RESUMED)
+        _displayIdle = NO;
+}
+
+- (BOOL) displayIdle {
+    return _displayIdle;
 }
 
 #pragma mark - Pointer state

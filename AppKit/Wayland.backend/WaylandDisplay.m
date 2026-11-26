@@ -328,7 +328,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _cursorShapeDevice, _cursorShapeManager, _dialogManager, _bell,
-                                      _alphaModifierManager, _toplevelTagManager,
+                                      _alphaModifierManager, _toplevelTagManager, _idleInhibitManager,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
@@ -470,6 +470,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) toplevelTagManagerAvailable {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateToplevelTags];
+}
+
+- (void) idleInhibitManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateIdleInhibitor];
 }
 
 - (void) applicationIconImageChanged {
@@ -643,6 +648,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                           kind: 0
                                         object: nil];
         [self toplevelTagManagerAvailable];
+    } else if (strcmp(interface, "zwp_idle_inhibit_manager_v1") == 0 && _idleInhibitManager == NULL) {
+        _idleInhibitManagerName = name;
+        _idleInhibitManager = [self bindGlobal: name
+                                     interface: &zwp_idle_inhibit_manager_v1_interface
+                                       version: 1
+                                          kind: 0
+                                        object: nil];
+        [self idleInhibitManagerAvailable];
     } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
         ((WaylandColorManager *) _color)->_colorManager == NULL) {
         uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
@@ -821,6 +834,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        WL_MARSHAL_FLAG_DESTROY, NULL);
         _toplevelTagManager = NULL;
         _toplevelTagManagerName = 0;
+        return;
+    }
+    if (_idleInhibitManager != NULL && name == _idleInhibitManagerName) {
+        // Existing inhibitors remain valid after the manager goes away.
+        WaylandMarshal(_idleInhibitManager, ZWP_IDLE_INHIBIT_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _idleInhibitManager = NULL;
+        _idleInhibitManagerName = 0;
         return;
     }
     if (_cursorShapeManager != NULL && name == _cursorShapeManagerName) {

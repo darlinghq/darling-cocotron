@@ -848,6 +848,11 @@ bool _CGSNativeConnectionPointerLocked(void)
 	return [nativeConnection() pointerLocked];
 }
 
+bool _CGSNativeConnectionDisplayIdle(void)
+{
+	return [nativeConnection() displayIdle];
+}
+
 void _CGSNativeConnectionPointerLockTargetChanged(void)
 {
 	[nativeConnection() pointerLockTargetMayHaveChanged];
