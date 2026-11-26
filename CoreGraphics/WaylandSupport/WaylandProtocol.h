@@ -27,7 +27,7 @@
 // xdg-shell, xdg-decoration, xdg-output, viewporter, fractional-scale, xdg-activation,
 // pointer-gestures,
 // relative-pointer, pointer-constraints, text-input-v3, wlr-output-management, KDE appmenu,
-// xdg-toplevel-icon, color-management and color-representation XML. The
+// xdg-toplevel-icon, color-management, color-representation and xdg-session-management XML. The
 // scanner's client headers are not used: their inline request stubs call the variadic
 // wl_proxy_marshal_flags().
 extern const struct wl_interface wl_display_interface;
@@ -97,6 +97,9 @@ extern const struct wl_interface wp_image_description_info_v1_interface;
 extern const struct wl_interface wp_image_description_reference_v1_interface;
 extern const struct wl_interface wp_color_representation_manager_v1_interface;
 extern const struct wl_interface wp_color_representation_surface_v1_interface;
+extern const struct wl_interface xdg_session_manager_v1_interface;
+extern const struct wl_interface xdg_session_v1_interface;
+extern const struct wl_interface xdg_toplevel_session_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -461,6 +464,25 @@ enum {
     WP_COLOR_REP_SURFACE_SET_ALPHA_MODE = 1,
     WP_COLOR_REP_SURFACE_SET_COEFFICIENTS_AND_RANGE = 2,
     WP_COLOR_REP_SURFACE_SET_CHROMA_LOCATION = 3,
+
+    // xdg_session_manager_v1
+    WP_SESSION_MANAGER_DESTROY = 0,
+    WP_SESSION_MANAGER_GET_SESSION = 1,
+
+    // xdg_session_v1
+    WP_SESSION_DESTROY = 0,
+    WP_SESSION_REMOVE = 1,
+    WP_SESSION_ADD_TOPLEVEL = 2,
+    WP_SESSION_RESTORE_TOPLEVEL = 3,
+    WP_SESSION_REMOVE_TOPLEVEL = 4,
+    WP_SESSION_EV_CREATED = 0,
+    WP_SESSION_EV_RESTORED = 1,
+    WP_SESSION_EV_REPLACED = 2,
+
+    // xdg_toplevel_session_v1
+    WP_TOPLEVEL_SESSION_DESTROY = 0,
+    WP_TOPLEVEL_SESSION_RENAME = 1,
+    WP_TOPLEVEL_SESSION_EV_RESTORED = 0,
 };
 
 // Enum values from the same protocol files.
@@ -571,6 +593,11 @@ enum {
     WP_COLOR_CHROMA_TYPE_3 = 4,
     WP_COLOR_CHROMA_TYPE_4 = 5,
     WP_COLOR_CHROMA_TYPE_5 = 6,
+
+    // xdg_session_manager_v1.reason
+    WP_SESSION_REASON_LAUNCH = 1,
+    WP_SESSION_REASON_RECOVER = 2,
+    WP_SESSION_REASON_SESSION_RESTORE = 3,
 };
 
 // Linux input event codes (linux/input-event-codes.h) carried by wl_pointer.button.

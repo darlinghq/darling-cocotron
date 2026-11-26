@@ -108,6 +108,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [_deviceDictionary release];
     [_surfaceOutputs release];
     [_title release];
+    [_sessionName release];
     [super dealloc];
 }
 
@@ -145,6 +146,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (struct wl_proxy *) surface {
     return _surface;
+}
+
+- (struct wl_proxy *) toplevel {
+    return _toplevel;
 }
 
 - (struct wl_proxy *) ensureSurface {
@@ -205,17 +210,73 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self updateSurfaceColorIfNeeded];
 }
 
+- (void) sessionManagerAvailable {
+    if (_mapped && _toplevel != NULL && _toplevelSession == NULL)
+        [self joinSessionBeforeCommit];
+}
+
+- (NSString *) ensureSessionToplevelName {
+    if (_sessionName == nil)
+        _sessionName = [[NSString stringWithFormat: @"darling-%@",
+                         [[NSProcessInfo processInfo] globallyUniqueString]] copy];
+    return _sessionName;
+}
+
+- (void) setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring {
+    if ([name length] == 0)
+        return;
+    if (_toplevelSession != NULL && ![name isEqualToString: _sessionName]) {
+        union wl_argument args[1] = {{.s = [name UTF8String]}};
+        WaylandMarshal(_toplevelSession, WP_TOPLEVEL_SESSION_RENAME, NULL, 0, args);
+    }
+    [name retain];
+    [_sessionName release];
+    _sessionName = name;
+    _restoringSessionToplevel = restoring;
+}
+
+- (BOOL) isRestoringSessionToplevel {
+    return _restoringSessionToplevel;
+}
+
+- (BOOL) hasCommittedSurface {
+    return _surfaceCommitted;
+}
+
+- (void) commitSurface {
+    if (_surface == NULL)
+        return;
+    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
+    _surfaceCommitted = YES;
+}
+
+- (struct wl_proxy *) toplevelSession {
+    return _toplevelSession;
+}
+
+- (void) setToplevelSession: (struct wl_proxy *) proxy {
+    _toplevelSession = proxy;
+}
+
+- (void) joinSessionBeforeCommit {
+    [_display joinSessionForToplevel: self];
+}
+
 // The surface with the objects that are tied to it. The role objects must be gone first.
 - (void) destroySurface {
     WaylandColorManager *color = [_display colorManager];
     [color destroyColorSurface: _colorSurface];
     [color destroyRepresentationSurface: _representationSurface];
     _colorSurface = _representationSurface = NULL;
+    if (_toplevelSession != NULL)
+        sendRequest(_toplevelSession, WP_TOPLEVEL_SESSION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    _toplevelSession = NULL;
     if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_surface)
         sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _fractionalScale = _viewport = _surface = NULL;
+    _surfaceCommitted = NO;
 }
 
 // The core protocol makes the role of a wl_surface permanent for its lifetime, and xdg_toplevel and
@@ -492,6 +553,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [self updateTaskbarPresence];
             _toplevelIconSet = NO;
             [self updateToplevelIcon];
+            // The session request has to precede the initial commit on the surface.
+            [self joinSessionBeforeCommit];
         }
 
     }
@@ -501,7 +564,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _pendingSuspended = NO;
     _pendingFullscreen = NO;
     // The initial commit has no buffer; content follows the first configure.
-    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
+    [self commitSurface];
     _mapped = YES;
     [self scheduleScaleUpdate];
     if (_subwindowRedrawNeeded) [self scheduleSubwindowRedraw];
@@ -547,7 +610,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_toplevel == NULL || _display->_toplevelIcons == nil)
         return;
     if ([_display->_toplevelIcons applyToToplevel: _toplevel hadIcon: &_toplevelIconSet] && _mapped && _configured) {
-        sendRequest(_surface, WP_SURFACE_COMMIT, 0);
+        [self commitSurface];
         [_display flush];
     }
 }
@@ -715,7 +778,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // their native-window identity. A NULL buffer unmaps the entire subtree.
     union wl_argument detach[] = {{.o = NULL}, {.i = 0}, {.i = 0}};
     WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, detach);
-    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
+    [self commitSurface];
     _toplevel = _xdgSurface = NULL;
     [_surfaceOutputs removeAllObjects];
     [self destroyBuffers];
@@ -1605,7 +1668,7 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
                                          &wl_callback_interface, args,
                                          WaylandObjectFrameCallback, self);
 
-    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
+    [self commitSurface];
     buffer->busy = YES;
     _needsPresent = NO;
     [_display flush];
@@ -1669,6 +1732,11 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
         } else if (opcode == WP_TOPLEVEL_EV_WM_CAPABILITIES) {
             _pendingMinimizeAdvertised = WaylandStatesContain(args[0].a, WP_TOPLEVEL_CAPABILITY_MINIMIZE);
         }
+        break;
+
+    case WaylandObjectToplevelSession:
+        // The event only says the compositor used the state saved under this name; the state itself
+        // arrives with the following configure, which is handled as an ordinary toplevel configure.
         break;
 
     case WaylandObjectDecoration:

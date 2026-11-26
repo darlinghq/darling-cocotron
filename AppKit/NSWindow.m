@@ -963,6 +963,7 @@ static NSString *menuBarStylePreference(void) {
     [NS_EXTRA(NSWindow, self)->_tabGroup release];
     [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters release];
     [NS_EXTRA(NSWindow, self)->_tabbingIdentifier release];
+    [NS_EXTRA(NSWindow, self)->_sessionToplevelName release];
     [NS_EXTRA(NSWindow, self)->_subtitle release];
     [NS_EXTRA(NSWindow, self)->_childWindows release];
     [NS_EXTRA(NSWindow, self)->_representedFilename release];
@@ -1018,6 +1019,13 @@ static NSString *menuBarStylePreference(void) {
     if (_platformWindow != nil)
         return;
     _platformWindow = [[NSDisplay currentDisplay] newWindowWithDelegate: self];
+
+    // A window recreated from saved state can have its session name before the native window
+    // exists. The session request must precede the first surface commit.
+    if ([NS_EXTRA(NSWindow, self)->_sessionToplevelName length] > 0 &&
+        [_platformWindow respondsToSelector: @selector(setSessionToplevelName:restoring:)])
+        [_platformWindow setSessionToplevelName: NS_EXTRA(NSWindow, self)->_sessionToplevelName
+                                       restoring: NS_EXTRA(NSWindow, self)->_restoringSessionToplevel];
 
     [self _updatePlatformWindowTitle];
 
@@ -5637,6 +5645,28 @@ static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
 
 - (void) endSheet: (NSWindow *) sheet returnCode: (NSInteger) returnCode {
     [NSApp endSheet: sheet returnCode: returnCode];
+}
+
+@end
+
+@implementation NSWindow (NSStateRestoration)
+
+- (void) _setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring {
+    [name retain];
+    [NS_EXTRA(NSWindow, self)->_sessionToplevelName release];
+    NS_EXTRA(NSWindow, self)->_sessionToplevelName = name;
+    NS_EXTRA(NSWindow, self)->_restoringSessionToplevel = restoring;
+    if (_platformWindow != nil &&
+        [_platformWindow respondsToSelector: @selector(setSessionToplevelName:restoring:)])
+        [_platformWindow setSessionToplevelName: name restoring: restoring];
+}
+
+- (NSString *) _sessionToplevelName {
+    return NS_EXTRA(NSWindow, self)->_sessionToplevelName;
+}
+
+- (BOOL) _isRestoringSessionToplevel {
+    return NS_EXTRA(NSWindow, self)->_restoringSessionToplevel;
 }
 
 @end

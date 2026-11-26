@@ -46,6 +46,7 @@
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
+#import "../NSWindow-Private.h"
 #import <AppKit/NSMenuWindow.h>
 #import <AppKit/NSMenuView.h>
 #import <AppKit/NSPopUpWindow.h>
@@ -114,6 +115,7 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectFrameCallback:
             case WaylandObjectBuffer:
             case WaylandObjectLayerSurface:
+            case WaylandObjectToplevelSession:
                 [(WaylandWindow *) object handleEvent: opcode
                                                  kind: objectKind
                                                 proxy: proxy
@@ -317,6 +319,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
         [(WaylandColorManager *) _color shutdown];
+        // Destroying the session preserves the compositor's state for the next launch. The windows
+        // have already released their toplevel session objects before this display is deallocated.
+        if (_session != NULL)
+            WaylandMarshal(_session, WP_SESSION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        if (_sessionManager != NULL)
+            WaylandMarshal(_sessionManager, WP_SESSION_MANAGER_DESTROY,
+                           NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
@@ -332,6 +341,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [_cursor release];
     [_inputEvent release];
     [_color release];
+    [_sessionIdentifier release];
     [_outputs release];
     [_afterDispatch release];
     if (_windows != NULL)
@@ -349,6 +359,93 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
 - (WaylandColorManager *) colorManager {
     return _color;
+}
+
+#pragma mark - Window-system session
+
+- (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier {
+    if (_sessionRequested)
+        return;
+    _sessionRequested = YES;
+    _sessionReason = reason;
+    [_sessionIdentifier release];
+    _sessionIdentifier = [identifier copy];
+    [self startSessionIfPossible];
+}
+
+- (NSString *) windowSessionIdentifier {
+    return _sessionIdentifier;
+}
+
+// The manager and AppKit's reason can arrive in either order: the registry is read during -init,
+// while the reason comes from the saved state later in launching.
+- (void) startSessionIfPossible {
+    if (!_sessionRequested || _sessionManager == NULL || _session != NULL)
+        return;
+    uint32_t reason = (uint32_t) _sessionReason;
+    if (reason < WP_SESSION_REASON_LAUNCH || reason > WP_SESSION_REASON_SESSION_RESTORE)
+        reason = WP_SESSION_REASON_LAUNCH;
+    union wl_argument args[3] = {
+        {.o = NULL}, {.u = reason}, {.s = [_sessionIdentifier length] > 0 ? [_sessionIdentifier UTF8String] : NULL},
+    };
+    _session = WaylandCreateObject(_sessionManager, WP_SESSION_MANAGER_GET_SESSION,
+                                   &xdg_session_v1_interface, args,
+                                   WaylandObjectSession, self);
+    if (_session == NULL)
+        return;
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) sessionManagerAvailable];
+}
+
+- (void) joinSessionForToplevel: (WaylandWindow *) window {
+    if (_session == NULL || window == nil || [window toplevelSession] != NULL)
+        return;
+    NSString *name = [window ensureSessionToplevelName];
+    const char *utf8 = [name UTF8String];
+    if (utf8 == NULL)
+        return;
+    // A session state can only be restored before the first commit. If AppKit set the name
+    // after the window was already mapped, the same name is still used to store new state.
+    BOOL restoring = [window isRestoringSessionToplevel] && ![window hasCommittedSurface];
+    union wl_argument args[3] = {
+        {.o = NULL}, {.o = (struct wl_object *) [window toplevel]}, {.s = utf8},
+    };
+    struct wl_proxy *proxy =
+            WaylandCreateObject(_session,
+                                restoring ? WP_SESSION_RESTORE_TOPLEVEL : WP_SESSION_ADD_TOPLEVEL,
+                                &xdg_toplevel_session_v1_interface, args,
+                                WaylandObjectToplevelSession, window);
+    if (proxy != NULL)
+        [window setToplevelSession: proxy];
+}
+
+- (void) sessionEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    if (opcode == WP_SESSION_EV_CREATED) {
+        NSString *identifier = args[0].s != NULL ? [NSString stringWithUTF8String: args[0].s] : nil;
+        [identifier retain];
+        [_sessionIdentifier release];
+        _sessionIdentifier = identifier;
+        if (NSApp != nil)
+            [NSApp _writeWindowSessionMarkerWithIdentifier: identifier];
+    } else if (opcode == WP_SESSION_EV_REPLACED) {
+        // Another client took the session over: all its objects are inert now.
+        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+            WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+            struct wl_proxy *proxy = [window toplevelSession];
+            if (proxy != NULL) {
+                WaylandMarshal(proxy, WP_TOPLEVEL_SESSION_DESTROY, NULL,
+                               WL_MARSHAL_FLAG_DESTROY, NULL);
+                [window setToplevelSession: NULL];
+            }
+        }
+        if (_session != NULL)
+            WaylandMarshal(_session, WP_SESSION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _session = NULL;
+        [_sessionIdentifier release];
+        _sessionIdentifier = nil;
+        if (NSApp != nil)
+            [NSApp _removeWindowSessionMarker];
+    }
 }
 
 // The windows carry the application icon (see WaylandToplevelIcon.h): when the application sets another
@@ -490,7 +587,15 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
               interface: (const char *) interface
                 version: (uint32_t) version
 {
-    if (strcmp(interface, "wp_color_manager_v1") == 0 &&
+    if (strcmp(interface, "xdg_session_manager_v1") == 0 && _sessionManager == NULL) {
+        _sessionManagerName = name;
+        _sessionManager = [self bindGlobal: name
+                                 interface: &xdg_session_manager_v1_interface
+                                   version: 1
+                                      kind: WaylandObjectSessionManager
+                                    object: self];
+        [self startSessionIfPossible];
+    } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
         ((WaylandColorManager *) _color)->_colorManager == NULL) {
         uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
         struct wl_proxy *proxy = [self bindGlobal: name
@@ -623,6 +728,15 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
 - (void) registryGlobalRemoved: (uint32_t) name {
     [(WaylandColorManager *) _color globalRemoved: name];
+    if (_sessionManager != NULL && name == _sessionManagerName) {
+        // The manager global is gone; an existing session keeps working (see the protocol's
+        // manager destructor), so only the factory is dropped here.
+        WaylandMarshal(_sessionManager, WP_SESSION_MANAGER_DESTROY,
+                       NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _sessionManager = NULL;
+        _sessionManagerName = 0;
+        return;
+    }
     if (_textInputManager && name == _textInputManagerName) {
         [self detachTextInput];
         WaylandMarshal(_textInputManager, WP_TEXT_INPUT_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
@@ -815,6 +929,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     case WaylandObjectTouch:
         [self touchEvent: opcode arguments: args];
+        break;
+
+    case WaylandObjectSession:
+        [self sessionEvent: opcode arguments: args];
         break;
 
     default:
