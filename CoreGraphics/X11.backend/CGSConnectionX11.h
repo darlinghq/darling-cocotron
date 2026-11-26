@@ -88,6 +88,10 @@
 // The CGS window that has this X window, 0 when none.
 -(CGSWindowID) _windowIDForNativeWindow:(Window)native;
 -(CGSWindowX11*) _cgsWindowForNativeWindow:(Window)native;
+// The display overlay (see -[CGSWindow becomeDisplayOverlay:]) shown last, nil when there is none, and whether an
+// X window is a display overlay.
+-(CGSWindowX11*) _displayOverlayWindow;
+-(BOOL) _isDisplayOverlayNativeWindow:(Window)native;
 // The device pixel position of a point of CoreGraphics' global space (rounded).
 -(void) _getRootX:(int*)x y:(int*)y forPoint:(CGPoint)point;
 // Shows a blank cursor on the windows of this connection, or the cursor they had (the process' cursor is hidden).
