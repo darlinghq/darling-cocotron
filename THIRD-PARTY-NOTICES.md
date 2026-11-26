@@ -70,6 +70,16 @@ and the licence.
 - Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
   generates the interface tables from it at build time.
 
+## pointer-warp-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/pointer-warp-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/pointer-warp/pointer-warp-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2024 Neal Gompa, 2024 Xaver Hugl, 2024 Matthias Klumpp, 2024 Vlad Zahorodnii
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
 ## DejaVuSans.ttf
 
 - Location: `tests/fixtures/fonts/DejaVuSans.ttf`, licence text in `tests/fixtures/fonts/DejaVu-LICENSE.txt`

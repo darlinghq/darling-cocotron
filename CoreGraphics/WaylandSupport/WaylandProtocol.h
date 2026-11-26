@@ -100,6 +100,7 @@ extern const struct wl_interface wp_color_representation_surface_v1_interface;
 extern const struct wl_interface xdg_session_manager_v1_interface;
 extern const struct wl_interface xdg_session_v1_interface;
 extern const struct wl_interface xdg_toplevel_session_v1_interface;
+extern const struct wl_interface wp_pointer_warp_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -235,6 +236,9 @@ enum {
     WP_LOCKED_POINTER_SET_CURSOR_POSITION_HINT = 1,
     WP_LOCKED_POINTER_EV_LOCKED = 0,
     WP_LOCKED_POINTER_EV_UNLOCKED = 1,
+
+    WP_POINTER_WARP_DESTROY = 0,
+    WP_POINTER_WARP_WARP_POINTER = 1,
 
     WP_TOUCH_RELEASE = 0,
     WP_TOUCH_EV_DOWN = 0,
