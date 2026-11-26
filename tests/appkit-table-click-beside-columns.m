@@ -21,7 +21,7 @@ static int failures;
 @interface Source : NSObject <NSTableViewDataSource, NSTableViewDelegate> {
 @public
     int actions, doubleActions, edits, tracks;
-    NSInteger actionColumn, actionRow;
+    NSInteger actionColumn, actionRow, notifiedColumn;
 }
 @end
 
@@ -34,6 +34,7 @@ static int failures;
     tracks++;
     return NO;
 }
+- (void)tableViewSelectionDidChange:(NSNotification *)n { notifiedColumn = [[n object] clickedColumn]; }
 - (void)clicked:(id)sender { actions++; actionColumn = [sender clickedColumn]; actionRow = [sender clickedRow]; }
 - (void)doubleClicked:(id)sender { doubleActions++; actionColumn = [sender clickedColumn]; actionRow = [sender clickedRow]; }
 @end
@@ -174,6 +175,90 @@ static void test_a_click_below_the_rows_still_clears_the_selection(void)
     CHECK([table selectedRow] == -1);
 }
 
+// QUIRK pinned: a click below the last row sends the action, and the double action on a double click, with
+// clickedRow and clickedColumn both -1 even over column 0. Observed on macOS 26.1 arm64 (probe 659, "below the last
+// row, inside column 0", fresh table): `action(clickedRow=-1,clickedColumn=-1,selectedRow=-1)` and, at click
+// count 2, `doubleAction(clickedRow=-1,clickedColumn=-1,selectedRow=-1)`. The point is derived from the last row.
+static void test_a_click_below_the_rows_sends_the_action(void)
+{
+    Source *source = setup();
+    NSPoint below = NSMakePoint(50, NSMaxY([table rectOfRow:4]) + 20);
+    CHECK([table rowAtPoint:below] == -1 && [table columnAtPoint:below] == 0);
+    source->actionRow = source->actionColumn = 99; // anything but -1, so that a value copied from the action shows
+
+    click(below, 1);
+    CHECK(source->actions == 1 && source->doubleActions == 0);
+    CHECK(source->actionRow == -1 && source->actionColumn == -1);
+    CHECK([table selectedRow] == -1);
+
+    source->actionRow = source->actionColumn = 99;
+    click(below, 2);
+    CHECK(source->actions == 1 && source->doubleActions == 1);
+    CHECK(source->actionRow == -1 && source->actionColumn == -1);
+    CHECK([table selectedRow] == -1);
+    CHECK([table editedRow] == -1);
+    CHECK([table clickedRow] == -1 && [table clickedColumn] == -1);
+}
+
+// The same click right of the last column too (probe 659, "below the last row, right of the last column")
+static void test_a_click_below_the_rows_beside_the_columns_sends_the_action(void)
+{
+    Source *source = setup();
+    NSPoint below = NSMakePoint(250, NSMaxY([table rectOfRow:4]) + 20);
+    source->actionRow = source->actionColumn = 99;
+    click(below, 1);
+    CHECK(source->actions == 1);
+    CHECK(source->actionRow == -1 && source->actionColumn == -1);
+}
+
+// The click's values are -1 and -1 already when the selection it clears is announced, not the column the point
+// lies over (the order is the code's own: the action is sent last, the notification is not probed).
+static void test_the_selection_notification_of_a_click_below_the_rows_sees_no_clicked_cell(void)
+{
+    Source *source = setup();
+    [table selectRowIndexes:[NSIndexSet indexSetWithIndex:1] byExtendingSelection:NO];
+    source->notifiedColumn = 99;
+    click(NSMakePoint(50, NSMaxY([table rectOfRow:4]) + 20), 1);
+    CHECK([table selectedRow] == -1);
+    CHECK(source->notifiedColumn == -1);
+}
+
+// Sending the double action on a double click on a cell is documented
+// (https://developer.apple.com/documentation/appkit/nstableview/doubleaction). QUIRK pinned: with a double action set
+// the double click on an editable cell also starts no edit; the documentation is silent on that. Observed on macOS 26.1
+// arm64 (probe 659, "editable columns; inside column 0, row 1 (control); click count 2", the data source implements
+// setObjectValue:): `action(clickedRow=1,clickedColumn=0,selectedRow=1)` then
+// `doubleAction(clickedRow=1,clickedColumn=0,selectedRow=1)`, `editedRow=-1` at 0.1 s and 0.5 s, no setObjectValue.
+static void test_double_click_with_a_double_action_starts_no_edit(void)
+{
+    Source *source = setup(); // column 0 is editable, the data source sets values, the double action is set
+    NSPoint cell = NSMakePoint(50, NSMidY([table rectOfRow:1]));
+    click(cell, 1);
+    click(cell, 2);
+    CHECK(source->actions == 1 && source->doubleActions == 1);
+    CHECK(source->actionRow == 1 && source->actionColumn == 0);
+    CHECK([table editedRow] == -1 && [table editedColumn] == -1);
+    [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]];
+    drain();
+    CHECK([table editedRow] == -1 && [table editedColumn] == -1);
+    CHECK(source->edits == 0);
+}
+
+// Documented, not a QUIRK: a table without a double action edits the cell on a double click (see the page of
+// doubleAction above). Not probed on macOS 26.1.
+static void test_double_click_without_a_double_action_edits(void)
+{
+    Source *source = setup();
+    SEL none = 0;
+    [table setDoubleAction:none];
+    NSPoint cell = NSMakePoint(50, NSMidY([table rectOfRow:1]));
+    click(cell, 1);
+    click(cell, 2);
+    CHECK(source->doubleActions == 0);
+    CHECK([table editedRow] == 1 && [table editedColumn] == 0);
+    [table abortEditing];
+}
+
 int main(void)
 {
     @autoreleasepool
@@ -186,6 +271,11 @@ int main(void)
         test_a_click_in_the_column_is_unchanged();
         test_clicked_row_and_column_are_reset_after_the_click();
         test_a_click_below_the_rows_still_clears_the_selection();
+        test_a_click_below_the_rows_sends_the_action();
+        test_a_click_below_the_rows_beside_the_columns_sends_the_action();
+        test_the_selection_notification_of_a_click_below_the_rows_sees_no_clicked_cell();
+        test_double_click_with_a_double_action_starts_no_edit();
+        test_double_click_without_a_double_action_edits();
     }
     if (failures)
         return 1;
