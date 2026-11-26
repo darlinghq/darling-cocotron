@@ -56,6 +56,8 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
         NSMutableArray *_scrollViews;
         NSScroller *_horizontalScroller;
         NSColor *_backgroundColor;
+        NSString *_columnsAutosaveName;
+        NSMutableArray *_columnItems;
 
         Class _cellClass;
         int _numberOfVisibleColumns;
@@ -63,6 +65,13 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
         int _firstVisibleColumn;
         int _maxVisibleColumns;
         int _selectedColumn;
+        int _clickedColumn;
+        int _clickedRow;
+        CGFloat _defaultColumnWidth;
+        CGFloat _rowHeight;
+        NSBrowserColumnResizingType _columnResizingType;
+        BOOL _autohidesScroller;
+        BOOL _prefersAllColumnUserResizing;
         BOOL _reusesColumns;
         BOOL _hasHorizontalScroller;
         BOOL _separatesColumns;
@@ -105,6 +114,20 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
 - selectedCellInColumn: (NSInteger) column;
 - (NSInteger) selectedColumn;
 - (NSInteger) selectedRowInColumn: (NSInteger) column;
+- (NSInteger) clickedColumn;
+- (NSInteger) clickedRow;
+- (CGFloat) minColumnWidth;
+- (void) setMinColumnWidth: (CGFloat) columnWidth;
+- (CGFloat) defaultColumnWidth;
+- (void) setDefaultColumnWidth: (CGFloat) columnWidth;
+@property(nonatomic) BOOL autohidesScroller;
+@property(nonatomic) BOOL prefersAllColumnUserResizing;
+@property(nonatomic) CGFloat rowHeight;
+@property(nullable, nonatomic, copy) NSString *columnsAutosaveName;
+@property(nonatomic) NSBrowserColumnResizingType columnResizingType;
+
+- (nullable id) itemAtRow: (NSInteger) row inColumn: (NSInteger) column;
+- (nullable id) parentForItemsInColumn: (NSInteger) column;
 
 - (CGFloat) titleHeight;
 - (NSRect) titleFrameOfColumn: (NSInteger) column;
@@ -168,5 +191,16 @@ typedef NS_ENUM(NSUInteger, NSBrowserDropOperation) {
         willDisplayCell: cell
                   atRow: (NSInteger) row
                  column: (NSInteger) column;
+
+@optional
+- (nullable id) rootItemForBrowser: (NSBrowser *) browser;
+- (NSInteger) browser: (NSBrowser *) browser
+        numberOfChildrenOfItem: (nullable id) item;
+- (id) browser: (NSBrowser *) browser
+         child: (NSInteger) index
+        ofItem: (nullable id) item;
+- (BOOL) browser: (NSBrowser *) browser isLeafItem: (id) item;
+- (nullable id) browser: (NSBrowser *) browser
+        objectValueForItem: (id) item;
 
 @end

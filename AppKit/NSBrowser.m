@@ -74,6 +74,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
         NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns =
                 [keyed decodeIntForKey: @"NSNumberOfVisibleColumns"];
         NS_EXTRA(NSBrowser, self)->_selectedColumn = -1;
+        NS_EXTRA(NSBrowser, self)->_clickedColumn = -1;
+        NS_EXTRA(NSBrowser, self)->_clickedRow = -1;
 
         NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection = (flags & 0x80000000) ? YES : NO;
         NS_EXTRA(NSBrowser, self)->_allowsEmptySelection = (flags & 0x00020000) ? NO : YES;
@@ -136,6 +138,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
         NS_EXTRA(NSBrowser, self)->_maxVisibleColumns = maxVisibleColumns;
         NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns = 1;
         NS_EXTRA(NSBrowser, self)->_selectedColumn = -1;
+        NS_EXTRA(NSBrowser, self)->_clickedColumn = -1;
+        NS_EXTRA(NSBrowser, self)->_clickedRow = -1;
 
         NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection = (flags & 0x80000000) ? YES : NO;
         NS_EXTRA(NSBrowser, self)->_allowsBranchSelection = (flags & 0x40000000) ? YES : NO;
@@ -171,6 +175,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
     _cellPrototype = nil;
 
     NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns = 1;
+    NS_EXTRA(NSBrowser, self)->_clickedColumn = -1;
+    NS_EXTRA(NSBrowser, self)->_clickedRow = -1;
     NS_EXTRA(NSBrowser, self)->_allowsMultipleSelection = NO;
     NS_EXTRA(NSBrowser, self)->_allowsEmptySelection = NO;
     NS_EXTRA(NSBrowser, self)->_allowsBranchSelection = NO;
@@ -190,6 +196,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
     [NS_EXTRA(NSBrowser, self)->_matrices release];
     [NS_EXTRA(NSBrowser, self)->_scrollViews release];
     [NS_EXTRA(NSBrowser, self)->_horizontalScroller release];
+    [NS_EXTRA(NSBrowser, self)->_columnsAutosaveName release];
+    [NS_EXTRA(NSBrowser, self)->_columnItems release];
     NS_EXTRA_FREE(NSBrowser, self);
     [super dealloc];
 }
@@ -359,6 +367,106 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
     return [[self matrixInColumn: column] selectedRow];
 }
 
+- (NSInteger) clickedColumn {
+    return NS_EXTRA(NSBrowser, self)->_clickedColumn;
+}
+
+- (NSInteger) clickedRow {
+    return NS_EXTRA(NSBrowser, self)->_clickedRow;
+}
+
+- (CGFloat) minColumnWidth {
+    return (CGFloat) NS_EXTRA(NSBrowser, self)->_minColumnWidth;
+}
+
+- (void) setMinColumnWidth: (CGFloat) columnWidth {
+    NS_EXTRA(NSBrowser, self)->_minColumnWidth = (int) MAX(0, columnWidth);
+    [self tile];
+}
+
+- (CGFloat) defaultColumnWidth {
+    return NS_EXTRA(NSBrowser, self)->_defaultColumnWidth;
+}
+
+- (void) setDefaultColumnWidth: (CGFloat) columnWidth {
+    NS_EXTRA(NSBrowser, self)->_defaultColumnWidth = MAX(0, columnWidth);
+    [self tile];
+}
+
+- (BOOL) autohidesScroller {
+    return NS_EXTRA(NSBrowser, self)->_autohidesScroller;
+}
+
+- (void) setAutohidesScroller: (BOOL) flag {
+    NS_EXTRA(NSBrowser, self)->_autohidesScroller = flag;
+    for (NSScrollView *scrollView in NS_EXTRA(NSBrowser, self)->_scrollViews)
+        [scrollView setAutohidesScrollers: flag];
+}
+
+- (BOOL) prefersAllColumnUserResizing {
+    return NS_EXTRA(NSBrowser, self)->_prefersAllColumnUserResizing;
+}
+
+- (void) setPrefersAllColumnUserResizing: (BOOL) flag {
+    NS_EXTRA(NSBrowser, self)->_prefersAllColumnUserResizing = flag;
+}
+
+- (CGFloat) rowHeight {
+    return NS_EXTRA(NSBrowser, self)->_rowHeight;
+}
+
+- (void) setRowHeight: (CGFloat) rowHeight {
+    NS_EXTRA(NSBrowser, self)->_rowHeight = MAX(0, rowHeight);
+    if (rowHeight > 0) {
+        for (NSMatrix *matrix in NS_EXTRA(NSBrowser, self)->_matrices) {
+            NSSize cellSize = [matrix cellSize];
+            cellSize.height = rowHeight;
+            [matrix setCellSize: cellSize];
+        }
+    }
+}
+
+- (NSString *) columnsAutosaveName {
+    return NS_EXTRA(NSBrowser, self)->_columnsAutosaveName;
+}
+
+- (void) setColumnsAutosaveName: (NSString *) name {
+    name = [name copy];
+    [NS_EXTRA(NSBrowser, self)->_columnsAutosaveName release];
+    NS_EXTRA(NSBrowser, self)->_columnsAutosaveName = name;
+}
+
+- (NSBrowserColumnResizingType) columnResizingType {
+    return NS_EXTRA(NSBrowser, self)->_columnResizingType;
+}
+
+- (void) setColumnResizingType: (NSBrowserColumnResizingType) type {
+    NS_EXTRA(NSBrowser, self)->_columnResizingType = type;
+}
+
+- (nullable id) parentForItemsInColumn: (NSInteger) column {
+    if (column == 0) {
+        if ([_delegate respondsToSelector: @selector(rootItemForBrowser:)])
+            return [_delegate rootItemForBrowser: self];
+        return nil;
+    }
+    NSInteger selectedRow = [[self matrixInColumn: column - 1] selectedRow];
+    if (selectedRow < 0)
+        return nil;
+    return [self itemAtRow: selectedRow inColumn: column - 1];
+}
+
+- (nullable id) itemAtRow: (NSInteger) row inColumn: (NSInteger) column {
+    NSMutableArray *columnItems = NS_EXTRA(NSBrowser, self)->_columnItems;
+    if (column < 0 || column >= [columnItems count])
+        return nil;
+    NSArray *items = [columnItems objectAtIndex: column];
+    if (row < 0 || row >= [items count])
+        return nil;
+    id item = [items objectAtIndex: row];
+    return item == [NSNull null] ? nil : item;
+}
+
 - (CGFloat) seperatorWidth {
     return 2;
 }
@@ -367,15 +475,28 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
     return 20;
 }
 
+- (NSInteger) _effectiveVisibleColumns {
+    NSInteger visibleCols = MAX(1, NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns);
+    CGFloat minWidth = MAX((CGFloat) NS_EXTRA(NSBrowser, self)->_minColumnWidth,
+                           NS_EXTRA(NSBrowser, self)->_defaultColumnWidth);
+    if (minWidth > 0 && [self bounds].size.width > 0) {
+        NSInteger fitCols = MAX(1, (NSInteger) ([self bounds].size.width / minWidth));
+        if (fitCols < visibleCols)
+            visibleCols = fitCols;
+    }
+    return visibleCols;
+}
+
 - (NSRect) titleFrameOfColumn: (NSInteger) column {
     NSRect result;
     CGFloat columnGap = NS_EXTRA(NSBrowser, self)->_separatesColumns ? [self seperatorWidth] : 0;
+    NSInteger visibleCols = [self _effectiveVisibleColumns];
 
     column -= [self firstVisibleColumn];
 
     result.size.width = ([self bounds].size.width -
-                         (NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns - 1) * columnGap) /
-                        NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns;
+                         (visibleCols - 1) * columnGap) /
+                        visibleCols;
     result.size.height = [self titleHeight];
     result.origin.x = column * (result.size.width + columnGap);
     result.origin.y = [self bounds].size.height - result.size.height;
@@ -419,7 +540,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
 }
 
 - (NSRect) frameOfInsideOfColumn: (NSInteger) column {
-    NSScrollView *scrollView = [NS_EXTRA(NSBrowser, self)->_scrollViews objectAtIndex: 0];
+    // The scroll views exist once the browser has been tiled; loading a column before that makes them.
+    NSScrollView *scrollView = [self createScrollViewAtIndex: 0];
     NSSize size = [scrollView contentSize];
 
     return NSMakeRect(0, 0, size.width, size.height);
@@ -427,8 +549,9 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
 
 - (void) setDelegate: delegate {
     // check delegate validity; no delegate is valid
-    if (delegate != nil && ![delegate respondsToSelector: @selector(browser:
-                                               createRowsForColumn:inMatrix:)])
+    if (delegate != nil &&
+        ![delegate respondsToSelector: @selector(browser:createRowsForColumn:inMatrix:)] &&
+        ![delegate respondsToSelector: @selector(browser:numberOfChildrenOfItem:)])
         if (![delegate respondsToSelector: @selector(browser:
                                                    numberOfRowsInColumn:)] &&
             ![delegate respondsToSelector: @selector
@@ -609,7 +732,10 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
 }
 
 - (void) doClick: sender {
-    [self _reloadSelectionInColumn: [self columnOfMatrix: sender]];
+    NSInteger col = [self columnOfMatrix: sender];
+    NS_EXTRA(NSBrowser, self)->_clickedColumn = (int) col;
+    NS_EXTRA(NSBrowser, self)->_clickedRow = (int) [sender selectedRow];
+    [self _reloadSelectionInColumn: col];
 
     if ([[[self window] currentEvent] type] != NSKeyDown ||
         NS_EXTRA(NSBrowser, self)->_sendsActionOnArrowKeys == YES)
@@ -617,6 +743,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
 }
 
 - (void) doDoubleClick: sender {
+    NS_EXTRA(NSBrowser, self)->_clickedColumn = (int) [self columnOfMatrix: sender];
+    NS_EXTRA(NSBrowser, self)->_clickedRow = (int) [sender selectedRow];
     [self sendAction: [self doubleAction] to: [self target]];
 }
 
@@ -662,7 +790,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
             [matrix setPrototype: _cellPrototype];
         else
             [matrix setCellClass: [self cellClass]];
-        [matrix setCellSize: NSMakeSize(frame.size.width, 16)];
+        CGFloat rowHeight = NS_EXTRA(NSBrowser, self)->_rowHeight;
+        [matrix setCellSize: NSMakeSize(frame.size.width, rowHeight > 0 ? rowHeight : 16)];
         [matrix setAutoresizingMask: NSViewWidthSizable];
         [matrix setAutosizesCells: YES];
         [matrix setAllowsEmptySelection: [self allowsEmptySelection]];
@@ -711,9 +840,42 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
     [matrix renewRows: 0 columns: 1];
 
     if ([_delegate respondsToSelector: @selector(browser:
-                                               createRowsForColumn:inMatrix:)])
+                                               createRowsForColumn:inMatrix:)]) {
         [_delegate browser: self createRowsForColumn: column inMatrix: matrix];
-    else {
+    } else if ([_delegate respondsToSelector: @selector(browser:numberOfChildrenOfItem:)]) {
+        id parentItem = [self parentForItemsInColumn: column];
+        NSInteger nrows = 0;
+        if (column == 0 || parentItem != nil)
+            nrows = [_delegate browser: self numberOfChildrenOfItem: parentItem];
+
+        if (NS_EXTRA(NSBrowser, self)->_columnItems == nil)
+            NS_EXTRA(NSBrowser, self)->_columnItems = [NSMutableArray new];
+        NSMutableArray *allColumnItems = NS_EXTRA(NSBrowser, self)->_columnItems;
+        while ([allColumnItems count] <= (NSUInteger) column)
+            [allColumnItems addObject: [NSMutableArray array]];
+        NSMutableArray *items = [allColumnItems objectAtIndex: column];
+        [items removeAllObjects];
+
+        [matrix renewRows: nrows columns: 1];
+        BOOL hasChild = [_delegate respondsToSelector: @selector(browser:child:ofItem:)];
+        BOOL hasIsLeaf = [_delegate respondsToSelector: @selector(browser:isLeafItem:)];
+        BOOL hasObjectValue = [_delegate respondsToSelector: @selector(browser:objectValueForItem:)];
+        BOOL hasWillDisplay = [_delegate respondsToSelector: @selector(browser:willDisplayCell:atRow:column:)];
+
+        for (NSInteger i = 0; i < nrows; i++) {
+            id item = hasChild ? [_delegate browser: self child: i ofItem: parentItem] : nil;
+            [items addObject: item ?: [NSNull null]];
+            id cell = [matrix cellAtRow: i column: 0];
+            if (item != nil) {
+                if ([cell respondsToSelector: @selector(setLeaf:)])
+                    [cell setLeaf: hasIsLeaf ? [_delegate browser: self isLeafItem: item] : YES];
+                if (hasObjectValue)
+                    [cell setObjectValue: [_delegate browser: self objectValueForItem: item]];
+            }
+            if (hasWillDisplay)
+                [_delegate browser: self willDisplayCell: cell atRow: i column: column];
+        }
+    } else {
         NSInteger nrows = [_delegate browser: self
                         numberOfRowsInColumn: column];
         NSInteger i;
@@ -907,6 +1069,7 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
         [view setBorderType: NSBezelBorder];
         [view setHasVerticalScroller: YES];
         [view setHasHorizontalScroller: NO];
+        [view setAutohidesScrollers: NS_EXTRA(NSBrowser, self)->_autohidesScroller];
         [view setAutoresizesSubviews: YES];
 
         [NS_EXTRA(NSBrowser, self)->_scrollViews addObject: view];
@@ -918,8 +1081,9 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
 
 - (void) tile {
     NSInteger i;
+    NSInteger visibleCols = [self _effectiveVisibleColumns];
 
-    for (i = 0; i < NS_EXTRA(NSBrowser, self)->_numberOfVisibleColumns; i++) {
+    for (i = 0; i < visibleCols; i++) {
         NSInteger column = NS_EXTRA(NSBrowser, self)->_firstVisibleColumn + i;
         NSRect frame = [self frameOfColumn: column];
         NSView *scrollView = [self createScrollViewAtIndex: i];
