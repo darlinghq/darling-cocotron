@@ -1334,8 +1334,18 @@ static const CGFloat NSScrollViewLinesPerWheelNotch = 3;
         deltaY *= [self verticalLineScroll] * NSScrollViewLinesPerWheelNotch;
     }
 
-    visible.origin.x += deltaX;
-    visible.origin.y += deltaY * direction;
+    deltaX += NS_EXTRA(NSScrollView, self)->_scrollWheelRemainderX;
+    deltaY += NS_EXTRA(NSScrollView, self)->_scrollWheelRemainderY;
+    CGFloat stepX = trunc(deltaX);
+    CGFloat stepY = trunc(deltaY);
+    NS_EXTRA(NSScrollView, self)->_scrollWheelRemainderX = deltaX - stepX;
+    NS_EXTRA(NSScrollView, self)->_scrollWheelRemainderY = deltaY - stepY;
+
+    if (stepX == 0 && stepY == 0)
+        return;
+
+    visible.origin.x += stepX;
+    visible.origin.y += stepY * direction;
 
     if (visible.origin.y < bounds.origin.y)
         visible.origin.y = bounds.origin.y;
