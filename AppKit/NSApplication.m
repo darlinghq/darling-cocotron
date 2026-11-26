@@ -2617,6 +2617,8 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
     // A cancelled termination ends here, and the application runs on.
     NS_EXTRA(NSApplication, self)->_terminateInProgress = NO;
     if (terminate == YES) {
+        // The process is really exiting now, so the next launch must not treat it as a crash.
+        [self _removeWindowSessionMarker];
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationWillTerminateNotification
                               object: self];

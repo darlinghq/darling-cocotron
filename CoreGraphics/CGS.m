@@ -853,6 +853,16 @@ bool _CGSNativeConnectionPointerLocked(void)
 	return [nativeConnection() pointerLocked];
 }
 
+id _CGSNativeConnectionWaylandColorManager(void)
+{
+	return [nativeConnection() waylandColorManager];
+}
+
+bool _CGSNativeConnectionDisplaySleepPrevented(void)
+{
+	return [nativeConnection() displaySleepPrevented];
+}
+
 void _CGSNativeConnectionPointerLockTargetChanged(void)
 {
 	[nativeConnection() pointerLockTargetMayHaveChanged];

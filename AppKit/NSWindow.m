@@ -963,6 +963,7 @@ static NSString *menuBarStylePreference(void) {
     [NS_EXTRA(NSWindow, self)->_tabGroup release];
     [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters release];
     [NS_EXTRA(NSWindow, self)->_tabbingIdentifier release];
+    [NS_EXTRA(NSWindow, self)->_sessionToplevelName release];
     [NS_EXTRA(NSWindow, self)->_subtitle release];
     [NS_EXTRA(NSWindow, self)->_childWindows release];
     [NS_EXTRA(NSWindow, self)->_representedFilename release];
@@ -1018,6 +1019,13 @@ static NSString *menuBarStylePreference(void) {
     if (_platformWindow != nil)
         return;
     _platformWindow = [[NSDisplay currentDisplay] newWindowWithDelegate: self];
+
+    // A window recreated from saved state can have its session name before the native window
+    // exists. The session request must precede the first surface commit.
+    if ([NS_EXTRA(NSWindow, self)->_sessionToplevelName length] > 0 &&
+        [_platformWindow respondsToSelector: @selector(setSessionToplevelName:restoring:)])
+        [_platformWindow setSessionToplevelName: NS_EXTRA(NSWindow, self)->_sessionToplevelName
+                                       restoring: NS_EXTRA(NSWindow, self)->_restoringSessionToplevel];
 
     [self _updatePlatformWindowTitle];
 
@@ -2280,17 +2288,21 @@ static NSString *menuBarStylePreference(void) {
 }
 
 // The color space the window's content is in. Without one set (or after setting
-// nil) it is that of the window's screen. The setting is only stored: no color
-// management is applied to the content.
+// nil) it is that of the window's screen. The platform window is told so a backend
+// can describe the content to the window system.
 - (NSColorSpace *) colorSpace {
     NSColorSpace *colorSpace = NS_EXTRA(NSWindow, self)->_colorSpace;
     return colorSpace != nil ? colorSpace : [[self screen] colorSpace];
 }
 
 - (void) setColorSpace: (NSColorSpace *) newColorSpace {
+    if (newColorSpace == NS_EXTRA(NSWindow, self)->_colorSpace)
+        return;
     NSColorSpace *old = NS_EXTRA(NSWindow, self)->_colorSpace;
     NS_EXTRA(NSWindow, self)->_colorSpace = [newColorSpace retain];
     [old release];
+    if ([_platformWindow respondsToSelector: @selector(colorSpaceChanged)])
+        [_platformWindow colorSpaceChanged];
 }
 
 // There is a single space, so every window is on the active one.
@@ -5633,6 +5645,28 @@ static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
 
 - (void) endSheet: (NSWindow *) sheet returnCode: (NSInteger) returnCode {
     [NSApp endSheet: sheet returnCode: returnCode];
+}
+
+@end
+
+@implementation NSWindow (NSStateRestoration)
+
+- (void) _setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring {
+    [name retain];
+    [NS_EXTRA(NSWindow, self)->_sessionToplevelName release];
+    NS_EXTRA(NSWindow, self)->_sessionToplevelName = name;
+    NS_EXTRA(NSWindow, self)->_restoringSessionToplevel = restoring;
+    if (_platformWindow != nil &&
+        [_platformWindow respondsToSelector: @selector(setSessionToplevelName:restoring:)])
+        [_platformWindow setSessionToplevelName: name restoring: restoring];
+}
+
+- (NSString *) _sessionToplevelName {
+    return NS_EXTRA(NSWindow, self)->_sessionToplevelName;
+}
+
+- (BOOL) _isRestoringSessionToplevel {
+    return NS_EXTRA(NSWindow, self)->_restoringSessionToplevel;
 }
 
 @end

@@ -329,6 +329,16 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 {
 }
 
+-(BOOL) displaySleepPrevented
+{
+	return NO;
+}
+
+-(id) waylandColorManager
+{
+	return nil;
+}
+
 -(BOOL) cancelsHiddenUntilMouseMoves
 {
 	return NO;

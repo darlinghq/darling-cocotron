@@ -49,9 +49,17 @@ typedef enum {
 // The displays changed. CoreGraphics has read the new layout and reported it to the display
 // reconfiguration callbacks.
 - (void) nativeConnectionDisplayLayoutChanged;
+// An output's color description changed. CoreGraphics has dropped the screens so the next
+// -createScreens rebuilds them with the new description; the observer posts the color change
+// notification.
+- (void) nativeConnectionDisplayColorSpaceChanged;
 // Another process asked for the windows of this one to be activated and the window system offers
 // no request for that, so only the process can do it (Wayland). Called on the main thread.
 - (void) nativeConnectionActivationRequested;
+// The compositor's color management or color representation global arrived after the windows were made.
+- (void) nativeConnectionColorManagerAvailable;
+// The process took or dropped its last power assertion that keeps the display awake.
+- (void) nativeConnectionDisplaySleepPreventionChanged;
 // The keyboard focus moved to a window system object of the process (the wl_surface on Wayland), or
 // left it (NULL). The pointer is compared by value only.
 - (void) nativeConnectionKeyboardFocusChanged: (void *) surface;
@@ -181,6 +189,10 @@ extern bool _CGSNativeConnectionCursorHidden(void);
 extern bool _CGSSetCursorHiddenUntilMouseMoves(bool flag);
 // The pointer is locked to a surface (Wayland: the lock of the disassociated mouse is active).
 extern bool _CGSNativeConnectionPointerLocked(void);
+// The color manager of a Wayland connection (see WaylandColor.h), nil without one.
+extern id _CGSNativeConnectionWaylandColorManager(void);
+// This process holds a power assertion that keeps the display awake; false without a backend that tracks it.
+extern bool _CGSNativeConnectionDisplaySleepPrevented(void);
 // The surface the lock should be made on may be another one (a window was mapped, unmapped or activated).
 extern void _CGSNativeConnectionPointerLockTargetChanged(void);
 

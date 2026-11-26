@@ -31,6 +31,7 @@
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <OpenGL/CGLInternal.h>
 #include <dlfcn.h>
+#import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
@@ -45,6 +46,7 @@
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
+#import "../NSWindow-Private.h"
 #import <AppKit/NSMenuWindow.h>
 #import <AppKit/NSMenuView.h>
 #import <AppKit/NSPopUpWindow.h>
@@ -105,6 +107,7 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectFrameCallback:
             case WaylandObjectBuffer:
             case WaylandObjectLayerSurface:
+            case WaylandObjectToplevelSession:
                 [(WaylandWindow *) object handleEvent: opcode
                                                  kind: objectKind
                                                 proxy: proxy
@@ -306,7 +309,16 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     _toplevelIcons = nil;
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
+        // Destroying the session preserves the compositor's state for the next launch. The windows
+        // have already released their toplevel session objects before this display is deallocated.
+        if (_session != NULL)
+            WaylandMarshal(_session, WP_SESSION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        if (_sessionManager != NULL)
+            WaylandMarshal(_sessionManager, WP_SESSION_MANAGER_DESTROY,
+                           NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
+                                      _cursorShapeDevice, _cursorShapeManager, _dialogManager, _bell,
+                                      _alphaModifierManager, _toplevelTagManager, _idleInhibitManager,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
@@ -320,6 +332,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     [_cursor release];
     [_inputEvent release];
+    [_sessionIdentifier release];
     [_outputs release];
     [_afterDispatch release];
     if (_windows != NULL)
@@ -335,11 +348,129 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         WL.wl_display_flush(_wlDisplay);
 }
 
+// The connection is CoreGraphics', and so is the color manager: it binds the compositor's color globals
+// and describes the outputs, and this display's windows use the same manager (and so one set of
+// color objects per surface).
+- (WaylandColorManager *) colorManager {
+    return _CGSNativeConnectionWaylandColorManager();
+}
+
+#pragma mark - Window-system session
+
+- (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier {
+    if (_sessionRequested)
+        return;
+    _sessionRequested = YES;
+    _sessionReason = reason;
+    [_sessionIdentifier release];
+    _sessionIdentifier = [identifier copy];
+    [self startSessionIfPossible];
+}
+
+- (NSString *) windowSessionIdentifier {
+    return _sessionIdentifier;
+}
+
+- (BOOL) supportsWindowSessions {
+    return _sessionManager != NULL;
+}
+
+// The manager and AppKit's reason can arrive in either order: the registry is read during -init,
+// while the reason comes from the saved state later in launching.
+- (void) startSessionIfPossible {
+    if (!_sessionRequested || _sessionManager == NULL || _session != NULL)
+        return;
+    uint32_t reason = (uint32_t) _sessionReason;
+    if (reason < WP_SESSION_REASON_LAUNCH || reason > WP_SESSION_REASON_SESSION_RESTORE)
+        reason = WP_SESSION_REASON_LAUNCH;
+    union wl_argument args[3] = {
+        {.o = NULL}, {.u = reason}, {.s = [_sessionIdentifier length] > 0 ? [_sessionIdentifier UTF8String] : NULL},
+    };
+    _session = WaylandCreateObject(_sessionManager, WP_SESSION_MANAGER_GET_SESSION,
+                                   &xdg_session_v1_interface, args,
+                                   WaylandObjectSession, self);
+    if (_session == NULL)
+        return;
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) sessionManagerAvailable];
+}
+
+- (void) joinSessionForToplevel: (WaylandWindow *) window {
+    if (_session == NULL || window == nil || [window toplevelSession] != NULL)
+        return;
+    NSString *name = [window ensureSessionToplevelName];
+    const char *utf8 = [name UTF8String];
+    if (utf8 == NULL)
+        return;
+    // A session state can only be restored before the first commit. If AppKit set the name
+    // after the window was already mapped, the same name is still used to store new state.
+    BOOL restoring = [window isRestoringSessionToplevel] && ![window hasCommittedSurface];
+    union wl_argument args[3] = {
+        {.o = NULL}, {.o = (struct wl_object *) [window toplevel]}, {.s = utf8},
+    };
+    struct wl_proxy *proxy =
+            WaylandCreateObject(_session,
+                                restoring ? WP_SESSION_RESTORE_TOPLEVEL : WP_SESSION_ADD_TOPLEVEL,
+                                &xdg_toplevel_session_v1_interface, args,
+                                WaylandObjectToplevelSession, window);
+    if (proxy != NULL)
+        [window setToplevelSession: proxy];
+}
+
+- (void) sessionEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    if (opcode == WP_SESSION_EV_CREATED) {
+        NSString *identifier = args[0].s != NULL ? [NSString stringWithUTF8String: args[0].s] : nil;
+        [identifier retain];
+        [_sessionIdentifier release];
+        _sessionIdentifier = identifier;
+        if (NSApp != nil)
+            [NSApp _writeWindowSessionMarkerWithIdentifier: identifier];
+    } else if (opcode == WP_SESSION_EV_REPLACED) {
+        // Another client took the session over: all its objects are inert now.
+        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+            WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+            struct wl_proxy *proxy = [window toplevelSession];
+            if (proxy != NULL) {
+                WaylandMarshal(proxy, WP_TOPLEVEL_SESSION_DESTROY, NULL,
+                               WL_MARSHAL_FLAG_DESTROY, NULL);
+                [window setToplevelSession: NULL];
+            }
+        }
+        if (_session != NULL)
+            WaylandMarshal(_session, WP_SESSION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _session = NULL;
+        [_sessionIdentifier release];
+        _sessionIdentifier = nil;
+        if (NSApp != nil)
+            [NSApp _removeWindowSessionMarker];
+    }
+}
+
 // The windows carry the application icon (see WaylandToplevelIcon.h): when the application sets another
 // one, the windows already shown are given it too.
 - (void) updateWindowIcons {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateToplevelIcon];
+}
+
+- (void) dialogManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) dialogManagerAvailable];
+}
+
+- (void) alphaModifierManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) alphaModifierAvailable];
+}
+
+- (void) toplevelTagManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateToplevelTags];
+}
+
+- (void) idleInhibitManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateIdleInhibitor];
 }
 
 - (void) applicationIconImageChanged {
@@ -411,6 +542,36 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [self outputsDidChange];
 }
 
+// CoreGraphics has rebuilt the screens with an output's new color description.
+- (void) nativeConnectionDisplayColorSpaceChanged {
+    // Windows without an explicit color space follow the screen, so their surface descriptions
+    // have to be sent again.
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) colorManagerAvailable];
+    [self flush];
+    [[NSNotificationQueue defaultQueue]
+            enqueueNotification: [NSNotification notificationWithName: NSScreenColorSpaceDidChangeNotification
+                                                               object: NSApp]
+                   postingStyle: NSPostASAP
+                   coalesceMask: NSNotificationCoalescingOnName | NSNotificationCoalescingOnSender
+                       forModes: nil];
+}
+
+// CoreGraphics bound a color management or color representation global after the windows were made.
+- (void) nativeConnectionColorManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) colorManagerAvailable];
+    [self flush];
+}
+
+// The process took or dropped the power assertion that keeps the display awake: the windows hold
+// an idle inhibitor only while it is held.
+- (void) nativeConnectionDisplaySleepPreventionChanged {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateIdleInhibitor];
+    [self flush];
+}
+
 // Another process asked for the activation of this one's windows (see _CGSActivateProcess).
 - (void) nativeConnectionActivationRequested {
     [self requestActivation];
@@ -452,7 +613,54 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
               interface: (const char *) interface
                 version: (uint32_t) version
 {
-    if (strcmp(interface, "wl_compositor") == 0 && _compositor == NULL) {
+    if (strcmp(interface, "xdg_session_manager_v1") == 0 && _sessionManager == NULL) {
+        _sessionManagerName = name;
+        _sessionManager = [self bindGlobal: name
+                                 interface: &xdg_session_manager_v1_interface
+                                   version: 1
+                                      kind: WaylandObjectSessionManager
+                                    object: self];
+        [self startSessionIfPossible];
+    } else if (strcmp(interface, "xdg_wm_dialog_v1") == 0 && _dialogManager == NULL) {
+        _dialogManagerName = name;
+        _dialogManager = [self bindGlobal: name
+                                interface: &xdg_wm_dialog_v1_interface
+                                  version: 1
+                                     kind: 0
+                                   object: nil];
+        [self dialogManagerAvailable];
+    } else if (strcmp(interface, "xdg_system_bell_v1") == 0 && _bell == NULL) {
+        _bellName = name;
+        _bell = [self bindGlobal: name
+                       interface: &xdg_system_bell_v1_interface
+                         version: 1
+                            kind: 0
+                          object: nil];
+    } else if (strcmp(interface, "wp_alpha_modifier_v1") == 0 && _alphaModifierManager == NULL) {
+        _alphaModifierManagerName = name;
+        _alphaModifierManager = [self bindGlobal: name
+                                       interface: &wp_alpha_modifier_v1_interface
+                                         version: 1
+                                            kind: 0
+                                          object: nil];
+        [self alphaModifierManagerAvailable];
+    } else if (strcmp(interface, "xdg_toplevel_tag_manager_v1") == 0 && _toplevelTagManager == NULL) {
+        _toplevelTagManagerName = name;
+        _toplevelTagManager = [self bindGlobal: name
+                                     interface: &xdg_toplevel_tag_manager_v1_interface
+                                       version: 1
+                                          kind: 0
+                                        object: nil];
+        [self toplevelTagManagerAvailable];
+    } else if (strcmp(interface, "zwp_idle_inhibit_manager_v1") == 0 && _idleInhibitManager == NULL) {
+        _idleInhibitManagerName = name;
+        _idleInhibitManager = [self bindGlobal: name
+                                     interface: &zwp_idle_inhibit_manager_v1_interface
+                                       version: 1
+                                          kind: 0
+                                        object: nil];
+        [self idleInhibitManagerAvailable];
+    } else if (strcmp(interface, "wl_compositor") == 0 && _compositor == NULL) {
         // Version 4 has wl_surface.damage_buffer.
         _compositorVersion = MIN(version, 4);
         _compositor = [self bindGlobal: name
@@ -521,6 +729,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _textInputManager = [self bindGlobal: name interface: &zwp_text_input_manager_v3_interface
                                      version: 1 kind: 0 object: nil];
         [self attachTextInput];
+    } else if (strcmp(interface, "wp_cursor_shape_manager_v1") == 0 && _cursorShapeManager == NULL) {
+        _cursorShapeManagerName = name;
+        _cursorShapeManager = [self bindGlobal: name
+                                     interface: &wp_cursor_shape_manager_v1_interface
+                                      version: MIN(version, (uint32_t) wp_cursor_shape_manager_v1_interface.version)
+                                         kind: 0
+                                       object: nil];
+        [self updateCursorShapeDevice];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame.
         _seat = [self bindGlobal: name
@@ -547,9 +763,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                   version: output->_version
                                      kind: WaylandObjectOutput
                                    object: output];
-        if (output->_proxy != NULL) {
+        if (output->_proxy != NULL)
             [_outputs addObject: output];
-        }
     }
 }
 
@@ -561,6 +776,62 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 }
 
 - (void) registryGlobalRemoved: (uint32_t) name {
+    if (_sessionManager != NULL && name == _sessionManagerName) {
+        // The manager global is gone; an existing session keeps working (see the protocol's
+        // manager destructor), so only the factory is dropped here.
+        WaylandMarshal(_sessionManager, WP_SESSION_MANAGER_DESTROY,
+                       NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _sessionManager = NULL;
+        _sessionManagerName = 0;
+        return;
+    }
+    if (_dialogManager != NULL && name == _dialogManagerName) {
+        // xdg_dialog_v1 objects created from this factory survive its removal.
+        WaylandMarshal(_dialogManager, XDG_WM_DIALOG_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _dialogManager = NULL;
+        _dialogManagerName = 0;
+        return;
+    }
+    if (_bell != NULL && name == _bellName) {
+        WaylandMarshal(_bell, XDG_SYSTEM_BELL_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _bell = NULL;
+        _bellName = 0;
+        return;
+    }
+    if (_alphaModifierManager != NULL && name == _alphaModifierManagerName) {
+        // The protocol says objects created with the manager survive its destruction.
+        WaylandMarshal(_alphaModifierManager, WP_ALPHA_MODIFIER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _alphaModifierManager = NULL;
+        _alphaModifierManagerName = 0;
+        return;
+    }
+    if (_toplevelTagManager != NULL && name == _toplevelTagManagerName) {
+        WaylandMarshal(_toplevelTagManager, XDG_TOPLEVEL_TAG_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _toplevelTagManager = NULL;
+        _toplevelTagManagerName = 0;
+        return;
+    }
+    if (_idleInhibitManager != NULL && name == _idleInhibitManagerName) {
+        // Existing inhibitors remain valid after the manager goes away.
+        WaylandMarshal(_idleInhibitManager, ZWP_IDLE_INHIBIT_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _idleInhibitManager = NULL;
+        _idleInhibitManagerName = 0;
+        return;
+    }
+    if (_cursorShapeManager != NULL && name == _cursorShapeManagerName) {
+        // The device becomes inert with the manager; the compositor keeps the last shape that was set.
+        [self updateCursorShapeDevice];
+        WaylandMarshal(_cursorShapeManager, WP_CURSOR_SHAPE_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _cursorShapeManager = NULL;
+        _cursorShapeManagerName = 0;
+        return;
+    }
     if (_textInputManager && name == _textInputManagerName) {
         [self detachTextInput];
         WaylandMarshal(_textInputManager, WP_TEXT_INPUT_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
@@ -755,6 +1026,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         [self touchEvent: opcode arguments: args];
         break;
 
+    case WaylandObjectSession:
+        [self sessionEvent: opcode arguments: args];
+        break;
+
     default:
         break;
     }
@@ -885,11 +1160,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available {
     if (available) {
         _pointer = (struct wl_proxy *) _CGSNativeConnectionPointer();
+        [self updateCursorShapeDevice];
         return;
     }
     [_draggingManager cancel];
     [self consumeDragPress];
     _pointer = NULL;
+    [self updateCursorShapeDevice];
     _pointerWindow = nil;
     _pointerEnterSerial = 0;
     _pressedButtons = 0;
@@ -897,8 +1174,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
 - (void) nativeConnectionPointerEntered: (void *) surface serial: (uint32_t) serial x: (double) x y: (double) y {
     // The seat may have given CoreGraphics the pointer before this display was an observer: an enter says it exists.
-    if (_pointer == NULL)
+    if (_pointer == NULL) {
         _pointer = (struct wl_proxy *) _CGSNativeConnectionPointer();
+        // The cursor shape device is made for the pointer, wherever the display learned of it.
+        [self updateCursorShapeDevice];
+    }
     _pointerEnterSerial = serial;
     _pointerWindow = [self windowForSurface: (struct wl_proxy *) surface];
     _pointerSurfacePoint = CGPointMake(x, y);
@@ -1879,6 +2159,58 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     return buffer;
 }
 
+// The freedesktop names WaylandCursor looks up, and the matching wp_cursor_shape_device_v1.shape.
+// Names that are not in this table (a custom NSImage, for example) use the default shape.
+static uint32_t CursorShapeForCursor(WaylandCursor *cursor) {
+    static const struct { const char *name; uint32_t shape; } shapes[] = {
+            {"default", WP_CURSOR_SHAPE_DEFAULT},
+            {"grabbing", WP_CURSOR_SHAPE_GRABBING},
+            {"crosshair", WP_CURSOR_SHAPE_CROSSHAIR},
+            {"text", WP_CURSOR_SHAPE_TEXT},
+            {"vertical-text", WP_CURSOR_SHAPE_VERTICAL_TEXT},
+            {"zoom-in", WP_CURSOR_SHAPE_ZOOM_IN},
+            {"zoom-out", WP_CURSOR_SHAPE_ZOOM_OUT},
+            {"grab", WP_CURSOR_SHAPE_GRAB},
+            {"pointer", WP_CURSOR_SHAPE_POINTER},
+            {"s-resize", WP_CURSOR_SHAPE_S_RESIZE},
+            {"w-resize", WP_CURSOR_SHAPE_W_RESIZE},
+            {"ew-resize", WP_CURSOR_SHAPE_EW_RESIZE},
+            {"e-resize", WP_CURSOR_SHAPE_E_RESIZE},
+            {"n-resize", WP_CURSOR_SHAPE_N_RESIZE},
+            {"ns-resize", WP_CURSOR_SHAPE_NS_RESIZE},
+            {"nw-resize", WP_CURSOR_SHAPE_NW_RESIZE},
+            {"ne-resize", WP_CURSOR_SHAPE_NE_RESIZE},
+            {"se-resize", WP_CURSOR_SHAPE_SE_RESIZE},
+            {"sw-resize", WP_CURSOR_SHAPE_SW_RESIZE},
+            {"nwse-resize", WP_CURSOR_SHAPE_NWSE_RESIZE},
+            {"nesw-resize", WP_CURSOR_SHAPE_NESW_RESIZE},
+    };
+    const char *const *names = cursor != nil ? [cursor names] : NULL;
+    for (int i = 0; names != NULL && names[i] != NULL; i++)
+        for (size_t j = 0; j < sizeof(shapes) / sizeof(shapes[0]); j++)
+            if (strcmp(names[i], shapes[j].name) == 0)
+                return shapes[j].shape;
+    return WP_CURSOR_SHAPE_DEFAULT;
+}
+
+- (void) updateCursorShapeDevice {
+    if (_cursorShapeManager != NULL && _pointer != NULL && _cursorShapeDevice == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _pointer}};
+        _cursorShapeDevice = WaylandCreateObject(_cursorShapeManager,
+                                                 WP_CURSOR_SHAPE_MANAGER_GET_POINTER,
+                                                 &wp_cursor_shape_device_v1_interface,
+                                                 args, 0, nil);
+        // The current cursor was set with wl_pointer.set_cursor before the manager existed.
+        if (_cursorShapeDevice != NULL)
+            [self performAfterDispatch: ^{ [self applyCursor]; }];
+    } else if ((_cursorShapeManager == NULL || _pointer == NULL) && _cursorShapeDevice != NULL) {
+        // A device whose pointer went away is inert; there is nothing to send it.
+        WaylandMarshal(_cursorShapeDevice, WP_CURSOR_SHAPE_DEVICE_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _cursorShapeDevice = NULL;
+    }
+}
+
 - (void) applyCursorSnapshot: (WaylandCursor *) cursor {
     if (_pointer == NULL || _pointerEnterSerial == 0)
         return;
@@ -1896,6 +2228,15 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
         args[2].i = 0;
         args[3].i = 0;
         WaylandMarshal(_pointer, WP_POINTER_SET_CURSOR, NULL, 0, args);
+        [self flush];
+        return;
+    }
+    // A named cursor needs neither a cursor surface nor a theme: the compositor draws the shape.
+    // The protocol requires the latest wl_pointer.enter serial, which is the one kept for the
+    // surface cursor too.
+    if (_cursorShapeDevice != NULL) {
+        union wl_argument shapeArgs[2] = {{.u = serial}, {.u = CursorShapeForCursor(cursor)}};
+        WaylandMarshal(_cursorShapeDevice, WP_CURSOR_SHAPE_DEVICE_SET_SHAPE, NULL, 0, shapeArgs);
         [self flush];
         return;
     }
@@ -2095,6 +2436,17 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 }
 
 - (void) beep {
+    if (_bell == NULL)
+        return;
+    // The bell is associated with the window that asked for it when there is one; a NULL surface is
+    // also valid and says there is no particular toplevel (NSBeep is often called without an event).
+    struct wl_proxy *surface = NULL;
+    id platformWindow = [[NSApp keyWindow] platformWindow];
+    if ([platformWindow isKindOfClass: [WaylandWindow class]])
+        surface = [(WaylandWindow *) platformWindow surface];
+    union wl_argument args[1] = {{.o = surface != NULL ? (struct wl_object *) surface : NULL}};
+    WaylandMarshal(_bell, XDG_SYSTEM_BELL_RING, NULL, 0, args);
+    [self flush];
 }
 
 - (NSUInteger) pressedMouseButtons {
