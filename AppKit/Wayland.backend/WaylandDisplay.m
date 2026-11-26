@@ -17,8 +17,6 @@
  SOFTWARE. */
 
 #import <AppKit/NSTextInputBackend.h>
-#import <AppKit/NSTouch.h>
-#import "../private-include/AppKit/NSTouchBackend.h"
 #import "WaylandDisplay.h"
 #import "../private-include/AppKit/NSEventTime.h"
 #import "NSEvent_gesture.h"
@@ -1009,8 +1007,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         break;
 
     case WaylandObjectSeat:
-        if (opcode == WP_SEAT_EV_CAPABILITIES)
-            [self seatCapabilities: args[0].u];
+        // The pointer, the keyboard and the touch screen of the seat are CoreGraphics': it binds its own seat
+        // object and decodes them into CGEvents.
         break;
 
     case WaylandObjectTextInput:
@@ -1020,10 +1018,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     case WaylandObjectActivationToken:
         if (proxy == _activationToken && opcode == WP_ACTIVATION_TOKEN_EV_DONE)
             [self activationTokenDone: args[0].s];
-        break;
-
-    case WaylandObjectTouch:
-        [self touchEvent: opcode arguments: args];
         break;
 
     case WaylandObjectSession:
@@ -1037,34 +1031,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
 #pragma mark - Seat
 
-- (void) releaseInputDevice: (struct wl_proxy **) device opcode: (uint32_t) opcode {
-    if (*device == NULL)
-        return;
-    // wl_pointer.release and wl_keyboard.release exist from version 3.
-    if (WL.wl_proxy_get_version(*device) >= 3) {
-        union wl_argument args[1] = {{.o = NULL}};
-        WaylandMarshal(*device, opcode, NULL, WL_MARSHAL_FLAG_DESTROY, args);
-    } else {
-        WL.wl_proxy_destroy(*device);
-    }
-    *device = NULL;
-}
-
-- (void) seatCapabilities: (uint32_t) capabilities {
-    union wl_argument args[1] = {{.o = NULL}};
-
-    // The pointer is CoreGraphics': it binds the process' wl_pointer from its own seat object, decodes it
-    // into CGEvents and tells this display about it (see the pointer methods below).
-    if ((capabilities & WP_SEAT_CAPABILITY_TOUCH) && _touch == NULL) {
-        args[0].o = NULL;
-        _touch = WaylandCreateObject(_seat, WP_SEAT_GET_TOUCH, &wl_touch_interface, args,
-                                     WaylandObjectTouch, self);
-    } else if (!(capabilities & WP_SEAT_CAPABILITY_TOUCH) && _touch != NULL) {
-        [self releaseInputDevice: &_touch opcode: WP_TOUCH_RELEASE];
-        [self touchCancel];
-    }
-}
-
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface {
     if (surface == NULL)
         return nil;
@@ -1075,73 +1041,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
             return window;
     }
     return nil;
-}
-
-#pragma mark - Touch
-
-// Fingers are reported as touch events, which AppKit's touch handling reads from the event stream
-// and which move the mouse for views that take no touches: compositors emulate no pointer from a
-// touch screen.
-- (void) touchEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    if (_touchWindows == nil)
-        _touchWindows = [NSMutableDictionary new];
-    switch (opcode) {
-    case WP_TOUCH_EV_DOWN: {
-        WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) args[2].o];
-        if (window == nil)
-            break;
-        _inputSerial = args[0].u;
-        [_touchWindows setObject: [NSValue valueWithNonretainedObject: window] forKey: @(args[3].i)];
-        CGPoint point = CGPointMake(wl_fixed_to_double(args[4].f), wl_fixed_to_double(args[5].f));
-        [self postTouchPhase: NSTouchPhaseBegan identifier: args[3].i window: window point: point];
-        break;
-    }
-    case WP_TOUCH_EV_MOTION: {
-        WaylandWindow *window = [[_touchWindows objectForKey: @(args[1].i)] nonretainedObjectValue];
-        if (window == nil || ![self windowIsKnown: window])
-            break;
-        CGPoint point = CGPointMake(wl_fixed_to_double(args[2].f), wl_fixed_to_double(args[3].f));
-        [self postTouchPhase: NSTouchPhaseMoved identifier: args[1].i window: window point: point];
-        break;
-    }
-    case WP_TOUCH_EV_UP: {
-        WaylandWindow *window = [[_touchWindows objectForKey: @(args[2].i)] nonretainedObjectValue];
-        [_touchWindows removeObjectForKey: @(args[2].i)];
-        if (window == nil || ![self windowIsKnown: window])
-            break;
-        // Up carries no position: the finger leaves where it last was.
-        [self postTouchPhase: NSTouchPhaseEnded identifier: args[2].i window: window point: CGPointMake(NAN, NAN)];
-        break;
-    }
-    case WP_TOUCH_EV_CANCEL:
-        [self touchCancel];
-        break;
-    }
-}
-
-// point is in the surface's coordinates (NAN for a finger without a position)
-- (void) postTouchPhase: (NSTouchPhase) phase identifier: (int32_t) identifier window: (WaylandWindow *) window
-                  point: (CGPoint) point
-{
-    BOOL known = !isnan(point.x) && !isnan(point.y);
-
-    NSTouchPostNativeReport([window delegate], (uintptr_t) [window surface], identifier, phase,
-                            known ? [window transformPoint: point] : NSMakePoint(NAN, NAN),
-                            known ? llround(point.x * 1024) : 0, known ? llround(point.y * 1024) : 0);
-}
-
-// The compositor takes the touch screen for itself: every finger is cancelled.
-- (void) touchCancel {
-    NSDictionary *fingers = [[_touchWindows copy] autorelease];
-
-    [_touchWindows removeAllObjects];
-    for (NSNumber *identifier in fingers) {
-        WaylandWindow *window = [[fingers objectForKey: identifier] nonretainedObjectValue];
-
-        if (window != nil && [self windowIsKnown: window])
-            [self postTouchPhase: NSTouchPhaseCancelled identifier: [identifier intValue] window: window
-                           point: CGPointMake(NAN, NAN)];
-    }
 }
 
 - (BOOL) windowIsKnown: (WaylandWindow *) window {
@@ -1676,6 +1575,11 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     _keyboardFocusWindow = nil;
     if (!ownUnmapping)
         [self applicationFocusMayHaveLeft];
+}
+
+// A finger of the touch screen went down on a surface of the process: its serial is the input serial too.
+- (void) nativeConnectionTouchDownWithSerial: (uint32_t) serial {
+    _inputSerial = serial;
 }
 
 - (void) nativeConnectionKeyPressedWithSerial: (uint32_t) serial {

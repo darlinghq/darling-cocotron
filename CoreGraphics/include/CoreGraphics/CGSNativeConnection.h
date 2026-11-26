@@ -125,6 +125,10 @@ typedef enum {
 // Wayland: CGWarpMouseCursorPosition() moved the application's cursor within its surface to x, y (the
 // compositor is asked to move the pointer there; the next events start from it).
 - (void) nativeConnectionPointerWarpedToX: (double) x y: (double) y;
+// Wayland: a finger went down on a surface of the process (the touch screen of the seat, which CoreGraphics decodes into
+// touch CGEvents), with the compositor's serial of the touch down, which the requests that start a move or a grab need.
+// Before the touch event is posted.
+- (void) nativeConnectionTouchDownWithSerial: (uint32_t) serial;
 // The seat gained or lost its pointer. The compositor objects that need it (cursor, locked pointer)
 // are reached through _CGSNativeConnectionPointer().
 - (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available;
@@ -168,6 +172,11 @@ extern BOOL _CGSNativeConnectionRelativeMouseState(BOOL *requested, CGPoint *fro
 // X11: the windows the pointer can be grabbed for changed (a display overlay appeared or went): a wanted
 // grab that is not held is retried.
 extern void _CGSNativeConnectionPointerWindowsChanged(void);
+// X11: a window the process made asks for its touch screen events (and the touchpad pinch gestures, where the server has
+// them), which CoreGraphics decodes into touch and gesture CGEvents (see CoreGraphicsPrivate.h). Called once the window
+// exists and again when its other input selection changes; the window is an X window. A server without XInput 2.2 has no
+// touches. Nothing on Wayland, where CoreGraphics reads the touch screen of the seat.
+extern void _CGSNativeConnectionSelectTouchInput(unsigned long window);
 // X11: mouse motion the framework made events for itself (a display overlay) that CGGetLastMouseDelta() reports too.
 extern void _CGSNativeConnectionAccumulateMouseDelta(double dx, double dy);
 // The index and name of the keyboard layout group in effect. -1 and NULL when there is none.

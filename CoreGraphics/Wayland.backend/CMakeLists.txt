@@ -17,6 +17,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CGSConnectionWayland.m
 			CGSWaylandKeyboard.m
 			CGSWaylandPointer.m
+			CGSWaylandTouch.m
 			CGSWaylandKeymap.m
 			CGSWaylandOutputManager.m
 			CGSWindowWayland.m

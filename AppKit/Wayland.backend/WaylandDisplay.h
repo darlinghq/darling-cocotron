@@ -71,7 +71,6 @@ typedef enum {
     WaylandObjectRelativePointer,
     WaylandObjectActivationToken,
     WaylandObjectLayerSurface,
-    WaylandObjectTouch,
     WaylandObjectIconManager,
     // The session protocol's objects. These are above the color manager's range so the two sets
     // can each be recognized with one comparison in the dispatcher.
@@ -170,9 +169,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSString *_textInputPendingPreedit, *_textInputPendingCommit;
     int _textInputPendingCursorBegin, _textInputPendingCursorEnd;
     NSString *_textInputPreedit;     // the composition the client currently shows
-    struct wl_proxy *_touch;
-    // Finger id -> WaylandWindow it went down on (up and motion name no surface).
-    NSMutableDictionary *_touchWindows;
     // The outputs and the rest of the connection are set up; changes of the outputs are passed on.
     BOOL _setupDone;
     // A change of the outputs waits for the end of the pass over the events.

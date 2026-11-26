@@ -841,6 +841,11 @@ void _CGSNativeConnectionPointerWindowsChanged(void)
 	[nativeConnection() pointerWindowsChanged];
 }
 
+void _CGSNativeConnectionSelectTouchInput(unsigned long window)
+{
+	[nativeConnection() selectTouchInputOnNativeWindow: window];
+}
+
 void _CGSNativeConnectionObjectDestroyed(void* object)
 {
 	[nativeConnection() nativeObjectDestroyed: object];

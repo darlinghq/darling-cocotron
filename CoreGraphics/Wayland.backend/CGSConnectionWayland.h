@@ -70,6 +70,7 @@ typedef enum {
     CGSWaylandObjectKeyboardSync,
     CGSWaylandObjectPointer,
     CGSWaylandObjectPinchGesture,
+    CGSWaylandObjectTouch,
     CGSWaylandObjectLockedPointer,
     CGSWaylandObjectRelativePointer,
     CGSWaylandObjectWarpLock,
@@ -116,6 +117,8 @@ typedef enum {
     // The seat's pointer, which decodes the pointer into CGEvents (CGSWaylandPointer), and the pinch
     // gesture factory it makes the pinch object from.
     id _pointerDecoder;
+    // The seat's touch screen, which decodes the fingers into CGEvents (CGSWaylandTouch).
+    id _touchDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
     // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers
@@ -168,6 +171,8 @@ typedef enum {
 - (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface;
 // Posts what the pointer decoder holds back until the compositor ends it (a scroll frame).
 - (void) flushPendingPointerEvents;
+// Posts the modifier key change the keyboard decoder holds back until the compositor confirms it.
+- (void) flushPendingKeyboardEvents;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
 // Where a point of the surface is in global coordinates, when it is a surface of this connection's windows.

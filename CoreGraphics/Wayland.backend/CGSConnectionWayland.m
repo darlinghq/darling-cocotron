@@ -21,6 +21,7 @@
 #import "CGSConnectionWayland.h"
 #import "CGSWaylandKeyboard.h"
 #import "CGSWaylandPointer.h"
+#import "CGSWaylandTouch.h"
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
@@ -136,6 +137,9 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectPinchGesture:
                 [(CGSWaylandPointer *) object pinchEvent: opcode arguments: args];
                 break;
+            case CGSWaylandObjectTouch:
+                [(CGSWaylandTouch *) object touchEvent: opcode arguments: args];
+                break;
             case CGSWaylandObjectLockedPointer:
             case CGSWaylandObjectRelativePointer:
             case CGSWaylandObjectWarpLock:
@@ -227,6 +231,7 @@ static const CGEventFlags kHotKeyModifierMask =
     if (_keymap != nil)
         _keyboardDecoder = [[CGSWaylandKeyboard alloc] initWithConnection: self keymap: _keymap];
     _pointerDecoder = [[CGSWaylandPointer alloc] initWithConnection: self];
+    _touchDecoder = [[CGSWaylandTouch alloc] initWithConnection: self];
 
     _wlDisplay = WL.wl_display_connect(NULL);
     if (_wlDisplay == NULL) {
@@ -336,6 +341,8 @@ static const CGEventFlags kHotKeyModifierMask =
     [_keyboardDecoder release];
     [(CGSWaylandPointer *) _pointerDecoder stop];
     [_pointerDecoder release];
+    [(CGSWaylandTouch *) _touchDecoder stop];
+    [_touchDecoder release];
     if (_pointerGestures != NULL)
         WL.wl_proxy_destroy(_pointerGestures);
     [_hotKeys release];
@@ -878,6 +885,7 @@ static const CGEventFlags kHotKeyModifierMask =
 
 - (void) seatCapabilities: (uint32_t) capabilities {
     [(CGSWaylandPointer *) _pointerDecoder seatCapabilities: capabilities seat: _seat];
+    [(CGSWaylandTouch *) _touchDecoder seatCapabilities: capabilities seat: _seat];
     if ((capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard == NULL) {
         union wl_argument args[1] = {{.o = NULL}};
         _keyboard = [self createObject: _seat
@@ -928,6 +936,7 @@ static const CGEventFlags kHotKeyModifierMask =
 
 - (void) nativeObjectDestroyed: (void *) object {
     [(CGSWaylandPointer *) _pointerDecoder surfaceDestroyed: (struct wl_proxy *) object];
+    [(CGSWaylandTouch *) _touchDecoder surfaceDestroyed: (struct wl_proxy *) object];
     [(CGSWaylandKeyboard *) _keyboardDecoder surfaceDestroyed: (struct wl_proxy *) object];
 }
 

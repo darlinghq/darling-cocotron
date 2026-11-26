@@ -1533,6 +1533,11 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	[_pointer windowsChanged];
 }
 
+-(void) selectTouchInputOnNativeWindow:(unsigned long)window
+{
+	[_pointer selectTouchInputOnWindow: (Window) window];
+}
+
 -(void) nativeObjectDestroyed:(void*)object
 {
 	[_pointer windowDestroyed: (Window) (uintptr_t) object];
