@@ -2,6 +2,7 @@
  * Copyright (C) 2026 Darling Developers
  */
 #import "NSAssetCatalog.h"
+#import "NSSVGRenderer.h"
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSPDFImageRep.h>
@@ -58,6 +59,7 @@ enum {
     PixelFormatARGB = 0x41524742,
     PixelFormatGA8 = 0x47413820,
     PixelFormatPDF = 0x50444620,
+    PixelFormatSVG = 0x53564720,
     MaxImageSide = 16384,
     RenditionHeaderSize = 184,
     MaxTreeDepth = 32,
@@ -612,14 +614,33 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
     if (scale <= 0)
         scale = 1;
 
-    if (pixelFormat == PixelFormatPDF) {
+    if (pixelFormat == PixelFormatPDF || pixelFormat == PixelFormatSVG) {
         Span data;
         if (!renditionData(value, &data) || data.length < 12 || memcmp(data.bytes, "DWAR", 4) != 0)
             return nil;
-        Span pdf;
-        if (!spanWithin(data, 12, le32(data.bytes + 8), &pdf))
+        Span payload;
+        if (!spanWithin(data, 12, le32(data.bytes + 8), &payload))
             return nil;
-        return [NSPDFImageRep imageRepWithData: [NSData dataWithBytes: pdf.bytes length: pdf.length]];
+        if (pixelFormat == PixelFormatPDF)
+            return [NSPDFImageRep imageRepWithData: [NSData dataWithBytes: payload.bytes length: payload.length]];
+
+        NSData *svgData = nil;
+        if (payload.length >= 4 && memcmp(payload.bytes, "bvx", 3) == 0) {
+            size_t expected = payload.length >= 8 ? le32(payload.bytes + 4) : 0;
+            if (expected == 0 || expected > 16 * 1024 * 1024)
+                expected = 65536;
+            NSMutableData *decoded = [NSMutableData dataWithLength: expected];
+            size_t produced = compression_decode_buffer([decoded mutableBytes], expected,
+                                                        payload.bytes, payload.length, NULL, COMPRESSION_LZFSE);
+            if (produced > 0) {
+                [decoded setLength: produced];
+                svgData = decoded;
+            }
+        } else {
+            svgData = [NSData dataWithBytes: payload.bytes length: payload.length];
+        }
+        NSSize pointSize = NSMakeSize(le32(value.bytes + 12) / scale, le32(value.bytes + 16) / scale);
+        return NSRenderSVGData(svgData, pointSize, scale);
     }
     if (layout == RenditionLayoutInternalLink)
         return [self _linkedBitmap: value format: format scale: scale];
@@ -646,7 +667,8 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
         for (NSAssetCatalogRendition *rendition in renditions) {
             uint32_t pixelFormat = le32(rendition->value.bytes + 24);
             uint16_t layout = le16(rendition->value.bytes + 36);
-            if (layout == RenditionLayoutColor || (bytesPerPixel(pixelFormat) == 0 && pixelFormat != PixelFormatPDF))
+            if (layout == RenditionLayoutColor ||
+                (bytesPerPixel(pixelFormat) == 0 && pixelFormat != PixelFormatPDF && pixelFormat != PixelFormatSVG))
                 continue;
             NSMutableData *variant = [NSMutableData dataWithBytes: rendition->key.bytes length: rendition->key.length];
             uint16_t zero = 0;
@@ -681,7 +703,9 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
             if (image == nil)
                 image = [[[NSImage alloc] initWithSize: [rep size]] autorelease];
             [image addRepresentation: rep];
-            if (bytesPerPixel(le32(rendition->value.bytes + 24)) != 0 && ((le32(rendition->value.bytes + 8) >> 3) & 3) == 1)
+            uint32_t pixelFormat = le32(rendition->value.bytes + 24);
+            if ((bytesPerPixel(pixelFormat) != 0 || pixelFormat == PixelFormatSVG) &&
+                ((le32(rendition->value.bytes + 8) >> 3) & 3) == 1)
                 template = YES;
         }
         [image setTemplate: template];

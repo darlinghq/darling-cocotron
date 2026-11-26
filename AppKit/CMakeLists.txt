@@ -331,6 +331,7 @@ set(AppKit_sources
 	NSColor.subproj/NSColor_dynamic.m
 	NSColor.subproj/NSColor_assetCatalog.m
 	NSAssetCatalog.m
+	NSSVGRenderer.m
 
 	NSTableCornerView.m
 	NSTabView.m
