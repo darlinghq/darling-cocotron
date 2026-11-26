@@ -119,8 +119,15 @@ const CFStringRef KTFontUIFontTypeAttribute = CFSTR("KTFontUIFontTypeAttribute")
 
 static NSString *stringAttribute(NSDictionary *attributes, CFStringRef key);
 
+// NSFontDescriptor and CTFontDescriptorRef are toll-free bridged, so the
+// functions may be given an NSFontDescriptor: AppKit gives the CoreText
+// descriptor with its attributes (as an NSFont gives its CTFont, see ktFont()).
 static KTFontDescriptor *descriptorObject(CTFontDescriptorRef descriptor) {
-    return (KTFontDescriptor *) descriptor;
+    id object = (id) descriptor;
+    if (object != nil && ![object isKindOfClass: [KTFontDescriptor class]] &&
+        [object respondsToSelector: @selector(_coreTextFontDescriptor)])
+        return (KTFontDescriptor *) [object performSelector: @selector(_coreTextFontDescriptor)];
+    return (KTFontDescriptor *) object;
 }
 
 CTFontDescriptorRef KTFontDescriptorCreateWithFontData(CFDictionaryRef attributes,

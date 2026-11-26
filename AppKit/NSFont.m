@@ -712,8 +712,6 @@ static CGFloat sizeOrDefault(CGFloat size, CGFloat defaultSize) {
 }
 
 - (NSDictionary *) _fontTraitsAsDictionary {
-    NSFontManager *fm = [NSFontManager sharedFontManager];
-
     NSMutableDictionary *traitsDictionary =
             [NSMutableDictionary dictionaryWithCapacity: 4];
     NSFontFamily *family =
@@ -722,9 +720,15 @@ static CGFloat sizeOrDefault(CGFloat size, CGFloat defaultSize) {
     NSFontTraitMask symbolicTraits = [typeface traits];
     [traitsDictionary setObject: [NSNumber numberWithInt: symbolicTraits]
                          forKey: NSFontSymbolicTrait];
-    [traitsDictionary
-            setObject: [NSNumber numberWithInt: [fm weightOfFont: self]]
-               forKey: NSFontWeightTrait];
+    // The weight trait is on CoreText's scale (-1 to 1, 0 for a regular face),
+    // as CoreText gives it for the font, not NSFontManager's 0 to 15.
+    CTFontRef coreTextFont = [self _coreTextFont];
+    NSDictionary *coreTextTraits = coreTextFont != NULL
+            ? [(NSDictionary *) CTFontCopyTraits(coreTextFont) autorelease]
+            : nil;
+    NSNumber *weight = [coreTextTraits objectForKey: (NSString *) kCTFontWeightTrait];
+    [traitsDictionary setObject: weight ? weight : [NSNumber numberWithDouble: 0]
+                         forKey: NSFontWeightTrait];
     //	[traitsDictionary setObject: [NSNumber numberWithInt: ??] forKey:
     // NSFontWidthTrait]; // not sure what's put here
     [traitsDictionary setObject: [NSNumber numberWithDouble: [self italicAngle]]
@@ -742,7 +746,7 @@ static CGFloat sizeOrDefault(CGFloat size, CGFloat defaultSize) {
             dictionaryWithObjectsAndKeys:
                     [self fontName], NSFontNameAttribute, [self familyName],
                     NSFontFamilyAttribute,
-                    [[NSNumber numberWithDouble: [self pointSize]] stringValue],
+                    [NSNumber numberWithDouble: [self pointSize]],
                     NSFontSizeAttribute,
                     //								[self
                     // matrix], NSFontMatrixAttribute,
