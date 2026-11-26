@@ -226,7 +226,9 @@ static void drawRoundedSelection(NSRect rect) {
     [attributes setObject: style forKey: NSParagraphStyleAttributeName];
     if ([self font] != nil)
         [attributes setObject: [self font] forKey: NSFontAttributeName];
-    [attributes setObject: [self textColor]
+    // A cell that has not been given a text colour (one made with init, before it is in a control) shows the
+    // control text colour.
+    [attributes setObject: [self textColor] ?: [NSColor controlTextColor]
                    forKey: NSForegroundColorAttributeName];
 
     NSSize digitSize = maxDigitSize(attributes);
