@@ -410,7 +410,9 @@ static BOOL isViewable(Display* display, Window window)
 	if ([self getRect: &frame] != kCGSErrorSuccess)
 		return;
 	XSizeHints hints = {0};
-	hints.flags = USPosition | USSize;
+	hints.flags = USPosition | USSize | PWinGravity;
+	// The position is where the window's own area goes, not where the window manager's frame around it
+	hints.win_gravity = StaticGravity;
 	hints.x = (int) frame.origin.x;
 	hints.y = (int) frame.origin.y;
 	hints.width = (int) frame.size.width;
