@@ -56,6 +56,7 @@ enum {
     CompressionNone = 0,
     CompressionRunLength = 1,
     CompressionLZFSE = 4,
+    CompressionDeepmap2 = 11,
     PixelFormatARGB = 0x41524742,
     PixelFormatGA8 = 0x47413820,
     PixelFormatPDF = 0x50444620,
@@ -466,6 +467,16 @@ static NSData *decodeBitmapPixels(Span rendition, size_t *strideOut) {
             else if (!appendLZFSE(pixels, stream, bound))
                 return nil;
         }
+    } else if (compression == CompressionDeepmap2) {
+        if (body.length < 32 || memcmp(body.bytes + 16, "dmp2", 4) != 0)
+            return nil;
+        uint32_t payloadLen = le32(body.bytes + 28);
+        Span stream;
+        if (!spanWithin(body, 32, payloadLen, &stream))
+            return nil;
+        pixels = [NSMutableData data];
+        if (!appendLZFSE(pixels, stream, bound))
+            return nil;
     }
     if (pixels == nil || [pixels length] % height != 0 || [pixels length] / height < (size_t) width * pixelSize)
         return nil;
