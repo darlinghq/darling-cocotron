@@ -4844,8 +4844,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 - (void) platformWindowDeactivated: (CGWindow *) window
            checkForAppDeactivation: (BOOL) checkForAppDeactivation
 {
-    if (checkForAppDeactivation)
-        [NSApp _windowWillBecomeDeactive: self];
+    [NSApp _windowWillBecomeDeactive: self];
 
     [NS_EXTRA(NSWindow, self)->_childWindows
             makeObjectsPerformSelector: @selector(_parentWindowDidDeactivate:)
