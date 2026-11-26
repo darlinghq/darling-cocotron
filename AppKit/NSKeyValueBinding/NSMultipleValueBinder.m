@@ -65,15 +65,18 @@ static void *NSMultipleValueBinderWholeArrayChangeContext;
     }
 }
 
+// An exception from the bound key path or from the setter is not caught here: it leaves
+// -[NSTableView preparedCellAtColumn:row:] and reaches its caller. The documentation of that method does not
+// mention errors.
+// QUIRK: macOS 26.7.3 (black-box, tier 2) raises them out of preparedCellAtColumn:row: on every call and leaves the
+// column unchanged: NSGenericException from a getter that throws (fontBold binding), and
+// NSInternalInconsistencyException "Cannot create BOOL from object null of class NSNull" for NSNull in a BOOL
+// binding. Observed with column bindings to a key-value-coding source, and with an NSArrayController source (calling
+// preparedCellAtColumn:row: directly).
+// Test: tests/appkit-table-column-binding-exceptions.m
 - (void) applyToObject: (id) object inRow: (NSInteger) row keyPath: (id) path {
-    @try {
-        [object setValue: [self transformedObject: [[self _objectForRow: row]
-                                                           valueForKeyPath: _valueKeyPath]]
-                  forKey: path];
-    } @catch (id e) {
-        NSLog(@"exception %@ while setting value for key path %@ for row %ld", e,
-              _valueKeyPath, (long) row);
-    }
+    [object setValue: [self transformedObject: [[self _objectForRow: row] valueForKeyPath: _valueKeyPath]]
+              forKey: path];
 }
 
 - (void) applyToObject: (id) object inRow: (NSInteger) row {
