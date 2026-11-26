@@ -1,9 +1,10 @@
 /*
  * Copyright (C) 2026 Lubos Dolezel
  *
- * Darling's own drawings of a few system symbols, and the generic glyph drawn
- * for every other symbol name. They are simple line drawings made for Darling,
- * not Apple's symbol artwork.
+ * Darling's own drawings of a few system symbols, glyphs for common symbol names
+ * rendered from the Adwaita symbolic icons in SystemSymbols (see
+ * SystemSymbols/COPYING.Adwaita), and the generic glyph drawn for every other
+ * symbol name. They are not Apple's symbol artwork.
  */
 #import "NSSVGRenderer.h"
 #import <AppKit/NSBezierPath.h>
@@ -13,7 +14,6 @@
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSData.h>
 #import <Foundation/NSDictionary.h>
-#import <Foundation/NSSet.h>
 #import <Foundation/NSString.h>
 #include <math.h>
 #include <string.h>
@@ -101,7 +101,6 @@ static const struct {
     const char *name;
     GlyphDrawer draw;
 } glyphs[] = {
-    { "dt.finder", drawFolder },
     { "eject.fill", drawEjectFill },
     { "folder", drawFolder },
     { "network", drawNetwork },
@@ -145,9 +144,6 @@ static const struct {
     { "doc.badge.gearshape.fill", "preferences-system-symbolic" },
     { "doc.plaintext", "document-new-symbolic" },
     { "doc.text", "document-new-symbolic" },
-    { "dt.info.circle", "dialog-information-symbolic" },
-    { "dt.lightbulb", "dialog-information-symbolic" },
-    { "dt.window.top.on.rectangle", "window-new-symbolic" },
     { "ellipsis", "view-more-horizontal-symbolic" },
     { "ellipsis.circle", "view-more-horizontal-symbolic" },
     { "ellipsis.rectangle", "view-more-horizontal-symbolic" },
@@ -276,15 +272,6 @@ void NSImageSymbolDrawGlyph(NSString *name, NSRect rect) {
         if (rep != nil) {
             [rep drawInRect: rect];
             return;
-        }
-    }
-    static NSMutableSet *loggedMissing = nil;
-    @synchronized([NSImage class]) {
-        if (loggedMissing == nil)
-            loggedMissing = [[NSMutableSet alloc] init];
-        if (name != nil && ![loggedMissing containsObject: name]) {
-            [loggedMissing addObject: name];
-            NSLog(@"NSImageSymbolDrawGlyph: unmapped symbol '%@'", name);
         }
     }
     CGFloat line = MAX(1.0, floor(NSWidth(rect) / 12.0));

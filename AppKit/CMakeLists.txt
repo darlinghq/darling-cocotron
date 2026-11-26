@@ -597,6 +597,7 @@ set(AppKit_resources
 	SystemSymbols/network-workgroup-symbolic.svg SystemSymbols/network-workgroup-symbolic.svg
 	SystemSymbols/window-new-symbolic.svg SystemSymbols/window-new-symbolic.svg
 	SystemSymbols/format-text-rich-symbolic.svg SystemSymbols/format-text-rich-symbolic.svg
+	SystemSymbols/COPYING.Adwaita SystemSymbols/COPYING.Adwaita
 
 	NSMenuArrow.tiff NSMenu.subproj/NSMenuArrow.tiff
 	NSMenuViewDoubleRightArrowGray.tiff NSMenu.subproj/NSMenuViewDoubleRightArrowGray.tiff
