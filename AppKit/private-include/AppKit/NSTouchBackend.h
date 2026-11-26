@@ -23,8 +23,9 @@
 @class NSWindow;
 
 /*
- * How a windowing backend (or a host embedding Darling, such as a phone
- * shell) reports a finger. The identifier names the finger while it is
+ * How a host embedding Darling (such as a phone shell) reports a finger,
+ * which becomes events at once. The windowing backends report fingers as
+ * touch CGEvents (NSTouchPostNativeReport below). The identifier names the finger while it is
  * down and may be reused afterwards. The location is in the window's base
  * coordinates, from its bottom left. The finger is hit tested when it
  * begins and stays with the view it began in. An end or a cancel may give
@@ -37,3 +38,22 @@ APPKIT_EXPORT void NSTouchPost(NSWindow *window, long long identifier,
 // Cancels every finger down in the window, or in all windows for nil (a
 // compositor that takes the touch screen for itself).
 APPKIT_EXPORT void NSTouchCancelAll(NSWindow *window);
+
+/*
+ * What a finger's report makes of the touch events: the NSEvents (autoreleased, in order) that
+ * NSTouchPost() would post, for the reader of the touch CGEvents (see kCGSTouchIdentifier in
+ * CoreGraphicsPrivate.h) to put into the event queue. The normalized position is 0..1 from the
+ * device's bottom left, both it and the device size zero when unknown.
+ */
+APPKIT_EXPORT NSArray *NSTouchEventsForReport(NSWindow *window, long long identifier, NSTouchPhase phase,
+                                              NSPoint location, NSTimeInterval timestamp,
+                                              NSPoint normalizedPosition, NSSize deviceSize);
+
+/*
+ * A windowing backend reports a finger to the window system layer: a touch CGEvent for the
+ * window, which the event queue turns into NSEvents (NSTouchEventsForReport). The location is in the
+ * window's base coordinates (NAN for the end of a finger that has none), nativeX and nativeY the
+ * position in the window system's units as for the pointer events (kCGSEventNativeLocationX).
+ */
+APPKIT_EXPORT void NSTouchPostNativeReport(NSWindow *window, uintptr_t nativeWindow, long long identifier,
+                                           NSTouchPhase phase, NSPoint location, int64_t nativeX, int64_t nativeY);

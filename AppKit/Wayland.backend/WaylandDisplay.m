@@ -804,8 +804,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
 #pragma mark - Touch
 
-// Fingers go to AppKit's touch router, which moves the mouse for views that
-// take no touches: compositors emulate no pointer from a touch screen.
+// Fingers are reported as touch events, which AppKit's touch handling reads from the event stream
+// and which move the mouse for views that take no touches: compositors emulate no pointer from a
+// touch screen.
 - (void) touchEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
     if (_touchWindows == nil)
         _touchWindows = [NSMutableDictionary new];
@@ -817,7 +818,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _inputSerial = args[0].u;
         [_touchWindows setObject: [NSValue valueWithNonretainedObject: window] forKey: @(args[3].i)];
         CGPoint point = CGPointMake(wl_fixed_to_double(args[4].f), wl_fixed_to_double(args[5].f));
-        NSTouchPost([window delegate], args[3].i, NSTouchPhaseBegan, [window transformPoint: point], 0);
+        [self postTouchPhase: NSTouchPhaseBegan identifier: args[3].i window: window point: point];
         break;
     }
     case WP_TOUCH_EV_MOTION: {
@@ -825,7 +826,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         if (window == nil || ![self windowIsKnown: window])
             break;
         CGPoint point = CGPointMake(wl_fixed_to_double(args[2].f), wl_fixed_to_double(args[3].f));
-        NSTouchPost([window delegate], args[1].i, NSTouchPhaseMoved, [window transformPoint: point], 0);
+        [self postTouchPhase: NSTouchPhaseMoved identifier: args[1].i window: window point: point];
         break;
     }
     case WP_TOUCH_EV_UP: {
@@ -834,7 +835,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         if (window == nil || ![self windowIsKnown: window])
             break;
         // Up carries no position: the finger leaves where it last was.
-        NSTouchPost([window delegate], args[2].i, NSTouchPhaseEnded, NSMakePoint(NAN, NAN), 0);
+        [self postTouchPhase: NSTouchPhaseEnded identifier: args[2].i window: window point: CGPointMake(NAN, NAN)];
         break;
     }
     case WP_TOUCH_EV_CANCEL:
@@ -843,9 +844,29 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     }
 }
 
+// point is in the surface's coordinates (NAN for a finger without a position)
+- (void) postTouchPhase: (NSTouchPhase) phase identifier: (int32_t) identifier window: (WaylandWindow *) window
+                  point: (CGPoint) point
+{
+    BOOL known = !isnan(point.x) && !isnan(point.y);
+
+    NSTouchPostNativeReport([window delegate], (uintptr_t) [window surface], identifier, phase,
+                            known ? [window transformPoint: point] : NSMakePoint(NAN, NAN),
+                            known ? llround(point.x * 1024) : 0, known ? llround(point.y * 1024) : 0);
+}
+
+// The compositor takes the touch screen for itself: every finger is cancelled.
 - (void) touchCancel {
+    NSDictionary *fingers = [[_touchWindows copy] autorelease];
+
     [_touchWindows removeAllObjects];
-    NSTouchCancelAll(nil);
+    for (NSNumber *identifier in fingers) {
+        WaylandWindow *window = [[fingers objectForKey: identifier] nonretainedObjectValue];
+
+        if (window != nil && [self windowIsKnown: window])
+            [self postTouchPhase: NSTouchPhaseCancelled identifier: [identifier intValue] window: window
+                           point: CGPointMake(NAN, NAN)];
+    }
 }
 
 - (BOOL) windowIsKnown: (WaylandWindow *) window {

@@ -154,7 +154,8 @@ BOOL X11TouchHandleEvent(X11Display *x11, XEvent *ev) {
     long long identifier = ((long long) deviceID << 32) | (long long) detail;
     // As on Wayland, an end carries no position: the finger leaves where it last was.
     NSPoint location = phase == NSTouchPhaseEnded ? NSMakePoint(NAN, NAN) : [window logicalPoint: device];
-    NSTouchPost([window delegate], identifier, phase, location, 0);
+    NSTouchPostNativeReport([window delegate], (uintptr_t) [window windowHandle], identifier, phase, location,
+                            llround(device.x), llround(device.y));
 }
 
 @end

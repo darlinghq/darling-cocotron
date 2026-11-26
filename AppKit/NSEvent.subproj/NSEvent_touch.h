@@ -36,4 +36,9 @@
 // The view the finger began in, which all its events go to.
 - (NSView *) _view;
 - (NSWindow *) _window;
+- (instancetype) _initWithIdentity: (id<NSObject, NSCopying>) identity
+                            window: (NSWindow *) window
+                          location: (NSPoint) location;
+- (void) _moveTo: (NSPoint) location phase: (NSTouchPhase) phase;
+- (void) _setNormalizedPosition: (NSPoint) position deviceSize: (NSSize) size;
 @end

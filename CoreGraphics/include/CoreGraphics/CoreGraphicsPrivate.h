@@ -489,6 +489,46 @@ enum {
 	kCGSGesturePhase = 191,
 	kCGSGestureMagnification = 192,
 	kCGSGestureRotation = 193,
+	// Touch events: a gesture event (CGEvent type 29, NSEventTypeGesture) with kCGSTouchPhase not 0, one for
+	// each change of one finger on a touch screen (a gesture event with phase 0 is an ordinary one, as
+	// the touchpad's). Direct touch is not a CGEvent type of its own (CGEvent of type 37 is not valid; the touch
+	// events of the application are made from these). The window and the position are given as for pointer
+	// events: the window system's window (kCGSEventNativeWindow, with kCGSEventNativeLocationX/Y and
+	// kCGSEventPostedLocationX/Y), or, for an event of the application, kCGSTouchWindowNumber
+	// with the event's location. The CGEvent location is the global location of the finger. CGEvent.h has no
+	// fields for them.
+	// The number that names the finger while it is down, and may be used again afterwards. It is unique
+	// among the fingers of all touch devices of the event source (0 is a number like any other).
+	kCGSTouchIdentifier = 194,
+	// The phase as NSTouchPhase bits: began (1), moved (2), ended (8) or cancelled (16); the event is a
+	// touch event when this is not 0.
+	kCGSTouchPhase = 195,
+	// Where the finger is on its device, in millionths of the device's width and height from its bottom left
+	// corner (0 to 1000000), and the size of the device in 1/1024 of a point. All four are 0 when the source
+	// does not know.
+	kCGSTouchNormalizedX = 196,
+	kCGSTouchNormalizedY = 197,
+	kCGSTouchDeviceWidth = 198,
+	kCGSTouchDeviceHeight = 199,
+	// Not 0: the source has no position for the finger (the end of a finger that carries none, a cancel): the
+	// finger is where its previous event left it, and the location fields of the event are not meaningful.
+	kCGSTouchLocationUnknown = 200,
+	// The number of the window a touch event of the application is for (the fields of mouse events that name a
+	// window do not belong to gesture events), with the event's location. 0 when the event names the window
+	// system's window.
+	kCGSTouchWindowNumber = 201,
+};
+
+// The CGEvent type of the gesture events (NSEventTypeGesture), and the phases of a touch event
+// (NSTouchPhase bits).
+enum {
+	kCGSEventTypeGesture = 29,
+};
+enum {
+	kCGSTouchPhaseBegan = 1 << 0,
+	kCGSTouchPhaseMoved = 1 << 1,
+	kCGSTouchPhaseEnded = 1 << 3,
+	kCGSTouchPhaseCancelled = 1 << 4,
 };
 
 // The double-click interval of the user in seconds: the time within which a second press of a button
