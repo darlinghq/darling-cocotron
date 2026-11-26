@@ -83,6 +83,9 @@ typedef enum {
     struct wl_proxy *_frameCallback;
     // Per-surface color objects and the compositor session this toplevel belongs to.
     struct wl_proxy *_colorSurface, *_representationSurface, *_toplevelSession;
+    // xdg-dialog-v1: the dialog role of a sheet or modal panel, and its current modal hint.
+    struct wl_proxy *_dialog;
+    BOOL _dialogModal;
     NSString *_sessionName;
     BOOL _restoringSessionToplevel;
     // Once a surface has committed, a saved session state can no longer be restored on it.
@@ -221,6 +224,8 @@ typedef enum {
 // Callbacks from the display when the color manager or session manager arrives later than the window.
 - (void) colorManagerAvailable;
 - (void) sessionManagerAvailable;
+// Called when the dialog manager arrives later than the window.
+- (void) dialogManagerAvailable;
 
 // Overrides of CGWindow's window-system session hooks (see CGWindowPrivate.h).
 - (NSString *) ensureSessionToplevelName;

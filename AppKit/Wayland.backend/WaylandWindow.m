@@ -271,6 +271,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_toplevelSession != NULL)
         sendRequest(_toplevelSession, WP_TOPLEVEL_SESSION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _toplevelSession = NULL;
+    if (_dialog != NULL)
+        sendRequest(_dialog, XDG_DIALOG_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    _dialog = NULL;
+    _dialogModal = NO;
     if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_surface)
@@ -546,6 +550,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [self updateSizeLimits];
             _levelParent = nil;
             [self updateLevelParent];
+            [self updateDialogForToplevel];
 
             _decorationForcedClient = forceClient;
             [self updateDecorationMode];
@@ -620,6 +625,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (!_mapped || _toplevel == NULL)
         return;
     [self updateTaskbarPresence];
+    [self updateDialogForToplevel];
     [_display flush];
 }
 
@@ -1145,6 +1151,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) setLevel: (int) value {
     _level = value;
     [self updateLevelParent];
+    [self updateDialogForToplevel];
 }
 
 // xdg-shell cannot stack a window above arbitrary windows, but it can keep a
@@ -1176,9 +1183,52 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _levelParent;
 }
 
+// Sheets and windows in an application modal session are the dialogs AppKit has. xdg-shell can relate
+// a toplevel to its parent but cannot say that it is a dialog, so xdg-dialog-v1 tells the compositor.
+- (BOOL) isDialogToplevel {
+    NSWindow *window = _delegate;
+    if (window == nil)
+        return NO;
+    return ([window respondsToSelector: @selector(isSheet)] && [window isSheet]) ||
+           window == [NSApp modalWindow];
+}
+
+- (void) updateDialogForToplevel {
+    BOOL dialog = _toplevel != NULL && [self isDialogToplevel] &&
+                  _display->_dialogManager != NULL && _levelParent != nil &&
+                  _levelParent->_toplevel != NULL;
+    if (!dialog) {
+        if (_dialog != NULL) {
+            sendRequest(_dialog, XDG_DIALOG_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+            _dialog = NULL;
+            _dialogModal = NO;
+        }
+        return;
+    }
+    if (_dialog == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _toplevel}};
+        _dialog = WaylandCreateObject(_display->_dialogManager, XDG_WM_DIALOG_GET_XDG_DIALOG,
+                                      &xdg_dialog_v1_interface, args, 0, nil);
+        if (_dialog == NULL)
+            return;
+        _dialogModal = NO;
+    }
+    // A sheet is modal to its parent; the same is true of a window in an application modal session.
+    // The client still filters events for the parent (AppKit does that), so this is only a hint.
+    if (!_dialogModal) {
+        sendRequest(_dialog, XDG_DIALOG_SET_MODAL, 0);
+        _dialogModal = YES;
+    }
+}
+
+- (void) dialogManagerAvailable {
+    [self updateDialogForToplevel];
+}
+
 // The compositor drops the relation when the parent unmaps.
 - (void) levelParentUnmapped {
     _levelParent = nil;
+    [self updateDialogForToplevel];
 }
 
 - (void) updateTitle {

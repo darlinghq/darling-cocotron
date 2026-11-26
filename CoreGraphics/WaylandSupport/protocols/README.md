@@ -127,3 +127,14 @@ to set a themed cursor by name instead of a surface image when the compositor of
 - Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
 - Copyright: 2018 The Chromium Authors, 2023 Simon Ser
 - Licence: the MIT permission notice at the top of the file.
+
+## xdg-dialog
+
+`xdg-dialog-v1.xml` is the staging `xdg_wm_dialog_v1` protocol. The AppKit Wayland backend uses it to tell the
+compositor which toplevels are sheets or modal panels, so they can be presented as dialogs of their parent.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/xdg-dialog/xdg-dialog-v1.xml`
+  (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2023 Carlos Garnacho
+- Licence: the MIT permission notice at the top of the file.
