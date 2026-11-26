@@ -24,6 +24,7 @@
 #import "CGSWaylandTouch.h"
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandClipboard.h"
+#import "CGSWaylandPortalShortcuts.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
 #import "WaylandColor.h"
@@ -182,6 +183,8 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
 - (void) seatCapabilities: (uint32_t) capabilities;
 - (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
 - (void) releaseKeyboard;
+- (CGSWaylandPortalShortcuts *) portalShortcuts;
+- (void) removeHotKeyWithUID: (int) uid notifyPortal: (BOOL) notify;
 @end
 
 static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
@@ -343,6 +346,8 @@ static const CGEventFlags kHotKeyModifierMask =
 
     [_clipboard invalidate];
     [_clipboard release];
+    [(CGSWaylandPortalShortcuts *) _portalShortcuts invalidate];
+    [_portalShortcuts release];
     if (_dataDeviceManager != NULL)
         WL.wl_proxy_destroy(_dataDeviceManager);
     [_afterDispatch release];
@@ -1307,13 +1312,13 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
 
 #pragma mark - Hot keys
 
-// Wayland has no request to grab a key for the whole session, so the hot keys of this connection are
-// matched against the keys the compositor sends to the process' own wl_keyboard (CGSWaylandKeyboard asks
-// -activeHotKeyUIDsForKeyCode:flags:), which is while one of the process' surfaces has the keyboard focus.
-// Registration always succeeds, since no other client can hold a key combination here.
-// Limitation: while none of the process' surfaces has the keyboard focus the hot keys do not report. Wayland
-// itself has no global key request; the compositor-specific ways (the xdg-desktop-portal GlobalShortcuts
-// interface, KDE's KGlobalAccel) are not used, since they ask the user to confirm and assign each shortcut.
+// Wayland has no request to grab a key for the whole session. Each registered hot key is therefore
+// offered to the xdg-desktop-portal GlobalShortcuts interface (CGSWaylandPortalShortcuts), which lets
+// the desktop bind it globally after the user confirms it. While a portal session has not bound a
+// shortcut, the key is still matched against the compositor's wl_keyboard events, so the process gets
+// the same event when one of its surfaces has the focus (CGSWaylandKeyboard asks
+// -activeHotKeyUIDsForKeyCode:flags:). Registration always succeeds: no other Wayland client grabs a
+// combination, and a portal that declines one only leaves that hot key focused-only.
 - (CGSWaylandHotKeyEntry *) _hotKeyWithUID: (int) uid {
     for (CGSWaylandHotKeyEntry *entry in _hotKeys) {
         if (entry->uid == uid)
@@ -1323,7 +1328,7 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
 }
 
 - (void) setHotKeyWithUID: (int) uid keyCode: (CGKeyCode) keyCode flags: (CGEventFlags) flags exclusion: (int) exclusion {
-    [self removeHotKeyWithUID: uid];
+    [self removeHotKeyWithUID: uid notifyPortal: NO];
     CGSWaylandHotKeyEntry *entry = [[CGSWaylandHotKeyEntry alloc] init];
     entry->uid = uid;
     entry->virtualKey = keyCode;
@@ -1335,6 +1340,7 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
         [_hotKeys addObject: entry];
     }
     [entry release];
+    [[self portalShortcuts] hotKeysDidChange];
 }
 
 - (BOOL) getHotKeyWithUID: (int) uid keyCode: (CGKeyCode *) outKeyCode flags: (CGEventFlags *) outFlags {
@@ -1351,11 +1357,17 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
 }
 
 - (void) removeHotKeyWithUID: (int) uid {
+    [self removeHotKeyWithUID: uid notifyPortal: YES];
+}
+
+- (void) removeHotKeyWithUID: (int) uid notifyPortal: (BOOL) notify {
     @synchronized(self) {
         CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
         if (entry != nil)
             [_hotKeys removeObject: entry];
     }
+    if (notify)
+        [[self portalShortcuts] hotKeysDidChange];
 }
 
 - (BOOL) isHotKeyEnabledWithUID: (int) uid {
@@ -1371,6 +1383,7 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
         if (entry != nil)
             entry->enabled = enabled;
     }
+    [[self portalShortcuts] hotKeysDidChange];
 }
 
 - (NSArray *) activeHotKeyUIDsForKeyCode: (CGKeyCode) keyCode flags: (uint64_t) flags {
@@ -1379,7 +1392,8 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
         return nil;
     @synchronized(self) {
         for (CGSWaylandHotKeyEntry *entry in _hotKeys) {
-            if (entry->enabled && entry->virtualKey == keyCode && entry->flags == (flags & kHotKeyModifierMask)) {
+            if (entry->enabled && entry->virtualKey == keyCode && entry->flags == (flags & kHotKeyModifierMask)
+                    && ![self isHotKeyBoundToPortalWithUID: entry->uid]) {
                 if (uids == nil)
                     uids = [NSMutableArray array];
                 [uids addObject: @(entry->uid)];
@@ -1387,6 +1401,60 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
         }
     }
     return uids;
+}
+
+- (CGSWaylandPortalShortcuts *) portalShortcuts {
+    if (_portalShortcuts == nil)
+        _portalShortcuts = [[CGSWaylandPortalShortcuts alloc] initWithConnection: self];
+    return _portalShortcuts;
+}
+
+- (NSArray<NSDictionary *> *) enabledHotKeysForPortal {
+    NSMutableArray *result = [NSMutableArray array];
+    @synchronized(self) {
+        for (CGSWaylandHotKeyEntry *entry in _hotKeys) {
+            if (!entry->enabled)
+                continue;
+            [result addObject: @{@"uid": @(entry->uid), @"virtualKey": @(entry->virtualKey),
+                                 @"flags": @(entry->flags)}];
+        }
+    }
+    return result;
+}
+
+- (BOOL) isHotKeyBoundToPortalWithUID: (int) uid {
+    return [(CGSWaylandPortalShortcuts *) _portalShortcuts isUIDBound: uid];
+}
+
+- (void) postPortalHotKeyEventForUID: (int) uid pressed: (BOOL) pressed {
+    if (_hotKeyOperatingMode != 0)
+        return;
+    CGEventFlags flags = 0;
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        if (entry == nil || !entry->enabled)
+            return;
+        flags = entry->flags;
+    }
+    [self postHotKeyEventForUID: uid pressed: pressed flags: flags location: CGPointZero
+                           time: clock_gettime_nsec_np(CLOCK_UPTIME_RAW)];
+}
+
+- (NSString *) portalTriggerForKeyCode: (CGKeyCode) keyCode flags: (CGEventFlags) flags {
+    NSString *name = [_keymap portalKeysymNameForKeyCode: keyCode];
+    if (name == nil)
+        return nil;
+    NSMutableArray *parts = [NSMutableArray array];
+    if (flags & kCGEventFlagMaskControl)
+        [parts addObject: @"CTRL"];
+    if (flags & kCGEventFlagMaskAlternate)
+        [parts addObject: @"ALT"];
+    if (flags & kCGEventFlagMaskShift)
+        [parts addObject: @"SHIFT"];
+    if (flags & kCGEventFlagMaskCommand)
+        [parts addObject: @"LOGO"];
+    [parts addObject: name];
+    return [parts componentsJoinedByString: @"+"];
 }
 
 // The outputs that have reported a mode, in the order the compositor announced them. The first is

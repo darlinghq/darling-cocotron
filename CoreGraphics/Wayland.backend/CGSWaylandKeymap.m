@@ -33,6 +33,7 @@
 #import <Foundation/NSString.h>
 #import <Foundation/NSValue.h>
 
+#include <ctype.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -412,6 +413,41 @@ static int modifierKeyCodeOfKeysym(xkb_keysym_t sym) {
                 WL.xkb_state_serialize_layout(_state, XKB_STATE_LAYOUT_EFFECTIVE));
         return name != NULL ? [NSString stringWithUTF8String: name] : nil;
     }
+}
+
+// A fresh state keeps the decoder's state (and its Compose sequence) untouched. The XDG shortcut
+// specification names keysyms without the XKB_KEY_ prefix and allows only those characters.
+- (NSString *) portalKeysymNameForKeyCode: (uint32_t) keyCode {
+    if (_keymap == NULL || keyCode >= sizeof(carbonToX11) / sizeof(carbonToX11[0]))
+        return nil;
+    int keycode = carbonToX11[keyCode];
+    if (keycode == 0)
+        return nil;
+
+    int group = [self layoutGroup];
+    if (group < 0)
+        return nil;
+    struct xkb_state *state = WL.xkb_state_new(_keymap);
+    if (state == NULL)
+        return nil;
+    WL.xkb_state_update_mask(state, 0, 0, 0, 0, 0, (xkb_layout_index_t) group);
+    xkb_keysym_t keysym = WL.xkb_state_key_get_one_sym(state, keycode);
+    WL.xkb_state_unref(state);
+
+    char name[64];
+    int length = WL.xkb_keysym_get_name(keysym, name, sizeof(name));
+    if (length <= 0)
+        return nil;
+    const char *start = name;
+    if (strncmp(start, "XKB_KEY_", 8) == 0)
+        start += 8;
+    if (*start == '\0')
+        return nil;
+    for (const char *c = start; *c != '\0'; c++) {
+        if (!isalnum((unsigned char) *c) && *c != '_')
+            return nil;
+    }
+    return [NSString stringWithUTF8String: start];
 }
 
 @end

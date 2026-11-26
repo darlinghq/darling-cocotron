@@ -8,6 +8,9 @@
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/../WaylandSupport/WaylandProtocols.cmake)
 pkg_check_modules(WAYLAND_EGL wayland-egl)
+# Global shortcuts are offered through the host's xdg-desktop-portal over D-Bus, using the dbus
+# wrapper library of the native libdbus-1 (as AppKit's portal integrations do).
+pkg_check_modules(PC_DBUS REQUIRED dbus-1)
 
 if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 	wayland_protocol_sources(CG_WAYLAND_PROTOCOL_SOURCES "${CMAKE_CURRENT_BINARY_DIR}")
@@ -18,6 +21,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CGSWaylandKeyboard.m
 			CGSWaylandPointer.m
 			CGSWaylandClipboard.m
+			CGSWaylandPortalShortcuts.m
 			CGSWaylandTouch.m
 			CGSWaylandKeymap.m
 			CGSWaylandOutputManager.m
@@ -39,6 +43,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			Foundation
 			CoreGraphics
 			IOKit
+			dbus
 	)
 	target_include_directories(Wayland_cgbackend PRIVATE
 		../WaylandSupport
@@ -47,6 +52,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 		${WAYLAND_CURSOR_INCLUDE_DIRS}
 		${WAYLAND_EGL_INCLUDE_DIRS}
 		${XKBCOMMON_INCLUDE_DIRS}
+		${PC_DBUS_INCLUDE_DIRS}
 	)
 else ()
 	message(STATUS "CoreGraphics: not building the Wayland backend (needs "

@@ -150,6 +150,8 @@ typedef enum {
     BOOL _assertionsNotifyRegistered, _displaySleepPrevented;
     // The registered global hot keys (CGSWaylandHotKeyEntry), guarded by @synchronized(self).
     NSMutableArray *_hotKeys;
+    // The xdg-desktop-portal GlobalShortcuts client, created when a hot key is first registered.
+    id _portalShortcuts;
     // Set when the setup roundtrips are over; an output that is described before that is
     // part of the displays the first look finds, not a change.
     BOOL _setupDone;
@@ -212,8 +214,22 @@ typedef enum {
 // in effect, selects: a hot key matches when its key code is the key's and its Shift, Control, Option and
 // Command flags are exactly those of the flags (other bits, such as Caps Lock, do not count). Empty while hot
 // keys are switched off (the global operating mode is not 0). The keyboard calls this for every key that is
-// not a modifier.
+// not a modifier. Hot keys the portal has bound are left out: they are delivered to this process by the portal
+// even when none of its surfaces has the focus, so reporting them here as well would post each event twice.
 - (NSArray *) activeHotKeyUIDsForKeyCode: (CGKeyCode) keyCode flags: (uint64_t) flags;
+
+// A snapshot of the enabled registered hot keys for the portal: dictionaries with an NSNumber uid,
+// an NSNumber virtualKey and an NSNumber flags. Called on the main thread.
+- (NSArray *) enabledHotKeysForPortal;
+// Whether the xdg-desktop-portal GlobalShortcuts session has bound this uid. Bound uids are not also
+// matched against the keys the compositor sends to the process' own wl_keyboard.
+- (BOOL) isHotKeyBoundToPortalWithUID: (int) uid;
+// The portal reported a press or a release of a bound shortcut. Uses the same CGS event path as the
+// key events of the local wl_keyboard. Called on the main thread.
+- (void) postPortalHotKeyEventForUID: (int) uid pressed: (BOOL) pressed;
+// An XDG shortcut preferred trigger for a virtual key code and modifier flags, from the keymap the
+// compositor sent this connection; nil when the key has no keysym name.
+- (NSString *) portalTriggerForKeyCode: (CGKeyCode) keyCode flags: (CGEventFlags) flags;
 
 // Sends a request that creates an object and installs the dispatcher on it.
 - (struct wl_proxy *) createObject: (struct wl_proxy *) proxy

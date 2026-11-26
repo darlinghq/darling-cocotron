@@ -92,6 +92,11 @@ struct xkb_state;
 - (int) layoutGroup;
 - (NSString *) layoutName;
 
+// The XDG shortcut trigger name of a virtual key code in the current layout (the xkbcommon keysym
+// name without its XKB_KEY_ prefix), or nil when the key has no name. Used for the preferred
+// trigger of a portal global shortcut.
+- (NSString *) portalKeysymNameForKeyCode: (uint32_t) keyCode;
+
 @end
 
 #endif
