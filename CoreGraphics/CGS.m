@@ -69,6 +69,11 @@ CGError CGSSetDenyWindowServerConnections(Boolean deny)
 	return kCGSErrorSuccess;
 }
 
+Boolean _CGSWindowServerConnectionsDenied(void)
+{
+	return g_denyConnections;
+}
+
 extern void _CGSResetMainConnection(void);
 
 void CGSShutdownServerConnections(void)

@@ -43,6 +43,8 @@ extern CGError CGSNewConnection(_Nullable CGSDictionaryObj attribs, CGSConnectio
 extern CGError CGSReleaseConnection(CGSConnectionID connId);
 extern CGSConnectionID _CGSDefaultConnection(void);
 extern CGError CGSSetDenyWindowServerConnections(Boolean deny);
+// Whether CGSSetDenyWindowServerConnections() denied the process connections to the window system.
+extern Boolean _CGSWindowServerConnectionsDenied(void);
 extern void CGSShutdownServerConnections(void);
 
 // CGSRegion
