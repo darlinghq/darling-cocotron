@@ -81,6 +81,7 @@ typedef NS_ENUM(NSInteger, NSScrollViewFindBarPosition) {
         NSScrollElasticity _verticalScrollElasticity;
         NSScrollerStyle _scrollerStyle;
         BOOL _usesPredominantAxisScrolling;
+        BOOL _isTiling;
     NS_EXTRA_IVARS_END(NSScrollView)
 }
 

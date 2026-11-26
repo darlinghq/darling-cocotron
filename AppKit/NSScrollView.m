@@ -1155,43 +1155,50 @@ static CGFloat clampMagnification(NSScrollView *self, CGFloat value) {
 }
 
 - (void) tile {
-    NSRect frame;
+    if (NS_EXTRA(NSScrollView, self)->_isTiling)
+        return;
+    NS_EXTRA(NSScrollView, self)->_isTiling = YES;
+    @try {
+        NSRect frame;
 
-    [self createHeaderAndCornerViewsIfNeeded];
-    [self createRulerViewsIfNeeded];
+        [self createHeaderAndCornerViewsIfNeeded];
+        [self createRulerViewsIfNeeded];
 
-    frame = [self headerClipViewFrame];
-    [_headerClipView setFrame: frame];
+        frame = [self headerClipViewFrame];
+        [_headerClipView setFrame: frame];
 
-    frame = [self cornerViewFrame];
-    [_cornerView setFrame: frame];
+        frame = [self cornerViewFrame];
+        [_cornerView setFrame: frame];
 
-    frame = [self verticalScrollerFrame];
-    [_verticalScroller setFrame: frame];
+        frame = [self verticalScrollerFrame];
+        [_verticalScroller setFrame: frame];
 
-    frame = [self horizontalScrollerFrame];
-    [_horizontalScroller setFrame: frame];
+        frame = [self horizontalScrollerFrame];
+        [_horizontalScroller setFrame: frame];
 
-    frame = [self clipViewFrame];
-    [_clipView setFrame: frame];
+        frame = [self clipViewFrame];
+        [_clipView setFrame: frame];
 
-    frame = [self horizontalRulerFrame];
-    [NS_EXTRA(NSScrollView, self)->_horizontalRuler setFrame: frame];
+        frame = [self horizontalRulerFrame];
+        [NS_EXTRA(NSScrollView, self)->_horizontalRuler setFrame: frame];
 
-    frame = [self verticalRulerFrame];
-    [NS_EXTRA(NSScrollView, self)->_verticalRuler setFrame: frame];
+        frame = [self verticalRulerFrame];
+        [NS_EXTRA(NSScrollView, self)->_verticalRuler setFrame: frame];
 
-    frame = [_clipView bounds];
-    if (![self hasVerticalScroller])
-        frame.origin.y = 0;
-    if (![self hasHorizontalScroller])
-        frame.origin.x = 0;
-    [_clipView setBoundsOrigin: frame.origin];
+        frame = [_clipView bounds];
+        if (![self hasVerticalScroller])
+            frame.origin.y = 0;
+        if (![self hasHorizontalScroller])
+            frame.origin.x = 0;
+        [_clipView setBoundsOrigin: frame.origin];
 
-    [self reflectScrolledClipView: _clipView];
-    [_clipView discardCursorRects];
-    if (NS_EXTRA(NSScrollView, self)->_documentCursor != nil)
-        [_clipView addCursorRect: [_clipView bounds] cursor: NS_EXTRA(NSScrollView, self)->_documentCursor];
+        [self reflectScrolledClipView: _clipView];
+        [_clipView discardCursorRects];
+        if (NS_EXTRA(NSScrollView, self)->_documentCursor != nil)
+            [_clipView addCursorRect: [_clipView bounds] cursor: NS_EXTRA(NSScrollView, self)->_documentCursor];
+    } @finally {
+        NS_EXTRA(NSScrollView, self)->_isTiling = NO;
+    }
 }
 
 - (void) reflectScrolledClipView: (NSClipView *) clipView {
