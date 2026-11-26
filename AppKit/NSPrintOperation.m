@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <ApplicationServices/ApplicationServices.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSPanel.h>
@@ -324,6 +325,28 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
                                        forKey: (NSString *) kCGPDFContextTitle];
 }
 
+// The job as the print settings of the print info have it: a PDF file, the destination of the settings,
+// with the pages of the paper of the page format. There is no print queue to take the job otherwise.
+- (CGContextRef) _createPrintCoreContext {
+    NSPrintInfo *printInfo = NS_EXTRA(NSPrintOperation, self)->_printInfo;
+    PMPrintSession session = [printInfo PMPrintSession];
+    PMPrintSettings settings = [printInfo PMPrintSettings];
+    PMDestinationType destination = kPMDestinationPrinter;
+    CFURLRef url = NULL;
+    CGRect mediaBox;
+    CGContextRef context;
+
+    if (PMSessionGetDestinationType(session, settings, &destination) != noErr || destination != kPMDestinationFile ||
+        PMSessionCopyDestinationLocation(session, settings, &url) != noErr || url == NULL)
+        return nil;
+    // the paper in the orientation of the page format
+    mediaBox = CGRectMake(0, 0, [printInfo orientation] == NSLandscapeOrientation ? [printInfo paperSize].height : [printInfo paperSize].width,
+                          [printInfo orientation] == NSLandscapeOrientation ? [printInfo paperSize].width : [printInfo paperSize].height);
+    context = CGPDFContextCreateWithURL(url, &mediaBox, (CFDictionaryRef) [self _documentInfo]);
+    CFRelease(url);
+    return (CGContextRef) [(id) context autorelease];
+}
+
 - (NSGraphicsContext *) createContext {
     CGContextRef context;
 
@@ -347,14 +370,13 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
             if (panelResult != NSOKButton) {
                 return nil;
             }
-        } else {
-            NSLog(@"Printing not implemented without print panel yet");
-            return nil;
         }
 
         if ((context = (CGContextRef)
                      [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] objectForKey: @"_KGContext"]) ==
             nil)
+            context = [self _createPrintCoreContext];
+        if (context == nil)
             return nil;
     } else if (NS_EXTRA(NSPrintOperation, self)->_type == NSPrintOperationPDFInRect) {
         NSDictionary *auxiliaryInfo = [self _documentInfo];
