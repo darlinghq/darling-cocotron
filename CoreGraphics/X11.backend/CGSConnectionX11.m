@@ -1310,9 +1310,13 @@ static int ignoreBadWindowWhileOrdering(Display* display, XErrorEvent* errorEven
 	if (!_occlusionActiveKnown)
 	{
 		Window focused = X11OcclusionActiveWindow(_display);
-		// The application's own windows never cover each other here.
+		// The application's own windows never cover each other here. A window of the process that is none of
+		// the UI layer's toplevel windows (a display overlay) is judged like another client's, but is never
+		// watched (see below), which would replace its own selection of input.
 		if ([self _toplevelForNativeWindow: focused] != nil)
 			focused = None;
+		else if ([self _cgsWindowForNativeWindow: focused] != nil && ![[self _cgsWindowForNativeWindow: focused] isDisplayOverlay])
+			focused = None; // a window another framework made (CGSNewWindow)
 		_occlusionActive = focused;
 		_occlusionActiveKnown = YES;
 		_occlusionCoverValid = NO;
@@ -1324,9 +1328,9 @@ static int ignoreBadWindowWhileOrdering(Display* display, XErrorEvent* errorEven
 	// this client's earlier selection on that window.
 	if (active != _occlusionWatchWindow)
 	{
-		X11OcclusionStopWatching(_display, _occlusionWatchWindow, [self _toplevelForNativeWindow: _occlusionWatchWindow] != nil);
+		X11OcclusionStopWatching(_display, _occlusionWatchWindow, [self _cgsWindowForNativeWindow: _occlusionWatchWindow] != nil);
 		_occlusionWatchWindow = active;
-		if (active != None)
+		if (active != None && [self _cgsWindowForNativeWindow: active] == nil)
 			XSelectInput(_display, active, StructureNotifyMask | PropertyChangeMask);
 	}
 
