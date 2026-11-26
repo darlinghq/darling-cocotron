@@ -653,6 +653,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     NS_EXTRA(NSMatrix, self)->_allowsEmptySelection = flag;
 }
 
+- (BOOL) isSelectionByRect {
+    return NS_EXTRA(NSMatrix, self)->_selectionByRect;
+}
+
+- (void) setSelectionByRect: (BOOL) flag {
+    NS_EXTRA(NSMatrix, self)->_selectionByRect = flag;
+}
+
 - (void) setTabKeyTraversesCells: (BOOL) flag {
     NS_EXTRA(NSMatrix, self)->_tabKeyTraversesCells = flag;
 }
