@@ -21,6 +21,7 @@
 #import "CGSX11Pointer.h"
 #import "X11InputMask.h"
 #import "CGSConnectionX11.h"
+#import "CGSWindowX11.h"
 #import <CoreGraphics/CGEvent.h>
 #import <CoreGraphics/CGEventSource.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -171,13 +172,6 @@ static int64_t buttonNumberForX(unsigned int xButton) {
         return;
     }
 
-    // The observer holds the pointer for itself, or the window is not one input is decoded for.
-    if ([observer respondsToSelector: @selector(nativeConnectionObserverHandlesPointerEvent:)] &&
-        [observer nativeConnectionObserverHandlesPointerEvent: ev]) {
-        _located = NO;
-        return;
-    }
-
     // The motion a warp made is not mouse motion: the pointer is where the application put it.
     if (ev->type == MotionNotify && _echoRemaining > 0 && !_relative.active) {
         if (ev->xmotion.serial == _echoSerial) {
@@ -273,9 +267,10 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     // The modifier flags are the keyboard's (the pointer event's state was already compared with it).
     CGEventSetFlags(event, (CGEventFlags) [_connection modifierFlags]);
 
-    // The window of a CGS window; the windows of the framework above are known to it by the X window.
+    // The window of a CGS window; the windows of the framework above are known to it by the X window. The
+    // events of a display overlay have none, like those of a captured display.
     CGSWindowID windowID = [_connection _windowIDForNativeWindow: window];
-    if (windowID != 0) {
+    if (windowID != 0 && ![_connection _isDisplayOverlayNativeWindow: window]) {
         CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointer, windowID);
         CGEventSetIntegerValueField(event, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent, windowID);
     }
@@ -318,23 +313,6 @@ static int64_t buttonNumberForX(unsigned int xButton) {
                          winY: (int) winY
                          root: (CGPoint) root
                         state: (unsigned int) state {
-    id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
-    // The observer is asked as for a button press of the window: it holds the windows it does not decode input for.
-    if ([observer respondsToSelector: @selector(nativeConnectionObserverHandlesPointerEvent:)]) {
-        XEvent probe;
-        memset(&probe, 0, sizeof(probe));
-        probe.xbutton.type = ButtonPress;
-        probe.xbutton.button = Button4;
-        probe.xbutton.window = window;
-        probe.xbutton.x = winX;
-        probe.xbutton.y = winY;
-        probe.xbutton.x_root = (int) root.x;
-        probe.xbutton.y_root = (int) root.y;
-        probe.xbutton.state = state;
-        if ([observer nativeConnectionObserverHandlesPointerEvent: &probe])
-            return;
-    }
-
     // While the cursor is frozen the wheel scrolls where the cursor is.
     if (_relative.active) {
         winX = (int) _relative.virtualX - ((int) root.x - winX);
@@ -620,9 +598,13 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     XSync(_connection->_display, False);
 }
 
-// The window the pointer is grabbed for: the framework's choice (a display overlay, the key window), else the
-// window of the connection that holds the keyboard focus.
+// The window the pointer is grabbed for: a display overlay, which covers the screen above every window, so it is
+// the one while there is one; else the framework's choice (the key window), else the window of the connection that
+// holds the keyboard focus.
 - (Window) relativeMouseWindowChoice {
+    CGSWindowX11 *overlay = [_connection _displayOverlayWindow];
+    if (overlay != nil)
+        return overlay->_window;
     id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
     if ([observer respondsToSelector: @selector(nativeConnectionRelativeMouseWindow)]) {
         Window window = (Window) [observer nativeConnectionRelativeMouseWindow];

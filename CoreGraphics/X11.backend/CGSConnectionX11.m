@@ -699,6 +699,33 @@ static double windowOpacity(Display* display, Window window)
 	}
 }
 
+// The display overlay shown last, nil when there is none. Window ids grow with creation.
+-(CGSWindowX11*) _displayOverlayWindow
+{
+	CGSWindowX11* found = nil;
+	int foundID = 0;
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if ([window isKindOfClass: [CGSWindowX11 class]] && [(CGSWindowX11*) window isDisplayOverlay] &&
+				[key intValue] > foundID)
+			{
+				found = (CGSWindowX11*) window;
+				foundID = [key intValue];
+			}
+		}
+		return [[found retain] autorelease];
+	}
+}
+
+-(BOOL) _isDisplayOverlayNativeWindow:(Window)native
+{
+	return [[self _cgsWindowForNativeWindow: native] isDisplayOverlay];
+}
+
 -(CGSWindowID) _windowIDForNativeWindow:(Window)native
 {
 	@synchronized (_windows)
