@@ -34,8 +34,8 @@ json.dump({'info': {'version': 1, 'author': 'xcode'}}, open(os.path.join(root, '
 # Twelve small opaque images Pack0..Pack11 of (12 + i) x (10 + i % 3) points, and the grey image PackGA of 64 x 64
 # with alpha. Every pixel differs from its neighbours, so that the compressor has to store them (an image of one
 # colour, or a regular one, is stored in a shorter form). The colour of pixel (x, y) of image k is the three bytes
-# of the hash below (the same function is in tests/appkit-asset-catalog-deepmap2.m); PackGA is grey (the first
-# byte), opaque on the left half and at alpha 64 on the right half.
+# of the hash below (the same function is in tests/appkit-asset-catalog-deepmap2.m); PackGA is black, its alpha
+# the second byte.
 def hash_rgb(k, x, y):
     h = ((x * 73856093) ^ (y * 19349663) ^ (k * 83492791)) & 0xffffffff
     return (h & 255, (h >> 8) & 255, (h >> 16) & 255)
@@ -43,7 +43,7 @@ for i in range(12):
     w, h = 12 + i, 10 + (i % 3)
     imageset(root, 'Pack%d' % i, [('p%d.png' % i, '1x',
         lambda p, i=i, w=w, h=h: png(p, w, h, lambda x, y: hash_rgb(i, x, y), 'RGB'))])
-imageset(root, 'PackGA', [('ga.png', '1x', lambda p: png(p, 64, 64, lambda x, y: (hash_rgb(100, x, y)[0], 255 if x < 32 else 64), 'GA'))])
+imageset(root, 'PackGA', [('ga.png', '1x', lambda p: png(p, 64, 64, lambda x, y: (0, hash_rgb(100, x, y)[1]), 'GA'))])
 # Vector
 d = os.path.join(root, 'Vec.imageset'); os.makedirs(d, exist_ok=True)
 open(os.path.join(d, 'vec.svg'), 'w').write(

@@ -12,8 +12,8 @@
 //    fixtures/assetcatalog/make-xcassets-deepmap2.py), packed into one shared image: every pixel has to come from the
 //    right place of the packed image, so a reader that takes a frame from the wrong corner shows another
 //    image's pixels;
-//  - PackGA, 64 x 64 grey (the first byte of hash(100, x, y)), opaque on the left half and at alpha 64 on the right
-//    half (the grey and alpha planes of the compressed data are stored separately);
+//  - PackGA, 64 x 64 black with alpha the second byte of hash(100, x, y) (the compressed data keeps the alpha in a
+//    plane of its own);
 //  - Vec, an SVG 20 x 20 points: a red square from 2 to 18 and a blue square from 6 to 14 on a clear background.
 //    (The deepmap2 compression has more than one form: an image of a single colour or a regular one is stored
 //    in a shorter form than the LZFSE stream these pixels need, and this test does not cover it.)
@@ -109,9 +109,8 @@ int main(int argc, char **argv) {
         for (int y = 0; y < 64; y++)
             for (int x = 0; x < 64; x++) {
                 const unsigned char *p = [pixels bitmapData] + y * [pixels bytesPerRow] + x * 4;
-                int grey = (int) (hashOf(100, x, y) & 255);
-                if (x < 32 ? (abs(p[0] - grey) > 3 || abs(p[1] - grey) > 3 || abs(p[2] - grey) > 3 || p[3] != 255)
-                           : abs(p[3] - 64) > 3)
+                int alpha = (int) ((hashOf(100, x, y) >> 8) & 255);
+                if (p[0] > 3 || p[1] > 3 || p[2] > 3 || abs(p[3] - alpha) > 3)
                     bad++;
             }
         if (bad != 0)
