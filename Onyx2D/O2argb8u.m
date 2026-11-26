@@ -310,6 +310,32 @@ void O2BlendSpanSourceIn_8888(O2argb8u *src, O2argb8u *dst, int length) {
         src[i] = r;
     }
 }
+void O2BlendSpanSourceAtop_8888(O2argb8u *src, O2argb8u *dst, int length) {
+    int i;
+
+    for (i = 0; i < length; i++) {
+        O2argb8u s = src[i];
+        O2argb8u d = dst[i];
+        O2argb8u r;
+        unsigned invSa = 255 - (unsigned) s.a;
+
+        r.r = RI_INT_MIN(((unsigned) s.r * (unsigned) d.a +
+                          (unsigned) d.r * invSa + 127) /
+                                 255,
+                         255);
+        r.g = RI_INT_MIN(((unsigned) s.g * (unsigned) d.a +
+                          (unsigned) d.g * invSa + 127) /
+                                 255,
+                         255);
+        r.b = RI_INT_MIN(((unsigned) s.b * (unsigned) d.a +
+                          (unsigned) d.b * invSa + 127) /
+                                 255,
+                         255);
+        r.a = d.a;
+
+        src[i] = r;
+    }
+}
 void O2BlendSpanXOR_8888(O2argb8u *src, O2argb8u *dst, int length) {
     // Passes Visual Test
     int i;

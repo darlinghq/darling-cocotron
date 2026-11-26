@@ -153,5 +153,6 @@ void O2BlendSpanClear_8888(O2argb8u *src, O2argb8u *dst, int length);
 void O2BlendSpanCopy_8888(O2argb8u *src, O2argb8u *dst, int length);
 
 void O2BlendSpanSourceIn_8888(O2argb8u *src, O2argb8u *dst, int length);
+void O2BlendSpanSourceAtop_8888(O2argb8u *src, O2argb8u *dst, int length);
 void O2BlendSpanXOR_8888(O2argb8u *src, O2argb8u *dst, int length);
 void O2BlendSpanPlusLighter_8888(O2argb8u *src, O2argb8u *dst, int length);
