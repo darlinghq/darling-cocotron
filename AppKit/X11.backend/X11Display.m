@@ -241,7 +241,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 // callbacks, which is what posts NSApplicationDidChangeScreenParametersNotification) before it says so
 // here, so what this display derives from the layout is dropped now.
 - (void) nativeConnectionDisplayLayoutChanged {
-    _pointerKnown = NO;
     _primaryRootFrameValid = NO;
     // Whether the focused window covers a monitor depends on the layout.
     _occlusionCoverValid = NO;
@@ -407,36 +406,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     }
 }
 
-- (NSUInteger) currentModifierFlags {
-    XkbStateRec r;
-    if (XkbGetState(_display, XkbUseCoreKbd, &r) != Success)
-        return 0;
-
-    return [self modifierFlagsForState: r.mods];
-}
-
-- (NSUInteger) pressedMouseButtons {
-    Window root, child;
-    int rootX, rootY, winX, winY;
-    unsigned int mask = 0;
-
-    if (!XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
-                       &rootX, &rootY, &winX, &winY, &mask))
-        return 0;
-
-    // X numbers the buttons by position (1 left, 2 middle, 3 right); Cocoa
-    // numbers them 0 left, 1 right, 2 middle. The core protocol only reports
-    // the state of buttons 1 to 5, and 4 and 5 are the wheel.
-    NSUInteger buttons = 0;
-    if (mask & Button1Mask)
-        buttons |= 1 << 0;
-    if (mask & Button3Mask)
-        buttons |= 1 << 1;
-    if (mask & Button2Mask)
-        buttons |= 1 << 2;
-    return buttons;
-}
-
 - (NSDraggingManager *) draggingManager {
     return [X11DraggingManager sharedManager];
 }
@@ -512,10 +481,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     return xwin ? (unsigned long) [xwin windowHandle] : 0;
 }
 
-// The grab was taken or released: what AppKit knew of the pointer is stale, a confinement grab was replaced, and
-// the window's cursor position is where the cursor froze (absolute motion after the release starts from there).
+// The grab was taken or released: a confinement grab was replaced, and the window's cursor position is where the
+// cursor froze (absolute motion after the release starts from there).
 - (void) nativeConnectionRelativeMouseGrabChanged: (BOOL) active window: (unsigned long) window rootX: (int) x rootY: (int) y {
-    _pointerKnown = NO;
     if (!active)
         return;
     _confinedWindow = None;
@@ -663,72 +631,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 }
 
 
-
-- (BOOL) queryPointerRootX: (int *) x y: (int *) y state: (unsigned int *) state {
-    if (_pointerKnown) {
-        *x = _pointerRootX;
-        *y = _pointerRootY;
-        *state = _pointerState;
-        return YES;
-    }
-    // Not known from the event stream: ask the server, and again next time.
-    Window root, child;
-    int winX, winY;
-    return XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
-                         x, y, &winX, &winY, state);
-}
-
-// Tracks the pointer from the event stream, so that asking for the mouse
-// location, as applications do every frame, costs no round trip while the
-// pointer moves over our windows. Motion over other clients' windows is not
-// reported, which is why every event that can precede such motion forgets it.
-- (void) trackPointerForEvent: (XEvent *) ev {
-    switch (ev->type) {
-    case MotionNotify:
-        _pointerKnown = ev->xmotion.same_screen &&
-                ev->xmotion.root == DefaultRootWindow(_display);
-        _pointerRootX = ev->xmotion.x_root;
-        _pointerRootY = ev->xmotion.y_root;
-        _pointerState = ev->xmotion.state;
-        break;
-    case ButtonPress:
-    case ButtonRelease:
-    case KeyPress:
-    case KeyRelease:
-    case EnterNotify:
-    case LeaveNotify:
-    case FocusIn:
-    case FocusOut:
-    case KeymapNotify:
-        _pointerKnown = NO;
-        break;
-    default:
-        break;
-    }
-}
-
-- (NSPoint) mouseLocation {
-    int root_x = 0, root_y = 0;
-    unsigned int mask;
-
-    CGPoint frozen;
-    if (_CGSNativeConnectionRelativeMouseState(NULL, &frozen)) {
-        // The cursor is disassociated: report the frozen (virtual) position, as macOS does.
-        root_x = (int) frozen.x;
-        root_y = (int) frozen.y;
-    } else {
-        [self queryPointerRootX: &root_x y: &root_y state: &mask];
-    }
-    // Cocoa's global space, as +[NSEvent mouseLocation] reports on macOS: points,
-    // origin at the main monitor's bottom-left corner, y up, so the result can be
-    // compared with window and screen frames. CGEventGetLocation() reports the same
-    // point in CoreGraphics' y-down space (see CGSConnectionX11).
-    // -[X11Window mouseLocationOutsideOfEventStream] is window-local.
-    CGFloat scale = [self backingScale];
-    X11Point point = X11PointFromRoot([self primaryFrameInPoints],
-                                      (X11Point){root_x / scale, root_y / scale});
-    return NSMakePoint(point.x, point.y);
-}
 
 - (void) setWindow: (id) window forID: (XID) i {
     if (window)
@@ -1206,8 +1108,6 @@ enum {
             [_overlayWindows containsObject: @((unsigned long) ev->xany.window)];
 
     id delegate = [window delegate];
-
-    [self trackPointerForEvent: ev];
 
     switch (ev->type) {
     case KeyPress:
@@ -1957,7 +1857,6 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     if ([_openMenuWindows indexOfObjectIdenticalTo: window] == NSNotFound)
         return;
     [_openMenuWindows removeObjectIdenticalTo: window];
-    _pointerKnown = NO;
     if ([_openMenuWindows count] > 0) {
         [self grabPointerForMenus];
         [self grabKeyboardForMenus];

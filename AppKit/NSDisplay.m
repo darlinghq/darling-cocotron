@@ -621,20 +621,6 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     return 0;
 }
 
-- (NSPoint) mouseLocation {
-    NSInvalidAbstractInvocation();
-    return NSMakePoint(0, 0);
-}
-
-- (NSUInteger) currentModifierFlags {
-    NSInvalidAbstractInvocation();
-    return 0;
-}
-
-- (NSUInteger) pressedMouseButtons {
-    return 0;
-}
-
 - (NSArray *) orderedWindowNumbers {
     NSInvalidAbstractInvocation();
     return nil;

@@ -977,8 +977,13 @@ static const CGEventFlags kHotKeyModifierMask =
 
 - (CGPoint) mouseLocation {
     // Wayland reports the pointer only through wl_pointer events over a client's
-    // own surfaces, which these are not. A made-up origin would be
-    // indistinguishable from a real one, so this is CGEventObjC.m's sentinel.
+    // own surfaces: where it was last over one is all there is to report (its
+    // position outside them is not known).
+    CGPoint last;
+    if ([(CGSWaylandPointer *) _pointerDecoder getLastGlobalLocation: &last])
+        return last;
+    // A made-up origin would be indistinguishable from a real one, so this is
+    // CGEventObjC.m's sentinel.
     static BOOL warned;
     if (!warned) {
         warned = YES;
@@ -987,6 +992,10 @@ static const CGEventFlags kHotKeyModifierMask =
               @"to report");
     }
     return CGPointMake(CGFLOAT_MAX, CGFLOAT_MAX);
+}
+
+- (BOOL) isMouseButtonDown: (CGMouseButton) button {
+    return [(CGSWaylandPointer *) _pointerDecoder isButtonDown: button];
 }
 
 #pragma mark - Hot keys

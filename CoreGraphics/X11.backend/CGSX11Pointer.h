@@ -73,6 +73,12 @@ typedef struct {
     int64_t _clickCount;
     // The click state of the press of each button that is down, which its release reports.
     int64_t _downClickState[32];
+    // The pointer as the last motion event reported it (root pixels, and the state mask of the server), for the
+    // location query; guarded by @synchronized(self). Valid until an event that may have moved the
+    // pointer without one (a crossing, button, key or focus event, a warp).
+    BOOL _stateKnown;
+    int _stateRootX, _stateRootY;
+    unsigned int _stateMask;
     // Where the pointer was at the previous event, in root pixels, and the part of the motion in points
     // that the whole-number deltas did not carry.
     BOOL _located;
@@ -142,6 +148,12 @@ typedef struct {
 - (void) displayLayoutChanged;
 // The windows the application could confine the pointer to changed (an overlay appeared): retakes a wanted grab.
 - (void) windowsChanged;
+
+// Where the pointer is in root pixels and the state mask of the server, from the event stream while it knows, else
+// asked of the server. NO when the server does not say. Any thread.
+- (BOOL) getRootX: (int *) x y: (int *) y state: (unsigned int *) state;
+- (void) trackStateOfEvent: (XEvent *) event;
+- (void) forgetState;
 // Relative mode: whether it is wanted, and the frozen cursor in root pixels when the grab is held.
 - (BOOL) relativeMouseRequested: (BOOL *) requested frozenRoot: (CGPoint *) root;
 

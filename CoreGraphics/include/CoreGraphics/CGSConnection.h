@@ -211,6 +211,10 @@
 // on a destroyed object and the keyboard layout group in effect. The defaults know nothing.
 -(void*) keyboardFocus;
 -(uint64_t) modifierFlags;
+// The modifier flags the window system says are held now: the state of the session's keyboard, which may differ
+// from what the decoder has seen of the process' own events (no window of the process had the focus). The
+// default is the decoder's.
+-(uint64_t) hardwareModifierFlags;
 -(void) nativeObjectDestroyed:(void*)object;
 -(void) flushPendingKeyboardEvents;
 // The pointer: the seat's wl_pointer (Wayland), and where the pointer is in its surface, set by the

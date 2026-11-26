@@ -326,7 +326,7 @@ static X11DraggingManager *X11SharedManager;
     NSPoint imageOrigin = originWindow != nil
                               ? [originWindow convertRectToScreen: NSMakeRect(location.x, location.y, 0, 0)].origin
                               : location;
-    NSPoint mouseStart = [[NSDisplay currentDisplay] mouseLocation];
+    NSPoint mouseStart = [NSEvent mouseLocation];
     NSPoint imageAt = imageOrigin;
     @try {
         int rootX = 0, rootY = 0;
@@ -360,7 +360,7 @@ static X11DraggingManager *X11SharedManager;
                 // pointer is inside it, unless it asked for them anyway.
                 if (![self pointerInsideSuppressionRectAtRootX: rootX rootY: rootY])
                     [self sendPositionAtRootX: rootX rootY: rootY];
-                NSPoint mouse = [[NSDisplay currentDisplay] mouseLocation];
+                NSPoint mouse = [NSEvent mouseLocation];
                 imageAt = NSMakePoint(imageOrigin.x + mouse.x - mouseStart.x, imageOrigin.y + mouse.y - mouseStart.y);
                 if ([heldSource respondsToSelector: @selector(draggedImage:movedTo:)])
                     [heldSource draggedImage: heldImage movedTo: imageAt];

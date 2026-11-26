@@ -65,12 +65,6 @@
     // cursor is hidden, so warps are not honoured with a visible cursor there.
     BOOL _isXwayland;
     BOOL _cursorHidden;
-    // The pointer as the last MotionNotify reported it, root coordinates.
-    // Valid until an event that may have moved the pointer without one
-    // (crossing, button, key or focus events, a warp, a screen change).
-    BOOL _pointerKnown;
-    int _pointerRootX, _pointerRootY;
-    unsigned int _pointerState;
     // See -primaryRootFrame. Device pixels, root coordinates.
     NSRect _primaryRootFrame;
     BOOL _primaryRootFrameValid;
@@ -148,11 +142,6 @@
 #ifdef DARLING
 - (void) processPendingEvents;
 #endif
-// The pointer's position on the default root window and the button and
-// modifier state, from the event stream when it is known, else from the
-// server. Returns NO when the pointer is on another screen (the position is
-// then on that screen's root window).
-- (BOOL) queryPointerRootX: (int *) x y: (int *) y state: (unsigned int *) state;
 
 - (CGFloat) doubleClickInterval;
 - (int) handleError: (XErrorEvent *) errorEvent;

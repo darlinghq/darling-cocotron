@@ -522,6 +522,11 @@ static void* g_nativeObserver;
 	return 0;
 }
 
+-(uint64_t) hardwareModifierFlags
+{
+	return [self modifierFlags];
+}
+
 -(void) nativeObjectDestroyed:(void*)object
 {
 }
