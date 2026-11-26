@@ -36,10 +36,10 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 		Atom aware, proxy, enter, position, status, leave, drop, finished;
 		Atom selection, typeList, actionCopy, actionMove, actionLink, actionList;
 	} _atom;
+	CGSX11DragSession* _drag; // The drag this process runs, nil when there is none. Not retained.
 @private
 	CGSX11DropSession* _session;
 	BOOL _inDrop;
-	CGSX11DragSession* _drag; // The drag this process runs, nil when there is none. Not retained.
 }
 
 -(instancetype) initWithConnection:(CGSConnectionX11*) connection;
