@@ -72,14 +72,14 @@ static void WriteSavedState(void) {
                               withIntermediateDirectories: YES
                                                attributes: nil
                                                     error: NULL];
-    NSData *application = ArchiveState:^(NSKeyedArchiver *archiver) {
+    NSData *application = ArchiveState(^(NSKeyedArchiver *archiver) {
         [archiver encodeObject: @"color-session-probe" forKey: @"Application"];
-    };
-    NSData *window = ArchiveState:^(NSKeyedArchiver *archiver) {
+    });
+    NSData *window = ArchiveState(^(NSKeyedArchiver *archiver) {
         [archiver encodeRect: NSMakeRect(100, 100, 240, 120) forKey: @"NSWindowRestorationFrame"];
         [archiver encodeObject: NSStringFromClass([ColorSessionRestorer class])
                         forKey: @"NSWindowRestorationClass"];
-    };
+    });
     NSDictionary *entry = [NSDictionary dictionaryWithObjectsAndKeys:
             TestWindowIdentifier, @"Identifier",
             window, @"State",
