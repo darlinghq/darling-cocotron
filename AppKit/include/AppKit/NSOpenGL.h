@@ -1,6 +1,9 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/Foundation.h>
-#import <OpenGL/gl.h>
+// As on macOS, the OpenGL types without the OpenGL API: code that calls
+// OpenGL includes <OpenGL/gl.h> or <OpenGL/gl3.h> itself.
+#import <OpenGL/CGLTypes.h>
+#import <OpenGL/gltypes.h>
 
 #import <AppKit/NSOpenGLContext.h>
 #import <AppKit/NSOpenGLPixelBuffer.h>
