@@ -103,6 +103,8 @@ extern const struct wl_interface xdg_toplevel_session_v1_interface;
 extern const struct wl_interface wp_pointer_warp_v1_interface;
 extern const struct wl_interface wp_cursor_shape_manager_v1_interface;
 extern const struct wl_interface wp_cursor_shape_device_v1_interface;
+extern const struct wl_interface xdg_wm_dialog_v1_interface;
+extern const struct wl_interface xdg_dialog_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -247,6 +249,12 @@ enum {
     WP_CURSOR_SHAPE_MANAGER_GET_TABLET_TOOL_V2 = 2,
     WP_CURSOR_SHAPE_DEVICE_DESTROY = 0,
     WP_CURSOR_SHAPE_DEVICE_SET_SHAPE = 1,
+
+    XDG_WM_DIALOG_DESTROY = 0,
+    XDG_WM_DIALOG_GET_XDG_DIALOG = 1,
+    XDG_DIALOG_DESTROY = 0,
+    XDG_DIALOG_SET_MODAL = 1,
+    XDG_DIALOG_UNSET_MODAL = 2,
 
     WP_TOUCH_RELEASE = 0,
     WP_TOUCH_EV_DOWN = 0,

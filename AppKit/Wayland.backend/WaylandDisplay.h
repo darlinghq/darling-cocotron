@@ -140,6 +140,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSString *_sessionIdentifier;
     NSUInteger _sessionReason;
     BOOL _sessionRequested;
+    // xdg-dialog-v1: tells the compositor which toplevels are sheets or modal panels.
+    struct wl_proxy *_dialogManager;
+    uint32_t _dialogManagerName;
 
 @protected
     struct wl_proxy *_seat;
@@ -223,6 +226,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) joinSessionForToplevel: (WaylandWindow *) window;
 // Gives every window the current application icon (see WaylandToplevelIcon.h).
 - (void) updateWindowIcons;
+// Tells a window that the dialog manager arrived after it was mapped.
+- (void) dialogManagerAvailable;
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;

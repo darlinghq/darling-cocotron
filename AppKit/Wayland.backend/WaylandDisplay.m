@@ -327,7 +327,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
             WaylandMarshal(_sessionManager, WP_SESSION_MANAGER_DESTROY,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
-                                      _cursorShapeDevice, _cursorShapeManager,
+                                      _cursorShapeDevice, _cursorShapeManager, _dialogManager,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
@@ -454,6 +454,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) updateWindowIcons {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateToplevelIcon];
+}
+
+- (void) dialogManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) dialogManagerAvailable];
 }
 
 - (void) applicationIconImageChanged {
@@ -596,6 +601,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                       kind: WaylandObjectSessionManager
                                     object: self];
         [self startSessionIfPossible];
+    } else if (strcmp(interface, "xdg_wm_dialog_v1") == 0 && _dialogManager == NULL) {
+        _dialogManagerName = name;
+        _dialogManager = [self bindGlobal: name
+                                interface: &xdg_wm_dialog_v1_interface
+                                  version: 1
+                                     kind: 0
+                                   object: nil];
+        [self dialogManagerAvailable];
     } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
         ((WaylandColorManager *) _color)->_colorManager == NULL) {
         uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
@@ -744,6 +757,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _sessionManager = NULL;
         _sessionManagerName = 0;
+        return;
+    }
+    if (_dialogManager != NULL && name == _dialogManagerName) {
+        // xdg_dialog_v1 objects created from this factory survive its removal.
+        WaylandMarshal(_dialogManager, XDG_WM_DIALOG_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _dialogManager = NULL;
+        _dialogManagerName = 0;
         return;
     }
     if (_cursorShapeManager != NULL && name == _cursorShapeManagerName) {
