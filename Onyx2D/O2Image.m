@@ -165,6 +165,7 @@ ONYX2D_STATIC BOOL initFunctionsForRGBColorSpace(O2Image *self,
                 }
                 break;
 
+            case kO2ImageAlphaFirst:
             case kO2ImageAlphaPremultipliedFirst:
                 switch (bitmapInfo & kO2BitmapByteOrderMask) {
                 case kO2BitmapByteOrder16Little:
@@ -178,9 +179,6 @@ ONYX2D_STATIC BOOL initFunctionsForRGBColorSpace(O2Image *self,
                     self->_read_argb8u = O2ImageRead_XRGB8888_to_argb8u;
                     return YES;
                 }
-                break;
-
-            case kO2ImageAlphaFirst:
                 break;
 
             case kO2ImageAlphaNoneSkipLast:
