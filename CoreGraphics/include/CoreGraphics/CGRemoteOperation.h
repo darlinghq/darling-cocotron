@@ -24,6 +24,7 @@
 #import <CoreGraphics/CoreGraphicsExport.h>
 
 #include <CoreGraphics/CGError.h>
+#include <CoreFoundation/CFDate.h>
 #include <mach/boolean.h>
 #include <stdint.h>
 
@@ -62,27 +63,29 @@ typedef void (*CGScreenRefreshCallback)(uint32_t count, const CGRect *rects, voi
 #define kCGEventFilterMaskPermitAllEvents (kCGEventFilterMaskPermitLocalMouseEvents | kCGEventFilterMaskPermitLocalKeyboardEvents | kCGEventFilterMaskPermitSystemDefinedEvents)
 
 // TODO: All those deprecated functions
-extern CGError CGScreenRegisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
-extern void CGScreenUnregisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
+COREGRAPHICS_EXPORT CGError CGScreenRegisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
+COREGRAPHICS_EXPORT void CGScreenUnregisterMoveCallback(CGScreenUpdateMoveCallback callback, void *userInfo);
 
 COREGRAPHICS_EXPORT CGError CGRegisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *userInfo);
 COREGRAPHICS_EXPORT void CGUnregisterScreenRefreshCallback(CGScreenRefreshCallback callback, void *userInfo);
-CGError CGWaitForScreenRefreshRects(CGRect * _Nullable *rects, uint32_t *count);
-void CGReleaseScreenRefreshRects(CGRect *rects);
-CGError CGWaitForScreenUpdateRects(CGScreenUpdateOperation requestedOperations, CGScreenUpdateOperation *currentOperation, CGRect * _Nullable *rects, size_t *rectCount, CGScreenUpdateMoveDelta *delta);
+COREGRAPHICS_EXPORT CGError CGWaitForScreenRefreshRects(CGRect * _Nullable *rects, uint32_t *count);
+COREGRAPHICS_EXPORT void CGReleaseScreenRefreshRects(CGRect *rects);
+COREGRAPHICS_EXPORT CGError CGWaitForScreenUpdateRects(CGScreenUpdateOperation requestedOperations, CGScreenUpdateOperation *currentOperation, CGRect * _Nullable *rects, size_t *rectCount, CGScreenUpdateMoveDelta *delta);
 
 COREGRAPHICS_EXPORT boolean_t CGCursorIsDrawnInFramebuffer(void);
 
 // Obsolete event posting functions, which CGEventPost() replaces. They post to the combined
 // session state. Each CGButtonCount button value is the state the button is to have (the first
 // is the left button, then right, then the others).
-CGError CGPostMouseEvent(CGPoint mouseCursorPosition, boolean_t updateMouseCursorPosition, CGButtonCount buttonCount, boolean_t mouseButtonDown, ...);
-CGError CGPostScrollWheelEvent(CGWheelCount wheelCount, int32_t wheel1, ...);
-CGError CGPostKeyboardEvent(CGCharCode keyChar, CGKeyCode virtualKey, boolean_t keyDown);
+COREGRAPHICS_EXPORT CGError CGPostMouseEvent(CGPoint mouseCursorPosition, boolean_t updateMouseCursorPosition, CGButtonCount buttonCount, boolean_t mouseButtonDown, ...);
+COREGRAPHICS_EXPORT CGError CGPostScrollWheelEvent(CGWheelCount wheelCount, int32_t wheel1, ...);
+COREGRAPHICS_EXPORT CGError CGPostKeyboardEvent(CGCharCode keyChar, CGKeyCode virtualKey, boolean_t keyDown);
 
-CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
-CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
+COREGRAPHICS_EXPORT CGError CGWarpMouseCursorPosition(CGPoint newCursorPosition);
+COREGRAPHICS_EXPORT CGError CGAssociateMouseAndMouseCursorPosition(boolean_t connected);
+// The time local mouse events stay suppressed after CGWarpMouseCursorPosition() (0.25 seconds by default).
+COREGRAPHICS_EXPORT CGError CGSetLocalEventsSuppressionInterval(CFTimeInterval seconds);
 // The mouse motion since the last call, in the global display space's units (pixels, y down).
-void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY);
+COREGRAPHICS_EXPORT void CGGetLastMouseDelta(int32_t *deltaX, int32_t *deltaY);
 
 #endif

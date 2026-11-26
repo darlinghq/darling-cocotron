@@ -190,6 +190,10 @@ static NSArray *NSApplicationDocumentsInArguments(NSArray *arguments) {
 - (void) applicationIconImageChanged;
 @end
 
+@interface NSRunningApplication (NSApplicationBundleless)
+- (BOOL) _isOutsideApplicationBundle;
+@end
+
 @implementation NSApplication
 
 NS_EXTRA_DEALLOC(NSApplication)
@@ -244,6 +248,21 @@ static NSInteger cachedLayoutDirection = -1;
         cachedLayoutDirection = computeLayoutDirection();
     }
     return (NSUserInterfaceLayoutDirection) cachedLayoutDirection;
+}
+
+// SPI. Asks AppKit not to connect the process to the Dock; WebKit's web content process calls it,
+// before or after NSApp exists. On macOS 26.7.3 the process sees no difference (its activation
+// policy and setActivationPolicy: are unchanged). Darling's AppKit never connects to a Dock, so
+// there is nothing to prevent.
++ (void) _preventDockConnections {
+}
+
+// SPI. Prepares the process for accessibility; WebKit's web content process calls it when it
+// is asked to initialize accessibility. On macOS 26.7.3 the observable effect is that NSApp
+// exists afterwards, an instance of the receiving class, as +sharedApplication makes it, and a
+// second call is harmless. Test: tests/appkit-accessibility-initialize.m.
++ (void) _accessibilityInitialize {
+    [self sharedApplication];
 }
 
 + (NSApplication *) sharedApplication {
@@ -323,6 +342,77 @@ static void observeProcessCommands(NSApplication *application) {
     }
 }
 
+// An application that owns the menu bar while an application that is not regular (see
+// -_publishActivation) has the focus is made active again when that application ends with the focus
+// still on it, as macOS gives the activation back to the previous application when the front one quits.
+// Without it the focus would stay on no application of ours, and the menu bar would be gone.
+static pid_t yieldedTo;
+static BOOL yieldedHasFocus;
+static dispatch_source_t yieldedSource;
+
+static void stopWatchingYielded(void) {
+    if (yieldedSource != NULL) {
+        dispatch_source_cancel(yieldedSource);
+        dispatch_release(yieldedSource);
+        yieldedSource = NULL;
+    }
+    yieldedTo = 0;
+    yieldedHasFocus = NO;
+}
+
+static void yieldedProcessExited(void) {
+    BOOL give = yieldedHasFocus && ![NSApp isActive];
+
+    stopWatchingYielded();
+    if (give)
+        [NSApp activateIgnoringOtherApps: YES];
+}
+
+// The front process or the menu bar owner changed.
+static void followMenuBarOwnership(void) {
+    pid_t owner = 0, front = 0;
+    BOOL ownsBar = _CGSGetMenuBarOwnerProcess(&owner) == kCGErrorSuccess && owner == getpid();
+    BOOL frontKnown = _CGSGetFrontProcess(&front) == kCGErrorSuccess;
+
+    if (frontKnown && front == getpid()) {
+        stopWatchingYielded();
+        return;
+    }
+    if (ownsBar && frontKnown) {
+        if (yieldedTo != front) {
+            stopWatchingYielded();
+            yieldedTo = front;
+            yieldedSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_PROC, (uintptr_t) front,
+                                                   DISPATCH_PROC_EXIT, dispatch_get_main_queue());
+            if (yieldedSource == NULL) {
+                yieldedTo = 0;
+                return;
+            }
+            dispatch_source_set_event_handler(yieldedSource, ^{
+                yieldedProcessExited();
+            });
+            dispatch_resume(yieldedSource);
+        }
+        yieldedHasFocus = YES;
+    } else if (frontKnown) {
+        // Another application has the focus and owns the menu bar.
+        stopWatchingYielded();
+    } else {
+        // Nobody known has the focus: it may have gone to another client of the display server.
+        yieldedHasFocus = NO;
+    }
+}
+
+static void observeMenuBarOwnership(void) {
+    int token;
+
+    // The token stays registered for the life of the process.
+    notify_register_dispatch(kCGSFrontProcessNotificationName, &token, dispatch_get_main_queue(),
+                             ^(int ignored) {
+                                 followMenuBarOwnership();
+                             });
+}
+
 - (instancetype) init {
     if (NSApp)
         NSAssert(!NSApp, @"NSApplication is a singleton");
@@ -331,7 +421,9 @@ static void observeProcessCommands(NSApplication *application) {
     // An application connects to the window system as it starts, which is also what makes it
     // known as an application to other processes.
     (void) CGSMainConnectionID();
+    _CGSSetProcessActivationPolicy((int) [self activationPolicy]);
     observeProcessCommands(self);
+    observeMenuBarOwnership();
 
     _windows = [NSMutableArray new];
     _mainMenu = nil;
@@ -783,11 +875,35 @@ static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
     return NS_EXTRA(NSApplication, self)->_isActive || [self isActiveExcludingWindow: nil];
 }
 
+// Tells the other processes that this application owns the menu bar from now on, if it is a
+// regular application.
+// QUIRK: an application that is not regular (LSUIElement, LSBackgroundOnly or set to the accessory
+// or prohibited policy) that becomes active does not take the menu bar over: the application that
+// had it keeps it, and its menu stays in the menu bar, although it is no longer the active one.
+// Evidence: black-box observation on macOS 10.14.4 and 26.7.3 (tier 2): after such a helper's
+// window became key and main (frontmostApplication was the helper, the regular application had
+// resigned), NSWorkspace.menuBarOwningApplication stayed the regular application until the helper
+// quit.
+// Test: tests/appkit-global-menu/run-*-menu-style.py ("owner" cases).
+- (void) _publishActivation {
+    if ([self activationPolicy] == NSApplicationActivationPolicyRegular)
+        _CGSSetMenuBarOwnerProcess(getpid());
+}
+
 // Becomes the active application, posting the notifications, unless it is
 // already active.
 - (void) _becomeActive {
     if ([self isActive])
         return;
+
+    // An application that activates is the front application, even if none of its windows can have
+    // the focus, and a regular one owns the menu bar then. A prohibited one (see -[NSRunningApplication
+    // activationPolicy]) is neither: its windows have the focus, but it is not what the system calls
+    // the front application.
+    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited) {
+        _CGSSetFrontProcess(getpid());
+        [self _publishActivation];
+    }
 
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationWillBecomeActiveNotification
@@ -835,9 +951,29 @@ static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
     return _running;
 }
 
-// There is no system setting for full keyboard access to read.
+// Full keyboard access is on when the user lets the keyboard move the focus between all controls.
+// QUIRK: the AppleKeyboardUIMode global default holds it: 0 moves the focus between text boxes and
+// lists only, 2 and 3 between all controls (the Keyboard pane of System Preferences writes 3).
+// Evidence: independent public sources give `defaults write -g AppleKeyboardUIMode -int 3` as "full
+// keyboard access for all controls" (tier 4): https://eclecticlight.co/2019/08/15/global-defaults-in-macos-mojave
+// (lists it with 2 as the normal value), https://community.jamf.com/t5/jamf-pro/script-to-enable-keyboard-gt-shortcuts-gt-full-keyboard-access/td-p/165672
+// (reported working on Mojave). Apple's own page only describes the setting in the Keyboard pane
+// (https://support.apple.com/guide/mac-help/mchlc06d1059); the documented property only says whether
+// full keyboard access is on. Test: tests/appkit-full-keyboard-access.m (test_quirk_keyboard_ui_mode)
 - (BOOL) isFullKeyboardAccessEnabled {
-    return NO;
+    CFPreferencesAppSynchronize(kCFPreferencesAnyApplication);
+    CFPropertyListRef value = CFPreferencesCopyAppValue(CFSTR("AppleKeyboardUIMode"), kCFPreferencesCurrentApplication);
+    BOOL enabled = NO;
+    int mode;
+
+    if (value != NULL) {
+        if (CFGetTypeID(value) == CFNumberGetTypeID() && CFNumberGetValue(value, kCFNumberIntType, &mode))
+            enabled = (mode & 2) != 0;
+        else if (CFGetTypeID(value) == CFStringGetTypeID())
+            enabled = (CFStringGetIntValue(value) & 2) != 0;
+        CFRelease(value);
+    }
+    return enabled;
 }
 
 - (NSAppearance *) appearance {
@@ -1176,6 +1312,13 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
         return NO;
     NS_EXTRA(NSApplication, self)->_activationPolicy = activationPolicy;
     NS_EXTRA(NSApplication, self)->_activationPolicySet = YES;
+    _CGSSetProcessActivationPolicy((int) activationPolicy);
+    // A program that was prohibited and is active takes up the part of the front application now.
+    if (activationPolicy != NSApplicationActivationPolicyProhibited &&
+        NS_EXTRA(NSApplication, self)->_isActive) {
+        _CGSSetFrontProcess(getpid());
+        [self _publishActivation];
+    }
     return YES;
 }
 
@@ -1363,6 +1506,10 @@ static void applicationDelegateNotifications(NSDelegateNotification notes[16]) {
         }
     }
     return opened;
+}
+
+- (BOOL) _isFinishedLaunching {
+    return NS_EXTRA(NSApplication, self)->_finishedLaunching;
 }
 
 - (void) finishLaunching {
@@ -1665,8 +1812,12 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
         return;
     }
 
+    // (A program outside an application bundle is prohibited until it sets a policy, but has always
+    // ended with its last window.)
     if (closedByUser && terminateAfterLastWindowClosedSetting() &&
-        [self activationPolicy] == NSApplicationActivationPolicyRegular &&
+        ([self activationPolicy] == NSApplicationActivationPolicyRegular ||
+         (!NS_EXTRA(NSApplication, self)->_activationPolicySet &&
+          [[NSRunningApplication currentApplication] _isOutsideApplicationBundle])) &&
         ![NSStatusBar _hasStatusItems])
         [self terminate: self];
 }
@@ -1804,6 +1955,7 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
                 makeObjectsPerformSelector: @selector(_makeSureIsOnAScreen)];
 
         [self _checkForAppActivation];
+        [self _updateWindowsIfNeededInMode: mode];
         [self _displayAllWindowsIfNeeded];
 
         // One wait in HIToolbox's event queue, which holds AppKit's events
@@ -1972,9 +2124,31 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     return NO;
 }
 
+// The next -nextEventMatchingMask:... in the default or modal panel run loop
+// mode updates the windows.
 - (void) setWindowsNeedUpdate: (BOOL) value {
     NS_EXTRA(NSApplication, self)->_windowsNeedUpdate = value;
-    NSUnimplementedMethod();
+}
+
+// SPI. An accent color the application chose for itself, nil unless set; it
+// doesn't change +[NSColor controlAccentColor]. The application object lives
+// for the whole process, so the color is never released.
+- (NSColor *) _accentColor {
+    return NS_EXTRA(NSApplication, self)->_accentColor;
+}
+
+- (void) _setAccentColor: (NSColor *) color {
+    color = [color copy];
+    [NS_EXTRA(NSApplication, self)->_accentColor release];
+    NS_EXTRA(NSApplication, self)->_accentColor = color;
+}
+
+// SPI. The accent color the application's interface uses when it has its own:
+// the one set with -_setAccentColor:. (Darling doesn't read the color that
+// NSAccentColorName names in the Info.plist, as it would come from an asset
+// catalog.)
+- (NSColor *) _effectiveAccentColor {
+    return [[NS_EXTRA(NSApplication, self)->_accentColor retain] autorelease];
 }
 
 // The windows are updated between the two notifications; only the windows on screen are updated (and their
@@ -1985,6 +2159,15 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
         if ([window isVisible])
             [window update];
     [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationDidUpdateNotification object: self];
+}
+
+- (void) _updateWindowsIfNeededInMode: (NSRunLoopMode) mode {
+    if (!NS_EXTRA(NSApplication, self)->_windowsNeedUpdate)
+        return;
+    if (![mode isEqualToString: NSDefaultRunLoopMode] && ![mode isEqualToString: NSModalPanelRunLoopMode])
+        return;
+    NS_EXTRA(NSApplication, self)->_windowsNeedUpdate = NO;
+    [self updateWindows];
 }
 
 // Whether a window of this application may ask the window system for the input focus now. Ordering a
@@ -2681,7 +2864,10 @@ static BOOL resignForced;
     // A window of this process has the input focus, which is what makes it the front process.
     // CoreGraphics keeps it for the display servers that cannot be asked who has the focus and
     // tells the other processes (NSWorkspace's frontmostApplication follows it).
-    _CGSSetFrontProcess(getpid());
+    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited) {
+        _CGSSetFrontProcess(getpid());
+        [self _publishActivation];
+    }
     if (!NS_EXTRA(NSApplication, self)->_isActive) {
         NS_EXTRA(NSApplication, self)->_isActive = YES;
         [[NSNotificationCenter defaultCenter]
@@ -2745,11 +2931,13 @@ static BOOL resignForced;
     if (!forced && ![self _hasOnScreenWindow])
         return;
 
+    // The system's front process is no longer this application when the notifications go out, as on
+    // macOS: the front process observers (HIToolbox's application events) run before them.
+    _CGSResignFrontProcess(getpid());
     [[NSNotificationCenter defaultCenter]
             postNotificationName: NSApplicationWillResignActiveNotification
                           object: self];
     NS_EXTRA(NSApplication, self)->_isActive = NO;
-    _CGSResignFrontProcess(getpid());
 
     // Exposed menus are running tight event tracking loops and would remain
     // visible when the app deactivates (making the UI less than community

@@ -160,6 +160,8 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
 }
 
 - (void) dealloc {
+    if (exclusiveColorPanelOwner == self)
+        exclusiveColorPanelOwner = nil;
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     [_color release];
     [super dealloc];
@@ -245,6 +247,31 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
     _isBordered = flag;
 }
 
+- (BOOL) supportsAlpha {
+    return !_doesNotSupportAlpha;
+}
+
+- (void) setSupportsAlpha: (BOOL) supportsAlpha {
+    _doesNotSupportAlpha = !supportsAlpha;
+    if (_isActive)
+        [[NSColorPanel sharedColorPanel] setShowsAlpha: supportsAlpha];
+}
+
+static NSColorWell *exclusiveColorPanelOwner;
+
+// The active popover-style well that has the color panel to itself, or nil. Wells that show the
+// color panel directly are not recorded (observed on macOS 26.7.3).
+// Test: tests/appkit-popover-color-well.m.
++ (NSColorWell *) _exclusiveColorPanelOwner {
+    return exclusiveColorPanelOwner;
+}
+
+// Whether activating the well orders the color panel front; a popover-style well shows its
+// popover instead.
+- (BOOL) _activationShowsColorPanel {
+    return YES;
+}
+
 - (void) activate: (BOOL) exclusive {
     if (_isActive == YES) {
         return;
@@ -268,9 +295,13 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
                  object: [NSColorPanel sharedColorPanel]];
 
     // Update the color panel with our color.
+    [[NSColorPanel sharedColorPanel] setShowsAlpha: [self supportsAlpha]];
     [[NSColorPanel sharedColorPanel] setColor: [self color]];
 
-    [NSApp orderFrontColorPanel: self];
+    if ([self _activationShowsColorPanel])
+        [NSApp orderFrontColorPanel: self];
+    else if (exclusive)
+        exclusiveColorPanelOwner = self;
     _isActive = YES;
     [self setNeedsDisplay: YES];
 }
@@ -280,6 +311,8 @@ NSNotificationName _NSColorWellDidBecomeExclusiveNotification =
         return;
 
     _isActive = NO;
+    if (exclusiveColorPanelOwner == self)
+        exclusiveColorPanelOwner = nil;
     [[NSNotificationCenter defaultCenter]
             removeObserver: self
                       name: NSColorPanelColorDidChangeNotification

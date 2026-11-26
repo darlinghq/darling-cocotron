@@ -21,7 +21,11 @@ typedef CF_OPTIONS(uint32_t, CGDisplayChangeSummaryFlags) {
 
 typedef void (*CGDisplayReconfigurationCallBack)(CGDirectDisplayID display, CGDisplayChangeSummaryFlags flags, void *userInfo);
 
+CF_EXTERN_C_BEGIN
+
 extern CGError CGDisplayRegisterReconfigurationCallback(CGDisplayReconfigurationCallBack callback, void *userInfo);
 extern CGError CGDisplayRemoveReconfigurationCallback(CGDisplayReconfigurationCallBack callback, void *userInfo);
+
+CF_EXTERN_C_END
 
 #endif /* CGDISPLAYCONFIGURATION_H */

@@ -26,5 +26,9 @@ CORETEXT_EXPORT CFArrayRef CTFontManagerCreateFontDescriptorsFromURL(CFURLRef fi
 CORETEXT_EXPORT bool CTFontManagerIsSupportedFont(CFURLRef fontURL);
 
 CORETEXT_EXPORT bool CTFontManagerRegisterFontsForURL(CFURLRef fontURL, CTFontManagerScope scope, CFErrorRef * error);
+// Registers the fonts of the files, then calls the handler with the errors of
+// the files that failed. It returns whether to go on; done is true on the last call.
+CORETEXT_EXPORT void CTFontManagerRegisterFontURLs(CFArrayRef fontURLs, CTFontManagerScope scope, bool enabled,
+                                                   bool (^registrationHandler)(CFArrayRef errors, bool done));
 
 CF_IMPLICIT_BRIDGING_DISABLED

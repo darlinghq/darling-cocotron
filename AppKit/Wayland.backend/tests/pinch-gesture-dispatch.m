@@ -9,8 +9,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-// Private-compositor regression fixture. It drives the real WaylandDisplay
-// pinch-gesture entry point, records the AppKit events it posts, and checks
+// Private-compositor regression fixture. It drives the pinch-gesture entry point of CoreGraphics' pointer
+// decoder (the process' wl_pointer), takes the AppKit events made from the CGEvents it posts, and checks
 // that NSWindow delivers them to the view under the pointer.
 union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; };
 @interface NSObject (PinchFixture)
@@ -20,16 +20,28 @@ union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; 
 - (void) pointerEvent: (uint32_t) opcode arguments: (union Argument *) args;
 - (void) pinchEvent: (uint32_t) opcode arguments: (union Argument *) args;
 - (void) windowUnmapped: (id) window;
-- (void) seatCapabilities: (uint32_t) capabilities;
+- (void) seatCapabilities: (uint32_t) capabilities seat: (void *) seat;
 @end
 
+
 static NSMutableArray *events;
-static id display;
+static id display, decoder, connection;
 static NSWindow *window;
 static int failures, checks;
 
-static void capture(id self, SEL command, NSEvent *event, BOOL atStart) {
-    [events addObject: event];
+// The decoder is CoreGraphics': what it posts becomes NSEvents in AppKit's queue
+static void drain(void) {
+    NSEvent *event;
+    while ((event = [NSApp nextEventMatchingMask: NSEventMaskAny
+                                       untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.05]
+                                          inMode: NSDefaultRunLoopMode
+                                         dequeue: YES]) != nil)
+        [events addObject: event];
+}
+
+static id ivarOf(id object, const char *name) {
+    Ivar ivar = class_getInstanceVariable(object_getClass(object), name);
+    return ivar ? object_getIvar(object, ivar) : nil;
 }
 
 static void pinchCheck(BOOL passed, const char *description) {
@@ -40,6 +52,7 @@ static void pinchCheck(BOOL passed, const char *description) {
 }
 
 static BOOL isGesture(NSUInteger index, NSEventType type, NSEventPhase phase) {
+    drain();
     if (index >= [events count])
         return NO;
     NSEvent *event = [events objectAtIndex: index];
@@ -47,24 +60,27 @@ static BOOL isGesture(NSUInteger index, NSEventType type, NSEventPhase phase) {
 }
 
 static void *pinchProxy(void) {
-    Ivar ivar = class_getInstanceVariable(object_getClass(display), "_pinchGesture");
-    return *(void **) ((char *) display + ivar_getOffset(ivar));
+    Ivar ivar = class_getInstanceVariable(object_getClass(decoder), "_pinch");
+    return *(void **) ((char *) decoder + ivar_getOffset(ivar));
 }
 
 static void begin(void) {
     union Argument args[4] = {{.u = 7}, {.u = 100}, {.o = [[window platformWindow] surface]}, {.u = 2}};
-    [display pinchEvent: 0 arguments: args];
+    [decoder pinchEvent: 0 arguments: args];
+    drain();
 }
 
 static void update(double scale, double clockwiseDegrees) {
     union Argument args[5] = {{.u = 101}, {.i = 0}, {.i = 0},
                               {.i = (int32_t) (scale * 256.0)}, {.i = (int32_t) (clockwiseDegrees * 256.0)}};
-    [display pinchEvent: 1 arguments: args];
+    [decoder pinchEvent: 1 arguments: args];
+    drain();
 }
 
 static void end(int cancelled) {
     union Argument args[3] = {{.u = 8}, {.u = 102}, {.i = cancelled}};
-    [display pinchEvent: 2 arguments: args];
+    [decoder pinchEvent: 2 arguments: args];
+    drain();
 }
 
 @interface GestureView : NSView
@@ -90,23 +106,24 @@ static void end(int cancelled) {
 @implementation PinchApplication
 - (void) test: (id) sender {
     display = [NSClassFromString(@"NSDisplay") currentDisplay];
-    Class original = object_getClass(display);
-    Class recorder = objc_allocateClassPair(original, "PinchRecordingDisplay", 0);
-    Method method = class_getInstanceMethod(original, @selector(postEvent:atStart:));
-    class_addMethod(recorder, @selector(postEvent:atStart:), (IMP) capture,
-                    method_getTypeEncoding(method));
-    objc_registerClassPair(recorder);
+    if (![NSStringFromClass(object_getClass(display)) hasPrefix: @"Wayland"]) {
+        printf("SKIP the display is %s, not the Wayland backend\n", [NSStringFromClass(object_getClass(display)) UTF8String]);
+        exit(77);
+    }
+    connection = _CGSConnectionForID(CGSMainConnectionID());
+    decoder = ivarOf(connection, "_pointerDecoder");
     events = [NSMutableArray new];
-    object_setClass(display, recorder);
+    drain();
+    [events removeAllObjects];
 
-    // A headless compositor has no pointer device; take the capability so the
-    // backend requests its pinch object for real.
-    [display seatCapabilities: 1];
+    // A headless compositor has no pointer device; take the capability so the decoder requests its pinch
+    // object for real.
+    [decoder seatCapabilities: 1 seat: (void *) ivarOf(connection, "_seat")];
     pinchCheck(pinchProxy() != NULL, "a pointer gets a pinch gesture object");
 
     union Argument enter[4] = {{.u = 1},
         {.o = [[window platformWindow] surface]}, {.i = 40 * 256}, {.i = 30 * 256}};
-    [display pointerEvent: 0 arguments: enter];
+    [decoder pointerEvent: 0 arguments: enter];
 
     begin();
     pinchCheck([events count] == 2 && isGesture(0, NSEventTypeMagnify, NSEventPhaseBegan) &&
@@ -119,6 +136,7 @@ static void end(int cancelled) {
               fabs([magnify magnification] - 0.5) < 0.01 &&
               isGesture(3, NSEventTypeRotate, NSEventPhaseChanged) && fabs([rotate rotation] + 10) < 0.01,
           "update posts the scale change and counterclockwise rotation");
+    drain();
     pinchCheck(NSEqualPoints([magnify locationInWindow], [window mouseLocationOutsideOfEventStream]),
           "gesture events carry the pointer location");
     update(1.25, 0);
@@ -140,21 +158,23 @@ static void end(int cancelled) {
 
     begin();
     [display windowUnmapped: [window platformWindow]];
+    drain();
     update(2, 5);
     end(0);
     pinchCheck([events count] == 15 && isGesture(13, NSEventTypeMagnify, NSEventPhaseCancelled) &&
                    isGesture(14, NSEventTypeRotate, NSEventPhaseCancelled),
                "window unmap cancels an active pinch and drops the rest of it");
 
-    [display pointerEvent: 0 arguments: enter];
+    [decoder pointerEvent: 0 arguments: enter];
     begin();
-    [display seatCapabilities: 0];
+    [decoder seatCapabilities: 0 seat: NULL];
+    drain();
     pinchCheck(pinchProxy() == NULL && [events count] == 19 &&
                    isGesture(17, NSEventTypeMagnify, NSEventPhaseCancelled) &&
                    isGesture(18, NSEventTypeRotate, NSEventPhaseCancelled),
                "losing the pointer cancels an active pinch and destroys its object");
 
-    object_setClass(display, original);
+    drain();
 
     GestureView *view = [[GestureView alloc] initWithFrame: [[window contentView] bounds]];
     [window setContentView: view];

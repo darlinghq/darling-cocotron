@@ -180,6 +180,8 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
         NSInteger _activationPolicy;
         BOOL _isHidden;
         BOOL _windowsNeedUpdate;
+        // Set by -_setAccentColor:.
+        NSColor *_accentColor;
         NSDockTile *_dockTile;
 
         NSMutableArray *_modalStack;
@@ -235,7 +237,7 @@ typedef NSString *NSAboutPanelOptionKey NS_TYPED_ENUM;
 @property(nullable, nonatomic, readonly) NSWindow *keyWindow;
 @property(null_resettable, nonatomic, retain) NSImage *applicationIconImage;
 @property(nonatomic, getter=isActive, readonly) BOOL active;
-@property (readonly) BOOL isHidden;
+@property (getter=isHidden, readonly) BOOL hidden;
 @property (readonly) NSApplicationOcclusionState occlusionState;
 @property(nonatomic, getter=isRunning, readonly) BOOL running;
 @property(nonatomic, getter=isFullKeyboardAccessEnabled, readonly) BOOL fullKeyboardAccessEnabled;

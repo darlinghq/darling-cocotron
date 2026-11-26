@@ -50,10 +50,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // -screens reads them again. CoreGraphics reports a change to its reconfiguration callbacks, which
 // call this.
 - (void) _invalidateScreens;
-// A backend that learns of a change of the displays from its own connection calls this: it has
-// CoreGraphics read what its connection to the window system has been sent about the displays (which
-// reports the change to the reconfiguration callbacks), then drops the screens.
-- (void) _refreshDisplays;
 // Queues NSApplicationDidChangeScreenParametersNotification (merged per run loop pass).
 - (void) _postScreenParametersChanged;
 
@@ -92,6 +88,27 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // nextEventMatchingMask:...]: a backend handles here what its connection has already read, and
 // sends what it has buffered. Does nothing by default.
 - (void) willWaitForEvents;
+
+// The NSEvent of a key event the window system's keyboard posted as a CGEvent (see
+// -[NSApplication nextEventMatchingMask:...]): which window it is for and where the pointer is in
+// that window. NO drops the event (no window of the application can take it). The default is the key
+// window.
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          forKeyEvent: (struct __CGEvent *) event;
+// The NSEvent made for such a CGEvent, before it is handed to the application: the event to hand over,
+// which a display may replace. The default is the event.
+- (NSEvent *) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent;
+// The window and the pointer location of a mouse event CGEvent that names a window system window
+// (kCGSEventNativeWindow): YES when the display knows the window, which is then the window number; the
+// location (in the window, in points) only when it also knows it more exactly than the event's global
+// location says (*hasLocation).
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          hasLocation: (BOOL *) hasLocation
+      forPointerEvent: (struct __CGEvent *) event;
+// The NSEvent made for a mouse event CGEvent (not scroll wheel), before it is handed to the application.
+- (void) pointerEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent;
 
 // The events are those of HIToolbox's main event queue (NSEventQueue.m). These wait for the next one,
 // as -[NSApplication nextEventMatchingMask:...] does but with an NSAppKitSystem event when there is
@@ -191,6 +208,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // position is in CoreGraphics' global space (origin at the main screen's top-left
 // corner, y down), as CGWarpMouseCursorPosition() takes it.
 - (void) warpMouse: (NSPoint) position;
+// NO for a backend whose window system connection in CoreGraphics keeps the pointer's state itself (the cursor
+// hide count, warping, the disassociated mouse, the deltas): CoreGraphics' pointer functions do not reach the display.
+- (BOOL) usesPointerController;
+- (BOOL) cursorIsVisible;
 // YES disassociates the mouse from the cursor, as
 // CGAssociateMouseAndMouseCursorPosition(false) does: the cursor stays where it
 // is and mouse motion only produces event deltas. NO restores normal operation.

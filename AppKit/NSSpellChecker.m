@@ -35,9 +35,19 @@ NSString *const NSSpellCheckerDidChangeAutomaticTextReplacementNotification =
         @"NSSpellCheckerDidChangeAutomaticTextReplacementNotification";
 NSString *const NSSpellCheckerDidChangeAutomaticSpellingCorrectionNotification =
         @"NSSpellCheckerDidChangeAutomaticSpellingCorrectionNotification";
+NSString *const NSSpellCheckerDidChangeAutomaticQuoteSubstitutionNotification =
+        @"NSSpellCheckerDidChangeAutomaticQuoteSubstitutionNotification";
+NSString *const NSSpellCheckerDidChangeAutomaticDashSubstitutionNotification =
+        @"NSSpellCheckerDidChangeAutomaticDashSubstitutionNotification";
 
 NSString *const NSTextCheckingOrthographyKey = @"NSTextCheckingOrthographyKey";
 NSString *const NSTextCheckingQuotesKey = @"NSTextCheckingQuotesKey";
+// Not in the macOS SDK; the name is the one macOS 26.7.3 and Mac OS X 10.14.4 give it.
+NSString *const NSTextCheckingInsertionPointKey = @"InsertionPoint";
+// Not in the macOS SDK either: an option asking not to capitalize the first
+// word. The checker here never capitalizes it, so it has nothing to do. The
+// name is the one macOS 26.7.3 gives it.
+NSString *const NSTextCheckingSuppressInitialCapitalizationKey = @"SuppressInitialCapitalization";
 NSString *const NSTextCheckingReplacementsKey =
         @"NSTextCheckingReplacementsKey";
 NSString *const NSTextCheckingReferenceDateKey =
@@ -49,6 +59,12 @@ NSString *const NSTextCheckingDocumentTitleKey =
         @"NSTextCheckingDocumentTitleKey";
 NSString *const NSTextCheckingDocumentAuthorKey =
         @"NSTextCheckingDocumentAuthorKey";
+
+// Private: marks text in an attributed string as a completion that is
+// suggested inline and not yet accepted. The string was read from the
+// exported constant on macOS 26.7.3 (black-box observation; 10.14.4 does not
+// export it).
+NSString *const NSTextCompletionAttributeName = @"NSTextCompletion";
 
 #define SPELLCHECK_DEBUG 0
 
@@ -393,6 +409,85 @@ static NSSpellChecker *shared = nil;
 
     return sequenceNumber;
 }
+
+// The word the candidates replace: the one the selection is in or touches,
+// as macOS chooses it (observed on macOS 26.7.3: in "Hello wor" with the
+// insertion point at the end, the candidates replace "wor"). It is empty, at
+// the selection, when there is no word there.
+static NSRange candidateWordRange(NSString *string, NSRange selectedRange) {
+    NSMutableCharacterSet *wordCharacters =
+            [[[NSCharacterSet alphanumericCharacterSet] mutableCopy] autorelease];
+    [wordCharacters addCharactersInString: @"'\u2019"];
+
+    NSUInteger length = [string length];
+    NSUInteger start = MIN(selectedRange.location, length);
+    NSUInteger end = MIN(MAX(start, NSMaxRange(selectedRange)), length);
+    while (start > 0 &&
+           [wordCharacters characterIsMember: [string characterAtIndex: start - 1]])
+        start--;
+    while (end < length &&
+           [wordCharacters characterIsMember: [string characterAtIndex: end]])
+        end++;
+    return NSMakeRange(start, end - start);
+}
+
+// QUIRK: a candidate's replacement string is the word followed by a space,
+// so that accepting it also ends the word. Not documented. Evidence:
+// black-box observation on macOS 26.7.3 (tier 2): every candidate of
+// "I like teh", "Hello wor" and "" ends with one space ("teh ", "the ", ...).
+// Test: appkit-spell-checker-candidates.m, "quirk: a candidate ends with a space".
+static NSString *candidateReplacement(NSString *word) {
+    return [word stringByAppendingString: @" "];
+}
+
+- (NSInteger) requestCandidatesForSelectedRange: (NSRange) selectedRange
+                                       inString: (NSString *) stringToCheck
+                                          types: (NSTextCheckingTypes) checkingTypes
+                                        options: (NSDictionary *) options
+                         inSpellDocumentWithTag: (NSInteger) tag
+                              completionHandler:
+                                      (void (^)(NSInteger sequenceNumber,
+                                                NSArray<NSTextCheckingResult *> *candidates))
+                                              completionHandler
+{
+    static NSInteger lastSequenceNumber = 0;
+    NSInteger sequenceNumber =
+            __atomic_add_fetch(&lastSequenceNumber, 1, __ATOMIC_RELAXED);
+    NSString *string = [[stringToCheck copy] autorelease];
+    void (^handler)(NSInteger, NSArray<NSTextCheckingResult *> *) =
+            [[completionHandler copy] autorelease];
+
+    // As for requestCheckingOfString:, the spell engine is used on the main
+    // queue. The candidates are the word as typed, then the engine's guesses
+    // for it; macOS also offers completions, which Darling's engine does not
+    // make (see completionsForPartialWordRange:). The handler is called on
+    // another queue, as on macOS 26.7.3 (observed).
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSMutableArray<NSTextCheckingResult *> *candidates = [NSMutableArray array];
+        NSRange wordRange = candidateWordRange(string, selectedRange);
+        if (wordRange.length > 0) {
+            NSString *word = [string substringWithRange: wordRange];
+            NSMutableArray<NSString *> *words = [NSMutableArray arrayWithObject: word];
+            for (NSString *guess in [self guessesForWordRange: wordRange
+                                                     inString: string
+                                                     language: [self language]
+                                       inSpellDocumentWithTag: tag])
+                if (![words containsObject: guess])
+                    [words addObject: guess];
+            for (NSString *candidate in words)
+                [candidates addObject: [NSTextCheckingResult
+                                              correctionCheckingResultWithRange: wordRange
+                                                              replacementString: candidateReplacement(candidate)]];
+        }
+
+        if (handler != nil)
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+                handler(sequenceNumber, candidates);
+            });
+    });
+
+    return sequenceNumber;
+}
 #endif
 
 - (NSArray *) guessesForWordRange: (NSRange) range
@@ -610,6 +705,17 @@ static NSSpellChecker *shared = nil;
 
 + (BOOL) isAutomaticTextCompletionEnabled {
     return automaticSettingEnabled(@"NSAutomaticTextCompletionEnabled");
+}
+
+#pragma mark -
+#pragma mark Grammar Checking
+
+// Whether text views check grammar along with spelling when the application has
+// not chosen. Observed on macOS 26.7.3: YES, in a process with no preferences
+// set; the preference that turns it off there is not known, so Darling's is
+// always on. Test: tests/appkit-spellchecker-grammar-checking.m.
++ (BOOL) grammarCheckingEnabled {
+    return YES;
 }
 
 @end

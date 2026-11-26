@@ -1357,6 +1357,8 @@ static const CGFloat NSScrollViewLinesPerWheelNotch = 3;
     CGFloat lineScroll = NS_EXTRA(NSScrollView, self)->_verticalLineScroll;
     CGFloat pageScroll = NS_EXTRA(NSScrollView, self)->_verticalPageScroll;
 
+    // The page scroll is the amount of the content that stays visible when scrolling by a page.
+    pageScroll = MAX(clipRect.size.height - pageScroll, lineScroll);
     if (![docView isFlipped]) {
         lineScroll = 0.0 - lineScroll;
         pageScroll = 0.0 - pageScroll;
@@ -1410,11 +1412,14 @@ static const CGFloat NSScrollViewLinesPerWheelNotch = 3;
         break;
 
     case NSScrollerIncrementPage:
-        clipRect.origin.x += NS_EXTRA(NSScrollView, self)->_horizontalPageScroll;
+        // the page scroll is the amount of the content that stays visible
+        clipRect.origin.x += MAX(clipRect.size.width - NS_EXTRA(NSScrollView, self)->_horizontalPageScroll,
+                                 NS_EXTRA(NSScrollView, self)->_horizontalLineScroll);
         break;
 
     case NSScrollerDecrementPage:
-        clipRect.origin.x -= NS_EXTRA(NSScrollView, self)->_horizontalPageScroll;
+        clipRect.origin.x -= MAX(clipRect.size.width - NS_EXTRA(NSScrollView, self)->_horizontalPageScroll,
+                                 NS_EXTRA(NSScrollView, self)->_horizontalLineScroll);
         break;
 
     case NSScrollerKnobSlot:

@@ -30,18 +30,25 @@
     NSDictionary *_attributes;
     NSData *_fontData;
     int _faceIndex;
+    // The CTFontDescriptorOptions the descriptor was made with.
+    uint32_t _options;
 }
 
 - initWithAttributes: (NSDictionary *) attributes fontData: (NSData *) data;
 - initWithAttributes: (NSDictionary *) attributes
             fontData: (NSData *) data
            faceIndex: (int) faceIndex;
+- initWithAttributes: (NSDictionary *) attributes
+            fontData: (NSData *) data
+           faceIndex: (int) faceIndex
+             options: (uint32_t) options;
 
 - (NSDictionary *) attributes;
 - (NSData *) fontData;
 // Which face of the font data the descriptor describes: the data of a font
 // collection or a font suitcase holds several.
 - (int) faceIndex;
+- (uint32_t) options;
 
 @end
 
@@ -66,3 +73,19 @@ CFDataRef KTFontDescriptorGetFontData(CTFontDescriptorRef descriptor);
 // descriptor of a system UI font; read by CTFontDescriptorIsSystemUIFont().
 __attribute__((visibility("hidden")))
 extern const CFStringRef KTFontSystemUIAttribute;
+
+// Descriptor attribute (a CFNumber holding a CTFontUIFontType) that
+// CTFontCopyFontDescriptor() sets for the descriptor of a font made by
+// CTFontCreateUIFontForLanguage(); read back by CTFontCreateWithFontDescriptor().
+__attribute__((visibility("hidden")))
+extern const CFStringRef KTFontUIFontTypeAttribute;
+
+// The CSS weight (the OpenType usWeightClass scale, 1 to 1000) of a weight on
+// the kCTFontWeightTrait scale.
+__attribute__((visibility("hidden")))
+CGFloat KTFontCSSWeightForWeightTrait(CGFloat weight);
+
+// The CSS width (a percentage of the normal width, as the OpenType usWidthClass
+// classes define it) of a width on the kCTFontWidthTrait scale.
+__attribute__((visibility("hidden")))
+CGFloat KTFontCSSWidthForWidthTrait(CGFloat width);

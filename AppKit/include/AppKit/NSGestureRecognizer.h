@@ -19,9 +19,11 @@
 
 #import <AppKit/AppKitExport.h>
 #import <AppKit/AppKitIvarLayout.h>
+#import <AppKit/NSEvent.h>
+#import <AppKit/NSTouch.h>
 #import <Foundation/Foundation.h>
 
-@class NSEvent, NSGestureRecognizer, NSView;
+@class NSEvent, NSGestureRecognizer, NSPressureConfiguration, NSView;
 @protocol NSGestureRecognizerDelegate;
 
 typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
@@ -36,7 +38,8 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
 
 // NSWindow gives a recognizer the mouse and gesture events aimed at its view or
 // the view's subviews, before the view itself gets them. Recognizers don't
-// delay or cancel the view's events, and failure requirements aren't modelled.
+// delay or cancel the view's events (the delays properties are kept, but have
+// no effect), and failure requirements aren't modelled.
 #define _NSGESTURERECOGNIZER_IVARS \
     id _target; \
     SEL _action; \
@@ -44,13 +47,17 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
     id<NSGestureRecognizerDelegate> _delegate; \
     BOOL _enabled; \
     NSView *_view; \
-    NSEvent *_lastEvent;
+    NSEvent *_lastEvent; \
+    unsigned int _delayedEvents; \
+    NSPressureConfiguration *_pressureConfiguration; \
+    NSTouchTypeMask _allowedTouchTypes; \
+    NSString *_name;
 
 @interface NSGestureRecognizer : NSObject <NSCoding>
 #if !__OBJC2__
 {
     _NSGESTURERECOGNIZER_IVARS
-    NS_LEGACY_IVAR_PAD(_NSGestureRecognizerReserved, 40)
+    NS_LEGACY_IVAR_PAD(_NSGestureRecognizerReserved, 24)
 }
 #endif
 
@@ -63,8 +70,23 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
 @property(assign) id<NSGestureRecognizerDelegate> delegate;
 @property(getter=isEnabled) BOOL enabled;
 @property(readonly) NSView *view;
+@property(retain) NSPressureConfiguration *pressureConfiguration;
+
+// The defaults depend on the class: see each subclass.
+@property BOOL delaysPrimaryMouseButtonEvents;
+@property BOOL delaysSecondaryMouseButtonEvents;
+@property BOOL delaysOtherMouseButtonEvents;
+@property BOOL delaysKeyEvents;
+@property BOOL delaysMagnificationEvents;
+@property BOOL delaysRotationEvents;
 
 - (NSPoint) locationInView: (NSView *) view;
+
+@property(copy) NSString *name;
+@property(readonly) NSEventModifierFlags modifierFlags;
+
+// Only NSTouchTypeMaskDirect is supported.
+@property NSTouchTypeMask allowedTouchTypes;
 
 @end
 
@@ -73,6 +95,14 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
 - (BOOL) gestureRecognizerShouldBegin: (NSGestureRecognizer *) gestureRecognizer;
 - (BOOL) gestureRecognizer: (NSGestureRecognizer *) gestureRecognizer
         shouldAttemptToRecognizeWithEvent: (NSEvent *) event;
+- (BOOL) gestureRecognizer: (NSGestureRecognizer *) gestureRecognizer
+        shouldRecognizeSimultaneouslyWithGestureRecognizer: (NSGestureRecognizer *) otherGestureRecognizer;
+- (BOOL) gestureRecognizer: (NSGestureRecognizer *) gestureRecognizer
+        shouldRequireFailureOfGestureRecognizer: (NSGestureRecognizer *) otherGestureRecognizer;
+- (BOOL) gestureRecognizer: (NSGestureRecognizer *) gestureRecognizer
+        shouldBeRequiredToFailByGestureRecognizer: (NSGestureRecognizer *) otherGestureRecognizer;
+- (BOOL) gestureRecognizer: (NSGestureRecognizer *) gestureRecognizer
+        shouldReceiveTouch: (NSTouch *) touch;
 @end
 
 @interface NSGestureRecognizer (NSSubclassUse)
@@ -82,6 +112,11 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
 @property(readwrite) NSGestureRecognizerState state;
 
 - (void) reset;
+
+- (BOOL) canPreventGestureRecognizer: (NSGestureRecognizer *) preventedGestureRecognizer;
+- (BOOL) canBePreventedByGestureRecognizer: (NSGestureRecognizer *) preventingGestureRecognizer;
+- (BOOL) shouldRequireFailureOfGestureRecognizer: (NSGestureRecognizer *) otherGestureRecognizer;
+- (BOOL) shouldBeRequiredToFailByGestureRecognizer: (NSGestureRecognizer *) otherGestureRecognizer;
 
 - (void) mouseDown: (NSEvent *) event NS_SWIFT_NAME(mouseDown(with:));
 - (void) rightMouseDown: (NSEvent *) event NS_SWIFT_NAME(rightMouseDown(with:));
@@ -94,5 +129,15 @@ typedef NS_ENUM(NSInteger, NSGestureRecognizerState) {
 - (void) otherMouseDragged: (NSEvent *) event NS_SWIFT_NAME(otherMouseDragged(with:));
 - (void) magnifyWithEvent: (NSEvent *) event;
 - (void) rotateWithEvent: (NSEvent *) event;
+- (void) mouseCancelled: (NSEvent *) event NS_SWIFT_NAME(mouseCancelled(with:));
+- (void) keyDown: (NSEvent *) event NS_SWIFT_NAME(keyDown(with:));
+- (void) keyUp: (NSEvent *) event NS_SWIFT_NAME(keyUp(with:));
+- (void) flagsChanged: (NSEvent *) event NS_SWIFT_NAME(flagsChanged(with:));
+- (void) tabletPoint: (NSEvent *) event NS_SWIFT_NAME(tabletPoint(with:));
+- (void) pressureChangeWithEvent: (NSEvent *) event;
+- (void) touchesBeganWithEvent: (NSEvent *) event;
+- (void) touchesMovedWithEvent: (NSEvent *) event;
+- (void) touchesEndedWithEvent: (NSEvent *) event;
+- (void) touchesCancelledWithEvent: (NSEvent *) event;
 
 @end

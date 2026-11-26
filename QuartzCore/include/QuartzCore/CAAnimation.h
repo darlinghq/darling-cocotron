@@ -5,7 +5,8 @@
 #import <QuartzCore/CAMediaTiming.h>
 #import <CoreGraphics/CGPath.h>
 
-@class CAMediaTimingFunction, CAPropertyAnimation;
+@class CAMediaTimingFunction, CAPropertyAnimation, CAValueFunction;
+@protocol CAAnimationDelegate;
 
 CA_EXPORT NSString *const kCATransitionFade;
 CA_EXPORT NSString *const kCATransitionMoveIn;
@@ -40,12 +41,15 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
         CFTimeInterval _repeatDuration;
         float _speed;
         CFTimeInterval _timeOffset;
+        NSMutableDictionary *_undefinedKeyValues;
     NS_EXTRA_IVARS_END(CAAnimation)
 }
 
-+ animation;
++ (instancetype) animation;
++ (id) defaultValueForKey: (NSString *) key;
 
-@property(retain) id delegate;
+// Retained, unlike most delegates.
+@property(retain) id <CAAnimationDelegate> delegate;
 
 @property(getter=isRemovedOnCompletion) BOOL removedOnCompletion;
 
@@ -53,7 +57,8 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
 
 @end
 
-@interface NSObject (CAAnimationDelegate)
+@protocol CAAnimationDelegate <NSObject>
+@optional
 - (void) animationDidStart: (CAAnimation *) animation;
 - (void) animationDidStop: (CAAnimation *) animation finished: (BOOL) finished;
 @end
@@ -64,6 +69,7 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
         NSString *_keyPath;
         BOOL _additive;
         BOOL _cumulative;
+        CAValueFunction *_valueFunction;
     NS_SIDE_IVARS_END(CAPropertyAnimation)
 }
 
@@ -71,6 +77,7 @@ CA_EXPORT NSString *const kCAAnimationRotateAutoReverse;
 @property(copy) NSString *keyPath;
 @property(getter=isAdditive) BOOL additive;
 @property(getter=isCumulative) BOOL cumulative;
+@property(retain) CAValueFunction *valueFunction;
 
 @end
 

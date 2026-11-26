@@ -19,6 +19,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "CGConversions.h"
 #import "CGGradientPrivate.h"
+#import "CGContextInternal.h"
 #import <CoreGraphics/CGContext.h>
 #import <CoreGraphics/CGFunction.h>
 #import <CoreGraphics/CGGradient.h>
@@ -55,6 +56,9 @@ void CGContextBeginTransparencyLayer(CGContextRef context,
 void CGContextBeginTransparencyLayerWithRect(CGContextRef context, CGRect rect,
                                              CFDictionaryRef auxiliaryInfo)
 {
+    // a context delegate is told the rectangle
+    if (_CGContextDelegateBeginLayer(context, rect, auxiliaryInfo))
+        return;
     CGContextBeginTransparencyLayer(context, auxiliaryInfo);
 }
 
@@ -265,12 +269,24 @@ void CGContextClipToRects(CGContextRef context, const CGRect *rects,
 void CGContextSetStrokeColorSpace(CGContextRef context,
                                   CGColorSpaceRef colorSpace)
 {
+    // QUIRK: a NULL colour space does not crash: the colour becomes black, the initial colour of a colour space.
+    // Not documented. Evidence: black-box observation on macOS 10.14.4 x86_64 (tier 2).
+    // Test: tests/src/coregraphics_null_colorspace.c (test_quirk_null_colorspace_black)
+    if (colorSpace == NULL) {
+        CGContextSetGrayStrokeColor(context, 0, 1);
+        return;
+    }
     O2ContextSetStrokeColorSpace((O2ContextRef)context, (O2ColorSpaceRef)colorSpace);
 }
 
 void CGContextSetFillColorSpace(CGContextRef context,
                                 CGColorSpaceRef colorSpace)
 {
+    // QUIRK: see CGContextSetStrokeColorSpace
+    if (colorSpace == NULL) {
+        CGContextSetGrayFillColor(context, 0, 1);
+        return;
+    }
     O2ContextSetFillColorSpace((O2ContextRef)context, (O2ColorSpaceRef)colorSpace);
 }
 
@@ -473,6 +489,15 @@ void CGContextSetCompositeOperation(CGContextRef context, int operation) {
     }
 }
 
+// Attributes the memory behind a context to the task the token names. Darling
+// does not account memory per task, so there is nothing to record; the call
+// accepts any token and leaves the context unchanged, as observed on macOS
+// 26.7.3 (test cg-context-set-owner-identity.c).
+void CGContextSetOwnerIdentity(CGContextRef context, task_id_token_t owner) {
+    (void) context;
+    (void) owner;
+}
+
 void CGContextSetRenderingIntent(CGContextRef context,
                                  CGColorRenderingIntent renderingIntent)
 {
@@ -614,6 +639,13 @@ void CGContextDrawPDFPage(CGContextRef context, CGPDFPageRef page) {
     O2ContextDrawPDFPage((O2ContextRef)context, (O2PDFPageRef)page);
 }
 
+// Onyx2D draws a page's content stream only, not the appearance of its
+// annotations, so there is no annotation to ask the callback about.
+void CGContextDrawPDFPageWithAnnotations(CGContextRef context, CGPDFPageRef page, CGPDFAnnotationDrawCallbackType callback) {
+    (void) callback;
+    CGContextDrawPDFPage(context, page);
+}
+
 void CGContextFlush(CGContextRef context) {
     O2ContextFlush((O2ContextRef)context);
 }
@@ -698,18 +730,11 @@ static void CGGradientEvaluate(void *info, const CGFloat *in, CGFloat *out) {
     CGGradientColorAtLocation((CGGradientRef)info, in[0], out);
 }
 
-static CGShadingRef CGGradientCreateShading(CGGradientRef gradient,
-                                             CGPoint startPoint,
-                                             CGFloat startRadius,
-                                             CGPoint endPoint,
-                                             CGFloat endRadius,
-                                             bool isRadial,
-                                             CGGradientDrawingOptions options) {
+/* The colour function of a gradient, from location 0 to 1. */
+static CGFunctionRef CGGradientCreateFunction(CGGradientRef gradient) {
     CGFloat domain[] = { 0.0, 1.0 };
     CGFloat range[2 * CGGradientMaximumComponents];
     CGFunctionCallbacks callbacks;
-    CGFunctionRef function;
-    CGShadingRef shading;
     size_t i, numberOfComponents = gradient->numberOfComponents;
 
     /* One 0...1 range pair per output component, as CGFunctionCreate expects. */
@@ -721,8 +746,21 @@ static CGShadingRef CGGradientCreateShading(CGGradientRef gradient,
     memset(&callbacks, 0, sizeof(callbacks));
     callbacks.evaluate = CGGradientEvaluate;
 
-    function = CGFunctionCreate((void *)gradient, 1, domain, numberOfComponents,
-                               range, &callbacks);
+    return CGFunctionCreate((void *)gradient, 1, domain, numberOfComponents,
+                            range, &callbacks);
+}
+
+static CGShadingRef CGGradientCreateShading(CGGradientRef gradient,
+                                             CGPoint startPoint,
+                                             CGFloat startRadius,
+                                             CGPoint endPoint,
+                                             CGFloat endRadius,
+                                             bool isRadial,
+                                             CGGradientDrawingOptions options) {
+    CGFunctionRef function;
+    CGShadingRef shading;
+
+    function = CGGradientCreateFunction(gradient);
     if (function == NULL) {
         NSLog(@"CGContextDraw%sGradient, could not create the colour function",
               isRadial ? "Radial" : "Linear");
@@ -794,6 +832,9 @@ void CGContextShowGlyphsAtPositions(CGContextRef c,
 {
     if (c == NULL || glyphs == NULL || positions == NULL)
         return;
+    // A context delegate gets the run as it is, with the text matrix.
+    if (_CGContextDelegateShowGlyphsAtPositions(c, glyphs, positions, count))
+        return;
     // Each position is in text space: the text matrix is applied to it to
     // find where the glyph origin lands (a shear or translation in the text
     // matrix moves the glyph). The text matrix and text position are left as
@@ -806,4 +847,77 @@ void CGContextShowGlyphsAtPositions(CGContextRef c,
     }
     CGContextSetTextMatrix(c, matrix);
     CGContextSetTextPosition(c, saved.x, saved.y);
+}
+
+CGAffineTransform CGContextGetBaseCTM(CGContextRef context) {
+    return CGAffineTransformFromO2(O2ContextGetBaseCTM((O2ContextRef)context));
+}
+
+void CGContextSetBaseCTM(CGContextRef context, CGAffineTransform transform) {
+    O2ContextSetBaseCTM((O2ContextRef)context, O2AffineTransformFromCG(transform));
+}
+
+CGColorRef CGContextGetFillColorAsColor(CGContextRef context) {
+    if (context == NULL)
+        return NULL;
+    return (CGColorRef)O2ContextFillColor((O2ContextRef)context);
+}
+
+CGColorRef CGContextGetStrokeColorAsColor(CGContextRef context) {
+    if (context == NULL)
+        return NULL;
+    return (CGColorRef)O2ContextStrokeColor((O2ContextRef)context);
+}
+
+bool CGContextGetShouldAntialias(CGContextRef context) {
+    return O2ContextGetShouldAntialias((O2ContextRef)context);
+}
+
+void CGContextSetShouldAntialiasFonts(CGContextRef context, bool shouldAntialiasFonts) {
+    O2ContextSetShouldAntialiasFonts((O2ContextRef)context, shouldAntialiasFonts);
+}
+
+bool CGContextGetShouldAntialiasFonts(CGContextRef context) {
+    return O2ContextGetShouldAntialiasFonts((O2ContextRef)context);
+}
+
+// A bitmap context's destination is its bitmap; the others (PDF, delegate
+// contexts) have no colour space of their own and report the device RGB space.
+CGColorSpaceRef CGContextCopyDeviceColorSpace(CGContextRef context) {
+    if (context == NULL)
+        return NULL;
+    CGContextType type = CGContextGetType(context);
+    if (type == kCGContextTypeBitmap || type == kCGContextTypeIOSurface) {
+        CGColorSpaceRef space = CGBitmapContextGetColorSpace(context);
+        if (space != NULL)
+            return CGColorSpaceRetain(space);
+    }
+    return CGColorSpaceCreateDeviceRGB();
+}
+
+void CGContextDrawPathDirect(CGContextRef context, CGPathDrawingMode mode,
+                             CGPathRef path, const CGRect *boundingBox)
+{
+    (void) boundingBox;
+    O2ContextDrawPathDirect((O2ContextRef)context, (O2PathDrawingMode)mode, (O2PathRef)path);
+}
+
+void CGContextDrawConicGradient(CGContextRef context, CGGradientRef gradient,
+                                CGPoint center, CGFloat angle)
+{
+    if (context == NULL || gradient == NULL)
+        return;
+
+    CGFunctionRef function = CGGradientCreateFunction(gradient);
+    if (function == NULL)
+        return;
+    CGShadingRef shading = CGShadingCreateConic(gradient->colorSpace, center, angle, function);
+    CGFunctionRelease(function);
+    if (shading == NULL)
+        return;
+
+    /* The function keeps the gradient pointer unretained; the shading is
+     * released before returning. */
+    CGContextDrawShading(context, shading);
+    CGShadingRelease(shading);
 }

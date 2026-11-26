@@ -62,8 +62,8 @@
 - (NSDictionary *) copyVariationSettings;
 
 /* An owned font like this one with the given axes (tag to value) set on top of
- * the current settings. Tags that are not axes of the font are ignored and
- * values are clamped to the axis range. Returns nil when the font has no
+ * the current settings. Tags that are not axes of the font are ignored. A
+ * setting keeps the value it was given; the face uses it clamped to the axis range. Returns nil when the font has no
  * variation axes or cannot be reopened. */
 - (O2Font_freetype *) copyWithVariation: (NSDictionary *) variation;
 
@@ -108,8 +108,11 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
  * for every other name, including installed families and unknown names. The caller owns the
  * returned string. */
 NSString *O2FontCopyInstalledFamilyForStandardFamily(NSString *family);
+NSArray *O2FontCopyStandardFamilyNamesWithStandIn(void);
 
-// Returns an owned font covering all supplied Unicode scalar values, or nil.
+// Returns an owned font covering all supplied Unicode scalar values, or nil. The language (a
+// BCP 47 tag such as "zh-Hant-TW", or NULL) is passed on to fontconfig, whose configuration
+// decides which faces suit it.
 O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
                                            size_t count, FT_Face baseFace,
                                            const char *language);

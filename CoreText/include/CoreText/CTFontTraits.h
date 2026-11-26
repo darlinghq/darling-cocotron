@@ -26,7 +26,9 @@ typedef CF_OPTIONS(uint32_t, CTFontSymbolicTraits) {
   kCTFontTraitUIOptimized = (1 << 12),
   kCTFontUIOptimizedTrait = (1 << 12), // Deprecated
   kCTFontTraitColorGlyphs = (1 << 13),
+  kCTFontColorGlyphsTrait = (1 << 13), // Deprecated
   kCTFontTraitComposite = (1 << 14),
+  kCTFontCompositeTrait = (1 << 14), // Deprecated
   kCTFontTraitClassMask = (15U << kCTFontClassMaskShift),
   kCTFontClassMaskTrait = (15U << 28), // Deprecated
 };

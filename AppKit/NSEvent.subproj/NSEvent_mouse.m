@@ -24,6 +24,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScreen.h>
 #import <CoreGraphics/CGEvent.h>
 
+// A mouse is not pressure-sensitive: AppKit documents pressure as 0 or 1 for
+// such devices, so it is 1 while a button is held and 0 otherwise.
+static float defaultPressure(NSEventType type) {
+    switch (type) {
+    case NSLeftMouseDown:
+    case NSLeftMouseDragged:
+    case NSRightMouseDown:
+    case NSRightMouseDragged:
+    case NSOtherMouseDown:
+    case NSOtherMouseDragged:
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 // The button an event of this type is about, until a backend sets the
 // actual one: 0 is the left button, 1 the right one and 2 the middle one.
 static NSInteger defaultButtonNumber(NSEventType type) {
@@ -57,6 +73,7 @@ static NSInteger defaultButtonNumber(NSEventType type) {
                    window: window];
 
     _buttonNumber = defaultButtonNumber(type);
+    _pressure = defaultPressure(type);
     _clickCount = clickCount;
     _deltaX = deltaX;
     _deltaY = deltaY;
@@ -131,6 +148,7 @@ static NSInteger defaultButtonNumber(NSEventType type) {
                    window: [NSApp windowWithWindowNumber: windowNumber]];
     _timestamp = timestamp;
     _buttonNumber = defaultButtonNumber(type);
+    _pressure = pressure;
     _clickCount = clickCount;
     _eventNumber = eventNumber;
     return self;
@@ -138,6 +156,10 @@ static NSInteger defaultButtonNumber(NSEventType type) {
 
 - (CGFloat) deltaX {
     return _deltaX;
+}
+
+- (float) pressure {
+    return _pressure;
 }
 
 - (CGFloat) deltaY {

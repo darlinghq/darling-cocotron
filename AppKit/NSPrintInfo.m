@@ -79,6 +79,10 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
 
 - initWithDictionary: (NSDictionary *) dictionary {
     _attributes = [[NSMutableDictionary alloc] initWithDictionary: dictionary];
+    // Unscaled unless the dictionary says otherwise; the dictionary then
+    // holds the factor too, as on macOS 26.7.3.
+    if ([_attributes objectForKey: NSPrintScalingFactor] == nil)
+        [_attributes setObject: [NSNumber numberWithDouble: 1.0] forKey: NSPrintScalingFactor];
     return self;
 }
 
@@ -234,6 +238,15 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
 - (void) setVerticalPagination: (NSPrintingPaginationMode) value {
     [_attributes setObject: [NSNumber numberWithInt: value]
                     forKey: NSPrintVerticalPagination];
+}
+
+- (CGFloat) scalingFactor {
+    return [[_attributes objectForKey: NSPrintScalingFactor] doubleValue];
+}
+
+- (void) setScalingFactor: (CGFloat) value {
+    [_attributes setObject: [NSNumber numberWithDouble: value]
+                    forKey: NSPrintScalingFactor];
 }
 
 - (void) setTopMargin: (CGFloat) value {

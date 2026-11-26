@@ -552,6 +552,68 @@ void NSDrawWindowBackground(NSRect rect) {
     NSRectFill(rect);
 }
 
+// Private: paints the background of a menu, its background colour, over the
+// bounds (limited to clipRect unless that is empty). The menu window's frame
+// line is not part of it. The flags (pop-up menu or not) do not change the
+// colour in Darling.
+void NSDrawMenuBackground(NSRect bounds, NSRect clipRect, NSUInteger flags) {
+    NSRect rect = NSIsEmptyRect(clipRect) ? bounds : NSIntersectionRect(bounds, clipRect);
+
+    if (NSIsEmptyRect(rect))
+        return;
+    [[NSColor menuBackgroundColor] setFill];
+    NSRectFill(rect);
+}
+
+// Private: the parameters CoreGraphics takes for a focus ring style
+// (CGStyleCreateFocusRingWithColor). Field layout as WebKit declares it, in
+// its BSD-licensed PAL headers (pal/spi/cg/CoreGraphicsSPI.h).
+struct _NSCGFocusRingStyle {
+    unsigned int version;
+    int32_t tint;     // 0 blue, 1 graphite
+    int32_t ordering; // 0 ring only, 1 below the shape, 2 above it
+    CGFloat alpha;
+    CGFloat radius;
+    CGFloat threshold;
+    CGRect bounds;
+    int accumulate;
+};
+
+// Private: fills in the focus ring style for a placement at a time into the
+// ring's appearance animation, and returns whether the animation is still
+// running. Observed on macOS 26.7.3 and 10.14.4 (black-box, the same on both):
+// the ring settles 0.25 s in at alpha 0.5, radius 3.00438541 and threshold
+// 0.15; before that it grows in from radius 28 and alpha 0, and the call
+// returns YES. Version, tint (whatever the control tint), bounds and
+// accumulation are 0; the ordering is the placement's.
+// Darling's focus rings do not animate, so every time gets the settled style,
+// and the call returns NO.
+// Test: tests/appkit-webkit-private-functions.m
+BOOL NSInitializeCGFocusRingStyleForTime(NSFocusRingPlacement placement, void *style, NSTimeInterval time) {
+    struct _NSCGFocusRingStyle *ring = style;
+
+    if (ring == NULL)
+        return NO;
+
+    memset(ring, 0, sizeof(*ring));
+    switch (placement) {
+    case NSFocusRingBelow:
+        ring->ordering = 1;
+        break;
+    case NSFocusRingAbove:
+        ring->ordering = 2;
+        break;
+    default:
+        ring->ordering = 0;
+        break;
+    }
+    ring->alpha = 0.5;
+    ring->radius = 3.00438541;
+    ring->threshold = 0.15;
+    ring->bounds = CGRectZero;
+    return NO;
+}
+
 NSRect NSDrawTiledRects(NSRect bounds, NSRect clip, const NSRectEdge *sides,
                         const CGFloat *grays, int count)
 {
@@ -729,4 +791,54 @@ void _NSFocusRingAfterPaintingPath(CGContextRef context, CGPathRef path) {
     CGContextSaveGState(context);
     focusRingBand(context, path, YES, ![current _focusRingOuterOnly]);
     CGContextRestoreGState(context);
+}
+
+// The two frames below are measured from the observable behaviour of the functions on macOS 26.7.3 and 10.14.4
+// (black-box: the pixels they draw into a bitmap context, identical on both): a frame inside the rect, the inside
+// untouched, darker at the top than at the sides and the bottom, lighter when disabled. Probe:
+// vd-upstream/mac-probes/gog-blockers/appkit-carbon-theme.m. Test: appkit-carbon-theme-draw.
+
+typedef struct {
+    CGFloat top, side, bottom, topCorner, bottomCorner;
+} ThemeRing;
+
+static void themeFillGray(NSRect rect, CGFloat gray) {
+    [[NSColor colorWithDeviceWhite: gray alpha: 1.0] set];
+    NSRectFill(rect);
+}
+
+// One frame ring of `rect`, one point wide. The top row is the one at the largest y unless the context is flipped.
+static void themeDrawRing(NSRect rect, BOOL flipped, ThemeRing ring) {
+    if (rect.size.width < 2 || rect.size.height < 2)
+        return;
+    CGFloat topY = flipped ? NSMinY(rect) : NSMaxY(rect) - 1;
+    CGFloat bottomY = flipped ? NSMaxY(rect) - 1 : NSMinY(rect);
+    CGFloat sideMinY = MIN(topY, bottomY) + 1, sideHeight = rect.size.height - 2;
+
+    themeFillGray(NSMakeRect(NSMinX(rect), topY, rect.size.width, 1), ring.top);
+    themeFillGray(NSMakeRect(NSMinX(rect), bottomY, rect.size.width, 1), ring.bottom);
+    if (sideHeight > 0) {
+        themeFillGray(NSMakeRect(NSMinX(rect), sideMinY, 1, sideHeight), ring.side);
+        themeFillGray(NSMakeRect(NSMaxX(rect) - 1, sideMinY, 1, sideHeight), ring.side);
+    }
+    themeFillGray(NSMakeRect(NSMinX(rect), topY, 1, 1), ring.topCorner);
+    themeFillGray(NSMakeRect(NSMaxX(rect) - 1, topY, 1, 1), ring.topCorner);
+    themeFillGray(NSMakeRect(NSMinX(rect), bottomY, 1, 1), ring.bottomCorner);
+    themeFillGray(NSMakeRect(NSMaxX(rect) - 1, bottomY, 1, 1), ring.bottomCorner);
+}
+
+void _NSDrawCarbonThemeBezel(NSRect rect, BOOL enabled, BOOL flipped) {
+    static const ThemeRing enabledOuter = {0x7c / 255.0, 0xc3 / 255.0, 0xdd / 255.0, 0x69 / 255.0, 0xb9 / 255.0};
+    static const ThemeRing enabledInner = {0xc3 / 255.0, 0xf0 / 255.0, 0xfe / 255.0, 0xb9 / 255.0, 0xf0 / 255.0};
+    static const ThemeRing disabledOuter = {0xbe / 255.0, 0xe1 / 255.0, 0xee / 255.0, 0xb4 / 255.0, 0xdc / 255.0};
+    static const ThemeRing disabledInner = {0xe1 / 255.0, 0xf8 / 255.0, 1.0, 0xdc / 255.0, 0xf8 / 255.0};
+    themeDrawRing(rect, flipped, enabled ? enabledOuter : disabledOuter);
+    themeDrawRing(NSInsetRect(rect, 1, 1), flipped, enabled ? enabledInner : disabledInner);
+}
+
+void _NSDrawCarbonThemeListBox(NSRect rect, BOOL enabled, BOOL flipped, BOOL active) {
+    static const ThemeRing activeRing = {0x73 / 255.0, 0x99 / 255.0, 0x99 / 255.0, 0x73 / 255.0, 0x99 / 255.0};
+    static const ThemeRing inactiveRing = {0x8e / 255.0, 0xbe / 255.0, 0xbe / 255.0, 0x8e / 255.0, 0xbe / 255.0};
+    static const ThemeRing disabledRing = {0x99 / 255.0, 0xac / 255.0, 0xac / 255.0, 0x99 / 255.0, 0xac / 255.0};
+    themeDrawRing(rect, flipped, !enabled ? disabledRing : (active ? activeRing : inactiveRing));
 }

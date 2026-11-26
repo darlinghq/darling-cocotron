@@ -278,3 +278,83 @@ CFDataRef O2ColorProfileCopyICCData(const O2ColorProfile *p,
     free(t.data.bytes);
     return data;
 }
+
+static uint32_t readWord(const UInt8 *p) {
+    return ((uint32_t) p[0] << 24) | ((uint32_t) p[1] << 16) |
+           ((uint32_t) p[2] << 8) | p[3];
+}
+
+// Text without the NUL padding that may follow it.
+static CFStringRef createTrimmedString(const UInt8 *bytes, size_t length,
+                                       CFStringEncoding encoding, size_t unit)
+{
+    while (length >= unit) {
+        bool zero = true;
+        for (size_t i = 0; i < unit; i++)
+            zero = zero && bytes[length - unit + i] == 0;
+        if (!zero)
+            break;
+        length -= unit;
+    }
+    if (length == 0)
+        return NULL;
+    return CFStringCreateWithBytes(NULL, bytes, (CFIndex) length, encoding, false);
+}
+
+CFStringRef O2ICCProfileCopyDescription(CFDataRef profile) {
+    if (profile == NULL)
+        return NULL;
+    size_t length = (size_t) CFDataGetLength(profile);
+    const UInt8 *p = CFDataGetBytePtr(profile);
+    if (length < 132 || readWord(p + 36) != 0x61637370 /* 'acsp' */)
+        return NULL;
+
+    uint32_t tagCount = readWord(p + 128);
+    if (tagCount > (length - 132) / 12)
+        return NULL;
+    for (uint32_t i = 0; i < tagCount; i++) {
+        const UInt8 *entry = p + 132 + 12 * i;
+        if (readWord(entry) != 0x64657363 /* 'desc' */)
+            continue;
+        uint32_t offset = readWord(entry + 4), size = readWord(entry + 8);
+        if (offset > length || size > length - offset || size < 12)
+            return NULL;
+        const UInt8 *tag = p + offset;
+
+        switch (readWord(tag)) {
+        case 0x64657363: { /* 'desc', textDescriptionType: ASCII count, then the text */
+            uint32_t count = readWord(tag + 8);
+            if (count > size - 12)
+                return NULL;
+            return createTrimmedString(tag + 12, count, kCFStringEncodingASCII, 1);
+        }
+        case 0x74657874: /* 'text', textType: the text to the end of the tag */
+            return createTrimmedString(tag + 8, size - 8, kCFStringEncodingASCII, 1);
+        case 0x6D6C7563: { /* 'mluc': records of language, country, length and offset */
+            if (size < 16)
+                return NULL;
+            uint32_t records = readWord(tag + 8), recordSize = readWord(tag + 12);
+            if (recordSize < 12 || records == 0 || records > (size - 16) / recordSize)
+                return NULL;
+            uint32_t chosen = 0;
+            for (uint32_t r = 0; r < records; r++) {
+                const UInt8 *record = tag + 16 + r * recordSize;
+                if (record[0] == 'e' && record[1] == 'n') {
+                    chosen = r;
+                    break;
+                }
+            }
+            const UInt8 *record = tag + 16 + chosen * recordSize;
+            uint32_t textLength = readWord(record + 4), textOffset = readWord(record + 8);
+            if (textOffset > size || textLength > size - textOffset)
+                return NULL;
+            return createTrimmedString(tag + textOffset, textLength & ~1u,
+                                       kCFStringEncodingUTF16BE, 2);
+        }
+        default:
+            return NULL;
+        }
+    }
+    return NULL;
+}
+

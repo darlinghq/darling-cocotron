@@ -168,6 +168,8 @@ APPKIT_EXPORT NSNotificationName NSControlTintDidChangeNotification;
         NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
         NSMenu *_cellMenu;
         NSControlTint _controlTint;
+        // Set by -_setFallbackSemanticContext:; 1 in a new cell.
+        NSInteger _fallbackSemanticContext;
     NS_EXTRA_IVARS_END(NSCell)
 }
 

@@ -88,7 +88,7 @@ static const NSModalResponse NSAlertThirdButtonReturn = 1002;
 @property(null_unspecified, nonatomic, copy) NSString *helpAnchor;
 @property(nonatomic, readonly) NSArray<NSButton *> *buttons;
 @property(nullable, nonatomic, readonly) NSButton *suppressionButton;
-- (null_unspecified id) window;
+@property (readonly, strong, null_unspecified) NSWindow *window;
 
 - (void) setDelegate: (null_unspecified id) delegate;
 

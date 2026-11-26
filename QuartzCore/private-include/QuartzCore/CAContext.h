@@ -59,6 +59,8 @@ CA_EXTERN NSString *const kCAContextPortNumber;
 
 // A context whose layer tree other processes can show with a CALayerHost
 // given its contextId. The options are accepted and not used.
++ (BOOL) allowsCGSConnections;
++ (void) setAllowsCGSConnections: (BOOL) allows;
 + (instancetype) remoteContext;
 + (instancetype) remoteContextWithOptions: (NSDictionary *) options;
 // The same as +remoteContextWithOptions:; the connection is not used.

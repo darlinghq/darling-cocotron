@@ -201,3 +201,10 @@ void CTRunDraw(CTRunRef run, CGContextRef context, CFRange range)
                      positions, (size_t)range.length, context);
     free(positions);
 }
+
+CGSize CTRunGetInitialAdvance(CTRunRef run)
+{
+    // Darling's layout places the first glyph of a run at the run's start (no
+    // glyph is offset from its pen position), so the initial advance is zero.
+    return CGSizeZero;
+}

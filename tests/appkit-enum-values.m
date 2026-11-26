@@ -23,11 +23,22 @@ static void checkSizes(void)
     expect(sizeof(NSDragOperation) == sizeof(NSUInteger), "NSDragOperation is NSUInteger sized");
     expect(sizeof(NSApplicationActivationPolicy) == sizeof(NSInteger), "NSApplicationActivationPolicy is NSInteger sized");
     expect(sizeof(NSTableViewGridLineStyle) == sizeof(NSUInteger), "NSTableViewGridLineStyle is NSUInteger sized");
+    expect(sizeof(NSSelectionAffinity) == sizeof(NSUInteger), "NSSelectionAffinity is NSUInteger sized");
+    expect(sizeof(NSControlStateValue) == sizeof(NSInteger), "NSControlStateValue is NSInteger sized");
 }
 
 static void checkValues(void)
 {
     expect(NSEventTypeLeftMouseDown == 1 && NSEventTypeKeyDown == 10 && NSEventTypeScrollWheel == 22, "NSEventType values");
+    expect(NSSelectionAffinityUpstream == 0 && NSSelectionAffinityDownstream == 1, "NSSelectionAffinity values");
+    expect(NSControlStateValueMixed == -1 && NSControlStateValueOff == 0 && NSControlStateValueOn == 1,
+           "NSControlStateValue values");
+    // a state is any integer, so a BOOL is one
+    NSControlStateValue state = YES;
+    expect(state == NSControlStateValueOn, "a BOOL is a control state");
+    expect(NSWindowCollectionBehaviorPrimary == 1 << 16 && NSWindowCollectionBehaviorAuxiliary == 1 << 17 &&
+                   NSWindowCollectionBehaviorCanJoinAllApplications == 1 << 18,
+           "NSWindowCollectionBehavior roles");
     expect(NSWindowStyleMaskTitled == 1 && NSWindowStyleMaskResizable == 8 && NSWindowStyleMaskFullSizeContentView == 0x8000,
            "NSWindowStyleMask values");
     expect(NSWindowStyleMaskUnifiedTitleAndToolbar == 0x1000, "NSWindowStyleMaskUnifiedTitleAndToolbar value");

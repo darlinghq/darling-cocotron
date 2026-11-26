@@ -37,6 +37,9 @@ typedef O2Shading *O2ShadingRef;
     O2Float _startRadius;
     O2Float _endRadius;
     O2Float _domain[2];
+    // A conic shading: colours sweep around _startPoint from _angle.
+    BOOL _isConic;
+    O2Float _angle;
 }
 
 - initWithColorSpace: (O2ColorSpaceRef) colorSpace
@@ -71,6 +74,8 @@ O2ColorSpaceRef O2ShadingColorSpace(O2Shading *self);
 - (O2Function *) function;
 
 - (BOOL) isAxial;
+- (BOOL) isConic;
+- (O2Float) angle;
 
 O2ShadingRef O2ShadingCreateAxial(O2ColorSpaceRef colorSpace, O2Point start,
                                   O2Point end, O2FunctionRef function,
@@ -79,6 +84,11 @@ O2ShadingRef O2ShadingCreateRadial(O2ColorSpaceRef colorSpace, O2Point start,
                                    O2Float startRadius, O2Point end,
                                    O2Float endRadius, O2FunctionRef function,
                                    BOOL extendStart, BOOL extendEnd);
+// The function is evaluated from 0 to 1 going around center counterclockwise
+// in user space (from the positive x axis towards the positive y axis),
+// starting at angle radians.
+O2ShadingRef O2ShadingCreateConic(O2ColorSpaceRef colorSpace, O2Point center,
+                                  O2Float angle, O2FunctionRef function);
 O2ShadingRef O2ShadingRetain(O2ShadingRef self);
 void O2ShadingRelease(O2ShadingRef self);
 

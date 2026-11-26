@@ -35,6 +35,7 @@ struct CGGradient {
     size_t numberOfComponents; /* components per stop, alpha included */
     CGFloat *locations;        /* count entries, sorted ascending, within 0...1 */
     CGFloat *components;       /* count * numberOfComponents entries */
+    bool interpolatesPremultiplied; /* colours between stops mix with alpha premultiplied */
 };
 
 /* Interpolates the stops at t in 0...1; the shape CGFunctionCallbacks.evaluate needs. */

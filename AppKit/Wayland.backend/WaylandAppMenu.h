@@ -22,11 +22,14 @@
     NSDBusMenu *_exporter;
     WaylandDisplay *_display;
     NSMenuBarController *_bar;
+    BOOL _exporting;
 }
 
-// Connects to the session bus. Without one the menu is not exported. The bar
-// is only made when the display has a layer shell.
-- (instancetype) initWithDisplay: (WaylandDisplay *) display;
+// Connects to the session bus when exporting. Without one the menu is not
+// exported. Without exporting (the windows carry the menu as strips) the menu
+// is only shown in the bar. The bar is only made when the display has a layer
+// shell.
+- (instancetype) initWithDisplay: (WaylandDisplay *) display exporting: (BOOL) exporting;
 
 // YES while something on the session bus shows application menus: the
 // registrar's name (com.canonical.AppMenu.Registrar) has an owner.

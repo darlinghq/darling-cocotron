@@ -364,6 +364,7 @@ APPKIT_EXPORT NSString *const NSAccessibilityLayoutChangedNotification;
 APPKIT_EXPORT NSString *const NSAccessibilityUIElementsKey;
 
 APPKIT_EXPORT NSString *const NSAccessibilityToggleSubrole;
+APPKIT_EXPORT NSString *const NSAccessibilitySwitchSubrole;
 
 APPKIT_EXPORT NSString *const NSAccessibilityFullScreenButtonSubrole;
 
@@ -373,6 +374,13 @@ typedef NSString * NSAccessibilityNotificationUserInfoKey;
 APPKIT_EXPORT NSAccessibilityNotificationUserInfoKey const NSAccessibilityAnnouncementKey;
 APPKIT_EXPORT NSAccessibilityNotificationName const NSAccessibilityAnnouncementRequestedNotification;
 APPKIT_EXPORT NSAccessibilityNotificationUserInfoKey const NSAccessibilityPriorityKey;
+
+// values for NSAccessibilityPriorityKey
+typedef NS_ENUM(NSInteger, NSAccessibilityPriorityLevel) {
+    NSAccessibilityPriorityLow = 10,
+    NSAccessibilityPriorityMedium = 50,
+    NSAccessibilityPriorityHigh = 90,
+};
 
 APPKIT_EXPORT void NSAccessibilityPostNotificationWithUserInfo(id element,
                                                                NSAccessibilityNotificationName notification,

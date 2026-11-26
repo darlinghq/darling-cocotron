@@ -8,11 +8,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "WaylandLibrary.h"
-#include "WaylandProtocol.h"
 
-// Private-compositor regression fixture. It drives the real WaylandDisplay
-// protocol entry point and records the AppKit events it posts.
+// Private-compositor regression fixture. It drives the protocol entry point of CoreGraphics' pointer
+// decoder (the process' wl_pointer) and takes the AppKit events made from the CGEvents it posts.
 union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; };
 @interface NSObject (ScrollFrameFixture)
 + (id) currentDisplay;
@@ -20,24 +18,31 @@ union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; 
 - (void *) surface;
 - (void) pointerEvent: (uint32_t) opcode arguments: (union Argument *) args;
 - (void) windowUnmapped: (id) window;
-- (void) seatCapabilities: (uint32_t) capabilities;
-- (void) keyboardEvent: (uint32_t) opcode arguments: (union Argument *) args;
+- (void) seatCapabilities: (uint32_t) capabilities seat: (void *) seat;
 @end
 
-extern struct WaylandLibrary WL;
+
+static id decoder;
+
+// The decoder is CoreGraphics': what it posts becomes NSEvents in AppKit's queue
+static void drain(NSMutableArray *events) {
+    NSEvent *event;
+    while ((event = [NSApp nextEventMatchingMask: NSEventMaskAny
+                                       untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.05]
+                                          inMode: NSDefaultRunLoopMode
+                                         dequeue: YES]) != nil)
+        [events addObject: event];
+}
+
+static id ivarOf(id object, const char *name) {
+    Ivar ivar = class_getInstanceVariable(object_getClass(object), name);
+    return ivar ? object_getIvar(object, ivar) : nil;
+}
 
 static NSMutableArray *events;
 static id display;
 static NSWindow *window;
 static int failures, checks;
-static uint32_t (*realProxyVersion)(struct wl_proxy *proxy);
-static uint32_t forcedProxyVersion(struct wl_proxy *proxy) {
-    return 4;
-}
-
-static void capture(id self, SEL command, NSEvent *event, BOOL atStart) {
-    [events addObject: event];
-}
 
 static void scrollCheck(BOOL passed, const char *description) {
     checks++;
@@ -53,11 +58,13 @@ static NSEventType eventTypeAt(NSUInteger index) {
 static void axis(uint32_t which, double value) {
     union Argument args[3] = {{.u = 0}, {.u = which},
                               {.i = (int32_t) (value * 256.0)}};
-    [display pointerEvent: 4 arguments: args];
+    [decoder pointerEvent: 4 arguments: args];
+    drain(events);
 }
 
 static void frame(void) {
-    [display pointerEvent: 5 arguments: NULL];
+    [decoder pointerEvent: 5 arguments: NULL];
+    drain(events);
 }
 
 @interface ScrollFrameApplication : NSApplication
@@ -66,19 +73,18 @@ static void frame(void) {
 @implementation ScrollFrameApplication
 - (void) test: (id) sender {
     display = [NSClassFromString(@"NSDisplay") currentDisplay];
-    Class original = object_getClass(display);
-    Class recorder = objc_allocateClassPair(original, "ScrollFrameRecordingDisplay", 0);
-    Method method = class_getInstanceMethod(original, @selector(postEvent:atStart:));
-    scrollCheck(method != NULL, "backend event method exists");
-    class_addMethod(recorder, @selector(postEvent:atStart:), (IMP) capture,
-                    method_getTypeEncoding(method));
-    objc_registerClassPair(recorder);
+    decoder = ivarOf(_CGSConnectionForID(CGSMainConnectionID()), "_pointerDecoder");
+    id connection = _CGSConnectionForID(CGSMainConnectionID());
+    scrollCheck(decoder != nil, "CoreGraphics has the pointer decoder");
     events = [NSMutableArray new];
-    object_setClass(display, recorder);
+    drain(events);
+    [events removeAllObjects];
+    // A headless compositor has no pointer device: take the capability so the decoder has a wl_pointer
+    [decoder seatCapabilities: 1 seat: (void *) ivarOf(connection, "_seat")];
 
     union Argument enter[4] = {{.u = 1},
         {.o = [[window platformWindow] surface]}, {.i = 20 * 256}, {.i = 30 * 256}};
-    [display pointerEvent: 0 arguments: enter];
+    [decoder pointerEvent: 0 arguments: enter];
 
     axis(0, 20.0);
     axis(1, -10.0);
@@ -101,47 +107,46 @@ static void frame(void) {
 
     axis(0, 10.0);
     union Argument button[4] = {{.u = 3}, {.u = 100}, {.u = 0x110}, {.u = 1}};
-    [display pointerEvent: 3 arguments: button];
+    [decoder pointerEvent: 3 arguments: button];
+    drain(events);
     scrollCheck([events count] == 4 &&
                     eventTypeAt(2) == NSScrollWheel &&
                     eventTypeAt(3) == NSLeftMouseDown,
                 "overtaking button is posted after the pending scroll");
 
-    realProxyVersion = WL.wl_proxy_get_version;
-    WL.wl_proxy_get_version = forcedProxyVersion;
-    axis(0, 10.0);
-    scrollCheck([events count] == 5 &&
-                    [(NSEvent *) [events lastObject] type] == NSScrollWheel,
-                "pre-v5 axis delivery remains immediate");
-    WL.wl_proxy_get_version = realProxyVersion;
+    // (A seat older than version 5 sends no wl_pointer.frame and each axis event is a frame by itself: the
+    // decoder reads the version of its own wl_pointer through CoreGraphics' own copy of the library shim, which
+    // a program cannot replace, so that case is not driven here.)
 
     union Argument leave[2] = {{.u = 2},
                                {.o = [[window platformWindow] surface]}};
-    [display pointerEvent: 1 arguments: leave];
+    [decoder pointerEvent: 1 arguments: leave];
+    drain(events);
     frame();
-    scrollCheck([events count] == 5,
+    scrollCheck([events count] == 4,
                 "pointer leave discards an unfinished scroll frame");
 
-    [display pointerEvent: 0 arguments: enter];
+    [decoder pointerEvent: 0 arguments: enter];
     axis(0, 10.0);
-    [display seatCapabilities: 0];
+    [decoder seatCapabilities: 0 seat: NULL];
+    drain(events);
+    frame();
+    scrollCheck([events count] == 4,
+                "pointer capability loss discards an unfinished scroll frame");
+    [decoder seatCapabilities: 1 seat: (void *) ivarOf(connection, "_seat")];
+    [decoder pointerEvent: 0 arguments: enter];
+    axis(0, 10.0);
     frame();
     scrollCheck([events count] == 5,
-                "pointer capability loss discards an unfinished scroll frame");
-    [display seatCapabilities: 1];
-    [display pointerEvent: 0 arguments: enter];
-    axis(0, 10.0);
-    frame();
-    scrollCheck([events count] == 6,
                 "pointer capability reacquisition resumes framed scrolling");
 
     axis(0, 10.0);
     [display windowUnmapped: [window platformWindow]];
+    drain(events);
     frame();
-    scrollCheck([events count] == 6,
+    scrollCheck([events count] == 5,
                 "window unmap discards an unfinished scroll frame");
 
-    object_setClass(display, original);
     [events release];
     printf("RESULT checks=%d failures=%d\n", checks, failures);
     exit(failures ? 1 : 0);

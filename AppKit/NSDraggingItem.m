@@ -68,13 +68,15 @@ NSDraggingImageComponentKey const NSDraggingImageComponentLabelKey = @"label";
 
 - (void) setDraggingFrame: (NSRect) frame contents: (id) contents {
     [self setDraggingFrame: frame];
-    NSSize size = frame.size;
+    // The component fills the frame; the provider keeps it, so it is the same
+    // one each time it is asked for (observed on macOS 26.7.3).
+    NSDraggingImageComponent *icon = [NSDraggingImageComponent draggingImageComponentWithKey:
+                                                                   NSDraggingImageComponentIconKey];
+    [icon setContents: contents];
+    [icon setFrame: NSMakeRect(0, 0, frame.size.width, frame.size.height)];
+    NSArray *components = [NSArray arrayWithObject: icon];
     [self setImageComponentsProvider: ^NSArray * {
-        NSDraggingImageComponent *icon = [NSDraggingImageComponent draggingImageComponentWithKey:
-                                                                       NSDraggingImageComponentIconKey];
-        [icon setContents: contents];
-        [icon setFrame: NSMakeRect(0, 0, size.width, size.height)];
-        return [NSArray arrayWithObject: icon];
+        return components;
     }];
 }
 

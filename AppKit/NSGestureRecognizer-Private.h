@@ -19,8 +19,21 @@
 
 #import <AppKit/NSGestureRecognizer.h>
 
+enum {
+    _NSGestureRecognizerDelaysPrimaryMouseButtonEvents = 1 << 0,
+    _NSGestureRecognizerDelaysSecondaryMouseButtonEvents = 1 << 1,
+    _NSGestureRecognizerDelaysOtherMouseButtonEvents = 1 << 2,
+    _NSGestureRecognizerDelaysKeyEvents = 1 << 3,
+    _NSGestureRecognizerDelaysMagnificationEvents = 1 << 4,
+    _NSGestureRecognizerDelaysRotationEvents = 1 << 5,
+};
+
 @interface NSGestureRecognizer (NSGestureRecognizerPrivate)
 - (void) _setView: (NSView *) view;
 - (BOOL) _receiveEvent: (NSEvent *) event;
 - (void) _resetIfFinished;
+
+// The kinds of event a new recognizer of this class delays (the
+// _NSGestureRecognizerDelays* bits); archives record them explicitly.
++ (unsigned int) _defaultDelayedEvents;
 @end

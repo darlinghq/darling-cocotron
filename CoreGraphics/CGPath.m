@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "CGConversions.h"
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreGraphics/CGPath.h>
 #import <Onyx2D/O2MutablePath.h>
 #import <Onyx2D/O2Path.h>
@@ -173,6 +174,83 @@ void CGPathAddRoundedRect(CGMutablePathRef path,
     CGPathAddCurveToPoint(path, transform,
                           x1 - rx + k * rx, y0, x1, y0 + ry - k * ry,
                           x1, y0 + ry);
+    CGPathCloseSubpath(path);
+}
+
+static CGSize cornerRadii(CGSize corner) {
+    // a corner that is round in one direction only is square
+    if (!(corner.width > 0) || !(corner.height > 0))
+        return CGSizeZero;
+    return corner;
+}
+
+static CGFloat fitRadii(CGFloat side, CGFloat first, CGFloat second) {
+    CGFloat sum = first + second;
+    return sum > side ? side / sum : 1;
+}
+
+// The subpath starts on the right edge where the (maxX, minY) corner ends,
+// runs counterclockwise towards increasing y, and closes. Each corner is a quarter
+// ellipse of its own radii; a corner with no radius is square. When the radii
+// of two corners on one side add up to more than that side, all radii are
+// scaled down by one factor until they fit.
+void CGPathAddUnevenCornersRoundedRect(CGMutablePathRef path,
+                                       const CGAffineTransform *transform,
+                                       CGRect rect, const CGSize corners[4])
+{
+    if (path == NULL || CGRectIsNull(rect))
+        return;
+    rect = CGRectStandardize(rect);
+    if (corners == NULL || CGRectIsEmpty(rect)) {
+        CGPathAddRect(path, transform, rect);
+        return;
+    }
+
+    CGFloat x0 = CGRectGetMinX(rect), x1 = CGRectGetMaxX(rect);
+    CGFloat y0 = CGRectGetMinY(rect), y1 = CGRectGetMaxY(rect);
+    CGFloat w = x1 - x0, h = y1 - y0;
+    // Inferred order, from how WebKit's PathCG (BSD) fills the array: the
+    // corners at (minX, maxY), (maxX, maxY), (maxX, minY), (minX, minY).
+    CGSize minXMaxY = cornerRadii(corners[0]);
+    CGSize maxXMaxY = cornerRadii(corners[1]);
+    CGSize maxXMinY = cornerRadii(corners[2]);
+    CGSize minXMinY = cornerRadii(corners[3]);
+
+    CGFloat scale = 1;
+    scale = MIN(scale, fitRadii(w, minXMaxY.width, maxXMaxY.width));
+    scale = MIN(scale, fitRadii(w, minXMinY.width, maxXMinY.width));
+    scale = MIN(scale, fitRadii(h, minXMinY.height, minXMaxY.height));
+    scale = MIN(scale, fitRadii(h, maxXMinY.height, maxXMaxY.height));
+    if (scale < 1) {
+        CGSize *all[4] = {&minXMaxY, &maxXMaxY, &maxXMinY, &minXMinY};
+        for (int i = 0; i < 4; i++) {
+            all[i]->width *= scale;
+            all[i]->height *= scale;
+        }
+    }
+    const CGFloat k = 0.5522847498307936;
+
+    CGPathMoveToPoint(path, transform, x1, y0 + maxXMinY.height);
+    CGPathAddLineToPoint(path, transform, x1, y1 - maxXMaxY.height);
+    CGPathAddCurveToPoint(path, transform,
+                          x1, y1 - maxXMaxY.height + k * maxXMaxY.height,
+                          x1 - maxXMaxY.width + k * maxXMaxY.width, y1,
+                          x1 - maxXMaxY.width, y1);
+    CGPathAddLineToPoint(path, transform, x0 + minXMaxY.width, y1);
+    CGPathAddCurveToPoint(path, transform,
+                          x0 + minXMaxY.width - k * minXMaxY.width, y1,
+                          x0, y1 - minXMaxY.height + k * minXMaxY.height,
+                          x0, y1 - minXMaxY.height);
+    CGPathAddLineToPoint(path, transform, x0, y0 + minXMinY.height);
+    CGPathAddCurveToPoint(path, transform,
+                          x0, y0 + minXMinY.height - k * minXMinY.height,
+                          x0 + minXMinY.width - k * minXMinY.width, y0,
+                          x0 + minXMinY.width, y0);
+    CGPathAddLineToPoint(path, transform, x1 - maxXMinY.width, y0);
+    CGPathAddCurveToPoint(path, transform,
+                          x1 - maxXMinY.width + k * maxXMinY.width, y0,
+                          x1, y0 + maxXMinY.height - k * maxXMinY.height,
+                          x1, y0 + maxXMinY.height);
     CGPathCloseSubpath(path);
 }
 

@@ -9,6 +9,7 @@
  * measured on macOS 10.14.4; levels 1 and 3 scale it by 1/2 and 3/2. */
 #define O2FONT_SMOOTHING_WIDENING 0.0125
 #import <string.h>
+#include <ctype.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <stdint.h>
@@ -508,6 +509,20 @@ NSString *O2FontCopyInstalledFamilyForStandardFamily(NSString *family) {
     return [result retain];
 }
 
+// The names of the families macOS ships (Times, Helvetica, ...) that have no installed family of that
+// name but an installed stand-in, as -availableMembersOfFontFamily: resolves them.
+NSArray *O2FontCopyStandardFamilyNamesWithStandIn(void) {
+    NSMutableArray *names = [[NSMutableArray alloc] init];
+    for (size_t i = 0; i < sizeof(standardFamilies) / sizeof(standardFamilies[0]); i++) {
+        NSString *candidate = [NSString stringWithUTF8String: standardFamilies[i].family];
+        NSString *installed = O2FontCopyInstalledFamilyForStandardFamily(candidate);
+        if (installed != nil)
+            [names addObject: candidate];
+        [installed release];
+    }
+    return names;
+}
+
 /* fontconfig ranks bitmap faces (the X11 .pcf fonts) above outline fonts for some generic
  * families, and a bitmap face has units_per_EM == 0, so every metric derived from it divides
  * by zero. Return the first scalable face of the sorted set, or the first face if none is. */
@@ -539,6 +554,48 @@ static NSString *filenameOfFirstScalableFace(FcFontSet *set, int *faceIndex) {
     }
     *faceIndex = fallbackIndex;
     return fallback;
+}
+
+// The fontconfig language (RFC 3066 style, as fontconfig's rules test it) for a BCP 47 tag:
+// lowercase, without a script subtag. A Chinese script subtag stands for the region whose
+// writing it is (fontconfig distinguishes Chinese by region): Hans as zh-cn, Hant as zh-tw
+// unless the region is Hong Kong or Macau. Returns false if the tag has no language.
+static bool fontconfigLanguage(const char *tag, char *out, size_t size) {
+    char language[16] = "", script[8] = "", region[8] = "";
+    size_t index = 0;
+    for (int subtag = 0; tag[index] != '\0'; subtag++) {
+        size_t length = strcspn(tag + index, "-_");
+        char part[16];
+        if (length >= sizeof(part))
+            length = sizeof(part) - 1;
+        for (size_t i = 0; i < length; i++)
+            part[i] = (char) tolower((unsigned char) tag[index + i]);
+        part[length] = '\0';
+        if (subtag == 0)
+            strcpy(language, part);
+        else if (length == 4 && script[0] == '\0' && region[0] == '\0')
+            strcpy(script, part);
+        else if ((length == 2 || length == 3) && region[0] == '\0')
+            strcpy(region, part);
+        index += strcspn(tag + index, "-_");
+        if (tag[index] != '\0')
+            index++;
+    }
+    if (language[0] == '\0' || strlen(language) > 3)
+        return false;
+    if (strcmp(language, "zh") == 0) {
+        if (strcmp(region, "hk") == 0 || strcmp(region, "mo") == 0)
+            ; // the region says it
+        else if (strcmp(script, "hant") == 0)
+            strcpy(region, "tw");
+        else if (strcmp(script, "hans") == 0 || region[0] == '\0')
+            strcpy(region, "cn");
+    }
+    if (region[0] != '\0')
+        snprintf(out, size, "%s-%s", language, region);
+    else
+        snprintf(out, size, "%s", language);
+    return true;
 }
 
 O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
@@ -587,9 +644,10 @@ O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
         if (FT_IS_FIXED_WIDTH(baseFace))
             added = added && FcPatternAddInteger(pattern, FC_SPACING, FC_MONO);
     }
-    if (language != NULL && language[0] != '\0')
+    char fcLanguage[32];
+    if (language != NULL && fontconfigLanguage(language, fcLanguage, sizeof(fcLanguage)))
         added = added && FcPatternAddString(pattern, FC_LANG,
-                                            (const FcChar8 *)language);
+                                            (const FcChar8 *)fcLanguage);
     if (!added) {
         FcPatternDestroy(pattern);
         return nil;
@@ -994,7 +1052,10 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
         double maximum = [[axis objectForKey: @"maximum"] doubleValue];
         if (number != number)
             continue;
-        number = number < minimum ? minimum : (number > maximum ? maximum : number);
+        // The setting keeps the value that was asked for (CGFontCopyVariations reports it); the face is
+        // given the value inside the axis range, below.
+        (void) minimum;
+        (void) maximum;
         [settings setObject: [NSNumber numberWithDouble: number] forKey: tag];
     }
 
@@ -1023,7 +1084,11 @@ static NSString *variationAxisName(FT_Face face, FT_UInt nameID) {
         NSNumber *value = [settings objectForKey: [axis objectForKey: @"tag"]];
         if (value == nil)
             value = [axis objectForKey: @"default"];
-        coordinates[i] = (FT_Fixed) llround([value doubleValue] * 65536.0);
+        double number = [value doubleValue];
+        double minimum = [[axis objectForKey: @"minimum"] doubleValue];
+        double maximum = [[axis objectForKey: @"maximum"] doubleValue];
+        number = number < minimum ? minimum : (number > maximum ? maximum : number);
+        coordinates[i] = (FT_Fixed) llround(number * 65536.0);
     }
     FT_Error error = FT_Set_Var_Design_Coordinates(face, (FT_UInt) [axes count], coordinates);
     free(coordinates);

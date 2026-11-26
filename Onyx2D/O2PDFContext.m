@@ -22,6 +22,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSException.h>
 #include <math.h>
+#include <string.h>
 #import <Foundation/NSPathUtilities.h>
 #import <Foundation/NSProcessInfo.h>
 #import <Onyx2D/O2ClipPhase.h>
@@ -38,6 +39,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2PDFContext.h>
 #import <Onyx2D/O2PDFDictionary.h>
 #import <Onyx2D/O2PDFObject_Name.h>
+#import <Onyx2D/O2PDFObject_const.h>
 #import <Onyx2D/O2PDFObject_R.h>
 #import <Onyx2D/O2PDFPage.h>
 #import <Onyx2D/O2PDFStream.h>
@@ -153,9 +155,17 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
 }
 
 - (void) dealloc {
+    // Releasing a PDF context finishes its document, as CGPDFContextClose() does: a context that is released with
+    // the document not closed still has the trailer written (and an open page ended)
+    if (_dataConsumer != nil) {
+        if (_page != nil)
+            [self endPage];
+        [self close];
+    }
     [_dataConsumer release];
     [_outline release];
     [_fontCache release];
+    [_destinations release];
     if (_objectToRef != NULL)
         NSFreeMapTable(_objectToRef);
     [_indirectObjects release];
@@ -503,6 +513,27 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
         }
     }
 
+    // The opacity of the fill and the stroke is not part of the colour
+    // operators, it is the /ca and /CA entries of a graphics state parameter
+    // dictionary, which the page resources hold.
+    {
+        O2Float globalAlpha = O2GStateAlpha(gState);
+        O2Float fillAlpha = O2ColorGetAlpha(gState->_fillColor) * globalAlpha;
+        O2Float strokeAlpha =
+                O2ColorGetAlpha(gState->_strokeColor) * globalAlpha;
+
+        if (fillAlpha < 1. || strokeAlpha < 1.) {
+            O2PDFDictionary *opacity = [O2PDFDictionary pdfDictionary];
+
+            [opacity setNameForKey: "Type" value: "ExtGState"];
+            [opacity setNumberForKey: "ca" value: fillAlpha];
+            [opacity setNumberForKey: "CA" value: strokeAlpha];
+            [self contentWithFormat: @"%@ gs ",
+                                     [self nameForResource: opacity
+                                                inCategory: "ExtGState"]];
+        }
+    }
+
     [self contentWithFormat: @"%g Tc ", gState->_characterSpacing];
     [self contentWithFormat: @"%g w ", gState->_lineWidth];
     [self contentWithFormat: @"%d J ", gState->_lineCap];
@@ -650,6 +681,9 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
 }
 
 - (void) drawShading: (O2Shading *) shading {
+    // PDF has no conic shading type; a conic shading is not written.
+    if ([shading isConic])
+        return;
     [self emitSaveGState];
     [self emitCurrentGState];
     O2PDFObject *pdfObject = [shading encodeReferenceWithContext: self];
@@ -798,6 +832,105 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
     // _pages, _catalog, nil]];
 }
 
+// the rect in default page space that covers rect in user space
+- (O2Rect) pageRectForUserRect: (O2Rect) rect {
+    O2AffineTransform ctm = O2ContextGetCTM(self);
+    O2Point corners[4] = {
+        O2PointMake(O2RectGetMinX(rect), O2RectGetMinY(rect)),
+        O2PointMake(O2RectGetMaxX(rect), O2RectGetMinY(rect)),
+        O2PointMake(O2RectGetMinX(rect), O2RectGetMaxY(rect)),
+        O2PointMake(O2RectGetMaxX(rect), O2RectGetMaxY(rect)),
+    };
+    O2Float minX = INFINITY, minY = INFINITY, maxX = -INFINITY, maxY = -INFINITY;
+    for (int i = 0; i < 4; i++) {
+        O2Point p = O2PointApplyAffineTransform(corners[i], ctm);
+        minX = MIN(minX, p.x);
+        minY = MIN(minY, p.y);
+        maxX = MAX(maxX, p.x);
+        maxY = MAX(maxY, p.y);
+    }
+    return O2RectMake(minX, minY, maxX - minX, maxY - minY);
+}
+
+// a link annotation on the current page that covers rect and does nothing
+// yet; the caller sets what activating it does
+- (O2PDFDictionary *) addLinkForRect: (O2Rect) rect {
+    O2PDFArray *annotations = nil;
+    if (![_page getArrayForKey: "Annots" value: &annotations]) {
+        annotations = [O2PDFArray pdfArray];
+        [_page setObjectForKey: "Annots" value: annotations];
+    }
+    O2PDFDictionary *link = [O2PDFDictionary pdfDictionary];
+    [link setNameForKey: "Type" value: "Annot"];
+    [link setNameForKey: "Subtype" value: "Link"];
+    [link setObjectForKey: "Rect"
+                    value: [O2PDFArray pdfArrayWithRect: [self pageRectForUserRect: rect]]];
+    // no visible border, as the link only marks an area of the page
+    O2PDFInteger noBorder[3] = {0, 0, 0};
+    [link setObjectForKey: "Border" value: [O2PDFArray pdfArrayWithIntegers: noBorder count: 3]];
+    [annotations addObject: [self referenceForObject: link]];
+    return link;
+}
+
+- (void) setURL: (NSURL *) url forRect: (O2Rect) rect {
+    if (_page == nil || url == nil)
+        return;
+    O2PDFDictionary *action = [O2PDFDictionary pdfDictionary];
+    [action setNameForKey: "S" value: "URI"];
+    [action setObjectForKey: "URI"
+                      value: [O2PDFString pdfObjectWithString: [url absoluteString]]];
+    [[self addLinkForRect: rect] setObjectForKey: "A" value: action];
+}
+
+- (void) addDestinationWithName: (NSString *) name atPoint: (O2Point) point {
+    if (_page == nil || name == nil)
+        return;
+    O2Point onPage = O2PointApplyAffineTransform(point, O2ContextGetCTM(self));
+    // the page scrolled so that the point is at its top left, at the zoom the
+    // reader already uses (null)
+    O2PDFArray *destination = [O2PDFArray pdfArray];
+    [destination addObject: [self referenceForObject: _page]];
+    [destination addObject: [O2PDFObject_Name pdfObjectWithCString: "XYZ"]];
+    [destination addNumber: onPage.x];
+    [destination addNumber: onPage.y];
+    [destination addObject: [O2PDFObject_const pdfObjectWithNull]];
+    if (_destinations == nil)
+        _destinations = [NSMutableDictionary new];
+    [_destinations setObject: destination forKey: name];
+}
+
+- (void) setDestinationWithName: (NSString *) name forRect: (O2Rect) rect {
+    if (_page == nil || name == nil)
+        return;
+    [[self addLinkForRect: rect] setObjectForKey: "Dest"
+                                           value: [O2PDFString pdfObjectWithString: name]];
+}
+
+// the named destinations, as the name tree of the catalog's Names dictionary,
+// whose keys must be in byte order
+- (void) encodeDestinations {
+    if ([_destinations count] == 0)
+        return;
+    NSArray *names = [[_destinations allKeys] sortedArrayUsingComparator: ^NSComparisonResult(NSString *a, NSString *b) {
+        NSData *x = [a dataUsingEncoding: NSUTF8StringEncoding];
+        NSData *y = [b dataUsingEncoding: NSUTF8StringEncoding];
+        int order = memcmp([x bytes], [y bytes], MIN([x length], [y length]));
+        if (order == 0)
+            return [x length] < [y length] ? NSOrderedAscending : ([x length] > [y length] ? NSOrderedDescending : NSOrderedSame);
+        return order < 0 ? NSOrderedAscending : NSOrderedDescending;
+    }];
+    O2PDFArray *pairs = [O2PDFArray pdfArray];
+    for (NSString *name in names) {
+        [pairs addObject: [O2PDFString pdfObjectWithString: name]];
+        [pairs addObject: [_destinations objectForKey: name]];
+    }
+    O2PDFDictionary *tree = [O2PDFDictionary pdfDictionary];
+    [tree setObjectForKey: "Names" value: pairs];
+    O2PDFDictionary *catalogNames = [O2PDFDictionary pdfDictionary];
+    [catalogNames setObjectForKey: "Dests" value: tree];
+    [_catalog setObjectForKey: "Names" value: catalogNames];
+}
+
 - (void) setOutline: (NSDictionary *) outline {
     [_outline autorelease];
     _outline = [outline copy];
@@ -850,6 +983,7 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
 }
 
 - (void) close {
+    [self encodeDestinations];
     if (_outline != nil) {
         O2PDFDictionary *root = [O2PDFDictionary pdfDictionary];
         NSArray *children = [_outline objectForKey: @"Children"];

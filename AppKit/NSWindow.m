@@ -104,6 +104,11 @@ const NSNotificationName NSWindowDidAnimateNotification =
 
 const NSNotificationName NSWindowDidChangeBackingPropertiesNotification =
         @"NSWindowDidChangeBackingPropertiesNotification";
+// Not in the macOS SDK: posted when the window's contents move into or out
+// of a layer surface. Windows here are never hosted in one, so it is never
+// posted. The name is the one macOS 26.7.3 gives it.
+const NSNotificationName _NSWindowDidChangeContentsHostedInLayerSurfaceNotification =
+        @"_NSWindowDidChangeContentsHostedInLayerSurfaceNotification";
 const NSNotificationName NSWindowDidChangeScreenProfileNotification =
         @"NSWindowDidChangeScreenProfileNotification";
 NSString *const NSBackingPropertyOldScaleFactorKey =
@@ -122,6 +127,11 @@ const NSNotificationName NSWindowDidOrderOffScreenNotification =
         @"NSWindowDidOrderOffScreenNotification";
 const NSNotificationName NSWindowDidOrderOnScreenNotification =
         @"_NSWindowDidBecomeVisible";
+// Not in the macOS SDK either. The names are the ones macOS 26.7.3 and
+// Mac OS X 10.14.4 give them; the first does not match its symbol.
+const NSNotificationName NSWindowWillOrderOnScreenNotification = @"_NSWindowWillBecomeVisible";
+const NSNotificationName NSWindowWillOrderOffScreenNotification =
+        @"NSWindowWillOrderOffScreenNotification";
 const NSNotificationName NSWindowWillEnterFullScreenNotification =
         @"NSWindowWillEnterFullScreenNotification";
 const NSNotificationName NSWindowWillExitFullScreenNotification =
@@ -169,6 +179,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (NSRect) zoomedFrame;
 - (void) _updateOcclusionState;
 - (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible;
+- (void) _willOrderOnScreen: (BOOL) visible;
 
 @end
 
@@ -188,27 +199,63 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSView *) view;
 
-- (NSComparisonResult) compareKeyViewPosition: (_NSKeyViewPosition *) other;
-
 @end
 
 @implementation _NSKeyViewPosition
 
+// The loop a window builds for itself visits a view, then its subviews, each level in reading order: rows from
+// the top down, left to right inside a row; a view belongs to the row of the highest one remaining when
+// their vertical extents overlap (views that only touch are in different rows). Black-box observation on
+// macOS 26.7.3 and 10.14.4 (tier 2, mac-probes p794c): a left view whose top is up to 23 points below the top
+// of a right view 24 points tall comes first, from 24 points on (the extents only touch) it comes second; a
+// view of a third row whose extent overlaps only the second member of a row is not part of that row; the
+// subviews of a container are visited before the views that come after the container.
+// Test: appkit-window-recalculate-key-view-loop-order.m
 + (void) addKeyViewPositionsWithView: (NSView *) view
                              toArray: (NSMutableArray *) array
 {
+    NSMutableArray *remaining = [NSMutableArray array];
+
     [array addObject: [[[_NSKeyViewPosition alloc] initWithView: view]
                               autorelease]];
 
     for (NSView *child in [view subviews])
-        [self addKeyViewPositionsWithView: child toArray: array];
+        [remaining addObject: [[[_NSKeyViewPosition alloc] initWithView: child]
+                                      autorelease]];
+
+    // Highest first; the sort is stable for equal tops.
+    [remaining sortWithOptions: NSSortStable
+               usingComparator: ^NSComparisonResult(_NSKeyViewPosition *a, _NSKeyViewPosition *b) {
+                   CGFloat top = NSMaxY(a->_rect), otherTop = NSMaxY(b->_rect);
+
+                   return top > otherTop ? NSOrderedAscending : (top < otherTop ? NSOrderedDescending : NSOrderedSame);
+               }];
+
+    while ([remaining count] > 0) {
+        _NSKeyViewPosition *leader = [remaining objectAtIndex: 0];
+        NSMutableArray *row = [NSMutableArray array];
+
+        for (_NSKeyViewPosition *candidate in remaining)
+            if (candidate == leader ||
+                (NSMinY(candidate->_rect) < NSMaxY(leader->_rect) &&
+                 NSMaxY(candidate->_rect) > NSMinY(leader->_rect)))
+                [row addObject: candidate];
+        [remaining removeObjectsInArray: row];
+        [row sortWithOptions: NSSortStable
+             usingComparator: ^NSComparisonResult(_NSKeyViewPosition *a, _NSKeyViewPosition *b) {
+                 CGFloat left = NSMinX(a->_rect), otherLeft = NSMinX(b->_rect);
+
+                 return left < otherLeft ? NSOrderedAscending : (left > otherLeft ? NSOrderedDescending : NSOrderedSame);
+             }];
+        for (_NSKeyViewPosition *position in row)
+            [self addKeyViewPositionsWithView: position->_view toArray: array];
+    }
 }
 
 + (NSArray *) sortedKeyViewPositionsWithView: (NSView *) view {
     NSMutableArray *result = [NSMutableArray array];
 
     [self addKeyViewPositionsWithView: view toArray: result];
-    [result sortUsingSelector: @selector(compareKeyViewPosition:)];
 
     return result;
 }
@@ -221,20 +268,6 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 - (NSView *) view {
     return _view;
-}
-
-- (NSComparisonResult) compareKeyViewPosition: (_NSKeyViewPosition *) other {
-
-    // Sort by larger Y (cartesian coordinates)
-    if (NSMaxY(_rect) < NSMaxY(other->_rect))
-        return NSOrderedDescending;
-    else {
-        // Then sort by smaller X
-        if (NSMinX(_rect) < NSMinX(other->_rect))
-            return NSOrderedAscending;
-        else
-            return NSOrderedDescending;
-    }
 }
 
 @end
@@ -381,7 +414,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (void) slideDraggedImageTo: (NSPoint) point {
 }
 
-- (int) draggingSequenceNumber {
+- (NSInteger) draggingSequenceNumber {
     return 0;
 }
 
@@ -467,6 +500,12 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
     return [NSStandardWindowButtonCell class];
 }
 
+@end
+
+// The SPI protocol of views that register with -registerScrollViewSeparatorTrackingAdapter:.
+@protocol NSScrollViewSeparatorTrackingAdapter
+- (NSRect) scrollViewFrame;
+- (BOOL) hasScrolledContentsUnderTitlebar;
 @end
 
 @interface NSApplication (DarlingTerminateCheck)
@@ -564,28 +603,67 @@ static BOOL _allowsAutomaticWindowTabbing;
     return 0;
 }
 
-// Darling setting DarlingInWindowMenuBar (boolean, off by default): draw the
-// main menu as a strip inside each titled window instead of in the desktop's
-// global menu or the application's own menu bar. It is read from the
-// application's preferences, falling back to NSGlobalDomain, and from the
-// org.darlinghq.AppKit domain. The strip is drawn as well when the display
-// backend has nowhere else to show the menu, so that it is never missing. The
-// answer is fixed at first use, because the frame of every window depends on it.
+// Where the main menu is shown is a Darling setting, DarlingMenuBarStyle, a
+// string read from the application's preferences, falling back to
+// NSGlobalDomain, and from the org.darlinghq.AppKit domain:
+//   "window": a strip inside each window that can carry one, always;
+//   "screen": outside the windows, in the desktop's global menu or in a menu
+//             bar along the top of the screen, whenever the display backend
+//             can show it there;
+//   "auto" (the default, also for any other value): the desktop's global menu
+//             when the desktop has one, and the strips otherwise.
+// The older boolean DarlingInWindowMenuBar means "window" when it is YES, if
+// DarlingMenuBarStyle is not set.
+// Whichever the style, the menu bar along the top of the screen is also shown
+// while the application has a main menu and no visible window carries a strip
+// (see NSMenuBarController), when the backend can show one.
+// The answer is fixed at first use, because the frame of every window depends on it.
+static NSString *menuBarStylePreference(void) {
+    CFStringRef key = CFSTR("DarlingMenuBarStyle");
+    CFPropertyListRef value =
+            CFPreferencesCopyAppValue(key, kCFPreferencesCurrentApplication);
+
+    if (value == NULL || CFGetTypeID(value) != CFStringGetTypeID()) {
+        if (value != NULL)
+            CFRelease(value);
+        value = CFPreferencesCopyAppValue(key, CFSTR("org.darlinghq.AppKit"));
+    }
+    if (value != NULL && CFGetTypeID(value) != CFStringGetTypeID()) {
+        CFRelease(value);
+        value = NULL;
+    }
+    return [(NSString *) value autorelease];
+}
+
 + (BOOL) _usesInWindowMenuBar {
     static BOOL value;
     static dispatch_once_t once;
 
     dispatch_once(&once, ^{
-      CFStringRef key = CFSTR("DarlingInWindowMenuBar");
-      Boolean valid = false;
-      Boolean flag = CFPreferencesGetAppBooleanValue(
-              key, kCFPreferencesCurrentApplication, &valid);
+      NSString *style = [menuBarStylePreference() lowercaseString];
+      BOOL forceWindow = [style isEqualToString: @"window"];
+      BOOL forceScreen = [style isEqualToString: @"screen"];
 
-      if (!valid)
-          flag = CFPreferencesGetAppBooleanValue(
-                  key, CFSTR("org.darlinghq.AppKit"), &valid);
-      value = (valid && flag) ||
-              ![[NSDisplay currentDisplay] _showsMainMenuOutsideWindows];
+      if (style == nil) {
+          CFStringRef key = CFSTR("DarlingInWindowMenuBar");
+          Boolean valid = false;
+          Boolean flag = CFPreferencesGetAppBooleanValue(
+                  key, kCFPreferencesCurrentApplication, &valid);
+
+          if (!valid)
+              flag = CFPreferencesGetAppBooleanValue(
+                      key, CFSTR("org.darlinghq.AppKit"), &valid);
+          forceWindow = valid && flag;
+      }
+
+      NSDisplay *display = [NSDisplay currentDisplay];
+
+      if (forceWindow)
+          value = YES;
+      else if (forceScreen)
+          value = ![display _showsMainMenuOutsideWindows];
+      else
+          value = ![display _desktopShowsMainMenu];
     });
     return value;
 }
@@ -883,6 +961,7 @@ static BOOL _allowsAutomaticWindowTabbing;
     [NS_EXTRA(NSWindow, self)->_animations release];
     [NS_EXTRA(NSWindow, self)->_tabGroup _windowWillDeallocate];
     [NS_EXTRA(NSWindow, self)->_tabGroup release];
+    [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters release];
     [NS_EXTRA(NSWindow, self)->_tabbingIdentifier release];
     [NS_EXTRA(NSWindow, self)->_subtitle release];
     [NS_EXTRA(NSWindow, self)->_childWindows release];
@@ -2677,8 +2756,11 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if ([self initialFirstResponder] != nil) {
         [self makeFirstResponder: [self initialFirstResponder]];
     } else {
-        // Otherwise calculate one and set the first responder.
-        if ([self autorecalculatesKeyViewLoop]) {
+        // Otherwise calculate one and set the first responder. A window that
+        // does not recalculate its loop automatically still gets one when it
+        // has none (documented for -recalculateKeyViewLoop).
+        if ([self autorecalculatesKeyViewLoop] ||
+            ![self _hasEstablishedKeyViewLoop]) {
             [self recalculateKeyViewLoop];
         }
         if ([self firstResponder] == self) {
@@ -2744,20 +2826,49 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     return 0.20;
 }
 
+// With a view as the first responder, the next (previous) valid key view of that view takes the focus, and
+// nothing changes when there is none; a text field's field editor is a view outside the loop, so while it is
+// edited the call changes nothing (the editor's own handling of Tab moves on). With the window itself as the
+// first responder the initial first responder is chosen when it accepts first responder status, and
+// otherwise its next (previous) valid key view; without an initial first responder the first (last) valid
+// key view of the loop is. Black-box observation on macOS 26.7.3 and 10.14.4 (tier 2, mac-probes p794b,
+// p794d): selectNextKeyView: and selectPreviousKeyView: leave a field editor, and a custom view without
+// next key view, as the first responder (also with an initial first responder set); with the window as
+// first responder, Next gives the first valid key view of a loop that skips a button, Previous the last one,
+// and a set initial first responder wins in both directions.
+// Test: appkit-window-select-key-view-initial.m
 - (void) selectNextKeyView: sender {
     if ([_firstResponder isKindOfClass: [NSView class]]) {
         NSView *view = (NSView *) _firstResponder;
 
-        [self selectKeyViewFollowingView: view];
+        if ([view nextValidKeyView] != nil)
+            [self selectKeyViewFollowingView: view];
+        return;
     }
+
+    NSView *initial = [self initialFirstResponder];
+    NSView *candidate = initial == nil ? [_contentView nextValidKeyView]
+                                       : ([initial acceptsFirstResponder] ? initial : [initial nextValidKeyView]);
+
+    if (candidate != nil)
+        [self _makeFirstResponder: candidate selecting: NSSelectingNext];
 }
 
 - (void) selectPreviousKeyView: sender {
     if ([_firstResponder isKindOfClass: [NSView class]]) {
         NSView *view = (NSView *) _firstResponder;
 
-        [self selectKeyViewPrecedingView: view];
+        if ([view previousValidKeyView] != nil)
+            [self selectKeyViewPrecedingView: view];
+        return;
     }
+
+    NSView *initial = [self initialFirstResponder];
+    NSView *candidate = initial == nil ? [_contentView previousValidKeyView]
+                                       : ([initial acceptsFirstResponder] ? initial : [initial previousValidKeyView]);
+
+    if (candidate != nil)
+        [self _makeFirstResponder: candidate selecting: NSSelectingPrevious];
 }
 
 // While the new key view is made first responder, -keyViewSelectionDirection
@@ -2782,6 +2893,27 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
 - (void) selectKeyViewPrecedingView: (NSView *) view {
     [self _makeFirstResponder: [view previousValidKeyView] selecting: NSSelectingPrevious];
+}
+
+// YES when some view of the window can hand the key focus on to another one,
+// that is when somebody has set up a key view loop. A manual chain whose next
+// views are all hidden or refuse first responder status counts as no loop. The
+// check runs once, when the window first becomes key, so views added later
+// get no links from it.
+- (BOOL) _hasEstablishedKeyViewLoop {
+    NSMutableArray *pending = [NSMutableArray array];
+
+    if (_contentView != nil)
+        [pending addObject: _contentView];
+    while ([pending count] > 0) {
+        NSView *view = [pending lastObject];
+
+        [pending removeLastObject];
+        if ([view canBecomeKeyView] && [view nextValidKeyView] != nil)
+            return YES;
+        [pending addObjectsFromArray: [view subviews]];
+    }
+    return NO;
 }
 
 - (void) recalculateKeyViewLoopIfNeeded {
@@ -2827,6 +2959,9 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     if (create && newFieldEditor == nil && _sharedFieldEditor == nil) {
         newFieldEditor = _sharedFieldEditor = [[NSTextView alloc] init];
+        // The container of a field editor follows neither the width nor the height of the view (macOS 26.7.3
+        // and 10.14.4, black-box, tier 2, mac-probes p783); the view sizes it to itself.
+        [[_sharedFieldEditor textContainer] setWidthTracksTextView: NO];
         // Cells draw their titles without padding; keep editing aligned.
         [[_sharedFieldEditor textContainer] setLineFragmentPadding: 0];
     }
@@ -3225,6 +3360,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     switch (place) {
     case NSWindowAbove:
+        [self _willOrderOnScreen: YES];
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
@@ -3251,6 +3387,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
 
     case NSWindowBelow:
+        [self _willOrderOnScreen: YES];
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
@@ -3287,6 +3424,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [[self retain] autorelease];
             [NS_EXTRA(NSWindow, self)->_parentWindow _detachChildWindow: self];
         }
+        [self _willOrderOnScreen: NO];
         appearance = [self _willChangeViewAppearanceForVisible: NO];
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
@@ -4010,6 +4148,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NS_EXTRA(NSWindow, self)->_isVisible == visible) {
         return;
     }
+    [self _willOrderOnScreen: visible];
     NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     if (visible) {
@@ -4493,6 +4632,17 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                                                              rootHidden: NO];
     [NSViewController _willPerformAppearanceTransitions: appearance];
     return appearance;
+}
+
+// Ordering a hidden window in, or a visible one out, is announced before the
+// window changes, with the window as the object and no user info; ordering a
+// window where it already is announces nothing (observed on macOS 26.7.3 and
+// Mac OS X 10.14.4, test appkit-window-will-order-notifications.m).
+- (void) _willOrderOnScreen: (BOOL) visible {
+    if (NS_EXTRA(NSWindow, self)->_isVisible == visible)
+        return;
+    [self postNotificationName: visible ? NSWindowWillOrderOnScreenNotification
+                                        : NSWindowWillOrderOffScreenNotification];
 }
 
 // Called wherever something -occlusionState depends on may have changed: posts the notification
@@ -5333,6 +5483,27 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     if (bottom)
         return left ? 5 : right ? 7 : 6;
     return left ? 4 : 0;
+}
+
+// SPI. A view whose contents scroll under the title bar registers with its window, which asks
+// it for its frame (-scrollViewFrame) and whether contents are scrolled under the title bar
+// (-hasScrolledContentsUnderTitlebar) to decide whether to draw the title bar separator.
+// Observed on macOS 26.7.3: registering asks the adapter for its frame at once (an object
+// without -scrollViewFrame raises), keeps it in a set (nil raises), and returns YES, also for a
+// repeated registration or a view in another window; unregistering an adapter that is not
+// registered does nothing. Darling's title bars have no separator, so the window only keeps the
+// set. Test: tests/appkit-scroll-view-separator-tracking.m.
+- (BOOL) registerScrollViewSeparatorTrackingAdapter: (id<NSScrollViewSeparatorTrackingAdapter>) adapter {
+    [adapter scrollViewFrame];
+    if (NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters == nil)
+        NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters = [[NSMutableSet alloc] init];
+    [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters addObject: adapter];
+    return YES;
+}
+
+- (void) unregisterScrollViewSeparatorTrackingAdapter: (id<NSScrollViewSeparatorTrackingAdapter>) adapter {
+    if (adapter != nil)
+        [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters removeObject: adapter];
 }
 
 // The part of the content area that is not under the title bar or the
