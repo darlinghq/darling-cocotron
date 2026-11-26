@@ -726,6 +726,11 @@ static double windowOpacity(Display* display, Window window)
 	return [[self _cgsWindowForNativeWindow: native] isDisplayOverlay];
 }
 
+-(BOOL) isDisplayOverlayNativeWindow:(void*)nativeWindow
+{
+	return [self _isDisplayOverlayNativeWindow: (Window) (uintptr_t) nativeWindow];
+}
+
 -(CGSWindowID) _windowIDForNativeWindow:(Window)native
 {
 	@synchronized (_windows)
