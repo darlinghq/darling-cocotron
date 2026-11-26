@@ -21,6 +21,7 @@
 
 #import <CoreGraphics/CGSWindow.h>
 #import <X11/Xlib.h>
+#import <X11/Xutil.h>
 
 // A CGS window is a plain X11 top-level window: a child of the root window, so that
 // there is no window manager in the way of its geometry. Its pixels come from its
@@ -38,7 +39,23 @@
 	GC _gc;                  // for putting the contents on the window; created when first needed
 	BOOL _contentsShaped;    // the window's shape follows the alpha of its contents
 	BOOL _displayOverlay;    // -becomeDisplayOverlay: made this window the cover of a display
+
+	// A toplevel window of the application's UI layer (see CGSWindow.h), which draws into it itself.
+	BOOL _toplevel;
+	BOOL _toplevelUnmanaged;     // override-redirect: the window manager leaves the window alone
+	XVisualInfo* _visualInfo;    // the visual of the window (not owned)
+	Colormap _colormap;          // made with the window; freed with it
 }
+
+// Whether the window is a toplevel window of the UI layer, which handles the window system's events for it.
+-(BOOL) isToplevel;
+// The visual the window was made with (a toplevel window only; the window's depth is visualInfo->depth).
+-(XVisualInfo*) visualInfo;
+// Whether the display has a 32-bit visual with alpha for translucent toplevel windows.
++(BOOL) translucentVisualAvailableOnDisplay:(Display*) display;
+-(instancetype) initToplevelWithAttributes:(const CGSToplevelAttributes*) attributes
+								connection:(CGSConnection*) connection
+								  windowID:(CGSWindowID) windowID;
 
 // Whether the window is a display overlay (see -becomeDisplayOverlay:). Its input is the process' own, but
 // belongs to no window of the application: its events name no window.

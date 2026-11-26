@@ -42,6 +42,8 @@
 #import "X11Display.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
+#import "../../CoreGraphics/X11.backend/CGSWindowX11.h"
+#import <CoreGraphics/CGSServerSPI.h>
 #import "X11Fullscreen.h"
 #import "X11InputShape.h"
 #import "X11RoundedShape.h"
@@ -55,71 +57,6 @@
 #import <X11/Xutil.h>
 #include <math.h>
 #include <wchar.h>
-
-// The visual of opaque windows. Rendering goes through EGL, and a visual that
-// glXChooseVisual picks can be one that only GLX can draw to (NVIDIA's EGL
-// rejects such visuals with EGL_BAD_CONFIG), so the default visual comes first
-// when it is TrueColor with at least 24 bits.
-static XVisualInfo *X11OpaqueVisualInfo(Display *display) {
-    static XVisualInfo *visualInfo;
-
-    if (visualInfo != NULL)
-        return visualInfo;
-
-    int screen = DefaultScreen(display);
-    XVisualInfo visualTemplate = {
-        .visualid = XVisualIDFromVisual(DefaultVisual(display, screen)),
-        .screen = screen,
-    };
-    int count = 0;
-    visualInfo = XGetVisualInfo(display, VisualIDMask | VisualScreenMask,
-                                &visualTemplate, &count);
-    if (visualInfo != NULL &&
-        (visualInfo->class != TrueColor || visualInfo->depth < 24)) {
-        XFree(visualInfo);
-        visualInfo = NULL;
-    }
-
-    if (visualInfo == NULL) {
-        int attributes[] = {GLX_RGBA,       GLX_DOUBLEBUFFER, GLX_RED_SIZE,
-                            4,              GLX_GREEN_SIZE,   4,
-                            GLX_BLUE_SIZE,  4,                GLX_DEPTH_SIZE,
-                            4,              None};
-        visualInfo = glXChooseVisual(display, screen, attributes);
-        if (visualInfo == NULL)
-            NSLog(@"glXChooseVisual failed at %s %d", __FILE__, __LINE__);
-    }
-    return visualInfo;
-}
-
-// A 32-bit TrueColor visual with an alpha channel, for windows that let what
-// is behind them show through, or NULL if the screen has none.
-static XVisualInfo *X11AlphaVisualInfo(Display *display) {
-    static XVisualInfo visualInfo;
-    static BOOL looked;
-
-    if (!looked) {
-        looked = YES;
-        XVisualInfo visualTemplate = {
-            .screen = DefaultScreen(display),
-            .depth = 32,
-            .class = TrueColor,
-        };
-        int count = 0;
-        XVisualInfo *visuals = XGetVisualInfo(
-                display, VisualScreenMask | VisualDepthMask | VisualClassMask,
-                &visualTemplate, &count);
-        for (int i = 0; i < count && visualInfo.visual == NULL; i++) {
-            if (visuals[i].red_mask == 0xff0000 &&
-                visuals[i].green_mask == 0x00ff00 &&
-                visuals[i].blue_mask == 0x0000ff)
-                visualInfo = visuals[i];
-        }
-        if (visuals != NULL)
-            XFree(visuals);
-    }
-    return visualInfo.visual != NULL ? &visualInfo : NULL;
-}
 
 // Set once EGL could not create an alpha surface for the alpha visual; later
 // windows are then created opaque straight away.
@@ -534,8 +471,6 @@ static NSData *makeWindowIcon(X11Display *display) {
     BOOL isSheetPanel =
             isPanel && ([delegate styleMask] & NSDocModalWindowMask);
 
-    XSetWindowAttributes xattr;
-    unsigned long xattr_mask;
     // Only windows that must stay out of the window manager's hands are
     // unmanaged: menus, popups, sheets and anything that cannot become key
     // (NSWindow answers NO for a borderless window unless its class overrides
@@ -559,38 +494,30 @@ static NSData *makeWindowIcon(X11Display *display) {
     // window a frame, so a pop-up created with such a mask is as borderless as one with none.
     BOOL borderless = (_styleMask & ~(NSWindowStyleMaskMiniaturizable | NSWindowStyleMaskClosable)) ==
                       NSBorderlessWindowMask;
-    xattr.override_redirect =
-            (borderless && !_dock &&
-             (isMenuWindow || (!isPanel && ![delegate canBecomeKeyWindow])))
-                    ? True
-                    : False;
-    if (isSheetPanel) {
-        xattr.override_redirect = True;
-    }
-    _overrideRedirect = xattr.override_redirect;
-    xattr.border_pixel = 0;
+    BOOL unmanaged = borderless && !_dock &&
+                     (isMenuWindow || (!isPanel && ![delegate canBecomeKeyWindow]));
+    if (isSheetPanel)
+        unmanaged = YES;
+    _overrideRedirect = unmanaged;
 
+    // The window system's window is CoreGraphics': made once, and made again (keeping its children) when
+    // the visual has to change before the window is first shown. _frame is in root points, -frame in
+    // Cocoa's global space, which is what CoreGraphics takes.
+    CGSToplevelAttributes attributes = {
+        .frame = _cgsWindow == nil ? NSRectToCGRect([delegate frame]) : NSRectToCGRect([self frame]),
+        .unmanaged = unmanaged,
+    };
     for (;;) {
-        _visualInfo = _hasAlpha ? X11AlphaVisualInfo(_display)
-                                : X11OpaqueVisualInfo(_display);
-        if (_visualInfo == NULL)
+        attributes.translucent = _hasAlpha;
+        if (_cgsWindow == nil) {
+            _cgsWindow = [_CGSNewToplevelWindow(&attributes) retain];
+            if (_cgsWindow == nil)
+                return NO;
+        } else if ([_cgsWindow recreateToplevelWithAttributes: &attributes] != kCGSErrorSuccess) {
             return NO;
-
-        xattr.colormap = XCreateColormap(
-                _display, RootWindow(_display, _visualInfo->screen),
-                _visualInfo->visual, AllocNone);
-        // A window of another depth than its parent needs a border pixel of
-        // its own, or creating it fails with BadMatch.
-        xattr_mask = CWOverrideRedirect | CWColormap |
-                     (_hasAlpha ? CWBorderPixel : 0);
-
-        // _frame is in points; X wants device pixels.
-        O2Rect deviceFrame = [self deviceRect: _frame];
-        _window = XCreateWindow(
-                _display, DefaultRootWindow(_display), deviceFrame.origin.x,
-                deviceFrame.origin.y, deviceFrame.size.width,
-                deviceFrame.size.height, 0, _visualInfo->depth, InputOutput, _visualInfo->visual,
-                xattr_mask, &xattr);
+        }
+        _window = (Window) [_cgsWindow nativeWindow];
+        _visualInfo = [(CGSWindowX11 *) _cgsWindow visualInfo];
         if (!_hasAlpha) {
             _cglWindow = CGLGetWindow((void *) _window);
             break;
@@ -602,33 +529,11 @@ static NSData *makeWindowIcon(X11Display *display) {
                                            _visualInfo->visualid);
         if (_cglWindow != NULL)
             break;
-        XDestroyWindow(_display, _window);
-        XFreeColormap(_display, xattr.colormap);
         _hasAlpha = NO;
         alphaSurfaceFailed = YES;
     }
 
     [self syncDelegateProperties];
-
-    Atom atm = XInternAtom(_display, "WM_DELETE_WINDOW", False);
-    XSetWMProtocols(_display, _window, &atm, 1);
-
-    const char *name = [[[NSProcessInfo processInfo] processName] UTF8String];
-
-    XClassHint classHint = {.res_name = (char *) name,
-                            .res_class = (char *) name};
-    XSetClassHint(_display, _window, &classHint);
-
-    // _NET_WM_PID and WM_CLIENT_MACHINE, so that other clients, and other
-    // Darling processes listing windows, know whose window this is.
-    X11WindowOwnerPublish(_display, _window);
-
-    // Until the first frame, a translucent window shows its background:
-    // make that transparent rather than black.
-    if (_hasAlpha)
-        XSetWindowBackground(_display, _window, 0);
-    else
-        XSetWindowBackgroundPixmap(_display, _window, None);
 
     [self updateWindowManagerHints];
 
@@ -789,34 +694,6 @@ static NSData *makeWindowIcon(X11Display *display) {
     return _styleMask;
 }
 
-// ICCCM 4.1.2.3 minimum and maximum sizes for a resizable window. A minimum of zero and a maximum of
-// zero or too large for a window (the FLT_MAX of an unset maximum) are no limit, and a limit is
-// hinted only when it applies in some dimension. The hints are in device pixels too.
-- (void) addSizeLimitsToHints: (XSizeHints *) sh {
-    if (_delegate == nil)
-        return;
-    NSSize minimum = [_delegate _minFrameSize];
-    NSSize maximum = [_delegate _maxFrameSize];
-    const CGFloat largest = 65535;
-    // -deviceSize: makes a zero extent one pixel, which for a limit means none.
-    NSSize deviceMinimum = [self deviceSize: minimum];
-    NSSize deviceMaximum = [self deviceSize: maximum];
-
-    if (minimum.width > 0 || minimum.height > 0) {
-        sh->flags |= PMinSize;
-        sh->min_width = minimum.width > 0 ? MIN(deviceMinimum.width, largest) : 1;
-        sh->min_height = minimum.height > 0 ? MIN(deviceMinimum.height, largest) : 1;
-    }
-    BOOL limitedWidth = maximum.width > 0 && deviceMaximum.width < largest;
-    BOOL limitedHeight = maximum.height > 0 && deviceMaximum.height < largest;
-    if (limitedWidth || limitedHeight) {
-        sh->flags |= PMaxSize;
-        // A maximum below the minimum would make the hints inconsistent.
-        sh->max_width = limitedWidth ? MAX(deviceMaximum.width, sh->min_width) : largest;
-        sh->max_height = limitedHeight ? MAX(deviceMaximum.height, sh->min_height) : largest;
-    }
-}
-
 // NSWindow's size limits changed (see NSWindow_sizeLimits in NSWindow-Private.h).
 - (void) sizeLimitsChanged {
     if (_window == 0)
@@ -829,38 +706,20 @@ static NSData *makeWindowIcon(X11Display *display) {
 // -setStyleMask: hands the new mask here before it stores it. The hinted size is
 // _frame's, so a caller that just resized has to re-issue these.
 - (void) updateSizeHints: (NSUInteger) mask {
-    XSizeHints *sh = XAllocSizeHints();
+    // The limits CoreGraphics hints to the window manager (ICCCM 4.1.2.3): for a resizable window those NSWindow
+    // derives from minSize, maxSize, contentMinSize and contentMaxSize (a zero or unset extent is no limit), for
+    // any other the window's size.
+    NSSize minimum = NSZeroSize, maximum = NSZeroSize;
+
     if (mask & NSWindowStyleMaskResizable) {
-        // Make resizable, within the limits NSWindow derives from minSize, maxSize, contentMinSize
-        // and contentMaxSize.
-        sh->flags = 0;
-        [self addSizeLimitsToHints: sh];
+        if (_delegate != nil) {
+            minimum = [_delegate _minFrameSize];
+            maximum = [_delegate _maxFrameSize];
+        }
     } else {
-        // Make non-resizable
-        sh->flags = PMinSize | PMaxSize;
-        // WM size hints are in device pixels too.
-        NSSize device = [self deviceSize: _frame.size];
-        sh->min_width = sh->max_width = device.width;
-        sh->min_height = sh->max_height = device.height;
+        minimum = maximum = _frame.size;
     }
-
-    // AppKit always gives a window an explicit frame, so every managed window positions itself:
-    // say so, or a window manager may place it as it likes, typically in the middle of the screen
-    // or over its parent (ICCCM 4.1.2.3).
-    if (!_overrideRedirect)
-        sh->flags |= USPosition | PPosition;
-
-    // The frame is the client window's own rectangle, so a move must put the
-    // client window, not the window manager's frame around it, where the frame
-    // says (ICCCM 4.1.2.3, StaticGravity); with the default NorthWestGravity a
-    // decorated window lands lower and to the right by the size of its frame.
-    if (!_overrideRedirect) {
-        sh->flags |= PWinGravity;
-        sh->win_gravity = StaticGravity;
-    }
-
-    XSetWMSizeHints(_display, _window, sh, XA_WM_NORMAL_HINTS);
-    XFree(sh);
+    [_cgsWindow setToplevelMinimumSize: NSSizeToCGSize(minimum) maximumSize: NSSizeToCGSize(maximum)];
 }
 
 // Whether the window manager should hold this window fullscreen: the
@@ -1181,7 +1040,7 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 - (BOOL) wantsAlphaVisual {
-    return !alphaSurfaceFailed && X11AlphaVisualInfo(_display) != NULL &&
+    return !alphaSurfaceFailed && _CGSToplevelWindowsSupportTranslucency() &&
            [self isTranslucent];
 }
 
@@ -1239,19 +1098,7 @@ static const int X11ChromelessCornerRadius = 5;
         return;
     }
 
-    Window root, parent, *children = NULL;
-    unsigned int count = 0;
-    if (XQueryTree(_display, oldWindow, &root, &parent, &children, &count)) {
-        for (unsigned int i = 0; i < count; i++) {
-            XWindowAttributes attributes;
-            if (XGetWindowAttributes(_display, children[i], &attributes))
-                XReparentWindow(_display, children[i], _window, attributes.x,
-                                attributes.y);
-        }
-        if (children != NULL)
-            XFree(children);
-    }
-    XDestroyWindow(_display, oldWindow);
+    // CoreGraphics moved the children of the old window to the new one and destroyed it.
 
     // the new window has neither opacity nor shape yet
     _invisibleWithoutCompositor = NO;
@@ -1282,7 +1129,7 @@ static const int X11ChromelessCornerRadius = 5;
         [self settleVisual];
         if (_dock)
             [self publishDockHints];
-        XMapWindow(_display, _window);
+        [_cgsWindow orderWindow: kCGSOrderIn relativeTo: nil];
         _mapped = YES;
         _wasMapped = YES;
         _miniaturizedKnown = NO;
@@ -1390,16 +1237,7 @@ static const int X11ChromelessCornerRadius = 5;
     if (_window == 0)
         return;
 
-    Atom opacity = XInternAtom(_display, "_NET_WM_WINDOW_OPACITY", False);
-
-    if (value >= 1.0) {
-        XDeleteProperty(_display, _window, opacity);
-    } else {
-        unsigned long cardinal =
-                (unsigned long) (MAX(value, 0.0) * (double) 0xffffffffUL);
-        XChangeProperty(_display, _window, opacity, XA_CARDINAL, 32,
-                        PropModeReplace, (unsigned char *) &cardinal, 1);
-    }
+    [_cgsWindow setToplevelAlpha: value];
     _appliedAlpha = value;
     _alphaIsZero = value <= 0.0;
     [self updateInvisibility];
@@ -1468,13 +1306,21 @@ static const int X11ChromelessCornerRadius = 5;
             [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
         [(X11Display *) [NSDisplay currentDisplay] setWindow: nil
                                                        forID: _window];
-        XDestroyWindow(_display, _window);
+        // CoreGraphics destroys the window system's window, with its children.
+        CGSReleaseWindow(CGSMainConnectionID(), [_cgsWindow windowId]);
         _window = 0;
     }
+    [_cgsWindow release];
+    _cgsWindow = nil;
 }
 
 - (Window) windowHandle {
     return _window;
+}
+
+// The window's number is the id of its CoreGraphics window.
+- (NSInteger) _assignedWindowNumber {
+    return _cgsWindow != nil ? (NSInteger) [_cgsWindow windowId] : 0;
 }
 
 - (unsigned long) platformWindowID {
@@ -1532,34 +1378,13 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 - (void) setTitle: (NSString *) title {
-    const char *text = [title UTF8String];
-    // -setTitle: nil is undefined, but it used to reach here without a crash and
-    // strlen(NULL) would not survive it.
-    if (text == NULL)
-        text = "";
-    int length = (int) strlen(text);
-
-    // EWMH says the title is _NET_WM_NAME as UTF8_STRING, and nothing set it, so
-    // a title outside Latin-1 arrived as whatever XStringListToTextProperty could
-    // do with it. The bytes used to come from -[NSString cString], which converts
-    // to the system encoding and raises when a character does not fit. WM_NAME
-    // gets the same bytes for a window manager predating EWMH.
-    //
-    // No return check here. XChangeProperty reports through the X error handler, not
-    // its return value: it returns 1 on success, so comparing against Success (0)
-    // logged "failed" on every title, including the ones that demonstrably landed.
-    // -[X11Display handleError:] is what reports a real failure, with request and
-    // error codes.
-    XChangeProperty(_display, _window,
-                    XInternAtom(_display, "_NET_WM_NAME", False),
-                    XInternAtom(_display, "UTF8_STRING", False), 8,
-                    PropModeReplace, (const unsigned char *) text, length);
-
-    XChangeProperty(_display, _window, XA_WM_NAME, XA_STRING, 8, PropModeReplace,
-                    (const unsigned char *) text, length);
+    // The title is the window's _NET_WM_NAME (UTF8_STRING, as EWMH has it) and WM_NAME for a window manager
+    // predating EWMH; -setTitle: nil is undefined, but gives an empty title.
+    [_cgsWindow setProperty: kCGSWindowTitle value: (CFTypeRef) title];
 }
 
 - (void) setFrame: (O2Rect) frame {
+    O2Rect cocoaFrame = frame;
     O2Rect transformed = [self transformFrame: frame];
     NSSize previousSize = _frame.size;
     // Leave fullscreen before moving to a frame that does not cover a monitor,
@@ -1573,12 +1398,9 @@ static const int X11ChromelessCornerRadius = 5;
     if (X11FullscreenLeaveBeforeMove(fullscreen, _fullscreenRequested, moved))
         [self requestFullscreen: NO force: NO];
     frame = transformed;
-    // _frame stays in points; only the X call and the surface are in device
+    // _frame stays in points; only the window system's window and the surface are in device
     // pixels.
-    O2Rect deviceFrame = [self deviceRect: frame];
-    XMoveResizeWindow(_display, _window, deviceFrame.origin.x,
-                      deviceFrame.origin.y, deviceFrame.size.width,
-                      deviceFrame.size.height);
+    [_cgsWindow setToplevelFrame: NSRectToCGRect(cocoaFrame)];
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
     [self updateWindowShape];
@@ -1672,7 +1494,7 @@ static const int X11ChromelessCornerRadius = 5;
     _unmapPending = NO;
     if (_window == 0)
         return;
-    XUnmapWindow(_display, _window);
+    [_cgsWindow orderWindow: kCGSOrderOut relativeTo: nil];
     _mapped = NO;
     _occluded = NO;
     _miniaturizedKnown = NO;
@@ -2230,10 +2052,7 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
 // is rebuilt at the new device size, and the window and its views are told
 // before they redraw.
 - (void) displayBackingScaleChangedFrom: (CGFloat) oldScale {
-    O2Rect deviceFrame = [self deviceRect: _frame];
-    XMoveResizeWindow(_display, _window, deviceFrame.origin.x,
-                      deviceFrame.origin.y, deviceFrame.size.width,
-                      deviceFrame.size.height);
+    [_cgsWindow setToplevelFrame: NSRectToCGRect([self frame])];
     [_context release];
     _context = nil;
     [_delegate platformWindowDidInvalidateCGContext: self];

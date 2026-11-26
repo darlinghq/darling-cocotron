@@ -95,6 +95,22 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     return kCGErrorNotImplemented;
 }
 
+- (CGError) recreateToplevelWithAttributes: (const CGSToplevelAttributes *) attributes {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelFrame: (CGRect) frame {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelMinimumSize: (CGSize) minimum maximumSize: (CGSize) maximum {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelAlpha: (CGFloat) alpha {
+    return kCGErrorNotImplemented;
+}
+
 - (CGSSurface *) createSurface {
     NSInvalidAbstractInvocation();
 }

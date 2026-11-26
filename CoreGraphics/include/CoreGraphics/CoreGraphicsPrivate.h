@@ -149,6 +149,20 @@ extern void _CGSSetWindowEventProc(CGSWindowEventProc proc, void* info);
 // For the backends: reports a window event to that handler.
 extern void _CGSPostWindowEvent(CGSWindowEventKind kind, CGSWindowID window, CGRect rect);
 
+// What a toplevel window of an application's UI layer is made with (see
+// -[CGSConnection newToplevelWindowWithAttributes:]).
+typedef struct {
+	// The window's frame in the application's global space: points, the origin at the bottom left of the
+	// main display, y up (the space of NSWindow frames).
+	CGRect frame;
+	// The window system's manager neither places, decorates nor gives the focus to the window (menus,
+	// pop-ups, sheets).
+	bool unmanaged;
+	// What is behind the window shows through the alpha of its pixels. Not every window system can do
+	// this (see -[CGSConnection supportsTranslucentToplevels]); then the window is opaque.
+	bool translucent;
+} CGSToplevelAttributes;
+
 extern CGError CGSSetWindowOpacity(CGSConnectionID cid, CGSWindowID wid, bool isOpaque);
 extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level);
 extern CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAffineTransform transform);

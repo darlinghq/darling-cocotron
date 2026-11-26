@@ -1177,6 +1177,17 @@ CGError CGSNewWindow(CGSConnectionID conn, CFIndex flags, float x_offset, float 
 	return kCGSErrorSuccess;
 }
 
+CGSWindow* _CGSNewToplevelWindow(const CGSToplevelAttributes* attributes)
+{
+	CGSConnection* c = nativeConnection();
+	return attributes != NULL ? [c newToplevelWindowWithAttributes: attributes] : nil;
+}
+
+BOOL _CGSToplevelWindowsSupportTranslucency(void)
+{
+	return [nativeConnection() supportsTranslucentToplevels];
+}
+
 CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid)
 {
 	CGSConnection* c = _CGSConnectionForID(cid);
