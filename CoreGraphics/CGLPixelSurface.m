@@ -3,6 +3,8 @@
 #import <CoreGraphics/CGLPixelSurface.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <Onyx2D/O2Image.h>
+#import <OpenGL/gl.h>
+#import <OpenGL/glext.h>
 
 // this should be fixed upstream
 #ifndef DARLING
