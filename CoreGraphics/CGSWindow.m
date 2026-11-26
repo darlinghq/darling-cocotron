@@ -62,6 +62,7 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 }
 
 - (void) invalidate {
+    [self setToplevelEventProc: NULL info: NULL];
     [_connection _windowInvalidated: _windowId];
 }
 
@@ -92,6 +93,100 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 }
 
 - (CGError) becomeDisplayOverlay: (void **) drawable {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) recreateToplevelWithAttributes: (const CGSToplevelAttributes *) attributes {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelFrame: (CGRect) frame {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelMinimumSize: (CGSize) minimum maximumSize: (CGSize) maximum {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelAlpha: (CGFloat) alpha {
+    return kCGErrorNotImplemented;
+}
+
+- (void) setToplevelEventProc: (CGSToplevelEventProc) proc info: (void *) info {
+    @synchronized(self) {
+        _toplevelEventProc = proc;
+        _toplevelEventInfo = info;
+    }
+}
+
+- (void) postToplevelEvent: (const CGSToplevelEvent *) event {
+    CGSToplevelEventProc proc;
+    void *info;
+    @synchronized(self) {
+        proc = _toplevelEventProc;
+        info = _toplevelEventInfo;
+    }
+    if (proc != NULL)
+        proc(self, event, info);
+}
+
+- (CGRect) toplevelFrame {
+    return CGRectNull;
+}
+
+- (CGFloat) toplevelBackingScaleFactor {
+    return 1;
+}
+
+- (CGRect) toplevelDeviceRectForFrame: (CGRect) frame {
+    return frame;
+}
+
+- (CGSize) toplevelDeviceSizeForSize: (CGSize) size {
+    return size;
+}
+
+- (CGRect) toplevelDeviceRectForRect: (CGRect) rect {
+    return rect;
+}
+
+- (CGError) setToplevelHasShadow: (BOOL) hasShadow {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelContentsOpaque: (BOOL) opaque {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelCornerRadius: (CGFloat) radius {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelShapeEmpty: (BOOL) empty {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelWindowSystemComposites {
+    return NO;
+}
+
+- (CGError) setToplevelIgnoresMouseEvents: (BOOL) ignores {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelDecorated: (BOOL) decorated {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelIcons: (NSArray<NSData *> *) icons {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelHints: (const CGSToplevelHints *) hints {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) reserveToplevelDockStrip {
     return kCGErrorNotImplemented;
 }
 

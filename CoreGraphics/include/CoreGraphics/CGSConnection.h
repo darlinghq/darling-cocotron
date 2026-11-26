@@ -62,6 +62,10 @@
 // A snapshot of the connection's windows (the caller releases it)
 -(NSArray<CGSWindow*>*) copyAllWindows;
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
+// A toplevel window for the application's UI layer (see CGSWindow.h), or nil when the window system cannot make
+// one, which is the default. The window's id is the number CGWindow gives the UI layer's platform window.
+-(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes;
+-(BOOL) supportsTranslucentToplevels;
 
 // Activates the windows of another process directly through the display server (see
 // _CGSActivateProcess() for the options). Returns kCGErrorSuccess when a request was sent and

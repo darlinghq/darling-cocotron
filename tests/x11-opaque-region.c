@@ -1,10 +1,10 @@
-// Host test for AppKit/X11.backend/X11OpaqueRegion.h: an opaque window on a 32-bit visual gets
+// Host test for CoreGraphics/X11.backend/X11OpaqueRegion.h: an opaque window on a 32-bit visual gets
 // _NET_WM_OPAQUE_REGION covering all of it, a window on the default 24-bit visual gets none, and the property
 // is removed when the window stops being opaque. The depth passed to the header is the one the server reports for
 // the window, as the backend reads it from the visual it created the window with. Use tests/x11-opaque-region.sh,
 // which runs it on its own Xvfb.
 // Build: cc x11-opaque-region.c -lX11
-#include "../AppKit/X11.backend/X11OpaqueRegion.h"
+#include "../CoreGraphics/X11.backend/X11OpaqueRegion.h"
 #include <X11/Xutil.h>
 #include <stdio.h>
 

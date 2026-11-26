@@ -213,10 +213,7 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         return;
 
     [self _invalidateScreens];
-    for (id window in [_windowsByID allValues]) {
-        if ([window isKindOfClass: [X11Window class]])
-            [window displayBackingScaleChangedFrom: oldScale];
-    }
+    // The windows follow the new scale in CoreGraphics, which tells them (see CGSToplevelEvent).
 }
 
 // The windows carry the application icon in _NET_WM_ICON: when the application sets another one,
@@ -951,23 +948,8 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
     case KeymapNotify:
         break;
 
-    case Expose:;
-        // The exposed area is in device pixels from the top-left corner; the
-        // delegate takes points with y up.
-        CGFloat exposeScale = [window backingScaleFactor];
-        O2Rect rect = NSMakeRect(ev->xexpose.x / exposeScale,
-                                 ev->xexpose.y / exposeScale,
-                                 ev->xexpose.width / exposeScale,
-                                 ev->xexpose.height / exposeScale);
-
-        rect.origin.y =
-                [window frame].size.height - rect.origin.y - rect.size.height;
-        // The server sends one event per rectangle of an exposed area; the window is flushed
-        // and the delegate told once, for their union, after the last one.
-        if (![window addExposedRect: rect isLast: ev->xexpose.count == 0 exposedUnion: &rect])
-            break;
-        [window flushBuffer];
-        [delegate platformWindowExposed: window inRect: rect];
+    case Expose:
+        // Painting the window again is the window system's window's to report (see CGSToplevelEvent).
         break;
 
     case GraphicsExpose:
@@ -1015,21 +997,10 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
         }
         break;
 
-    case ConfigureNotify:; {
-            // The server also sends a ConfigureNotify for a pure move, and for
-            // every pixel of a drag, so reporting a resize unconditionally
-            // posted NSWindowDidResizeNotification for all of them. NSWindow
-            // resizes its background view, resets the cursor rects and saves
-            // the frame on each of those, once per pixel of a drag.
-            O2Rect oldFrame = [window frame];
-            [window frameChanged];
-            O2Rect newFrame = [window frame];
-            [delegate platformWindow: window
-                        frameChanged: newFrame
-                             didSize: !NSEqualSizes(oldFrame.size, newFrame.size)];
-            [self updatePointerConfinement];
-            break;
-        }
+    case ConfigureNotify:
+        // The new frame of the window is the window system's window's to report (see CGSToplevelEvent).
+        [self updatePointerConfinement];
+        break;
 
     case ConfigureRequest:
         break;
@@ -1076,21 +1047,7 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
                         handleXdndSourceMessage: &ev->xclient];
             }
         }
-        if (ev->xclient.format == 32 &&
-            ev->xclient.data.l[0] ==
-                    XInternAtom(_display, "WM_DELETE_WINDOW", False)) {
-            [[NSRunLoop currentRunLoop] cancelPerformSelector: @selector(platformWindowWillClose:)
-                                                       target: delegate
-                                                     argument: window];
-            [[NSRunLoop currentRunLoop] performSelector: @selector(platformWindowWillClose:)
-                                                 target: delegate
-                                               argument: window
-                                                  order: 0
-                                                  modes: @[
-                                                        NSDefaultRunLoopMode, NSModalPanelRunLoopMode,
-                                                        NSEventTrackingRunLoopMode
-                                                    ]];
-        }
+        // The close request is the window system's window's to report (see CGSToplevelEvent).
         break;
 
     case MappingNotify:
