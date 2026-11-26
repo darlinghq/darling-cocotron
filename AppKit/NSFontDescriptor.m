@@ -24,6 +24,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSString.h>
 #import <Foundation/NSValue.h>
+#import <CoreText/CTFontDescriptor.h>
+#import <objc/runtime.h>
+#import "KTFontDescriptor.h"
 
 NSFontDescriptorAttributeName NSFontFamilyAttribute = @"NSFontFamilyAttribute";
 NSFontDescriptorAttributeName NSFontNameAttribute = @"NSFontNameAttribute";
@@ -255,6 +258,47 @@ static NSString *const NSFontUIFontDesignTrait = @"NSCTFontUIFontDesignTrait";
 - (NSFontDescriptor *) matchingFontDescriptorWithMandatoryKeys: (NSSet *) keys {
     NSUnimplementedMethod();
     return nil;
+}
+
+@end
+
+// NSFontDescriptor and CTFontDescriptorRef are toll-free bridged. CoreText's
+// descriptor functions given an NSFontDescriptor use the CoreText descriptor
+// with the same attributes, made once (a descriptor does not change).
+static char coreTextDescriptorKey;
+
+@implementation NSFontDescriptor (CoreTextDescriptors)
+
+- (CTFontDescriptorRef) _coreTextFontDescriptor {
+    id descriptor = objc_getAssociatedObject(self, &coreTextDescriptorKey);
+    if (descriptor == nil) {
+        descriptor = [(id) CTFontDescriptorCreateWithAttributes(
+                (CFDictionaryRef) [self fontAttributes]) autorelease];
+        objc_setAssociatedObject(self, &coreTextDescriptorKey, descriptor,
+                                 OBJC_ASSOCIATION_RETAIN);
+    }
+    return (CTFontDescriptorRef) descriptor;
+}
+
+@end
+
+// A descriptor made with a CoreText function may be used as an
+// NSFontDescriptor: CoreText's descriptor object sends NSFontDescriptor's
+// messages to an NSFontDescriptor with its attributes.
+@implementation KTFontDescriptor (NSFontDescriptorMessages)
+
+- (id) forwardingTargetForSelector: (SEL) selector {
+    if ([NSFontDescriptor instancesRespondToSelector: selector]) {
+        NSDictionary *attributes = [(NSDictionary *)
+                CTFontDescriptorCopyAttributes((CTFontDescriptorRef) self) autorelease];
+        return [NSFontDescriptor fontDescriptorWithFontAttributes: attributes];
+    }
+    return [super forwardingTargetForSelector: selector];
+}
+
+- (BOOL) respondsToSelector: (SEL) selector {
+    return [super respondsToSelector: selector] ||
+           [NSFontDescriptor instancesRespondToSelector: selector];
 }
 
 @end
