@@ -264,34 +264,6 @@ static NSSize touchDeviceSize(CGEventRef cgEvent) {
                       CGEventGetIntegerValueField(cgEvent, kCGSTouchDeviceHeight) / 1024.0);
 }
 
-void NSTouchPostNativeReport(NSWindow *window, uintptr_t nativeWindow, long long identifier, NSTouchPhase phase,
-                             NSPoint location, int64_t nativeX, int64_t nativeY)
-{
-    CGEventRef cgEvent = CGEventCreate(NULL);
-    BOOL known = !isnan(location.x) && !isnan(location.y);
-
-    if (cgEvent == NULL)
-        return;
-    CGEventSetType(cgEvent, (CGEventType) kCGSEventTypeGesture);
-    CGEventSetIntegerValueField(cgEvent, kCGSTouchIdentifier, identifier);
-    CGEventSetIntegerValueField(cgEvent, kCGSTouchPhase, (int64_t) phase);
-    CGEventSetIntegerValueField(cgEvent, kCGSEventNativeWindow, (int64_t) nativeWindow);
-    if (known) {
-        NSPoint screen = [window convertBaseToScreen: location];
-        CGPoint global = CGPointMake(screen.x, _NSEventMainScreenMaxY() - screen.y);
-
-        CGEventSetLocation(cgEvent, global);
-        CGEventSetIntegerValueField(cgEvent, kCGSEventNativeLocationX, nativeX);
-        CGEventSetIntegerValueField(cgEvent, kCGSEventNativeLocationY, nativeY);
-        CGEventSetIntegerValueField(cgEvent, kCGSEventPostedLocationX, llround(global.x * 1024));
-        CGEventSetIntegerValueField(cgEvent, kCGSEventPostedLocationY, llround(global.y * 1024));
-    } else {
-        CGEventSetIntegerValueField(cgEvent, kCGSTouchLocationUnknown, 1);
-    }
-    _CGSEventStreamPost(cgEvent);
-    CFRelease(cgEvent);
-}
-
 // The reader of the event stream: a touch event (a change of a finger) becomes the events AppKit's touch handling
 // makes of it (touch events, or the mouse events of a finger on a view that takes no touches), in the
 // order of the stream; every other event is passed on.

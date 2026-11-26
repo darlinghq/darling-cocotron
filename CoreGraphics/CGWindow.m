@@ -203,6 +203,15 @@ static NSInteger nextWindowNumber = 1;
     return number;
 }
 
+- (NSString *) ensureSessionToplevelName {
+    return nil;
+}
+
+- (void) setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring {
+    (void) name;
+    (void) restoring;
+}
+
 - (void) dealloc {
     pthread_mutex_lock(&windowNumberLock);
     if (numbersByWindow != NULL) {

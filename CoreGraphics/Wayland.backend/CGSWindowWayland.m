@@ -20,6 +20,7 @@
 
 #import "CGSWindowWayland.h"
 #import "CGSSurfaceWayland.h"
+#import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 
@@ -69,6 +70,26 @@
     return self;
 }
 
+- (void) colorManagerAvailable {
+    if (_surface == NULL)
+        return;
+    WaylandColorManager *color = [_waylandConnection colorManager];
+    if (_colorSurface == NULL) {
+        _colorSurface = [color newColorSurfaceForSurface: _surface];
+        if (_colorSurface != NULL) {
+            // Direct CoreGraphics windows draw sRGB content; AppKit windows describe their
+            // -colorSpace themselves through the native window.
+            CGColorSpaceRef srgb = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
+            if (srgb != NULL) {
+                [color setColorSpace: srgb onSurface: _colorSurface];
+                CGColorSpaceRelease(srgb);
+            }
+        }
+    }
+    if (_representationSurface == NULL)
+        _representationSurface = [color newRepresentationSurfaceForSurface: _surface];
+}
+
 - (void) dealloc {
     // The surface's wl_egl_window references our wl_surface, so it has to go
     // first; -[CGSWindow dealloc] would only release _surfaces after this body.
@@ -78,6 +99,11 @@
     _surfaceObject = nil;
 
     [_title release];
+    WaylandColorManager *color = [_waylandConnection colorManager];
+    [color destroyColorSurface: _colorSurface];
+    [color destroyRepresentationSurface: _representationSurface];
+    _colorSurface = NULL;
+    _representationSurface = NULL;
     [self destroyRole];
     if (_surface != NULL)
         WaylandMarshal(_surface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
@@ -289,6 +315,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
             [self destroyRole];
             return NO;
         }
+
+        [self colorManagerAvailable];
 
         union wl_argument none[1] = {{.o = NULL}};
         WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);

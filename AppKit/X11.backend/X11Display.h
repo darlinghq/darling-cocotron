@@ -31,12 +31,6 @@
 
     id lastFocusedWindow;
     X11Cursor *_blankCursor, *_defaultCursor;
-    // A pinch gesture in progress (see X11Gesture.h): its window, the scale it last
-    // reported, and where and with which modifiers its last event was.
-    Window _pinchWindow;
-    CGFloat _pinchScale;
-    NSPoint _pinchLocation;
-    NSEventModifierFlags _pinchModifiers;
     // ConfinePointerToFullscreenWindows (org.darlinghq.AppKit): keep the
     // pointer inside the focused fullscreen window, through a pointer grab on
     // _confinedWindow while one is held.

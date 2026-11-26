@@ -249,6 +249,42 @@ extern CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display);
 // The name the window system gives the display's output (a description or a connector name), or NULL; the
 // caller releases it.
 extern CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display);
+// Keys of the dictionary a display's color description uses. Values are CFNumbers. Luminances use
+// the color-management protocol's units (minimum luminance is scaled by 10000); absent keys mean
+// the compositor did not report them.
+extern const CFStringRef kCGSDisplayColorPrimariesKey;
+extern const CFStringRef kCGSDisplayColorTransferFunctionKey;
+extern const CFStringRef kCGSDisplayColorMinLuminanceKey;
+extern const CFStringRef kCGSDisplayColorMaxLuminanceKey;
+extern const CFStringRef kCGSDisplayColorReferenceLuminanceKey;
+extern const CFStringRef kCGSDisplayColorTargetMinLuminanceKey;
+extern const CFStringRef kCGSDisplayColorTargetMaxLuminanceKey;
+extern const CFStringRef kCGSDisplayColorICCProfileKey;
+
+// Values of the primaries and transfer-function keys. The numbers are the window system's
+// color-management enum values; the names give the frameworks above CoreGraphics a stable
+// vocabulary for them.
+typedef enum {
+    kCGSDisplayColorPrimariesSRGB = 1,
+    kCGSDisplayColorPrimariesBT2020 = 6,
+    kCGSDisplayColorPrimariesDCIP3 = 8,
+    kCGSDisplayColorPrimariesDisplayP3 = 9,
+    kCGSDisplayColorPrimariesAdobeRGB = 10,
+} CGSDisplayColorPrimaries;
+
+typedef enum {
+    kCGSDisplayColorTransferFunctionGamma22 = 2,
+    kCGSDisplayColorTransferFunctionExtendedLinear = 5,
+    kCGSDisplayColorTransferFunctionSRGB = 9,
+    kCGSDisplayColorTransferFunctionExtendedSRGB = 10,
+    kCGSDisplayColorTransferFunctionPQ = 11,
+    kCGSDisplayColorTransferFunctionHLG = 13,
+    kCGSDisplayColorTransferFunctionCompoundPower24 = 14,
+} CGSDisplayColorTransferFunction;
+
+// The color description of the display's output, or NULL; the caller releases it. The dictionary
+// is in the format described by the keys above.
+extern CFDictionaryRef _CGSDisplayCopyColorInfo(CGDirectDisplayID display);
 
 // Darling extras, e.g. for CGL
 // Asks the window system to give the windows of a process the input focus and raise them,
