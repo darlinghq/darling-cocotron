@@ -19,6 +19,7 @@
 #import "CGSWindowX11.h"
 #import "CGSConnectionX11.h"
 #import "CGSSurfaceX11.h"
+#import "X11WindowOwner.h"
 
 #import <Foundation/NSString.h>
 #import <X11/Xutil.h>
@@ -83,6 +84,10 @@ static BOOL isViewable(Display* display, Window window)
 	// and asks whether the window is alive (_NET_WM_PING), which the connection answers
 	Atom protocols[2] = { XInternAtom(_display, "WM_DELETE_WINDOW", False), XInternAtom(_display, "_NET_WM_PING", False) };
 	XSetWMProtocols(_display, _window, protocols, 2);
+
+	// _NET_WM_PID and WM_CLIENT_MACHINE, so that other clients, and other Darling processes listing windows or
+	// following the focus, know whose window this is (the process' own windows are told from the others by it).
+	X11WindowOwnerPublish(_display, _window);
 
 	[self _setSizeHints];
 
