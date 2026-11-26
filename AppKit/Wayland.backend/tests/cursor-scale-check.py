@@ -36,6 +36,8 @@ for line in open(log, errors='replace'):
     if m: viewports.add(m[1])
     m = re.search(r'wl_surface#(\d+)\.commit\(\)', line)
     if m: state[m[1]] = (attached.get(m[1]), scales.get(m[1], 1), damage.get(m[1]))
+    m = re.search(r'wp_cursor_shape_device_v1#\d+\.set_shape\(\d+, (\d+)\)', line)
+    if m: events.append(('shape', int(m[1])))
     m = re.search(r'wl_pointer#\d+\.set_cursor\(\d+, (nil|wl_surface#(\d+)), (-?\d+), (-?\d+)\)', line)
     if m:
         if m[1] == 'nil':
@@ -45,12 +47,27 @@ for line in open(log, errors='replace'):
             events.append({'buffer': buf, 'scale': bscale, 'damage': dmg, 'hot': (int(m[3]), int(m[4])),
                            'viewport': m[2] in viewports})
 
-shown = [e for e in events if e]
+# A compositor with cursor-shape-v1 draws the named cursors (the arrow) itself: only the image cursor is a surface.
+shown = [e for e in events if isinstance(e, dict)]
+shapes = [e for e in events if isinstance(e, tuple)]
 results = []
 def check(label, ok): results.append((label, bool(ok)))
 
-check('set_cursor ran for the image, the arrow, a hidden cursor and the arrow again, then a rescale (>= 5)', len(events) >= 5)
-if len(shown) >= 3:
+check('cursor requests ran for the image, the arrow, a hidden cursor and the arrow again (>= 5)', len(events) >= 5)
+if shapes:
+    # The shape is the default cursor (1) whatever the scale; the image is a surface cursor with the scale tagged.
+    image = next((e for e in shown if (e['buffer'][0] / e['scale'], e['buffer'][1] / e['scale']) == (31, 17)), None)
+    check('image: %s buffer at scale %s is 31x17 logical, tagged %d' % (image and image['buffer'], image and image['scale'], whole),
+          image and image['scale'] == whole)
+    check('image hotspot is (3, 5)', image and image['hot'] == (3, 5))
+    check('image: no viewport on the cursor surface, damage %s is the logical size' % (image and image['damage'],),
+          image and not image['viewport'] and image['damage'] == (31, 17))
+    check('the arrow is the compositor-drawn default shape', ('shape', 1) in shapes)
+    check('hiding the cursor sent set_cursor with no surface', None in events)
+    check('the last request after the hide is the default shape again',
+          None in events and events[len(events) - 1 - events[::-1].index(None) + 1:] and
+          events[-1] == ('shape', 1))
+elif len(shown) >= 3:
     def logical(e): return (e['buffer'][0] / e['scale'], e['buffer'][1] / e['scale'])
     # The arrow is set when the pointer enters, before the fixture sets the image.
     image = next((e for e in shown if logical(e) == (31, 17)), shown[0])

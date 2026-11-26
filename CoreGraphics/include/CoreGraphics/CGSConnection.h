@@ -26,6 +26,7 @@
 #include <stdatomic.h>
 
 @class CGSWindow;
+@class CGSCursor;
 @class CGSScreen;
 @class CGSKeyboardLayout;
 
@@ -47,6 +48,8 @@
 	double _pointerDeltaX, _pointerDeltaY;
 	double _pointerSuppressUntil;
 	BOOL _pointerHiddenUntilMouseMoves;
+	// The cursor the process selected for its windows (nil: the default one). Guarded by @synchronized(self).
+	CGSCursor* _cursor;
 	// The displays the reconfiguration callbacks were last told about (nil until the displays
 	// have been read once). Guarded by @synchronized(self).
 	NSArray<CGSScreen*>* _reportedScreens;
@@ -162,6 +165,12 @@
 -(void) unhideCursor;
 -(void) forceShowCursor;
 -(BOOL) cursorIsVisible;
+// The cursor the process shows over its windows (CGSCursorSetCurrent(); nil is the default one). The backend that
+// keeps the pointer gives it to the window system in -cursorChanged, which is called on the thread that set it
+// (the default does nothing). While the cursor is hidden nothing of it is shown, and it is the one shown again.
+-(void) setCursor:(CGSCursor*)cursor;
+-(CGSCursor*) cursor;
+-(void) cursorChanged;
 // NO disconnects the mouse from the cursor: the cursor stays where it is and the mouse only makes deltas.
 -(void) setMouseAssociatedWithCursor:(BOOL)associated;
 // The mouse motion since the previous call in whole points, and the way for a framework that makes mouse events

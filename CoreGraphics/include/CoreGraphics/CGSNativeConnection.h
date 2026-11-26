@@ -130,11 +130,6 @@ typedef enum {
 // The seat gained or lost its pointer. The compositor objects that need it (cursor, locked pointer)
 // are reached through _CGSNativeConnectionPointer().
 - (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available;
-// X11 and Wayland: the process' cursor became hidden or shown (CGDisplayHideCursor() and the calls that undo
-// it). The windows the observer created show a blank cursor while it is hidden (Wayland: CoreGraphics has
-// given the pointer no image, and the observer, which has the cursor images, applies its own again when the
-// cursor is shown, and keeps the cursor hidden while _CGSNativeConnectionCursorHidden()). Main thread.
-- (void) nativeConnectionCursorHiddenChanged: (BOOL) hidden;
 // X11: the window (an X window) the pointer is to be grabbed for when the mouse is disassociated from the
 // cursor (CGAssociateMouseAndMouseCursorPosition(false)): the one the observer prefers (the key window). A
 // display overlay comes first, whatever the observer says. 0 for none, which leaves the choice to CoreGraphics (the window of the connection with the focus).
@@ -186,9 +181,6 @@ extern void *_CGSNativeConnectionPointer(void);
 extern void _CGSNativeConnectionSetPointerSurfacePoint(double x, double y);
 
 
-// The cursor of the process is hidden by the connection (Wayland): the framework that sets the cursor image
-// keeps it hidden. False without a connection or when the backend leaves the state to the framework.
-extern bool _CGSNativeConnectionCursorHidden(void);
 // +[NSCursor setHiddenUntilMouseMoves:] for a connection that keeps the flag; false when it does not, and
 // nothing was done.
 extern bool _CGSSetCursorHiddenUntilMouseMoves(bool flag);

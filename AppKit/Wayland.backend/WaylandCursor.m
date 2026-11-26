@@ -121,27 +121,4 @@
 - (NSSize) size { return _size; }
 - (NSPoint) hotSpot { return _hotSpot; }
 
-- (instancetype) initWithName: (const char *) name fallback: (const char *) fallback {
-    if ((self = [super init]) != nil) {
-        _names[0] = name;
-        _names[1] = fallback;
-        _names[2] = NULL;
-    }
-    return self;
-}
-
-- (instancetype) initBlank {
-    if ((self = [super init]) != nil)
-        _blank = YES;
-    return self;
-}
-
-- (const char *const *) names {
-    return _names;
-}
-
-- (BOOL) isBlank {
-    return _blank;
-}
-
 @end

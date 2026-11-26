@@ -26,6 +26,8 @@
 @synthesize displayID = _displayID;
 @synthesize bounds = _bounds;
 @synthesize backingScale = _backingScale;
+@synthesize nativeFrame = _nativeFrame;
+@synthesize hasNativeFrame = _hasNativeFrame;
 @synthesize name = _name;
 @synthesize colorInfo = _colorInfo;
 

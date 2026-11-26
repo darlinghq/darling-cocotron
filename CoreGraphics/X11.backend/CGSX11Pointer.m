@@ -467,17 +467,14 @@ static int64_t buttonNumberForX(unsigned int xButton) {
 
 #pragma mark - Cursor
 
-// Applies what the hide count says: the connection's own windows show a blank cursor while it is not zero, and
-// the observer (the framework that has windows of its own) is told, on the main thread, where Xlib is used.
+// Applies what the hide count says: the windows of the process show a blank cursor while it is not zero and the
+// selected cursor after it, on the main thread, where Xlib is used.
 - (void) reportCursorHidden {
     BOOL hidden = ![_connection cursorIsVisible];
     if (hidden == _hiddenReported)
         return;
     _hiddenReported = hidden;
-    [_connection _setBlankCursorOnWindows: hidden];
-    id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
-    if ([observer respondsToSelector: @selector(nativeConnectionCursorHiddenChanged:)])
-        [observer nativeConnectionCursorHiddenChanged: hidden];
+    [_connection _applyCursor];
     // On Xwayland a warp is only honoured while the cursor is hidden, and the grab depends on it.
     if (_relativeRequested && !_relative.active)
         [self beginRelativeMouse];

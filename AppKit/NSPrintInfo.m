@@ -24,6 +24,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSString.h>
 #import <Foundation/NSThread.h>
 #import <Foundation/NSValue.h>
+#import <Foundation/NSURL.h>
+#import <objc/runtime.h>
+#import <math.h>
+#import <limits.h>
 
 NSPrintInfoAttributeKey const NSPrintPaperName = @"NSPaperName";
 NSPrintInfoAttributeKey const NSPrintPaperSize = @"NSPaperSize";
@@ -58,6 +62,34 @@ NSPrintJobDispositionValue const NSPrintSaveJob = @"NSPrintSaveJob";
 NSPrintJobDispositionValue const NSPrintCancelJob = @"NSPrintCancelJob";
 
 NSString *const NSPrintSavePath = @"NSPrintSavePath";
+
+// The PrintCore objects behind a print info. A print info keeps its attributes in a dictionary, and the
+// session, page format and print settings are made from them when asked for and kept: the attributes
+// that are page setup or print settings are put into the objects again when they have changed since the
+// objects were last made or updated, and updateFromPMPageFormat / updateFromPMPrintSettings take the
+// values of the objects back into the attributes.
+@interface _NSPrintInfoPMObjects : NSObject {
+@public
+    PMPrintSession session;
+    PMPageFormat pageFormat;
+    PMPrintSettings printSettings;
+    NSString *pageSignature;
+    NSString *settingsSignature;
+}
+@end
+
+@implementation _NSPrintInfoPMObjects
+- (void) dealloc {
+    PMRelease(session);
+    PMRelease(pageFormat);
+    PMRelease(printSettings);
+    [pageSignature release];
+    [settingsSignature release];
+    [super dealloc];
+}
+@end
+
+static const char pmObjectsKey;
 
 @implementation NSPrintInfo
 
@@ -279,28 +311,223 @@ NSString *const NSPrintSavePath = @"NSPrintSavePath";
                     forKey: NSPrintVerticallyCentered];
 }
 
-// PrintCore is not implemented (its session, page format and settings creators return NULL),
-// so there are no PrintCore objects behind a print info.
+- (void) setUpPrintOperationDefaultValues {
+    // do nothing ?
+}
+
+
+- (_NSPrintInfoPMObjects *) _pmObjects {
+    _NSPrintInfoPMObjects *objects = objc_getAssociatedObject(self, &pmObjectsKey);
+
+    if (objects == nil) {
+        objects = [[[_NSPrintInfoPMObjects alloc] init] autorelease];
+        PMCreateSession(&objects->session);
+        PMCreatePageFormat(&objects->pageFormat);
+        PMCreatePrintSettings(&objects->printSettings);
+        PMSessionDefaultPageFormat(objects->session, objects->pageFormat);
+        PMSessionDefaultPrintSettings(objects->session, objects->printSettings);
+        objc_setAssociatedObject(self, &pmObjectsKey, objects, OBJC_ASSOCIATION_RETAIN);
+        // the attributes that the dictionary has (the defaults of the object are those of a session)
+        [self _pushPageFormat];
+        [self _pushPrintSettings];
+    }
+    return objects;
+}
+
+// The attributes of the page setup, in one string, to tell whether they have changed
+- (NSString *) _pageSignature {
+    NSSize size = [self paperSize];
+
+    return [NSString stringWithFormat: @"%g %g %d %g", size.width, size.height, (int) [self orientation],
+                     [self scalingFactor]];
+}
+
+- (NSString *) _settingsSignature {
+    NSDictionary *d = _attributes;
+
+    return [NSString stringWithFormat: @"%@ %@ %@ %@ %@ %@ %@", [d objectForKey: NSPrintCopies],
+                     [d objectForKey: NSPrintAllPages], [d objectForKey: NSPrintFirstPage],
+                     [d objectForKey: NSPrintLastPage], [d objectForKey: NSPrintMustCollate],
+                     [d objectForKey: NSPrintJobDisposition], [d objectForKey: NSPrintSavePath]];
+}
+
+// The paper that the size names in the list of the printer, else a paper of that size
+static PMPaper paperOfSize(PMPrintSession session, NSSize size, NSString *name) {
+    PMPrinter printer = NULL;
+    CFArrayRef papers = NULL;
+    PMPaper paper = NULL;
+
+    PMSessionGetCurrentPrinter(session, &printer);
+    if (printer && PMPrinterGetPaperList(printer, &papers) == noErr) {
+        for (CFIndex i = 0; i < CFArrayGetCount(papers); i++) {
+            PMPaper candidate = (PMPaper) CFArrayGetValueAtIndex(papers, i);
+            double width = 0, height = 0;
+
+            PMPaperGetWidth(candidate, &width);
+            PMPaperGetHeight(candidate, &height);
+            if (fabs(width - size.width) < 1 && fabs(height - size.height) < 1) {
+                CFRetain(candidate);
+                return candidate;
+            }
+        }
+    }
+    PMPaperMargins none = { 0, 0, 0, 0 };
+
+    PMPaperCreateCustom(printer, CFSTR("custom"), (CFStringRef) (name ? name : @"Custom"), size.width, size.height,
+                        &none, &paper);
+    return paper;
+}
+
+- (void) _pushPageFormat {
+    _NSPrintInfoPMObjects *objects = objc_getAssociatedObject(self, &pmObjectsKey);
+    NSSize size = [self paperSize];
+
+    if (objects == nil)
+        return;
+    if (size.width > 0 && size.height > 0) {
+        PMPaper paper = paperOfSize(objects->session, size, [self paperName]);
+        PMPageFormat format = NULL;
+
+        if (paper != NULL && PMCreatePageFormatWithPMPaper(&format, paper) == noErr) {
+            PMCopyPageFormat(format, objects->pageFormat);
+            PMRelease(format);
+        }
+        PMRelease(paper);
+    }
+    PMSetOrientation(objects->pageFormat, [self orientation] == NSLandscapeOrientation ? kPMLandscape : kPMPortrait,
+                     false);
+    if ([self scalingFactor] > 0)
+        PMSetScale(objects->pageFormat, [self scalingFactor] * 100);
+    PMSessionValidatePageFormat(objects->session, objects->pageFormat, NULL);
+    [objects->pageSignature release];
+    objects->pageSignature = [[self _pageSignature] retain];
+}
+
+- (void) _pushPrintSettings {
+    _NSPrintInfoPMObjects *objects = objc_getAssociatedObject(self, &pmObjectsKey);
+    NSNumber *copies = [_attributes objectForKey: NSPrintCopies];
+
+    if (objects == nil)
+        return;
+    if (copies != nil)
+        PMSetCopies(objects->printSettings, [copies unsignedIntValue], false);
+    if ([[_attributes objectForKey: NSPrintAllPages] boolValue] ||
+        [_attributes objectForKey: NSPrintAllPages] == nil) {
+        PMSetFirstPage(objects->printSettings, 1, false);
+        PMSetLastPage(objects->printSettings, kPMPrintAllPages, false);
+    } else {
+        PMSetFirstPage(objects->printSettings, [[_attributes objectForKey: NSPrintFirstPage] unsignedIntValue], false);
+        PMSetLastPage(objects->printSettings, [[_attributes objectForKey: NSPrintLastPage] unsignedIntValue], false);
+    }
+    if ([_attributes objectForKey: NSPrintMustCollate] != nil)
+        PMSetCollate(objects->printSettings, [[_attributes objectForKey: NSPrintMustCollate] boolValue]);
+    NSString *path = [_attributes objectForKey: NSPrintSavePath];
+
+    if ([[self jobDisposition] isEqualToString: NSPrintSaveJob] && path != nil) {
+        NSURL *url = [NSURL fileURLWithPath: path];
+
+        PMSessionSetDestination(objects->session, objects->printSettings, kPMDestinationFile, kPMDocumentFormatPDF,
+                                (CFURLRef) url);
+    } else {
+        PMSessionSetDestination(objects->session, objects->printSettings, kPMDestinationPrinter, NULL, NULL);
+    }
+    [objects->settingsSignature release];
+    objects->settingsSignature = [[self _settingsSignature] retain];
+}
+
 - (void *) PMPrintSession {
-    return NULL;
+    return [self _pmObjects]->session;
 }
 
 - (void *) PMPageFormat {
-    return NULL;
+    _NSPrintInfoPMObjects *objects = [self _pmObjects];
+
+    if (![objects->pageSignature isEqualToString: [self _pageSignature]])
+        [self _pushPageFormat];
+    return objects->pageFormat;
 }
 
 - (void *) PMPrintSettings {
-    return NULL;
+    _NSPrintInfoPMObjects *objects = [self _pmObjects];
+
+    if (![objects->settingsSignature isEqualToString: [self _settingsSignature]])
+        [self _pushPrintSettings];
+    return objects->printSettings;
 }
 
 - (void) updateFromPMPageFormat {
+    _NSPrintInfoPMObjects *objects = [self _pmObjects];
+    PMPaper paper = NULL;
+    PMOrientation orientation = kPMPortrait;
+    double scale = 100;
+    PMRect pageRect, paperRect;
+
+    PMSessionValidatePageFormat(objects->session, objects->pageFormat, NULL);
+    if (PMGetPageFormatPaper(objects->pageFormat, &paper) == noErr && paper != NULL) {
+        double width = 0, height = 0;
+        CFStringRef name = NULL;
+        PMPrinter printer = NULL;
+
+        PMPaperGetWidth(paper, &width);
+        PMPaperGetHeight(paper, &height);
+        [_attributes setObject: [NSValue valueWithSize: NSMakeSize(width, height)] forKey: NSPrintPaperSize];
+        PMSessionGetCurrentPrinter(objects->session, &printer);
+        if (PMPaperCreateLocalizedName(paper, printer, &name) == noErr && name != NULL) {
+            [_attributes setObject: (NSString *) name forKey: NSPrintPaperName];
+            CFRelease(name);
+        }
+    }
+    if (PMGetOrientation(objects->pageFormat, &orientation) == noErr)
+        [_attributes setObject: [NSNumber numberWithInt: orientation == kPMLandscape || orientation == kPMReverseLandscape
+                                                                 ? NSLandscapeOrientation
+                                                                 : NSPortraitOrientation]
+                        forKey: NSPrintOrientation];
+    if (PMGetScale(objects->pageFormat, &scale) == noErr)
+        [_attributes setObject: [NSNumber numberWithDouble: scale / 100] forKey: NSPrintScalingFactor];
+    // the part of the paper that a printer can print on, as the rectangle of the portrait paper
+    if (PMGetUnadjustedPageRect(objects->pageFormat, &pageRect) == noErr &&
+        PMGetUnadjustedPaperRect(objects->pageFormat, &paperRect) == noErr)
+        [_attributes setObject: [NSValue valueWithRect: NSMakeRect(-paperRect.left, paperRect.bottom - pageRect.bottom,
+                                                                   pageRect.right, pageRect.bottom)]
+                        forKey: @"_imageableRect"];
+    [objects->pageSignature release];
+    objects->pageSignature = [[self _pageSignature] retain];
 }
 
 - (void) updateFromPMPrintSettings {
-}
+    _NSPrintInfoPMObjects *objects = [self _pmObjects];
+    UInt32 copies = 1, first = 1, last = INT_MAX;
+    Boolean collate = false;
+    PMDestinationType destination = kPMDestinationPrinter;
 
-- (void) setUpPrintOperationDefaultValues {
-    // do nothing ?
+    if (PMGetCopies(objects->printSettings, &copies) == noErr)
+        [_attributes setObject: [NSNumber numberWithUnsignedInt: copies] forKey: NSPrintCopies];
+    PMGetFirstPage(objects->printSettings, &first);
+    PMGetLastPage(objects->printSettings, &last);
+    if (first <= 1 && last >= INT_MAX) {
+        [_attributes setObject: [NSNumber numberWithBool: YES] forKey: NSPrintAllPages];
+    } else {
+        [_attributes setObject: [NSNumber numberWithBool: NO] forKey: NSPrintAllPages];
+        [_attributes setObject: [NSNumber numberWithUnsignedInt: first] forKey: NSPrintFirstPage];
+        [_attributes setObject: [NSNumber numberWithUnsignedInt: last] forKey: NSPrintLastPage];
+    }
+    if (PMGetCollate(objects->printSettings, &collate) == noErr)
+        [_attributes setObject: [NSNumber numberWithBool: collate] forKey: NSPrintMustCollate];
+    PMSessionGetDestinationType(objects->session, objects->printSettings, &destination);
+    if (destination == kPMDestinationFile) {
+        CFURLRef url = NULL;
+
+        PMSessionCopyDestinationLocation(objects->session, objects->printSettings, &url);
+        [_attributes setObject: NSPrintSaveJob forKey: NSPrintJobDisposition];
+        if (url != NULL) {
+            [_attributes setObject: [(NSURL *) url path] forKey: NSPrintSavePath];
+            CFRelease(url);
+        }
+    } else if ([[self jobDisposition] isEqualToString: NSPrintSaveJob]) {
+        [_attributes setObject: NSPrintSpoolJob forKey: NSPrintJobDisposition];
+    }
+    [objects->settingsSignature release];
+    objects->settingsSignature = [[self _settingsSignature] retain];
 }
 
 @end
