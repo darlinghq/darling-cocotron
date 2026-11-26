@@ -30,6 +30,7 @@
 @class CGSWindowX11;
 @class CGSX11Keyboard;
 @class CGSX11Pointer;
+@class CGSX11Drag;
 
 @interface CGSConnectionX11 : CGSConnection {
 @public
@@ -65,6 +66,9 @@
 	CGSX11Keyboard* _keyboard;
 	// The pointer of the connection: its button and motion events become CGEvents (see CGSX11Pointer.h).
 	CGSX11Pointer* _pointer;
+	// The connection's part in XDND (see CGSX11Drag.h), made when the first window gets a drag destination or
+	// the first drag starts.
+	CGSX11Drag* _dragSupport;
 
 @private
 	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by

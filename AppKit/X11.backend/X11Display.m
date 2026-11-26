@@ -22,8 +22,7 @@
 #include <string.h>
 #import "NSEvent_mouse.h"
 #import "X11Cursor.h"
-#import "X11DraggingManager.h"
-#import "X11Pasteboard.h"
+#import "../NSCGSDraggingManager.h"
 #import "X11LevelStacking.h"
 #import "X11Crossing.h"
 #import "../private-include/AppKit/NSEventTime.h"
@@ -349,8 +348,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     }
 }
 
+// Drag and drop is CoreGraphics' (XDND on its connection); this is the manager on top of it.
 - (NSDraggingManager *) draggingManager {
-    return [X11DraggingManager sharedManager];
+    return [NSCGSDraggingManager sharedManager];
 }
 
 // Activating another process asks the window manager to activate its
@@ -697,7 +697,7 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
     previousOrderingErrorHandler = previousHandler;
     @try {
         for (NSNumber *xid in _windowsByID) {
-            // X11Pasteboard registers its helper X window in the same map; it has no window number.
+            // The map holds X windows that are not windows of the application as well; they have no window number.
             if (![_windowsByID[xid] isKindOfClass: [X11Window class]])
                 continue;
             Window w = (Window) [xid unsignedLongValue];
@@ -1103,12 +1103,7 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
         break;
 
     case ReparentNotify:
-        // A window manager frame has to point back at our window through XdndProxy
-        // before a drag source can find it under the pointer.
         if ([window isKindOfClass: [X11Window class]]) {
-            [(X11DraggingManager *) [self draggingManager]
-                    windowReparented: (X11Window *) window
-                              intoParent: ev->xreparent.parent];
             // A new frame is stacked by the window manager as it sees fit: put the
             // unmanaged windows that are meant to be below it where they belong.
             [(X11Window *) window restackForLevels];
@@ -1150,22 +1145,8 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
         break;
 
     case ClientMessage:
-        // XDND is entirely ClientMessage traffic: XdndEnter, XdndPosition,
-        // XdndStatus, XdndDrop, XdndFinished and XdndLeave.
-        if (ev->xclient.format == 32) {
-            if ([window isKindOfClass: [X11Window class]]) {
-                [(X11DraggingManager *) [self draggingManager]
-                        handleXdndMessage: &ev->xclient
-                                     toWindow: (X11Window *) window];
-            } else if ([window isKindOfClass: [X11Pasteboard class]]) {
-                // A drag's source window is the helper window of the pasteboard
-                // that owns its selection, so the replies a target sends to the
-                // source arrive there rather than on one of our windows.
-                [(X11DraggingManager *) [self draggingManager]
-                        handleXdndSourceMessage: &ev->xclient];
-            }
-        }
-        // The close request is the window system's window's to report (see CGSToplevelEvent).
+        // XDND (drag and drop) is CoreGraphics', which owns the connection. The close request is the window
+        // system's window's to report (see CGSToplevelEvent).
         break;
 
     case MappingNotify:

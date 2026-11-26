@@ -18,21 +18,18 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import "X11Pasteboard.h"
 #import <AppKit/NSDragging.h>
-#import <X11/Xlib.h>
+#import <AppKit/NSPasteboard.h>
+#import <CoreGraphics/CGSDrag.h>
 
-@class X11Window;
+@class NSWindow;
 
-// One incoming XDND offer. The pasteboard is an X11Pasteboard bound to the
-// source's drag selection, so the data it serves never touches the clipboard.
-// The wire methods are driven by X11DraggingManager; everything below them is
-// the backend-neutral half that talks to views.
-@interface X11DropSession : X11Pasteboard <NSDraggingInfo> {
-    Display *_xdpy;
-    X11Window *_targetWindow;
+// An incoming drag as the destinations of an AppKit window see it: the NSDraggingInfo of a CoreGraphics drop session
+// (see CGSDrag.h), whose pasteboard is the source's data, read when a destination asks for it, and which never touches
+// the clipboard. The window system's protocol is CoreGraphics'; everything here is the half that talks to views.
+@interface NSCGSDropSession : NSPasteboard <NSDraggingInfo> {
+    id<CGSDropSession> _session;
     NSWindow *_destination;
-    Window _source;
     NSArray *_types;
     id _receiver;
     NSDragOperation _sourceOperations, _acceptedOperations;
@@ -45,29 +42,16 @@
     BOOL _dropAnnounced, _transferFailed, _invalidated;
 }
 
-// The selection is named rather than passed as an atom because X11Pasteboard
-// derives its selection atom from the pasteboard name, and a drag's selection is
-// only reachable through that one path.
-- (id) initWithSource: (Window) source
-      selectionName: (NSString *) selection
-             target: (X11Window *) target
-               types: (NSArray *) types
-    sourceOperations: (NSDragOperation) operations;
+- (id) initWithSession: (id<CGSDropSession>) session window: (NSWindow *) window localSource: (id) source;
 
-- (BOOL) matchesSource: (Window) source;
+// The session this is the view of
+- (id<CGSDropSession>) dropSession;
 
-// The source of a drag this application runs itself
-- (void) setLocalSource: (id) source;
-
-// Returns the single operation the receiver accepted, NSDragOperationNone if it
-// refused, so the manager can mirror it in XdndStatus.
-- (NSDragOperation) updateAtRootX: (int) rootX
-                           rootY: (int) rootY
-                 requestedActions: (NSDragOperation) actions;
-
-// Returns the operation actually performed, NSDragOperationNone if the drop was
-// refused or failed.
-- (NSDragOperation) performDrop;
+// The operations the receiver accepts at a position of the window (points from its top left corner, y down), from
+// the mask the source was offered.
+- (NSDragOperation) updateAtPoint: (CGPoint) point;
+// The drop: returns the operation actually performed, NSDragOperationNone if the drop was refused or failed.
+- (NSDragOperation) performDropWithOperation: (NSDragOperation) operation;
 - (void) leave;
 
 @end

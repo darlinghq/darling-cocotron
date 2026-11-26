@@ -21,6 +21,7 @@
 #import "CGSX11Keyboard.h"
 #import "CGSX11Pointer.h"
 #import "CGSX11Selection.h"
+#import "CGSX11Drag.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -243,6 +244,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 	[_keyboardLayout release];
 	[_pointer release];
 	[_keyboard release];
+	[_dragSupport release];
 
 	[super dealloc];
 }
@@ -654,6 +656,7 @@ static double windowOpacity(Display* display, Window window)
 	{
 		case Expose:
 		case ConfigureNotify:
+		case ReparentNotify:
 		case FocusIn:
 		case FocusOut:
 		case ClientMessage:
@@ -669,6 +672,12 @@ static double windowOpacity(Display* display, Window window)
 
 	switch (event->type)
 	{
+		case ReparentNotify:
+			// A window manager frame has to point back at a window that takes drops through XdndProxy before a
+			// drag source can find it under the pointer.
+			if (_dragSupport != nil)
+				[_dragSupport windowReparented: window intoParent: event->xreparent.parent];
+			break;
 		case Expose:
 			[window windowSystemDidExpose: &event->xexpose];
 			break;
@@ -883,6 +892,10 @@ static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
 	// The requests, replies and clears of the selections the process owns or reads, and the property changes
 	// that pace their transfers, belong to the selections.
 	if (CGSX11SelectionHandleEvent(event))
+		return YES;
+	// XDND is entirely ClientMessage traffic: XdndEnter, XdndPosition, XdndStatus, XdndDrop, XdndFinished and
+	// XdndLeave.
+	if (event->type == ClientMessage && _dragSupport != nil && [_dragSupport handleClientMessage: &event->xclient])
 		return YES;
 	[self _windowSystemEvent: event];
 	[_pointer willHandleEvent: event];
