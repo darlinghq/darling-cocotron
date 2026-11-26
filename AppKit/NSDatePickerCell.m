@@ -226,7 +226,9 @@ static void drawRoundedSelection(NSRect rect) {
     [attributes setObject: style forKey: NSParagraphStyleAttributeName];
     if ([self font] != nil)
         [attributes setObject: [self font] forKey: NSFontAttributeName];
-    [attributes setObject: [self textColor]
+    // A cell that has not been given a text colour (one made with init, before it is in a control) shows the
+    // control text colour.
+    [attributes setObject: [self textColor] ?: [NSColor controlTextColor]
                    forKey: NSForegroundColorAttributeName];
 
     NSSize digitSize = maxDigitSize(attributes);
@@ -453,6 +455,23 @@ static void getRectsInFrameForAttributesStrings(NSRect *rects, NSRect frame,
     if ([_controlView isFlipped])
         frame.origin.y += half;
     return frame;
+}
+
+- (NSSize) cellSize {
+    NSArray *array = [self _attributedStrings];
+    CGFloat totalWidth = 0;
+    CGFloat maxHeight = 0;
+
+    for (NSAttributedString *check in array) {
+        NSSize size = [check size];
+        NSDictionary *attributes = [check attributesAtIndex: 0 effectiveRange: NULL];
+        NSNumber *width = [attributes objectForKey: @"_width"];
+        totalWidth += (width != nil) ? [width floatValue] : size.width;
+        maxHeight = MAX(maxHeight, size.height);
+    }
+
+    // Account for bezel + interior insets (6pt total) and 15pt stepper on the right.
+    return NSMakeSize(ceil(totalWidth) + 21.0, MAX(ceil(maxHeight) + 6.0, 22.0));
 }
 
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) view {
