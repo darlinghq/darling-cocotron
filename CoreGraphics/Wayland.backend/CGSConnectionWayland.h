@@ -201,6 +201,11 @@ typedef enum {
 - (void) flushPendingKeyboardEvents;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
+// Whether the surface is that of a display overlay (a window made with -becomeDisplayOverlay:), and the
+// surface of the display overlay shown last, NULL when there is none. The input of an overlay belongs to no
+// window of the application.
+- (BOOL) isDisplayOverlaySurface: (struct wl_proxy *) surface;
+- (struct wl_proxy *) displayOverlaySurface;
 // Where a point of the surface is in global coordinates, when it is a surface of this connection's windows.
 - (BOOL) globalLocation: (CGPoint *) location ofSurface: (struct wl_proxy *) surface point: (CGPoint) point;
 // The uids of the active hot keys that a press of the virtual key keyCode, with the given modifier flags

@@ -383,6 +383,11 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 {
 }
 
+-(BOOL) isDisplayOverlayNativeWindow:(void*)nativeWindow
+{
+	return NO;
+}
+
 static CGSScreen* screenWithID(NSArray<CGSScreen*>* screens, CGDirectDisplayID displayID)
 {
 	for (CGSScreen* screen in screens)

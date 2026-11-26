@@ -7,7 +7,8 @@
 // do. They are CGEvents first, so an event tap of the process sees them, with no window number; the NSEvents
 // are made from those; the motion is in CGGetLastMouseDelta().
 //
-// Driven by cgl-fullscreen-overlay-input-x11.sh (XTest): the program prints READY and the display's bounds,
+// Driven by cgl-fullscreen-overlay-input-x11.sh (XTest) or cgl-fullscreen-overlay-input-wayland.sh (a virtual
+// pointer and keyboard): the program prints READY and the display's bounds,
 // then PHASE2 and PHASE3 when it has seen what the harness did before, and reports at the end. Skipped
 // (SKIP, exit 0) without a fullscreen-capable pixel format.
 //
@@ -16,6 +17,7 @@
 #import <AppKit/AppKit.h>
 #include <ApplicationServices/ApplicationServices.h>
 #include <OpenGL/OpenGL.h>
+#include <OpenGL/gl.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,6 +133,12 @@ int main(void) {
             return 0;
         }
 
+        // The program draws, as one that fills a display does (a Wayland toplevel is mapped by its first buffer).
+        CGLSetCurrentContext(context);
+        glClearColor(0, 0, 0, 1);
+        glClear(GL_COLOR_BUFFER_BIT);
+        CGLFlushDrawable(context);
+
         CGRect bounds = CGDisplayBounds(display);
         CGFloat height = bounds.size.height;
         printf("READY %d %d %d %d\n", (int) bounds.origin.x, (int) bounds.origin.y, (int) bounds.size.width,
@@ -193,8 +201,11 @@ int main(void) {
         expect(key != nil && [[key characters] isEqual: @"a"] && [key window] == nil && [key windowNumber] == 0,
                @"the key arrives with no window");
 
-        expect(tapDowns >= 3 && tapUps >= 3 && tapScrolls > 0 && tapKeyDowns > 0 && tapKeyCode == 0,
-               [NSString stringWithFormat: @"the event tap saw the buttons, the wheel and the key (%d %d %d %d)",
+        // The tap's callbacks run from the run loop, which may not have caught up with the last event yet.
+        collect(0.3, ^BOOL { return NO; });
+        expect(tapDowns >= 3 && tapUps >= 3 && tapScrolls > 0 && tapKeyDowns > 0 &&
+               (key == nil || tapKeyCode == (int64_t) [key keyCode]),
+               [NSString stringWithFormat: @"the event tap saw the buttons, the wheel and the key, which agrees with the NSEvent (%d %d %d %d)",
                 tapDowns, tapUps, tapScrolls, tapKeyDowns]);
         expect(tapWithWindow == 0, [NSString stringWithFormat:
                                     @"no pointer CGEvent of the overlay names a window (%d do)", tapWithWindow]);

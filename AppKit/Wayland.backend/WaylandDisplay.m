@@ -1580,6 +1580,14 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     // An event the application or Carbon posted names no surface: it is for the key window.
     if (CGEventGetIntegerValueField(event, kCGSEventNativeWindow) == 0)
         return [super windowNumber: windowNumber location: location forKeyEvent: event];
+    // The keys of a display overlay (the cover of a display CGLSetFullScreen makes) are not for a window of the
+    // application: the event has none.
+    if (_CGSNativeConnectionIsDisplayOverlayWindow(
+                (void *) (intptr_t) CGEventGetIntegerValueField(event, kCGSEventNativeWindow))) {
+        *windowNumber = 0;
+        *location = NSZeroPoint;
+        return YES;
+    }
     WaylandWindow *window = [self windowForSurface: (struct wl_proxy *) (intptr_t) CGEventGetIntegerValueField(
                                                             event, kCGSEventNativeWindow)];
     id keyPlatformWindow = [[NSApp keyWindow] platformWindow];

@@ -1180,8 +1180,12 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
     [(CGSWaylandPointer *) _pointerDecoder warpToGlobalPoint: point];
 }
 
+// The windows are ordered from any thread; the lock is made on the one that reads the connection.
 - (void) pointerLockTargetMayHaveChanged {
-    [(CGSWaylandPointer *) _pointerDecoder updatePointerLock];
+    if ([NSThread isMainThread])
+        [(CGSWaylandPointer *) _pointerDecoder updatePointerLock];
+    else
+        [_pointerDecoder performSelectorOnMainThread: @selector(updatePointerLock) withObject: nil waitUntilDone: NO];
 }
 
 - (BOOL) pointerLocked {
@@ -1211,6 +1215,36 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
         }
     }
     return 0;
+}
+
+- (BOOL) isDisplayOverlaySurface: (struct wl_proxy *) surface {
+    uint32_t windowID = [self windowIDForSurface: surface];
+    CGSWindow *window = windowID != 0 ? [self windowForId: (CGSWindowID) windowID] : nil;
+
+    return [window isKindOfClass: [CGSWindowWayland class]] && [(CGSWindowWayland *) window isDisplayOverlay];
+}
+
+// Window ids grow with creation: the overlay made last is the one on top.
+- (struct wl_proxy *) displayOverlaySurface {
+    struct wl_proxy *found = NULL;
+    int foundID = 0;
+
+    @synchronized (_windows) {
+        for (NSNumber *key in _windows) {
+            CGSWindow *window = [_windows objectForKey: key];
+
+            if ([window isKindOfClass: [CGSWindowWayland class]] && [(CGSWindowWayland *) window isDisplayOverlay] &&
+                [(CGSWindowWayland *) window isShown] && [key intValue] > foundID) {
+                found = ((CGSWindowWayland *) window)->_surface;
+                foundID = [key intValue];
+            }
+        }
+    }
+    return found;
+}
+
+- (BOOL) isDisplayOverlayNativeWindow: (void *) nativeWindow {
+    return [self isDisplayOverlaySurface: (struct wl_proxy *) nativeWindow];
 }
 
 - (BOOL) globalLocation: (CGPoint *) location ofSurface: (struct wl_proxy *) surface point: (CGPoint) point {
