@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "X11Display.h"
+#include <string.h>
 #import "NSEvent_mouse.h"
 #import "X11Cursor.h"
 #import "X11DraggingManager.h"
@@ -51,8 +52,6 @@
 
 #import <OpenGL/CGLInternal.h>
 
-#import "X11Touch.h"
-#import "X11Gesture.h"
 #import "X11Occlusion.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
@@ -77,6 +76,19 @@ static BOOL appKitPreference(CFStringRef key) {
     Boolean value = CFPreferencesGetAppBooleanValue(
             key, CFSTR("org.darlinghq.AppKit"), &valid);
     return valid && value;
+}
+
+// Whether the locale modifiers (XMODIFIERS, as XSetLocaleModifiers("") returns them) name an input method other
+// than Xlib's own: "@im=none" and "@im=local" are the built-in one, and so is no @im at all.
+static BOOL modifiersNameInputMethod(const char *modifiers) {
+    const char *name = modifiers != NULL ? strstr(modifiers, "@im=") : NULL;
+    if (name == NULL)
+        return NO;
+    name += 4;
+    size_t length = strcspn(name, "@");
+    if (length == 0)
+        return NO;
+    return !(length == 4 && strncmp(name, "none", 4) == 0) && !(length == 5 && strncmp(name, "local", 5) == 0);
 }
 
 @implementation X11Display
@@ -112,8 +124,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
                        name: (NSString *) _kCGSDisplayOverlayWindowCreated
                      object: nil];
 
-        XSetLocaleModifiers("");
+        const char *modifiers = XSetLocaleModifiers("");
         _xim = XOpenIM(_display, NULL, NULL, NULL);
+        _inputMethodComposes = _xim != NULL && modifiersNameInputMethod(modifiers);
 
         if (!_xim) {
             NSLog(@"Failed to open XIM, falling back to im=none\n");
@@ -123,11 +136,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         }
 
         // RandR events are CoreGraphics', which reports the new layout (see -nativeConnectionDisplayLayoutChanged).
-        // The window manager publishes the focused window and the stacking order on the root window.
-        XSelectInput(_display, DefaultRootWindow(_display), PropertyChangeMask);
+        // The window manager publishes the focused window and the stacking order on the root window,
+        // whose property changes CoreGraphics' connection selects.
         _occlusionDirty = YES;
-
-        X11TouchInit(_display);
 
         int xwaylandOpcode, xwaylandEvent, xwaylandError;
         _isXwayland = XQueryExtension(_display, "XWAYLAND", &xwaylandOpcode,
@@ -136,9 +147,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         lastFocusedWindow = nil;
         _confinesPointer = appKitPreference(CFSTR("ConfinePointerToFullscreenWindows"));
         _controlActsAsCommand = appKitPreference(CFSTR("ControlKeyActsAsCommand"));
-
-        // The general pasteboard and the CLIPBOARD selection show the same contents.
-        NSPasteboardRegisterHostClipboard([X11Pasteboard hostClipboardOfDisplay: self]);
 
         // From here on CoreGraphics hands this display the events of the connection.
         _CGSSetNativeConnectionObserver(self);
@@ -722,9 +730,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
                    forKey: [NSNumber
                                    numberWithUnsignedLong: (unsigned long) i]];
     else {
-        // A window replaced by another X window ends its pinch here, while it is still known and
-        // has its delegate; -[X11Window invalidate] ends it earlier.
-        [self cancelPinchOnWindow: i];
         [_windowsByID removeObjectForKey: [NSNumber numberWithUnsignedLong:
                                                             (unsigned long) i]];
 
@@ -1544,39 +1549,11 @@ enum {
             [window propertyNotify: &ev->xproperty];
             // The window may have entered or left fullscreen.
             [self updatePointerConfinement];
-        } else if (window == nil) {
-            // An incremental transfer is paced by the receiver deleting the
-            // property, and that property lives on the receiver's window, which
-            // belongs to another client and so is not in the window map. The
-            // pasteboard that wrote it is the one waiting for the deletion.
-            [(X11DraggingManager *) [self draggingManager]
-                    handlePropertyChange: &ev->xproperty];
-        }
-        // An INCR transfer a pasteboard serves is paced by the requestor
-        // deleting a property on its own window, usually another client's,
-        // which therefore is not in the window map.
-        if (ev->xproperty.state == PropertyDelete &&
-            (window == nil || [window isKindOfClass: [X11Pasteboard class]]))
-            [X11Pasteboard dispatchPropertyNotify: &ev->xproperty];
-        break;
-
-    case SelectionClear:
-        if ([window respondsToSelector: @selector(selectionClear:)]) {
-            [window selectionClear: &ev->xselectionclear];
         }
         break;
 
-    case SelectionRequest:
-        if ([window respondsToSelector: @selector(selectionRequest:)]) {
-            [window selectionRequest: &ev->xselectionrequest];
-        }
-        break;
-
-    case SelectionNotify:
-        if ([window respondsToSelector: @selector(selectionNotify:)]) {
-            [window selectionNotify: &ev->xselection];
-        }
-        break;
+    // The selections (the requests, replies and clears of the clipboard and of a drag's data, and the property
+    // changes that pace their transfers) are handled by CoreGraphics, which owns the connection.
 
     case ColormapNotify:
         break;
@@ -1624,8 +1601,8 @@ enum {
         break;
 
     case GenericEvent:
-        // events of other extensions are not used
-        X11TouchHandleEvent(self, ev);
+        // The events of XInput2 (touch screens, pinch gestures, smooth scrolling) are CoreGraphics', which
+        // decodes them into CGEvents; the events of other extensions are not used.
         break;
 
     default:
@@ -1645,6 +1622,10 @@ enum {
     if (e->type != KeyPress && e->type != KeyRelease && XFilterEvent(e, None))
         return;
     [self postXEvent: e];
+}
+
+- (BOOL) nativeConnectionInputMethodComposes {
+    return _inputMethodComposes;
 }
 
 // The text of a key press as the input method of its window composes it (CoreGraphics decodes the key and

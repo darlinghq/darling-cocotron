@@ -17,7 +17,8 @@
  SOFTWARE. */
 
 #import "WaylandDropSession.h"
-#import "WaylandPasteboard.h"
+#import "WaylandDataDevice.h"
+#import <CoreGraphics/CGSSelection.h>
 #import "NSPasteboardAliases.h"
 #import "WaylandDragOperations.h"
 #import "WaylandDraggingManager.h"
@@ -46,7 +47,7 @@
         NSMutableArray *types = [NSMutableArray array];
         for (NSString *mime in mimes) {
             if ([mime isEqual: @"DELETE"]) continue; // Control target, never pasteboard data.
-            for (NSString *type in [WaylandPasteboard typesForMime:mime])
+            for (NSString *type in _CGSSelectionTypesForMime(mime))
                 if (![types containsObject:type]) [types addObject:type];
         }
         _localSnapshot = [[manager localSnapshotForSession:self mimes:mimes
@@ -101,14 +102,14 @@
     type = NSPasteboardCanonicalType(type);
     if (!type || [type isEqual: @"DELETE"]) return nil;
     if (_localSnapshot) return [self hasLocalAccess] && [_localSnapshot objectForKey:type] ? [_mimes objectAtIndex:0] : nil;
-    for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
+    for (NSString *mime in _CGSSelectionMimeTypesForType(NSPasteboardCanonicalType(type)))
         if ([_mimes containsObject: mime]) return mime;
     return nil;
 }
 - (NSString *) name { return NSDragPboard; }
 - (NSInteger) changeCount { return _sequence; }
 - (NSData *) convertedData: (NSData *) raw type: (NSString *) type mime: (NSString *) mime {
-    NSData *data = [WaylandPasteboard decodeData:raw forType:type mime:mime];
+    NSData *data = _CGSSelectionDecodeData(raw, type, mime);
     if (!data) { _transferFailed = YES; return nil; }
     [_cache setObject:data forKey:type];
     return data;
@@ -316,7 +317,7 @@
 }
 - (NSSpringLoadingHighlight) springLoadingHighlight { return NSSpringLoadingHighlightNone; }
 - (void) resetSpringLoading {}
-- (int) draggingSequenceNumber { return _sequence; }
+- (NSInteger) draggingSequenceNumber { return _sequence; }
 - (void) slideDraggedImageTo: (NSPoint) point {}
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination { return nil; }
 @end

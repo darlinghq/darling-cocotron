@@ -122,6 +122,25 @@ void CGPDFContextEndPage(CGContextRef self) {
     O2ContextEndPage((O2ContextRef)self);
 }
 
+// the PDF context that context is, or nil: the link functions do nothing on
+// other contexts
+static O2PDFContext *pdfContext(CGContextRef context) {
+    id object = (id)context;
+    return [object isKindOfClass:[O2PDFContext class]] ? object : nil;
+}
+
+void CGPDFContextSetURLForRect(CGContextRef context, CFURLRef url, CGRect rect) {
+    [pdfContext(context) setURL:(NSURL *)url forRect:rect];
+}
+
+void CGPDFContextAddDestinationAtPoint(CGContextRef context, CFStringRef name, CGPoint point) {
+    [pdfContext(context) addDestinationWithName:(NSString *)name atPoint:point];
+}
+
+void CGPDFContextSetDestinationForRect(CGContextRef context, CFStringRef name, CGRect rect) {
+    [pdfContext(context) setDestinationWithName:(NSString *)name forRect:rect];
+}
+
 // The outline is kept by the context and written into the file when the context is closed (the PDF has
 // /Outlines then; documents made without an outline have none). Observed on macOS 26.7.3 and Mac OS X
 // 10.14.4: after setting any dictionary, even an empty one, the generated document answers

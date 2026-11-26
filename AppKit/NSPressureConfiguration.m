@@ -21,14 +21,23 @@
 
 @implementation NSPressureConfiguration
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
-{
-    return [NSMethodSignature signatureWithObjCTypes: "v@:"];
+- (instancetype) init {
+    return [self initWithPressureBehavior: NSPressureBehaviorPrimaryDefault];
 }
 
-- (void)forwardInvocation:(NSInvocation *)anInvocation
-{
-    NSLog(@"Stub called: %@ in %@", NSStringFromSelector([anInvocation selector]), [self class]);
+- (instancetype) initWithPressureBehavior: (NSPressureBehavior) pressureBehavior {
+    if ((self = [super init]))
+        _pressureBehavior = pressureBehavior;
+    return self;
+}
+
+- (NSPressureBehavior) pressureBehavior {
+    return _pressureBehavior;
+}
+
+// A configuration only takes effect during a pressure event sequence, and
+// Darling never delivers one.
+- (void) set {
 }
 
 @end

@@ -3,6 +3,7 @@
 #include <CoreGraphics/CoreGraphics.h>
 #include <IOKit/hidsystem/IOLLEvent.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <mach/mach_types.h>
 #include <CoreGraphics/CGSServerSPI.h>
 
 __BEGIN_DECLS
@@ -42,6 +43,8 @@ extern CGError CGSNewConnection(_Nullable CGSDictionaryObj attribs, CGSConnectio
 extern CGError CGSReleaseConnection(CGSConnectionID connId);
 extern CGSConnectionID _CGSDefaultConnection(void);
 extern CGError CGSSetDenyWindowServerConnections(Boolean deny);
+// Whether CGSSetDenyWindowServerConnections() denied the process connections to the window system.
+extern Boolean _CGSWindowServerConnectionsDenied(void);
 extern void CGSShutdownServerConnections(void);
 
 // CGSRegion
@@ -112,6 +115,40 @@ extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
 extern CGError CGSSetWindowShape(CGSConnectionID cid, CGSWindowID wid, float x_offset, float y_offset, const CGSRegionRef shape);
 extern OSStatus CGSOrderWindow(CGSConnectionID cid, CGSWindowID wid, CGSWindowOrderingMode place, CGSWindowID relativeToWindow);
 extern CGError CGSMoveWindow(CGSConnectionID cid, CGSWindowID wid, const CGPoint *window_pos);
+// The pixels and the events of a CGS window, for a process that has no UI framework of its own above
+// CoreGraphics (the Window Manager of HIToolbox). See -[CGSWindow drawImage:atPoint:].
+// Replaces the part of the window's contents the image covers (top left origin, y down) and shows it.
+extern CGError _CGSWindowDrawImage(CGSConnectionID cid, CGSWindowID wid, CGImageRef image, CGPoint origin);
+// A snapshot of the window's contents, NULL for none.
+extern CGImageRef _CGSWindowCopyContents(CGSConnectionID cid, CGSWindowID wid);
+// Style bits of a window
+enum {
+	kCGSWindowStyleFloating = 1 << 0,     // stays above the ordinary windows
+	kCGSWindowStyleUtility = 1 << 1,      // a tool window: not in the task lists
+	kCGSWindowStyleBorderless = 1 << 2,   // no title bar and frame of the window system
+	kCGSWindowStyleIgnoresMouse = 1 << 3, // pointer input goes to the windows below
+	kCGSWindowStyleTransparent = 1 << 4,  // the pixels' alpha shows what is below
+	kCGSWindowStyleFixedSize = 1 << 5,    // the user cannot resize it
+	kCGSWindowStyleNoFocus = 1 << 6,      // never takes the keyboard focus
+	kCGSWindowStyleNoClose = 1 << 7,      // the window system offers no close control
+	kCGSWindowStyleUnmanaged = 1 << 8,    // the window system neither places nor decorates it
+};
+extern CGError _CGSWindowSetStyle(CGSConnectionID cid, CGSWindowID wid, uint32_t styleFlags);
+
+// What the window system tells about the windows, on the thread that runs the main run loop.
+// kCGSWindowEventBounds: the window's content rectangle in global coordinates (y down) changed.
+typedef enum {
+	kCGSWindowEventCloseRequested = 1, // the user asked the window system to close the window
+	kCGSWindowEventActivated = 2,      // the window got the keyboard focus
+	kCGSWindowEventDeactivated = 3,    // the window lost it
+	kCGSWindowEventBounds = 4,
+} CGSWindowEventKind;
+typedef void (*CGSWindowEventProc)(CGSWindowEventKind kind, CGSWindowID window, CGRect rect, void* info);
+// Sets the process' one handler of the window events (NULL removes it).
+extern void _CGSSetWindowEventProc(CGSWindowEventProc proc, void* info);
+// For the backends: reports a window event to that handler.
+extern void _CGSPostWindowEvent(CGSWindowEventKind kind, CGSWindowID window, CGRect rect);
+
 extern CGError CGSSetWindowOpacity(CGSConnectionID cid, CGSWindowID wid, bool isOpaque);
 extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level);
 extern CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAffineTransform transform);
@@ -152,6 +189,8 @@ extern CGError CGSAddTrackingRect(CGSConnectionID cid, CGSWindowID wid, CGRect r
 extern CGError CGSRemoveAllTrackingAreas(CGSConnectionID cid, CGSWindowID wid);
 extern CFStringRef CGSCopyManagedDisplayForWindow(const CGSConnectionID cid, CGSWindowID wid);
 extern CGError CGSGetScreenRectForWindow(CGSConnectionID cid, CGSWindowID wid, CGRect *outRect);
+// The IOHIDEvent an event was made from; Darling's events have none, so always NULL.
+extern CFTypeRef CGEventCopyIOHIDEvent(CGEventRef event);
 
 extern const CFStringRef kCGSWindowTitle;
 extern CGError CGSSetWindowTitle(CGSConnectionID cid, CGSWindowID wid, CFStringRef title);
@@ -210,6 +249,42 @@ extern CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display);
 // The name the window system gives the display's output (a description or a connector name), or NULL; the
 // caller releases it.
 extern CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display);
+// Keys of the dictionary a display's color description uses. Values are CFNumbers. Luminances use
+// the color-management protocol's units (minimum luminance is scaled by 10000); absent keys mean
+// the compositor did not report them.
+extern const CFStringRef kCGSDisplayColorPrimariesKey;
+extern const CFStringRef kCGSDisplayColorTransferFunctionKey;
+extern const CFStringRef kCGSDisplayColorMinLuminanceKey;
+extern const CFStringRef kCGSDisplayColorMaxLuminanceKey;
+extern const CFStringRef kCGSDisplayColorReferenceLuminanceKey;
+extern const CFStringRef kCGSDisplayColorTargetMinLuminanceKey;
+extern const CFStringRef kCGSDisplayColorTargetMaxLuminanceKey;
+extern const CFStringRef kCGSDisplayColorICCProfileKey;
+
+// Values of the primaries and transfer-function keys. The numbers are the window system's
+// color-management enum values; the names give the frameworks above CoreGraphics a stable
+// vocabulary for them.
+typedef enum {
+    kCGSDisplayColorPrimariesSRGB = 1,
+    kCGSDisplayColorPrimariesBT2020 = 6,
+    kCGSDisplayColorPrimariesDCIP3 = 8,
+    kCGSDisplayColorPrimariesDisplayP3 = 9,
+    kCGSDisplayColorPrimariesAdobeRGB = 10,
+} CGSDisplayColorPrimaries;
+
+typedef enum {
+    kCGSDisplayColorTransferFunctionGamma22 = 2,
+    kCGSDisplayColorTransferFunctionExtendedLinear = 5,
+    kCGSDisplayColorTransferFunctionSRGB = 9,
+    kCGSDisplayColorTransferFunctionExtendedSRGB = 10,
+    kCGSDisplayColorTransferFunctionPQ = 11,
+    kCGSDisplayColorTransferFunctionHLG = 13,
+    kCGSDisplayColorTransferFunctionCompoundPower24 = 14,
+} CGSDisplayColorTransferFunction;
+
+// The color description of the display's output, or NULL; the caller releases it. The dictionary
+// is in the format described by the keys above.
+extern CFDictionaryRef _CGSDisplayCopyColorInfo(CGDirectDisplayID display);
 
 // Darling extras, e.g. for CGL
 // Asks the window system to give the windows of a process the input focus and raise them,
@@ -379,6 +454,7 @@ extern size_t CGContextGetLineDashCount(CGContextRef context);
 extern void CGContextGetLineDashPattern(CGContextRef context, CGFloat *phase, CGFloat *lengths, size_t capacity);
 extern int CGContextGetCompositeOperation(CGContextRef context);
 extern void CGContextSetCompositeOperation(CGContextRef context, int operation);
+extern void CGContextSetOwnerIdentity(CGContextRef context, task_id_token_t owner);
 
 // Private numeric helpers.
 extern bool CGFloatIsValid(CGFloat value);
@@ -449,6 +525,46 @@ enum {
 	kCGSGesturePhase = 191,
 	kCGSGestureMagnification = 192,
 	kCGSGestureRotation = 193,
+	// Touch events: a gesture event (CGEvent type 29, NSEventTypeGesture) with kCGSTouchPhase not 0, one for
+	// each change of one finger on a touch screen (a gesture event with phase 0 is an ordinary one, as
+	// the touchpad's). Direct touch is not a CGEvent type of its own (CGEvent of type 37 is not valid; the touch
+	// events of the application are made from these). The window and the position are given as for pointer
+	// events: the window system's window (kCGSEventNativeWindow, with kCGSEventNativeLocationX/Y and
+	// kCGSEventPostedLocationX/Y), or, for an event of the application, kCGSTouchWindowNumber
+	// with the event's location. The CGEvent location is the global location of the finger. CGEvent.h has no
+	// fields for them.
+	// The number that names the finger while it is down, and may be used again afterwards. It is unique
+	// among the fingers of all touch devices of the event source (0 is a number like any other).
+	kCGSTouchIdentifier = 194,
+	// The phase as NSTouchPhase bits: began (1), moved (2), ended (8) or cancelled (16); the event is a
+	// touch event when this is not 0.
+	kCGSTouchPhase = 195,
+	// Where the finger is on its device, in millionths of the device's width and height from its bottom left
+	// corner (0 to 1000000), and the size of the device in 1/1024 of a point. All four are 0 when the source
+	// does not know.
+	kCGSTouchNormalizedX = 196,
+	kCGSTouchNormalizedY = 197,
+	kCGSTouchDeviceWidth = 198,
+	kCGSTouchDeviceHeight = 199,
+	// Not 0: the source has no position for the finger (the end of a finger that carries none, a cancel): the
+	// finger is where its previous event left it, and the location fields of the event are not meaningful.
+	kCGSTouchLocationUnknown = 200,
+	// The number of the window a touch event of the application is for (the fields of mouse events that name a
+	// window do not belong to gesture events), with the event's location. 0 when the event names the window
+	// system's window.
+	kCGSTouchWindowNumber = 201,
+};
+
+// The CGEvent type of the gesture events (NSEventTypeGesture), and the phases of a touch event
+// (NSTouchPhase bits).
+enum {
+	kCGSEventTypeGesture = 29,
+};
+enum {
+	kCGSTouchPhaseBegan = 1 << 0,
+	kCGSTouchPhaseMoved = 1 << 1,
+	kCGSTouchPhaseEnded = 1 << 3,
+	kCGSTouchPhaseCancelled = 1 << 4,
 };
 
 // The double-click interval of the user in seconds: the time within which a second press of a button
@@ -484,6 +600,105 @@ CGSConnection* _CGSConnectionForID(CGSConnectionID connId);
 CGSConnection* _CGSConnectionFromEventRecord(const CGSEventRecordPtr record);
 #endif
 
+// Draws a PDF page like CGContextDrawPDFPage, asking the callback whether to
+// draw each of the page's annotations (NULL draws them all).
+typedef struct CGPDFAnnotation *CGPDFAnnotationRef;
+#if defined(__BLOCKS__)
+typedef bool (^CGPDFAnnotationDrawCallbackType)(CGContextRef context, CGPDFPageRef page, CGPDFAnnotationRef annotation);
+#else
+typedef void *CGPDFAnnotationDrawCallbackType;
+#endif
+extern void CGContextDrawPDFPageWithAnnotations(CGContextRef context, CGPDFPageRef page, CGPDFAnnotationDrawCallbackType callback);
+
+// More private context functions, as WebKit (BSD licensed,
+// Source/WebCore/PAL/pal/spi/cg/CoreGraphicsSPI.h) declares them.
+// The base CTM is the transform the CTM started from, kept in the graphics
+// state (identity for a new context); setting it leaves the CTM as it is, and
+// drawing does not depend on it.
+extern CGAffineTransform CGContextGetBaseCTM(CGContextRef context);
+extern void CGContextSetBaseCTM(CGContextRef context, CGAffineTransform transform);
+// The current fill and stroke colours, owned by the context.
+extern CGColorRef CGContextGetFillColorAsColor(CGContextRef context);
+extern CGColorRef CGContextGetStrokeColorAsColor(CGContextRef context);
+extern bool CGContextGetShouldAntialias(CGContextRef context);
+// Kept in the graphics state; Onyx2D antialiases glyphs either way.
+extern void CGContextSetShouldAntialiasFonts(CGContextRef context, bool shouldAntialiasFonts);
+extern bool CGContextGetShouldAntialiasFonts(CGContextRef context);
+// The colour space of the context's destination (a new reference), NULL for a
+// NULL context.
+extern CGColorSpaceRef CGContextCopyDeviceColorSpace(CGContextRef context);
+// Draws path as CGContextDrawPath would, without changing the current path.
+// boundingBox, when given, is a hint and is not used.
+extern void CGContextDrawPathDirect(CGContextRef context, CGPathDrawingMode mode, CGPathRef path, const CGRect *boundingBox);
+// Draws the gradient around center: its start location at angle radians, and
+// its locations going counterclockwise in user space (from the positive x axis
+// towards the positive y axis) for one full turn.
+extern void CGContextDrawConicGradient(CGContextRef context, CGGradientRef gradient, CGPoint center, CGFloat angle);
+// A shading that evaluates function as CGContextDrawConicGradient sweeps a
+// gradient; it covers the whole clip.
+extern CGShadingRef CGShadingCreateConic(CGColorSpaceRef space, CGPoint center, CGFloat angle, CGFunctionRef function);
+
+// Adds a rectangle with elliptical corners of their own sizes. Inferred order
+// (WebKit's use): the corners at (minX, maxY), (maxX, maxY), (maxX, minY) and
+// (minX, minY), each size the horizontal and vertical radius. NULL corners add
+// a plain rectangle.
+extern void CGPathAddUnevenCornersRoundedRect(CGMutablePathRef path, const CGAffineTransform *transform, CGRect rect, const CGSize corners[4]);
+
+// A colored pattern that tiles image, one copy every image width and height
+// in pattern space; transform maps pattern space to the default user space.
+extern CGPatternRef CGPatternCreateWithImage2(CGImageRef image, CGAffineTransform transform, CGPatternTiling tiling);
+
+// Hints on how long an image's decoded data is worth keeping. Inferred values.
+// Kept with the image and reported; Onyx2D does not cache by them.
+enum {
+    kCGImageCachingTransient = 1,
+    kCGImageCachingTemporary = 3,
+};
+typedef uint32_t CGImageCachingFlags;
+extern void CGImageSetCachingFlags(CGImageRef image, CGImageCachingFlags flags);
+extern CGImageCachingFlags CGImageGetCachingFlags(CGImageRef image);
+
+// Converts colours to the destination colour space it was created with.
+typedef const struct CGColorTransform *CGColorTransformRef;
+// NULL for a NULL space. The attributes are not used.
+extern CGColorTransformRef CGColorTransformCreate(CGColorSpaceRef destination, CFDictionaryRef attributes);
+extern CFTypeID CGColorTransformGetTypeID(void);
+// Converts the colour components (without alpha) of a colour in source to the
+// destination space's components (without alpha). False, and the destination
+// left as it was, when the colours cannot be converted.
+extern bool CGColorTransformConvertColorComponents(CGColorTransformRef transform, CGColorSpaceRef source, CGColorRenderingIntent intent, const CGFloat sourceComponents[], CGFloat destinationComponents[]);
+// The colour in the transform's destination space, alpha kept.
+extern CGColorRef CGColorTransformConvertColor(CGColorTransformRef transform, CGColorRef color, CGColorRenderingIntent intent);
+
+// Whether two spaces are the same space: the same object, equal spaces
+// (CFEqual), or spaces of one model with the same ICC data. False when only one
+// of them is NULL.
+extern bool CGColorSpaceEqualToColorSpace(CGColorSpaceRef space1, CGColorSpaceRef space2);
+// The description ('desc' tag) of the space's ICC profile, or NULL when it has
+// no profile or the profile has no readable description.
+extern CFStringRef CGColorSpaceCopyICCProfileDescription(CGColorSpaceRef space);
+
+// Gradient creation with options. With kCGGradientInterpolatesPremultiplied
+// true, the colours between the stops are interpolated with their alpha
+// premultiplied.
+extern const CFStringRef kCGGradientInterpolatesPremultiplied;
+extern CGGradientRef CGGradientCreateWithColorComponentsAndOptions(CGColorSpaceRef space, const CGFloat components[], const CGFloat locations[], size_t count, CFDictionaryRef options);
+
+// A provider of a copy of the bytes, made when it is created. NULL for NULL
+// data with a size other than 0.
+extern CGDataProviderRef CGDataProviderCreateWithCopyOfData(const void *data, size_t size);
+
+// Walks the rectangles of a region. Each CGSNextRect returns the next one
+// (owned by the enumerator) and NULL after the last.
+typedef struct CGSRegionEnumeratorObject *CGSRegionEnumeratorObj;
+extern CGSRegionEnumeratorObj CGSRegionEnumerator(CGSRegionRef region);
+extern CGRect *CGSNextRect(const CGSRegionEnumeratorObj enumerator);
+extern CGError CGSReleaseRegionEnumerator(const CGSRegionEnumeratorObj enumerator);
+extern CGError CGSReleaseRegion(const CGSRegionRef region);
+
 __END_DECLS
+
+#include <CoreGraphics/CGContextDelegatePrivate.h>
+#include <CoreGraphics/CGStylePrivate.h>
 
 #endif

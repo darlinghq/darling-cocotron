@@ -21,6 +21,7 @@
 #define _CG_PDFCONTEXT_H_
 
 #include <CoreFoundation/CFString.h>
+#include <CoreFoundation/CFURL.h>
 #include <CoreGraphics/CoreGraphicsExport.h>
 #include <CoreGraphics/CGContext.h>
 #include <CoreGraphics/CGDataConsumer.h>
@@ -63,6 +64,9 @@ COREGRAPHICS_EXPORT void CGPDFContextClose(CGContextRef self);
 COREGRAPHICS_EXPORT void CGPDFContextBeginPage(CGContextRef self,
                                              CFDictionaryRef pageInfo);
 COREGRAPHICS_EXPORT void CGPDFContextEndPage(CGContextRef self);
+COREGRAPHICS_EXPORT void CGPDFContextSetURLForRect(CGContextRef context, CFURLRef url, CGRect rect);
+COREGRAPHICS_EXPORT void CGPDFContextAddDestinationAtPoint(CGContextRef context, CFStringRef name, CGPoint point);
+COREGRAPHICS_EXPORT void CGPDFContextSetDestinationForRect(CGContextRef context, CFStringRef name, CGRect rect);
 COREGRAPHICS_EXPORT void CGPDFContextSetOutline(CGContextRef context, CFDictionaryRef outline);
 
 CF_IMPLICIT_BRIDGING_DISABLED

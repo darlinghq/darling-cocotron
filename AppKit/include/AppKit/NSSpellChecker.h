@@ -30,9 +30,17 @@ APPKIT_EXPORT NSString
         *const NSSpellCheckerDidChangeAutomaticTextReplacementNotification;
 APPKIT_EXPORT NSString
         *const NSSpellCheckerDidChangeAutomaticSpellingCorrectionNotification;
+APPKIT_EXPORT NSString
+        *const NSSpellCheckerDidChangeAutomaticQuoteSubstitutionNotification;
+APPKIT_EXPORT NSString
+        *const NSSpellCheckerDidChangeAutomaticDashSubstitutionNotification;
 
 APPKIT_EXPORT NSString *const NSTextCheckingOrthographyKey;
 APPKIT_EXPORT NSString *const NSTextCheckingQuotesKey;
+#ifdef DARLING
+// not in the macOS SDK; code built against it declares it itself
+APPKIT_EXPORT NSString *const NSTextCheckingInsertionPointKey;
+#endif
 APPKIT_EXPORT NSString *const NSTextCheckingReplacementsKey;
 APPKIT_EXPORT NSString *const NSTextCheckingReferenceDateKey;
 APPKIT_EXPORT NSString *const NSTextCheckingReferenceTimeZoneKey;
@@ -135,6 +143,16 @@ typedef NS_ENUM(NSInteger, NSCorrectionResponse) {
                                       NSArray *results,
                                       NSOrthography *orthography,
                                       NSInteger wordCount)) completionHandler;
+
+- (NSInteger) requestCandidatesForSelectedRange: (NSRange) selectedRange
+                                       inString: (NSString *) stringToCheck
+                                          types: (NSTextCheckingTypes) checkingTypes
+                                        options: (NSDictionary *) options
+                         inSpellDocumentWithTag: (NSInteger) tag
+                              completionHandler:
+                                      (void (^)(NSInteger sequenceNumber,
+                                                NSArray<NSTextCheckingResult *> *candidates))
+                                              completionHandler;
 #endif
 
 - (NSArray *) guessesForWordRange: (NSRange) range

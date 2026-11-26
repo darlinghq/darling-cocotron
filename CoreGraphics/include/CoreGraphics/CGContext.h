@@ -23,7 +23,13 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CoreGraphicsExport.h>
 #import <CoreFoundation/CFBase.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2Context *CGContextRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGContext *CGContextRef;
+#endif
 
 #import <CoreGraphics/CGAffineTransform.h>
 #import <CoreGraphics/CGColor.h>
@@ -94,7 +100,16 @@ typedef CF_ENUM(int32_t, CGBlendMode) {
     kCGBlendModePlusLighter,
 };
 
-typedef int CGTextDrawingMode;
+typedef CF_ENUM(int32_t, CGTextDrawingMode) {
+    kCGTextFill,
+    kCGTextStroke,
+    kCGTextFillStroke,
+    kCGTextInvisible,
+    kCGTextFillClip,
+    kCGTextStrokeClip,
+    kCGTextFillStrokeClip,
+    kCGTextClip,
+};
 
 COREGRAPHICS_EXPORT CGContextRef CGContextRetain(CGContextRef context);
 COREGRAPHICS_EXPORT void CGContextRelease(CGContextRef context);

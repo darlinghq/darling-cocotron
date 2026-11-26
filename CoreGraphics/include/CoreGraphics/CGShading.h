@@ -25,7 +25,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2Shading *CGShadingRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGShading *CGShadingRef;
+#endif
 
 CF_IMPLICIT_BRIDGING_ENABLED
 

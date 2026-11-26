@@ -123,6 +123,11 @@ typedef enum {
 
 - (CGSubWindow *) createSubWindowWithFrame: (CGRect) frame;
 
+// A window system that persists toplevel state across launches identifies a toplevel by a stable
+// name. The default is no session support: the methods do nothing and return nil.
+- (NSString *) ensureSessionToplevelName;
+- (void) setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring;
+
 @end
 
 @interface NSObject (CGWindow_delegate)

@@ -108,8 +108,11 @@ NSArray *O2FontCopyInstalledFaces(NSString *family, NSString *postScriptName,
  * for every other name, including installed families and unknown names. The caller owns the
  * returned string. */
 NSString *O2FontCopyInstalledFamilyForStandardFamily(NSString *family);
+NSArray *O2FontCopyStandardFamilyNamesWithStandIn(void);
 
-// Returns an owned font covering all supplied Unicode scalar values, or nil.
+// Returns an owned font covering all supplied Unicode scalar values, or nil. The language (a
+// BCP 47 tag such as "zh-Hant-TW", or NULL) is passed on to fontconfig, whose configuration
+// decides which faces suit it.
 O2FontRef O2FontCreateWithCodePointCoverage(const uint32_t *codePoints,
                                            size_t count, FT_Face baseFace,
                                            const char *language);

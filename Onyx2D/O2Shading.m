@@ -107,7 +107,15 @@ O2ColorSpaceRef O2ShadingColorSpace(O2Shading *self) {
 }
 
 - (BOOL) isAxial {
-    return _isRadial ? NO : YES;
+    return (_isRadial || _isConic) ? NO : YES;
+}
+
+- (BOOL) isConic {
+    return _isConic;
+}
+
+- (O2Float) angle {
+    return _angle;
 }
 
 O2ShadingRef O2ShadingCreateAxial(O2ColorSpaceRef colorSpace, O2Point start,
@@ -141,6 +149,23 @@ O2ShadingRef O2ShadingCreateRadial(O2ColorSpaceRef colorSpace, O2Point start,
                                      extendStart: extendStart
                                        extendEnd: extendEnd
                                           domain: domain];
+}
+
+O2ShadingRef O2ShadingCreateConic(O2ColorSpaceRef colorSpace, O2Point center,
+                                  O2Float angle, O2FunctionRef function)
+{
+    O2Float domain[2] = {0.0f, 1.0f};
+    O2Shading *result = [[O2Shading alloc] initWithColorSpace: colorSpace
+                                                   startPoint: center
+                                                     endPoint: center
+                                                     function: function
+                                                  extendStart: YES
+                                                    extendEnd: YES
+                                                       domain: domain];
+
+    result->_isConic = YES;
+    result->_angle = angle;
+    return result;
 }
 
 O2ShadingRef O2ShadingRetain(O2ShadingRef self) {

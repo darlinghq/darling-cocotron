@@ -64,6 +64,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     _repeatDelay = 600;
     _heldKeyIdentities = [NSMutableDictionary new];
     _heldHotKeys = [NSMutableDictionary new];
+    _composingKeys = [NSMutableSet new];
     // The keyboard is hardware: the events it posts change the state the hardware state functions report.
     _source = (void *) CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
     return self;
@@ -75,6 +76,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     [self stop];
     [_heldKeyIdentities release];
     [_heldHotKeys release];
+    [_composingKeys release];
     if (_source != NULL)
         CFRelease((CFTypeRef) _source);
     [super dealloc];
@@ -120,7 +122,14 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
     [_heldKeyIdentities removeAllObjects];
     _syncModifierFlags = NO;
     _classifyHeldKeys = NO;
+    [self resetComposition];
     [_keymap resetModifiers];
+}
+
+// A sequence in progress ends: its keys are not delivered, and the next key starts afresh.
+- (void) resetComposition {
+    [_composingKeys removeAllObjects];
+    [_keymap resetCompose];
 }
 
 #pragma mark - Posting
@@ -183,13 +192,19 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
                    serial: 0];
 }
 
-- (void) postKeyEventForKeycode: (uint32_t) keycode pressed: (BOOL) pressed repeat: (BOOL) repeat serial: (uint32_t) serial {
+// text is what a dead key or compose sequence produced, nil for the key's own characters.
+- (void) postKeyEventForKeycode: (uint32_t) keycode
+                        pressed: (BOOL) pressed
+                         repeat: (BOOL) repeat
+                         serial: (uint32_t) serial
+                           text: (NSString *) text
+{
     if (_focus == NULL)
         return;
     [self postEventOfType: pressed ? kCGEventKeyDown : kCGEventKeyUp
                   keyCode: keycode < 256 ? x11ToCarbon[keycode] : 0
                     flags: [self modifierFlags]
-               characters: [_keymap charactersForKeycode: keycode]
+               characters: text ?: [_keymap charactersForKeycode: keycode]
      unmodifiedCharacters: [_keymap unmodifiedCharactersForKeycode: keycode]
                    repeat: repeat
                    serial: serial];
@@ -241,13 +256,45 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 
 #pragma mark - Key repeat
 
+// The user's key repeat settings, the KeyRepeat and InitialKeyRepeat global defaults that the Keyboard
+// pane of System Preferences writes: the interval between repeats and the delay before the first one,
+// both counted in 15 ms ticks. They take the place of what the compositor reports while they are set.
+// A compositor that reports no repeat at all keeps it off.
+// QUIRK: the 15 ms tick is not documented. Evidence: independent public reports (tier 4) read the value
+// in 15 ms steps: the slowest delay the pane offers, InitialKeyRepeat 15, is 225 ms and the fastest repeat
+// it offers, KeyRepeat 2, is 30 ms (https://www.jeffgeerling.com/blog/2011/supercharge-your-key-repeat/,
+// https://dev.classmethod.jp/articles/mac-keyboard-speed-2/), and the values are listed as global defaults
+// (https://eclecticlight.co/2019/08/15/global-defaults-in-macos-mojave).
+// Test: CoreGraphics/Wayland.backend/tests/key-repeat-preferences.m (quirk_tick_is_15_ms)
+static double repeatPreferenceMilliseconds(CFStringRef key) {
+    CFPropertyListRef value = CFPreferencesCopyValue(key, kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    double milliseconds = -1;
+    int ticks;
+    if (value != NULL) {
+        if (CFGetTypeID(value) == CFNumberGetTypeID() && CFNumberGetValue(value, kCFNumberIntType, &ticks) && ticks > 0)
+            milliseconds = ticks * 15.0;
+        else if (CFGetTypeID(value) == CFStringGetTypeID() && CFStringGetIntValue(value) > 0)
+            milliseconds = CFStringGetIntValue(value) * 15.0;
+        CFRelease(value);
+    }
+    return milliseconds;
+}
+
 - (void) startKeyRepeat: (uint32_t) keycode {
     [self stopKeyRepeat];
     _repeatKeycode = keycode;
 
+    double delay = _repeatDelay, interval = 1000.0 / _repeatRate;
+    double preferred = repeatPreferenceMilliseconds(CFSTR("InitialKeyRepeat"));
+    if (preferred > 0)
+        delay = preferred;
+    preferred = repeatPreferenceMilliseconds(CFSTR("KeyRepeat"));
+    if (preferred > 0)
+        interval = preferred;
+
     CFRunLoopTimerContext context = {.version = 0, .info = self};
-    _repeatTimer = CFRunLoopTimerCreate(NULL, CFAbsoluteTimeGetCurrent() + _repeatDelay / 1000.0,
-                                        1.0 / _repeatRate, 0, 0, repeatTimerCallback, &context);
+    _repeatTimer = CFRunLoopTimerCreate(NULL, CFAbsoluteTimeGetCurrent() + delay / 1000.0,
+                                        interval / 1000.0, 0, 0, repeatTimerCallback, &context);
     CFRunLoopAddTimer(CFRunLoopGetMain(), _repeatTimer, kCFRunLoopCommonModes);
 }
 
@@ -263,7 +310,8 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 - (void) repeatKey {
     if (![_keymap isUsable] || _repeatKeycode == 0)
         return;
-    [self postKeyEventForKeycode: _repeatKeycode pressed: YES repeat: YES serial: 0];
+    // A repeat is the key typed again, not a step of a sequence.
+    [self postKeyEventForKeycode: _repeatKeycode pressed: YES repeat: YES serial: 0 text: nil];
 }
 
 #pragma mark - Events
@@ -295,6 +343,9 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
         // presses for keys held before focus arrived.
         _classifyHeldKeys = YES;
         _syncModifierFlags = YES;
+        // A surface of the process has the keyboard focus: the process is the front process (before the
+        // framework that owns the surfaces hears of it).
+        _CGSNativeFocusReport(YES);
         if ([observer respondsToSelector: @selector(nativeConnectionKeyboardFocusChanged:)])
             [observer nativeConnectionKeyboardFocusChanged: _focus];
         [_connection pointerLockTargetMayHaveChanged];
@@ -308,6 +359,12 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
         [self resetKeyboardModifiers];
         if ([observer respondsToSelector: @selector(nativeConnectionKeyboardFocusChanged:)])
             [observer nativeConnectionKeyboardFocusChanged: NULL];
+        // The focus moving from one surface of the process to another arrives as a leave and an enter in
+        // the same dispatch; a leave that no enter follows means another client has the focus.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (_CGSNativeConnectionKeyboardFocus() == NULL)
+                _CGSNativeFocusReport(NO);
+        });
         break;
 
     case WP_KEYBOARD_EV_KEY: {
@@ -317,6 +374,8 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
         uint32_t keycode = args[2].u + 8;
         BOOL pressed = args[3].u == WP_KEYBOARD_KEY_STATE_PRESSED;
         uint32_t serial = args[0].u;
+        if (pressed)
+            [_connection inputPressedWithSerial: serial];
         if (pressed && [observer respondsToSelector: @selector(nativeConnectionKeyPressedWithSerial:)])
             [observer nativeConnectionKeyPressedWithSerial: serial];
 
@@ -344,7 +403,20 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
         }
         if ([self takeKeyAsHotKey: keycode pressed: pressed])
             break;
-        [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO serial: pressed ? serial : 0];
+
+        // A dead key or the Compose key is not delivered: what the sequence produces is, as the characters of
+        // the key that completes it, and the release of a key that was not delivered is not either.
+        NSString *composed = nil;
+        if (pressed) {
+            if ([_keymap composeKeycode: keycode text: &composed] == CGSKeyComposeConsumed) {
+                [_composingKeys addObject: @(keycode)];
+                break;
+            }
+        } else if ([_composingKeys containsObject: @(keycode)]) {
+            [_composingKeys removeObject: @(keycode)];
+            break;
+        }
+        [self postKeyEventForKeycode: keycode pressed: pressed repeat: NO serial: pressed ? serial : 0 text: composed];
         if (pressed && _repeatRate > 0 && [_keymap keyRepeats: keycode])
             [self startKeyRepeat: keycode];
         else if (!pressed && keycode == _repeatKeycode)
@@ -392,6 +464,7 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 - (void) stop {
     [self releaseHeldHotKeys];
     [self stopKeyRepeat];
+    [self resetComposition];
     [self cancelPendingModifier];
     _focus = NULL;
 }

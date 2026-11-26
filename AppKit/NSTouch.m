@@ -63,6 +63,8 @@
                                                             location: _location];
     copy->_phase = _phase;
     copy->_previousLocation = _previousLocation;
+    copy->_normalizedPosition = _normalizedPosition;
+    copy->_deviceSize = _deviceSize;
     copy->_view = [_view retain];
     return copy;
 }
@@ -71,8 +73,8 @@
 - (NSTouchPhase) phase { return _phase; }
 - (NSTouchType) type { return NSTouchTypeDirect; }
 - (BOOL) isResting { return NO; }
-- (NSPoint) normalizedPosition { return NSZeroPoint; }
-- (NSSize) deviceSize { return NSZeroSize; }
+- (NSPoint) normalizedPosition { return _normalizedPosition; }
+- (NSSize) deviceSize { return _deviceSize; }
 - (id) device { return nil; }
 - (NSView *) _view { return _view; }
 - (NSWindow *) _window { return _window; }
@@ -89,6 +91,11 @@
     _previousLocation = phase == NSTouchPhaseBegan ? location : _location;
     _location = location;
     _phase = phase;
+}
+
+- (void) _setNormalizedPosition: (NSPoint) position deviceSize: (NSSize) size {
+    _normalizedPosition = position;
+    _deviceSize = size;
 }
 
 - (void) _setPhase: (NSTouchPhase) phase {
@@ -188,8 +195,9 @@ static BOOL NSTouchMouseIsTaken(void) {
     return NO;
 }
 
-static void NSTouchPostMouse(NSTouch *finger, NSWindow *window, NSTouchPhase phase, NSPoint previous,
-                             NSPoint location, NSTimeInterval timestamp)
+// A finger's event as the mouse event it stands for
+static NSEvent *NSTouchMouseEvent(NSTouch *finger, NSWindow *window, NSTouchPhase phase, NSPoint previous,
+                                  NSPoint location, NSTimeInterval timestamp)
 {
     NSEventType type;
     switch (phase) {
@@ -214,20 +222,20 @@ static void NSTouchPostMouse(NSTouch *finger, NSWindow *window, NSTouchPhase pha
         type = NSEventTypeLeftMouseUp;
         break;
     default:
-        return;
+        return nil;
     }
     // deltaY is positive downwards, as the backends report it.
-    NSEvent *event = [NSEvent mouseEventWithType: type
-                                        location: location
-                                   modifierFlags: 0
-                                          window: window
-                                      clickCount: finger->_clickCount
-                                          deltaX: location.x - previous.x
-                                          deltaY: previous.y - location.y];
-    [[NSDisplay currentDisplay] postEvent: event atStart: NO];
+    return [NSEvent mouseEventWithType: type
+                              location: location
+                         modifierFlags: 0
+                                window: window
+                            clickCount: finger->_clickCount
+                                deltaX: location.x - previous.x
+                                deltaY: previous.y - location.y];
 }
 
-static void NSTouchPostTouches(NSTouch *changed, NSWindow *window, NSPoint location, NSTimeInterval timestamp) {
+// Every finger down in the window, as this event left it
+static NSEvent *NSTouchTouchesEvent(NSTouch *changed, NSWindow *window, NSPoint location, NSTimeInterval timestamp) {
     NSMutableSet *touches = [NSMutableSet set];
     for (NSTouch *finger in [sFingers objectEnumerator]) {
         if ([finger _window] != window || [finger _view] == nil)
@@ -238,16 +246,14 @@ static void NSTouchPostTouches(NSTouch *changed, NSWindow *window, NSPoint locat
         [touches addObject: snapshot];
         [snapshot release];
     }
-    NSEvent *event = [[NSEvent_touch alloc] initWithWindow: window
-                                                  location: location
-                                                 timestamp: timestamp
-                                                   touches: touches];
-    [[NSDisplay currentDisplay] postEvent: event atStart: NO];
-    [event release];
+    return [[[NSEvent_touch alloc] initWithWindow: window
+                                         location: location
+                                        timestamp: timestamp
+                                          touches: touches] autorelease];
 }
 
-void NSTouchPost(NSWindow *window, long long identifier, NSTouchPhase phase, NSPoint location,
-                 NSTimeInterval timestamp)
+static void NSTouchTrack(NSWindow *window, long long identifier, NSTouchPhase phase, NSPoint location,
+                         NSTimeInterval timestamp, NSPoint normalized, NSSize deviceSize, NSMutableArray *events)
 {
     if (sFingers == nil)
         sFingers = [NSMutableDictionary new];
@@ -259,8 +265,8 @@ void NSTouchPost(NSWindow *window, long long identifier, NSTouchPhase phase, NSP
     if (phase == NSTouchPhaseBegan) {
         // A finger that went up unreported is done before its number is reused.
         if (finger != nil)
-            NSTouchPost([finger _window], identifier, NSTouchPhaseCancelled,
-                        [finger locationInView: nil], timestamp);
+            NSTouchTrack([finger _window], identifier, NSTouchPhaseCancelled, [finger locationInView: nil], timestamp,
+                         normalized, deviceSize, events);
         if (window == nil)
             return;
         finger = [[NSTouch alloc] _initWithIdentity: [NSNumber numberWithUnsignedLongLong: ++sTouchSerial]
@@ -286,14 +292,33 @@ void NSTouchPost(NSWindow *window, long long identifier, NSTouchPhase phase, NSP
     if (isnan(location.x) || isnan(location.y))
         location = previous;
     [finger _moveTo: location phase: phase];
+    [finger _setNormalizedPosition: normalized deviceSize: deviceSize];
 
+    NSEvent *event = nil;
     if (finger->_movesMouse)
-        NSTouchPostMouse(finger, window, phase, previous, location, timestamp);
+        event = NSTouchMouseEvent(finger, window, phase, previous, location, timestamp);
     else if ([finger _view] != nil)
-        NSTouchPostTouches(finger, window, location, timestamp);
+        event = NSTouchTouchesEvent(finger, window, location, timestamp);
+    if (event != nil)
+        [events addObject: event];
 
     if (phase == NSTouchPhaseEnded || phase == NSTouchPhaseCancelled)
         [sFingers removeObjectForKey: key];
+}
+
+NSArray *NSTouchEventsForReport(NSWindow *window, long long identifier, NSTouchPhase phase, NSPoint location,
+                                NSTimeInterval timestamp, NSPoint normalizedPosition, NSSize deviceSize)
+{
+    NSMutableArray *events = [NSMutableArray array];
+    NSTouchTrack(window, identifier, phase, location, timestamp, normalizedPosition, deviceSize, events);
+    return events;
+}
+
+void NSTouchPost(NSWindow *window, long long identifier, NSTouchPhase phase, NSPoint location,
+                 NSTimeInterval timestamp)
+{
+    for (NSEvent *event in NSTouchEventsForReport(window, identifier, phase, location, timestamp, NSZeroPoint, NSZeroSize))
+        [[NSDisplay currentDisplay] postEvent: event atStart: NO];
 }
 
 void NSTouchCancelAll(NSWindow *window) {

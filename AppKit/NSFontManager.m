@@ -139,6 +139,20 @@ static Class _fontPanelFactory;
 - (NSArray *) availableFontFamilies {
     NSArray *families = [NSFontFamily allFontFamilyNames];
 
+    // The families every macOS provides are listed when an installed family stands in for them, as
+    // -availableMembersOfFontFamily: answers for them. Code that looks a family up by scanning this
+    // list (the common way, because NSFontManager wants exact names) must find them.
+    NSArray *standIns = O2FontCopyStandardFamilyNamesWithStandIn();
+    if ([standIns count] > 0) {
+        NSMutableArray *merged = [NSMutableArray arrayWithArray: families];
+        for (NSString *name in standIns) {
+            if (![merged containsObject: name])
+                [merged addObject: name];
+        }
+        families = [merged sortedArrayUsingSelector: @selector(localizedStandardCompare:)];
+    }
+    [standIns release];
+
     if (![_delegate respondsToSelector: @selector(fontManager:
                                                 willIncludeFont:)])
         return families;

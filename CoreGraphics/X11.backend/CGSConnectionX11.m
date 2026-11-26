@@ -20,6 +20,7 @@
 #import "CGSWindowX11.h"
 #import "CGSX11Keyboard.h"
 #import "CGSX11Pointer.h"
+#import "CGSX11Selection.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -176,6 +177,11 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 		XRRSelectInput(_display, DefaultRootWindow(_display), RRScreenChangeNotifyMask | RROutputChangeNotifyMask | RRCrtcChangeNotifyMask);
 	}
 
+	// The window manager names the focused window in _NET_ACTIVE_WINDOW of the root window, which is how a
+	// change of the focus to another client is noticed (see -_activeWindowChanged). The framework that
+	// builds windows on this connection selects nothing else on the root window and relies on this.
+	XSelectInput(_display, DefaultRootWindow(_display), PropertyChangeMask);
+
 	int major = XkbMajorVersion, minor = XkbMinorVersion;
 
 	if (XkbLibraryVersion(&major, &minor) && XkbQueryExtension(_display, NULL, &_xkbEventBase, &major, &minor, NULL))
@@ -191,6 +197,10 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 
 	_keyboard = [[CGSX11Keyboard alloc] initWithConnection: self];
 	_pointer = [[CGSX11Pointer alloc] initWithConnection: self];
+
+	// The general pasteboard shows the CLIPBOARD selection. This goes before the process makes its first
+	// pasteboard, which is why the connection does it, not the framework with the windows.
+	[self _startHostClipboard];
 
 	return self;
 }
@@ -613,6 +623,82 @@ static double windowOpacity(Display* display, Window window)
 	return pointer;
 }
 
+-(CGSWindowX11*) _cgsWindowForNativeWindow:(Window)native
+{
+	@synchronized (_windows)
+	{
+		for (NSNumber* key in _windows)
+		{
+			CGSWindow* window = [_windows objectForKey: key];
+
+			if ([window isKindOfClass: [CGSWindowX11 class]] && ((CGSWindowX11*) window)->_window == native)
+				return [[(CGSWindowX11*) window retain] autorelease];
+		}
+	}
+	return nil;
+}
+
+// What the window system says about the CGS windows of this process: repaints (the window's own
+// pixels are put on it again), and the close request, focus and bounds changes, which are reported
+// to whoever asked for them (_CGSSetWindowEventProc).
+-(void) _windowSystemEvent:(XEvent*) event
+{
+	switch (event->type)
+	{
+		case Expose:
+		case ConfigureNotify:
+		case FocusIn:
+		case FocusOut:
+		case ClientMessage:
+			break;
+		default:
+			return;
+	}
+
+	CGSWindowX11* window = [self _cgsWindowForNativeWindow: event->xany.window];
+	if (window == nil)
+		return;
+
+	switch (event->type)
+	{
+		case Expose:
+			[window windowSystemDidExpose: &event->xexpose];
+			break;
+		case ConfigureNotify:
+			[window windowSystemDidConfigure];
+			break;
+		case FocusIn:
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				_CGSPostWindowEvent(kCGSWindowEventActivated, window.windowId, CGRectNull);
+			break;
+		case FocusOut:
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				_CGSPostWindowEvent(kCGSWindowEventDeactivated, window.windowId, CGRectNull);
+			break;
+		case ClientMessage:
+		{
+			Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
+			Atom ping = XInternAtom(_display, "_NET_WM_PING", False);
+			if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == deleteWindow)
+				_CGSPostWindowEvent(kCGSWindowEventCloseRequested, window.windowId, CGRectNull);
+			else if (event->xclient.format == 32 && (Atom) event->xclient.data.l[0] == ping)
+			{
+				// The window manager asks whether the window is alive; it answers by getting the message
+				// back on the root window. A window that does not answer is reported as not responding.
+				XEvent reply = *event;
+				reply.xclient.window = DefaultRootWindow(_display);
+				XSendEvent(_display, DefaultRootWindow(_display), False, SubstructureNotifyMask | SubstructureRedirectMask, &reply);
+				XFlush(_display);
+			}
+			break;
+		}
+	}
+}
+
 -(CGSWindowID) _windowIDForNativeWindow:(Window)native
 {
 	@synchronized (_windows)
@@ -700,12 +786,31 @@ static double windowOpacity(Display* display, Window window)
 	return (mask & buttonMask) != 0;
 }
 
+static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
+
+// _NET_ACTIVE_WINDOW changed: the process reports whether the focused window is one of its own, or that
+// the focus went to another client (a Darling process or not). None says nothing: the focus is nowhere,
+// as after the last window of a client closed.
+-(void) _activeWindowChanged
+{
+	NSArray<NSNumber*>* active = rootWindowList(_display, "_NET_ACTIVE_WINDOW");
+
+	if ([active count] == 0 || [active[0] unsignedLongValue] == None)
+		return;
+	_CGSNativeFocusReport(X11WindowOwnerPID(_display, (Window) [active[0] unsignedLongValue]) == getpid());
+}
+
 // Handles an event of this connection. Returns YES when the event was this connection's own business
 // (a hot key, a keyboard layout or display layout change); the rest is the observer's. The keyboard also
 // decodes the key events, the modifier state of the pointer events and the focus changes, and those go
 // on to the observer.
 -(BOOL) processXEvent:(XEvent*) event
 {
+	// The requests, replies and clears of the selections the process owns or reads, and the property changes
+	// that pace their transfers, belong to the selections.
+	if (CGSX11SelectionHandleEvent(event))
+		return YES;
+	[self _windowSystemEvent: event];
 	[_pointer willHandleEvent: event];
 	switch (event->type)
 	{
@@ -758,11 +863,27 @@ static double windowOpacity(Display* display, Window window)
 			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
 				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
 				event->xfocus.detail != NotifyInferior)
+			{
 				[_keyboard focusGainedInWindow: event->xfocus.window];
+				// The keyboard focus is in a window of the process (the framework that owns the windows is
+				// told of the event after this, so the front process is up to date when it reacts).
+				_CGSNativeFocusReport(YES);
+			}
 			[_pointer focusEvent: event];
 			break;
 		case FocusOut:
+			// Like FocusIn: grabs and the pointer entering the window do not move the keyboard focus.
+			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
+				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
+				event->xfocus.detail != NotifyInferior)
+				[_keyboard resetComposition];
 			[_pointer focusEvent: event];
+			break;
+		case PropertyNotify:
+			// The observer is told of the root window's properties too (occlusion).
+			if (event->xproperty.window == DefaultRootWindow(_display) &&
+				event->xproperty.atom == XInternAtom(_display, "_NET_ACTIVE_WINDOW", False))
+				[self _activeWindowChanged];
 			break;
 		case KeymapNotify:
 			break;
@@ -797,6 +918,8 @@ static double windowOpacity(Display* display, Window window)
 			// Invalidate cached keyboard layout information
 			if (keymapChanged || groupChanged)
 			{
+				// A sequence in progress ends with the keymap that started it.
+				[_keyboard resetComposition];
 				// TODO: Emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 
 				@synchronized (self)
@@ -1419,6 +1542,11 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	[_pointer windowsChanged];
 }
 
+-(void) selectTouchInputOnNativeWindow:(unsigned long)window
+{
+	[_pointer selectTouchInputOnWindow: (Window) window];
+}
+
 -(void) nativeObjectDestroyed:(void*)object
 {
 	[_pointer windowDestroyed: (Window) (uintptr_t) object];
@@ -1600,7 +1728,10 @@ static Time currentServerTime(Display* display)
 
 +(CGError) copyFrontProcessID:(pid_t*)pid
 {
-	Display* display = XOpenDisplay(NULL);
+	// The process' connection when it has one; a process that never opened one (a command line tool)
+	// asks through a connection of its own, which it closes again.
+	CGSConnectionX11* shared = [processConnection() retain];
+	Display* display = shared != nil ? shared->_display : XOpenDisplay(NULL);
 	if (display == NULL)
 		return kCGErrorCannotComplete;
 
@@ -1610,7 +1741,9 @@ static Time currentServerTime(Display* display)
 	pid_t owner = 0;
 	if ([active count] > 0 && [active[0] unsignedLongValue] != None)
 		owner = X11WindowOwnerPID(display, (Window) [active[0] unsignedLongValue]);
-	XCloseDisplay(display);
+	if (shared == nil)
+		XCloseDisplay(display);
+	[shared release];
 
 	// The owner is 0 for a window of a process that is not a Darling process.
 	if (owner <= 0)

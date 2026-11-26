@@ -104,6 +104,11 @@ const NSNotificationName NSWindowDidAnimateNotification =
 
 const NSNotificationName NSWindowDidChangeBackingPropertiesNotification =
         @"NSWindowDidChangeBackingPropertiesNotification";
+// Not in the macOS SDK: posted when the window's contents move into or out
+// of a layer surface. Windows here are never hosted in one, so it is never
+// posted. The name is the one macOS 26.7.3 gives it.
+const NSNotificationName _NSWindowDidChangeContentsHostedInLayerSurfaceNotification =
+        @"_NSWindowDidChangeContentsHostedInLayerSurfaceNotification";
 const NSNotificationName NSWindowDidChangeScreenProfileNotification =
         @"NSWindowDidChangeScreenProfileNotification";
 NSString *const NSBackingPropertyOldScaleFactorKey =
@@ -122,6 +127,11 @@ const NSNotificationName NSWindowDidOrderOffScreenNotification =
         @"NSWindowDidOrderOffScreenNotification";
 const NSNotificationName NSWindowDidOrderOnScreenNotification =
         @"_NSWindowDidBecomeVisible";
+// Not in the macOS SDK either. The names are the ones macOS 26.7.3 and
+// Mac OS X 10.14.4 give them; the first does not match its symbol.
+const NSNotificationName NSWindowWillOrderOnScreenNotification = @"_NSWindowWillBecomeVisible";
+const NSNotificationName NSWindowWillOrderOffScreenNotification =
+        @"NSWindowWillOrderOffScreenNotification";
 const NSNotificationName NSWindowWillEnterFullScreenNotification =
         @"NSWindowWillEnterFullScreenNotification";
 const NSNotificationName NSWindowWillExitFullScreenNotification =
@@ -169,6 +179,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (NSRect) zoomedFrame;
 - (void) _updateOcclusionState;
 - (NSArray *) _willChangeViewAppearanceForVisible: (BOOL) visible;
+- (void) _willOrderOnScreen: (BOOL) visible;
 
 @end
 
@@ -403,7 +414,7 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 - (void) slideDraggedImageTo: (NSPoint) point {
 }
 
-- (int) draggingSequenceNumber {
+- (NSInteger) draggingSequenceNumber {
     return 0;
 }
 
@@ -489,6 +500,12 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
     return [NSStandardWindowButtonCell class];
 }
 
+@end
+
+// The SPI protocol of views that register with -registerScrollViewSeparatorTrackingAdapter:.
+@protocol NSScrollViewSeparatorTrackingAdapter
+- (NSRect) scrollViewFrame;
+- (BOOL) hasScrolledContentsUnderTitlebar;
 @end
 
 @interface NSApplication (DarlingTerminateCheck)
@@ -944,7 +961,9 @@ static NSString *menuBarStylePreference(void) {
     [NS_EXTRA(NSWindow, self)->_animations release];
     [NS_EXTRA(NSWindow, self)->_tabGroup _windowWillDeallocate];
     [NS_EXTRA(NSWindow, self)->_tabGroup release];
+    [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters release];
     [NS_EXTRA(NSWindow, self)->_tabbingIdentifier release];
+    [NS_EXTRA(NSWindow, self)->_sessionToplevelName release];
     [NS_EXTRA(NSWindow, self)->_subtitle release];
     [NS_EXTRA(NSWindow, self)->_childWindows release];
     [NS_EXTRA(NSWindow, self)->_representedFilename release];
@@ -1000,6 +1019,13 @@ static NSString *menuBarStylePreference(void) {
     if (_platformWindow != nil)
         return;
     _platformWindow = [[NSDisplay currentDisplay] newWindowWithDelegate: self];
+
+    // A window recreated from saved state can have its session name before the native window
+    // exists. The session request must precede the first surface commit.
+    if ([NS_EXTRA(NSWindow, self)->_sessionToplevelName length] > 0 &&
+        [_platformWindow respondsToSelector: @selector(setSessionToplevelName:restoring:)])
+        [_platformWindow setSessionToplevelName: NS_EXTRA(NSWindow, self)->_sessionToplevelName
+                                       restoring: NS_EXTRA(NSWindow, self)->_restoringSessionToplevel];
 
     [self _updatePlatformWindowTitle];
 
@@ -2262,17 +2288,21 @@ static NSString *menuBarStylePreference(void) {
 }
 
 // The color space the window's content is in. Without one set (or after setting
-// nil) it is that of the window's screen. The setting is only stored: no color
-// management is applied to the content.
+// nil) it is that of the window's screen. The platform window is told so a backend
+// can describe the content to the window system.
 - (NSColorSpace *) colorSpace {
     NSColorSpace *colorSpace = NS_EXTRA(NSWindow, self)->_colorSpace;
     return colorSpace != nil ? colorSpace : [[self screen] colorSpace];
 }
 
 - (void) setColorSpace: (NSColorSpace *) newColorSpace {
+    if (newColorSpace == NS_EXTRA(NSWindow, self)->_colorSpace)
+        return;
     NSColorSpace *old = NS_EXTRA(NSWindow, self)->_colorSpace;
     NS_EXTRA(NSWindow, self)->_colorSpace = [newColorSpace retain];
     [old release];
+    if ([_platformWindow respondsToSelector: @selector(colorSpaceChanged)])
+        [_platformWindow colorSpaceChanged];
 }
 
 // There is a single space, so every window is on the active one.
@@ -3342,6 +3372,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
 
     switch (place) {
     case NSWindowAbove:
+        [self _willOrderOnScreen: YES];
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
@@ -3368,6 +3399,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
 
     case NSWindowBelow:
+        [self _willOrderOnScreen: YES];
         NS_EXTRA(NSWindow, self)->_isClosed = NO;
         if (!wasVisible && ![self isMiniaturized]) {
             [self _constrainFrameBeforeOrderingIn];
@@ -3404,6 +3436,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
             [[self retain] autorelease];
             [NS_EXTRA(NSWindow, self)->_parentWindow _detachChildWindow: self];
         }
+        [self _willOrderOnScreen: NO];
         appearance = [self _willChangeViewAppearanceForVisible: NO];
         NS_EXTRA(NSWindow, self)->_isVisible = NO;
         [[self platformWindow] hideWindow];
@@ -4127,6 +4160,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
     if (NS_EXTRA(NSWindow, self)->_isVisible == visible) {
         return;
     }
+    [self _willOrderOnScreen: visible];
     NSArray *appearance = [self _willChangeViewAppearanceForVisible: visible];
     NS_EXTRA(NSWindow, self)->_isVisible = visible;
     if (visible) {
@@ -4610,6 +4644,17 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
                                                              rootHidden: NO];
     [NSViewController _willPerformAppearanceTransitions: appearance];
     return appearance;
+}
+
+// Ordering a hidden window in, or a visible one out, is announced before the
+// window changes, with the window as the object and no user info; ordering a
+// window where it already is announces nothing (observed on macOS 26.7.3 and
+// Mac OS X 10.14.4, test appkit-window-will-order-notifications.m).
+- (void) _willOrderOnScreen: (BOOL) visible {
+    if (NS_EXTRA(NSWindow, self)->_isVisible == visible)
+        return;
+    [self postNotificationName: visible ? NSWindowWillOrderOnScreenNotification
+                                        : NSWindowWillOrderOffScreenNotification];
 }
 
 // Called wherever something -occlusionState depends on may have changed: posts the notification
@@ -5452,6 +5497,27 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     return left ? 4 : 0;
 }
 
+// SPI. A view whose contents scroll under the title bar registers with its window, which asks
+// it for its frame (-scrollViewFrame) and whether contents are scrolled under the title bar
+// (-hasScrolledContentsUnderTitlebar) to decide whether to draw the title bar separator.
+// Observed on macOS 26.7.3: registering asks the adapter for its frame at once (an object
+// without -scrollViewFrame raises), keeps it in a set (nil raises), and returns YES, also for a
+// repeated registration or a view in another window; unregistering an adapter that is not
+// registered does nothing. Darling's title bars have no separator, so the window only keeps the
+// set. Test: tests/appkit-scroll-view-separator-tracking.m.
+- (BOOL) registerScrollViewSeparatorTrackingAdapter: (id<NSScrollViewSeparatorTrackingAdapter>) adapter {
+    [adapter scrollViewFrame];
+    if (NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters == nil)
+        NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters = [[NSMutableSet alloc] init];
+    [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters addObject: adapter];
+    return YES;
+}
+
+- (void) unregisterScrollViewSeparatorTrackingAdapter: (id<NSScrollViewSeparatorTrackingAdapter>) adapter {
+    if (adapter != nil)
+        [NS_EXTRA(NSWindow, self)->_separatorTrackingAdapters removeObject: adapter];
+}
+
 // The part of the content area that is not under the title bar or the
 // toolbar, in window coordinates. A window whose content view is not
 // full-size has the content rect itself; a full-size content view extends
@@ -5579,6 +5645,28 @@ static inline NSRect scaleWindowRect(NSRect rect, CGFloat scale) {
 
 - (void) endSheet: (NSWindow *) sheet returnCode: (NSInteger) returnCode {
     [NSApp endSheet: sheet returnCode: returnCode];
+}
+
+@end
+
+@implementation NSWindow (NSStateRestoration)
+
+- (void) _setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring {
+    [name retain];
+    [NS_EXTRA(NSWindow, self)->_sessionToplevelName release];
+    NS_EXTRA(NSWindow, self)->_sessionToplevelName = name;
+    NS_EXTRA(NSWindow, self)->_restoringSessionToplevel = restoring;
+    if (_platformWindow != nil &&
+        [_platformWindow respondsToSelector: @selector(setSessionToplevelName:restoring:)])
+        [_platformWindow setSessionToplevelName: name restoring: restoring];
+}
+
+- (NSString *) _sessionToplevelName {
+    return NS_EXTRA(NSWindow, self)->_sessionToplevelName;
+}
+
+- (BOOL) _isRestoringSessionToplevel {
+    return NS_EXTRA(NSWindow, self)->_restoringSessionToplevel;
 }
 
 @end

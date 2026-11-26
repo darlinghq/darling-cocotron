@@ -250,6 +250,21 @@ static NSInteger cachedLayoutDirection = -1;
     return (NSUserInterfaceLayoutDirection) cachedLayoutDirection;
 }
 
+// SPI. Asks AppKit not to connect the process to the Dock; WebKit's web content process calls it,
+// before or after NSApp exists. On macOS 26.7.3 the process sees no difference (its activation
+// policy and setActivationPolicy: are unchanged). Darling's AppKit never connects to a Dock, so
+// there is nothing to prevent.
++ (void) _preventDockConnections {
+}
+
+// SPI. Prepares the process for accessibility; WebKit's web content process calls it when it
+// is asked to initialize accessibility. On macOS 26.7.3 the observable effect is that NSApp
+// exists afterwards, an instance of the receiving class, as +sharedApplication makes it, and a
+// second call is harmless. Test: tests/appkit-accessibility-initialize.m.
++ (void) _accessibilityInitialize {
+    [self sharedApplication];
+}
+
 + (NSApplication *) sharedApplication {
     if (NSApp == nil) {
         [[self alloc] init]; // NSApp must be nil inside init
@@ -936,9 +951,29 @@ static NSImage *iconOfApplicationBundle(NSBundle *bundle) {
     return _running;
 }
 
-// There is no system setting for full keyboard access to read.
+// Full keyboard access is on when the user lets the keyboard move the focus between all controls.
+// QUIRK: the AppleKeyboardUIMode global default holds it: 0 moves the focus between text boxes and
+// lists only, 2 and 3 between all controls (the Keyboard pane of System Preferences writes 3).
+// Evidence: independent public sources give `defaults write -g AppleKeyboardUIMode -int 3` as "full
+// keyboard access for all controls" (tier 4): https://eclecticlight.co/2019/08/15/global-defaults-in-macos-mojave
+// (lists it with 2 as the normal value), https://community.jamf.com/t5/jamf-pro/script-to-enable-keyboard-gt-shortcuts-gt-full-keyboard-access/td-p/165672
+// (reported working on Mojave). Apple's own page only describes the setting in the Keyboard pane
+// (https://support.apple.com/guide/mac-help/mchlc06d1059); the documented property only says whether
+// full keyboard access is on. Test: tests/appkit-full-keyboard-access.m (test_quirk_keyboard_ui_mode)
 - (BOOL) isFullKeyboardAccessEnabled {
-    return NO;
+    CFPreferencesAppSynchronize(kCFPreferencesAnyApplication);
+    CFPropertyListRef value = CFPreferencesCopyAppValue(CFSTR("AppleKeyboardUIMode"), kCFPreferencesCurrentApplication);
+    BOOL enabled = NO;
+    int mode;
+
+    if (value != NULL) {
+        if (CFGetTypeID(value) == CFNumberGetTypeID() && CFNumberGetValue(value, kCFNumberIntType, &mode))
+            enabled = (mode & 2) != 0;
+        else if (CFGetTypeID(value) == CFStringGetTypeID())
+            enabled = (CFStringGetIntValue(value) & 2) != 0;
+        CFRelease(value);
+    }
+    return enabled;
 }
 
 - (NSAppearance *) appearance {
@@ -1920,6 +1955,7 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
                 makeObjectsPerformSelector: @selector(_makeSureIsOnAScreen)];
 
         [self _checkForAppActivation];
+        [self _updateWindowsIfNeededInMode: mode];
         [self _displayAllWindowsIfNeeded];
 
         // One wait in HIToolbox's event queue, which holds AppKit's events
@@ -2088,9 +2124,31 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     return NO;
 }
 
+// The next -nextEventMatchingMask:... in the default or modal panel run loop
+// mode updates the windows.
 - (void) setWindowsNeedUpdate: (BOOL) value {
     NS_EXTRA(NSApplication, self)->_windowsNeedUpdate = value;
-    NSUnimplementedMethod();
+}
+
+// SPI. An accent color the application chose for itself, nil unless set; it
+// doesn't change +[NSColor controlAccentColor]. The application object lives
+// for the whole process, so the color is never released.
+- (NSColor *) _accentColor {
+    return NS_EXTRA(NSApplication, self)->_accentColor;
+}
+
+- (void) _setAccentColor: (NSColor *) color {
+    color = [color copy];
+    [NS_EXTRA(NSApplication, self)->_accentColor release];
+    NS_EXTRA(NSApplication, self)->_accentColor = color;
+}
+
+// SPI. The accent color the application's interface uses when it has its own:
+// the one set with -_setAccentColor:. (Darling doesn't read the color that
+// NSAccentColorName names in the Info.plist, as it would come from an asset
+// catalog.)
+- (NSColor *) _effectiveAccentColor {
+    return [[NS_EXTRA(NSApplication, self)->_accentColor retain] autorelease];
 }
 
 // The windows are updated between the two notifications; only the windows on screen are updated (and their
@@ -2101,6 +2159,15 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
         if ([window isVisible])
             [window update];
     [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationDidUpdateNotification object: self];
+}
+
+- (void) _updateWindowsIfNeededInMode: (NSRunLoopMode) mode {
+    if (!NS_EXTRA(NSApplication, self)->_windowsNeedUpdate)
+        return;
+    if (![mode isEqualToString: NSDefaultRunLoopMode] && ![mode isEqualToString: NSModalPanelRunLoopMode])
+        return;
+    NS_EXTRA(NSApplication, self)->_windowsNeedUpdate = NO;
+    [self updateWindows];
 }
 
 // Whether a window of this application may ask the window system for the input focus now. Ordering a
@@ -2550,6 +2617,8 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
     // A cancelled termination ends here, and the application runs on.
     NS_EXTRA(NSApplication, self)->_terminateInProgress = NO;
     if (terminate == YES) {
+        // The process is really exiting now, so the next launch must not treat it as a crash.
+        [self _removeWindowSessionMarker];
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationWillTerminateNotification
                               object: self];
@@ -2794,13 +2863,11 @@ static BOOL resignForced;
 
 - (void) _windowDidBecomeActive: (NSWindow *) window {
     resignPending = NO;
-    // A window of this process has the input focus, which is what makes it the front process.
-    // CoreGraphics keeps it for the display servers that cannot be asked who has the focus and
-    // tells the other processes (NSWorkspace's frontmostApplication follows it).
-    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited) {
-        _CGSSetFrontProcess(getpid());
+    // A window of this process has the input focus, which makes the process the front process:
+    // CoreGraphics reports that itself from the window system's focus (and tells the other processes;
+    // NSWorkspace's frontmostApplication follows it).
+    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited)
         [self _publishActivation];
-    }
     if (!NS_EXTRA(NSApplication, self)->_isActive) {
         NS_EXTRA(NSApplication, self)->_isActive = YES;
         [[NSNotificationCenter defaultCenter]

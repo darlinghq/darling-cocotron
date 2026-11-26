@@ -36,12 +36,6 @@
     XID _lastClickWindow;
     NSPoint _lastClickPoint;   // Logical points, so the radius is scale-independent.
     X11Cursor *_blankCursor, *_defaultCursor;
-    // A pinch gesture in progress (see X11Gesture.h): its window, the scale it last
-    // reported, and where and with which modifiers its last event was.
-    Window _pinchWindow;
-    CGFloat _pinchScale;
-    NSPoint _pinchLocation;
-    NSEventModifierFlags _pinchModifiers;
     // ConfinePointerToFullscreenWindows (org.darlinghq.AppKit): keep the
     // pointer inside the focused fullscreen window, through a pointer grab on
     // _confinedWindow while one is held.
@@ -97,6 +91,9 @@
 
 @public
     XIM _xim;
+    // YES when a real input method (XMODIFIERS names one) does the composing; NO for Xlib's built-in one, which
+    // only composes dead keys and Compose sequences, and which CoreGraphics replaces.
+    BOOL _inputMethodComposes;
 }
 
 - (Display *) display;

@@ -13,15 +13,22 @@
 // The file is a binary property list of our own:
 //   Version      number, 1
 //   Application  data, keyed archive of the application's restorable state
+//   Session      string, the compositor session identifier (absent when none)
 //   Windows      array of dictionaries, in the order the windows were saved:
-//     Identifier   string, the window's identifier (absent when it has none)
-//     State        data, keyed archive of the window's restorable state; the
-//                  state of every view with an identifier that invalidated its
-//                  restorable state is a nested archive under the key
-//                  "NSViewState:<view identifier>"
-// The layout of the file is private to this AppKit.
+//     Identifier     string, the window's identifier (absent when it has none)
+//     State          data, keyed archive of the window's restorable state; the
+//                    state of every view with an identifier that invalidated its
+//                    restorable state is a nested archive under the key
+//                    "NSViewState:<view identifier>"
+//     WindowSession  string, the window's name in the compositor session
+// Where the window system has sessions (Wayland with xdg-session-management), a "running" file
+// beside state.plist holds the session identifier while the application is alive. A leftover file
+// means the previous instance did not exit cleanly. Without sessions it is neither written nor
+// read. The layout of these files is private to this AppKit.
 
 #import <AppKit/AppKit.h>
+#import <AppKit/NSDisplay.h>
+#import <CoreGraphics/CGWindowPrivate.h>
 #import "NSWindow-Private.h"
 
 static NSString *const StateFileName = @"state.plist";
@@ -30,7 +37,17 @@ static NSString *const StateApplicationKey = @"Application";
 static NSString *const StateWindowsKey = @"Windows";
 static NSString *const StateIdentifierKey = @"Identifier";
 static NSString *const StateStateKey = @"State";
+static NSString *const StateSessionKey = @"Session";
+static NSString *const StateWindowSessionKey = @"WindowSession";
+static NSString *const StateRunningMarkerName = @"running";
 static NSString *const ViewStateKeyPrefix = @"NSViewState:";
+
+// Reasons of xdg_session_manager_v1.get_session. The numbers are part of that protocol.
+enum {
+    SessionReasonLaunch = 1,
+    SessionReasonRecover = 2,
+    SessionReasonSessionRestore = 3,
+};
 
 // Progress of the restoration at launch.
 static BOOL restorationStarted;
@@ -62,6 +79,68 @@ static NSString *SavedStateDirectory(BOOL ignoringSavedState) {
         return nil;
     return [[[libraries objectAtIndex: 0] stringByAppendingPathComponent: @"Saved Application State"]
             stringByAppendingPathComponent: name];
+}
+
+// A marker left while the application is running. If it is still there at the next launch, the
+// previous instance did not finish saving its state, which is the window system's "recover" case.
+static NSString *RunningMarkerPath(void) {
+    // Only a window system with sessions has a use for it.
+    if (![[NSDisplay currentDisplay] supportsWindowSessions])
+        return nil;
+    NSString *directory = SavedStateDirectory(NO);
+
+    return directory == nil ? nil : [directory stringByAppendingPathComponent: StateRunningMarkerName];
+}
+
+// Creates the private saved-state directory with the same permissions the state file uses.
+static BOOL EnsurePrivateDirectory(NSString *directory) {
+    if (directory == nil)
+        return NO;
+    NSFileManager *files = [NSFileManager defaultManager];
+    if ([files fileExistsAtPath: directory])
+        return YES;
+    return [files createDirectoryAtPath: directory
+           withIntermediateDirectories: YES
+                            attributes: [NSDictionary dictionaryWithObject: [NSNumber numberWithShort: 0700]
+                                                                    forKey: NSFilePosixPermissions]
+                                 error: NULL];
+}
+
+// An empty identifier is a valid marker: it records that the application is running even when
+// the compositor has not named the session yet.
+static void WriteRunningMarker(NSString *identifier) {
+    NSString *path = RunningMarkerPath();
+    if (path == nil || !EnsurePrivateDirectory([path stringByDeletingLastPathComponent]))
+        return;
+    NSString *content = [identifier length] > 0 ? identifier : @"";
+    NSData *data = [content dataUsingEncoding: NSUTF8StringEncoding];
+    if (data == nil)
+        return;
+    NSFileManager *files = [NSFileManager defaultManager];
+    if ([data writeToFile: path options: NSDataWritingAtomic error: NULL])
+        [files setAttributes: [NSDictionary dictionaryWithObject: [NSNumber numberWithShort: 0600]
+                                                          forKey: NSFilePosixPermissions]
+                  ofItemAtPath: path
+                         error: NULL];
+}
+
+static NSString *ReadRunningMarkerIdentifier(BOOL *present) {
+    *present = NO;
+    NSString *path = RunningMarkerPath();
+    if (path == nil)
+        return nil;
+    NSData *data = [NSData dataWithContentsOfFile: path];
+    if (data == nil)
+        return nil;
+    *present = YES;
+    NSString *identifier = [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease];
+    return [identifier length] > 0 ? identifier : nil;
+}
+
+static void RemoveRunningMarker(void) {
+    NSString *path = RunningMarkerPath();
+    if (path != nil)
+        [[NSFileManager defaultManager] removeItemAtPath: path error: NULL];
 }
 
 static NSData *ArchiveState(BOOL secure, void (^encode)(NSKeyedArchiver *archiver)) {
@@ -183,17 +262,33 @@ static BOOL WindowIsSaved(NSWindow *window) {
         NSMutableDictionary *entry = [NSMutableDictionary dictionaryWithObject: state forKey: StateStateKey];
         if ([[window identifier] length] > 0)
             [entry setObject: [window identifier] forKey: StateIdentifierKey];
+
+        // The name is stable for the life of the platform window. A saved window is already
+        // native, so asking for it cannot create a window here.
+        NSString *windowSession = [window _sessionToplevelName];
+        if ([windowSession length] == 0) {
+            CGWindow *platformWindow = [window platformWindow];
+            if ([platformWindow respondsToSelector: @selector(ensureSessionToplevelName)])
+                windowSession = [platformWindow ensureSessionToplevelName];
+            if ([windowSession length] > 0)
+                [window _setSessionToplevelName: windowSession restoring: NO];
+        }
+        if ([windowSession length] > 0)
+            [entry setObject: windowSession forKey: StateWindowSessionKey];
         [windows addObject: entry];
     }
     NSData *application = ArchiveState(secure, ^(NSKeyedArchiver *archiver) {
         [self encodeRestorableStateWithCoder: archiver];
     });
 
-    NSDictionary *plist = [NSDictionary dictionaryWithObjectsAndKeys:
+    NSString *session = [[NSDisplay currentDisplay] windowSessionIdentifier];
+    NSMutableDictionary *plist = [NSMutableDictionary dictionaryWithObjectsAndKeys:
             [NSNumber numberWithInt: 1], StateVersionKey,
             application, StateApplicationKey,
             windows, StateWindowsKey,
             nil];
+    if ([session length] > 0)
+        [plist setObject: session forKey: StateSessionKey];
     NSData *data = [NSPropertyListSerialization dataWithPropertyList: plist
                                                               format: NSPropertyListBinaryFormat_v1_0
                                                              options: 0
@@ -201,11 +296,7 @@ static BOOL WindowIsSaved(NSWindow *window) {
     if (data == nil)
         return;
     // The saved state is private to the user.
-    [files createDirectoryAtPath: directory
-     withIntermediateDirectories: YES
-                      attributes: [NSDictionary dictionaryWithObject: [NSNumber numberWithShort: 0700]
-                                                              forKey: NSFilePosixPermissions]
-                           error: NULL];
+    EnsurePrivateDirectory(directory);
     NSString *path = [directory stringByAppendingPathComponent: StateFileName];
     if ([data writeToFile: path options: NSDataWritingAtomic error: NULL])
         [files setAttributes: [NSDictionary dictionaryWithObject: [NSNumber numberWithShort: 0600]
@@ -222,8 +313,11 @@ static BOOL WindowIsSaved(NSWindow *window) {
         return;
     restorationStarted = YES;
 
+    BOOL ignoring = DefaultsFlag(@"ApplePersistenceIgnoreState");
+    BOOL markerPresent = NO;
+    NSString *markerIdentifier = ignoring ? nil : ReadRunningMarkerIdentifier(&markerPresent);
     NSDictionary *plist = nil;
-    if (!DefaultsFlag(@"ApplePersistenceIgnoreState")) {
+    if (!ignoring) {
         NSString *directory = SavedStateDirectory(NO);
         NSData *data = directory == nil
                 ? nil
@@ -232,7 +326,31 @@ static BOOL WindowIsSaved(NSWindow *window) {
             plist = [NSPropertyListSerialization propertyListWithData: data options: 0 format: NULL error: NULL];
     }
     NSNumber *version = [plist isKindOfClass: [NSDictionary class]] ? [plist objectForKey: StateVersionKey] : nil;
-    if (![version isKindOfClass: [NSNumber class]] || [version intValue] != 1) {
+    BOOL validState = [version isKindOfClass: [NSNumber class]] && [version intValue] == 1;
+
+    // The reason is part of the compositor's get_session request, so it has to be known before
+    // any restored window is made native. A valid saved state is a normal restore; a leftover
+    // marker without usable state is a recovery; neither is a fresh launch.
+    NSString *sessionIdentifier = nil;
+    NSUInteger sessionReason = SessionReasonLaunch;
+    if (validState) {
+        sessionReason = SessionReasonSessionRestore;
+        id saved = [plist objectForKey: StateSessionKey];
+        if ([saved isKindOfClass: [NSString class]])
+            sessionIdentifier = saved;
+    } else if (markerPresent) {
+        sessionReason = SessionReasonRecover;
+        sessionIdentifier = markerIdentifier;
+    }
+    if (ignoring) {
+        // Neither the state nor the marker may influence this launch.
+        RemoveRunningMarker();
+    }
+    [[NSDisplay currentDisplay] beginWindowSessionWithReason: sessionReason
+                                                  identifier: sessionIdentifier];
+    [self _writeWindowSessionMarkerWithIdentifier: sessionIdentifier];
+
+    if (!validState) {
         [self _postDidFinishRestoringWindowsIfDone];
         return;
     }
@@ -255,6 +373,9 @@ static BOOL WindowIsSaved(NSWindow *window) {
         NSString *identifier = [entry objectForKey: StateIdentifierKey];
         if (![identifier isKindOfClass: [NSString class]])
             identifier = nil;
+        id savedSessionName = [entry objectForKey: StateWindowSessionKey];
+        __block NSString *sessionName = [savedSessionName isKindOfClass: [NSString class]]
+                ? [savedSessionName copy] : nil;
         NSKeyedUnarchiver *state = UnarchiverForState(stateData, secure);
         if (state == nil)
             continue;
@@ -267,16 +388,26 @@ static BOOL WindowIsSaved(NSWindow *window) {
             completed = YES;
             outstandingRestorations--;
             if (window != nil && error == nil) {
+                // Set this before the window can be shown. A restoration class that maps first
+                // still works: the backend then adds a new session entry instead of restoring one.
+                if ([sessionName length] > 0)
+                    [window _setSessionToplevelName: sessionName restoring: YES];
+                [sessionName release];
+                sessionName = nil;
                 if (launchFinished)
                     [self _applyRestoredState: stateData toWindow: window];
                 else
                     [pendingWindows addObject: [NSArray arrayWithObjects: window, stateData, nil]];
             }
+            [sessionName release];
+            sessionName = nil;
             [self _postDidFinishRestoringWindowsIfDone];
         };
         if (![self restoreWindowWithIdentifier: identifier state: state completionHandler: completion] && !completed) {
             completed = YES;
             outstandingRestorations--;
+            [sessionName release];
+            sessionName = nil;
         }
     }
     if (outstandingRestorations == 0 && [pendingWindows count] == 0)
@@ -330,6 +461,16 @@ static BOOL WindowIsSaved(NSWindow *window) {
         extensions--;
         [self _postDidFinishRestoringWindowsIfDone];
     }
+}
+
+- (void) _writeWindowSessionMarkerWithIdentifier: (NSString *) identifier {
+    if (DefaultsFlag(@"ApplePersistenceIgnoreState"))
+        return;
+    WriteRunningMarker(identifier);
+}
+
+- (void) _removeWindowSessionMarker {
+    RemoveRunningMarker();
 }
 
 @end

@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGSPointerController.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import "NSEventQueue.h"
+#import "NSWindow-Private.h"
 
 // What CoreGraphics' pointer functions (CGDisplayHideCursor() and the rest, see CGSPointerController.h) reach
 // the display through: CoreGraphics does not know AppKit, so the display registers this when it starts.
@@ -108,9 +109,17 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
 // The instance is published only after the backend has initialized, so a
 // backend that fails to start (or raises) leaves nothing behind and a later
 // call tries again.
+//
+// A process that has denied itself connections to the window system
+// (CGSSetDenyWindowServerConnections()) has no display: this returns nil
+// instead of raising, so that NSApplication still initializes and the
+// process sees no screens, as on macOS.
 + (NSDisplay *) currentDisplay {
     @synchronized([NSDisplay class]) {
         if (processDisplay == nil) {
+            if (_CGSWindowServerConnectionsDenied()) {
+                return nil;
+            }
             processDisplay = [[NSDisplay alloc] init];
         }
         return processDisplay;
@@ -644,6 +653,21 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
 {
     NSInvalidAbstractInvocation();
     return frame;
+}
+
+// Backends whose window system has no session protocol keep the default: no session is started and
+// nothing is persisted for one. Wayland overrides these when it binds xdg_session_manager_v1.
+- (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier {
+    (void) reason;
+    (void) identifier;
+}
+
+- (NSString *) windowSessionIdentifier {
+    return nil;
+}
+
+- (BOOL) supportsWindowSessions {
+    return NO;
 }
 
 @end

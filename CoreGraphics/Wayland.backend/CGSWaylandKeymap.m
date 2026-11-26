@@ -27,10 +27,14 @@
 #import "../DarlingUnicodeKeyLayoutCompose.h"
 // The table of virtual key codes and the keycodes of the keymap, shared with the X11 backend.
 #import "../X11.backend/CarbonKeys.h"
+#import "../CGSKeyCompose.h"
 #import <CoreGraphics/CGEventTypes.h>
+#import <Foundation/NSArray.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSValue.h>
 
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
@@ -94,6 +98,7 @@ static uint32_t keyLayoutCodepoint(void *context, uint32_t keysym) {
     if (_context != NULL)
         WL.xkb_context_unref(_context);
     [_layout release];
+    CGSKeyComposeDestroy(_compose);
     [super dealloc];
 }
 
@@ -147,6 +152,8 @@ static uint32_t keyLayoutCodepoint(void *context, uint32_t keysym) {
         _state = state;
         [_layout release];
         _layout = nil;
+        if (_compose != NULL)
+            CGSKeyComposeReset(_compose);
     }
     return YES;
 }
@@ -343,6 +350,32 @@ static int modifierKeyCodeOfKeysym(xkb_keysym_t sym) {
         // Every modifier is ignored except Shift.
         xkb_level_index_t level = [self modifierActive: XKB_MOD_NAME_SHIFT] ? 1 : 0;
         return stringWithCodepoint([self codepointForKeysym: [self keysymForKeycode: keycode level: level]]);
+    }
+}
+
+#pragma mark - Dead keys and compose sequences
+
+- (void) resetCompose {
+    @synchronized (self) {
+        if (_compose != NULL)
+            CGSKeyComposeReset(_compose);
+    }
+}
+
+- (CGSKeyComposeResult) composeKeycode: (uint32_t) keycode text: (NSString **) text {
+    *text = nil;
+    @synchronized (self) {
+        if (_state == NULL)
+            return CGSKeyComposeNone;
+        if (!_composeLoaded) {
+            _composeLoaded = YES;
+            _compose = CGSKeyComposeCreate();
+        }
+        if (_compose == NULL)
+            return CGSKeyComposeNone;
+        // A shortcut is not text: a key with Control or Command is no part of a sequence and ends one.
+        BOOL shortcut = [self modifierActive: XKB_MOD_NAME_CTRL] || [self modifierActive: XKB_MOD_NAME_LOGO];
+        return CGSKeyComposeFeed(_compose, WL.xkb_state_key_get_one_sym(_state, keycode), shortcut, text);
     }
 }
 

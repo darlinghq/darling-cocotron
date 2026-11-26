@@ -375,6 +375,15 @@ CFStringRef CGDisplayModeCopyPixelEncoding(CGDisplayModeRef mode) {
     }
 }
 
+const CFStringRef kCGSDisplayColorPrimariesKey = CFSTR("Primaries");
+const CFStringRef kCGSDisplayColorTransferFunctionKey = CFSTR("TransferFunction");
+const CFStringRef kCGSDisplayColorMinLuminanceKey = CFSTR("MinLuminance");
+const CFStringRef kCGSDisplayColorMaxLuminanceKey = CFSTR("MaxLuminance");
+const CFStringRef kCGSDisplayColorReferenceLuminanceKey = CFSTR("ReferenceLuminance");
+const CFStringRef kCGSDisplayColorTargetMinLuminanceKey = CFSTR("TargetMinLuminance");
+const CFStringRef kCGSDisplayColorTargetMaxLuminanceKey = CFSTR("TargetMaxLuminance");
+const CFStringRef kCGSDisplayColorICCProfileKey = CFSTR("ICCProfile");
+
 CFArrayRef CGDisplayCopyAllDisplayModes(CGDirectDisplayID displayIndex,
                                         CFDictionaryRef options)
 {
@@ -400,6 +409,12 @@ CFStringRef _CGSDisplayCopyOutputName(CGDirectDisplayID display) {
     CGSScreen *screen = screenForDisplayID(activeScreens(NULL), display);
 
     return (CFStringRef) [[screen name] retain];
+}
+
+CFDictionaryRef _CGSDisplayCopyColorInfo(CGDirectDisplayID display) {
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), display);
+
+    return (CFDictionaryRef) [[screen colorInfo] retain];
 }
 
 static NSData *edidForDisplay(CGDirectDisplayID displayId) {

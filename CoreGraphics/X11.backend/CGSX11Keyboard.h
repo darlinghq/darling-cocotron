@@ -26,7 +26,10 @@
 //
 // Core events are used rather than XInput2: an X input method (XIM) filters and composes the core key
 // events (XFilterEvent, Xutf8LookupString), and the input context belongs to the framework that owns the
-// windows. That framework is asked for the composed text through the connection's observer.
+// windows. That framework is asked for the composed text through the connection's observer. When no
+// input method of the application composes (Xlib's built-in one does, but loses the keys of a sequence
+// that no entry of the Compose table continues), the keyboard composes dead keys and Compose sequences itself
+// (CGSKeyCompose.h), as the Wayland backend does.
 
 #ifndef CGSX11KEYBOARD_H
 #define CGSX11KEYBOARD_H
@@ -37,6 +40,7 @@
 #include <stdint.h>
 
 @class CGSConnectionX11;
+@class NSMutableSet;
 
 @interface CGSX11Keyboard : NSObject {
     // Declared here: the i386 slice has the legacy Objective-C ABI, which has no ivars in the @implementation.
@@ -49,6 +53,11 @@
     unsigned char _heldMask[256];
     KeySym _lastKeySym;
     void *_source; // CGEventSourceRef of the hardware state
+    // Dead keys and Compose sequences, when CoreGraphics composes them (no input method does); see -composesKeys.
+    struct CGSKeyCompose *_compose;
+    BOOL _composeLoaded;
+    // The key codes held down whose press went into a sequence: their repeats and releases produce nothing.
+    NSMutableSet *_composingKeys;
 }
 
 - (instancetype) initWithConnection: (CGSConnectionX11 *) connection;
@@ -58,6 +67,8 @@
 // A pointer or crossing event carries the server's modifier state: a difference from the tracked state is
 // reported. `root` is the pointer in root coordinates.
 - (void) resyncWithState: (unsigned int) state window: (Window) window root: (CGPoint) root;
+// The sequence in progress ends (the keymap changed, or the focus moved): the next key starts afresh.
+- (void) resetComposition;
 // A window of the process got the keyboard focus: keys went up and down meanwhile, so the keys that are
 // held and the modifier state are read from the server.
 - (void) focusGainedInWindow: (Window) window;

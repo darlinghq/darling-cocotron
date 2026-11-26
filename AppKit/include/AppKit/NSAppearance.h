@@ -41,9 +41,16 @@ APPKIT_EXPORT const NSAppearanceName NSAppearanceNameControlStrip; // Undocument
 // Undocumented: whether the macOS 26 system design is in use.
 APPKIT_EXPORT BOOL NSSolariumEnabled(void);
 
+@class NSColor;
+
+// Legacy ABI instance size: Apple's 28 bytes (see AppKitIvarLayout.h).
 @interface NSAppearance : NSObject <NSSecureCoding> {
     NSAppearanceName _name;
-    NS_LEGACY_IVAR_PAD(_NSAppearanceReserved, 24)
+    NS_LEGACY_IVAR_PAD(_NSAppearanceReserved, 24 - sizeof(void *))
+    NS_EXTRA_IVARS_BEGIN(NSAppearance)
+        BOOL _hasTintColor;
+        NSColor *_tintColor;
+    NS_EXTRA_IVARS_END(NSAppearance)
 }
 
 // One shared appearance per known name; nil for any other name.

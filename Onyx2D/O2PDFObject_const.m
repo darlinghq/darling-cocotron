@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <Foundation/NSString.h>
 #import <Onyx2D/O2PDFObject_const.h>
+#import <Onyx2D/O2PDFContext.h>
 
 @implementation O2PDFObject_const
 
@@ -83,6 +84,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         return NO;
 
     return YES;
+}
+
+// only the null object appears in a written file; the marks are parser state
+- (void) encodeWithPDFContext: (O2PDFContext *) encoder {
+    if (_objectType == kO2PDFObjectTypeNull)
+        [encoder appendCString: "null "];
 }
 
 - (NSString *) description {

@@ -81,7 +81,9 @@ The choice is made once, before the first window frame is computed.
 ## Clipboard and drag-and-drop
 
 The general pasteboard is the selection of `wl_data_device` (core protocol, `wl_data_device_manager`
-version 3 for drag actions). Text maps to `text/plain;charset=utf-8`, `text/plain` and `UTF8_STRING`, PNG and
+version 3 for drag actions). CoreGraphics owns that: its connection has a data device of its own and keeps the
+pasteboard in step with the compositor's clipboard (`CoreGraphics/Wayland.backend/CGSWaylandClipboard.m`), so a
+process without windows gets the clipboard too; this backend's data device only handles drag and drop. Text maps to `text/plain;charset=utf-8`, `text/plain` and `UTF8_STRING`, PNG and
 TIFF images to `image/png` and `image/tiff`, file lists (`NSFilenamesPboardType`) to `text/uri-list`; other
 types travel under their own names. Other named pasteboards are process-local. Publishing needs keyboard
 focus and an input serial, so writes made earlier stay local until input arrives. A write made while a key or
@@ -96,7 +98,7 @@ Incoming drops use AppKit's drag hit testing and the same enter, update, exit an
 other backends; copy and move are negotiated, the drag pasteboard is separate from the clipboard, and
 callbacks run after native dispatch. Outgoing drags start from a mouse press and show a drag icon at the
 output scale. A drag whose source and target are the same process stays in the process and keeps the
-original Cocoa data. File lists are converted by `AppKit/DarlingFileURIList.m`, shared with the X11 backend:
+original Cocoa data. File lists are converted by `CoreGraphics/DarlingFileURIList.m`, shared with the X11 backend:
 only paths below `/Volumes/SystemRoot` (host paths) are offered to other processes.
 
 ## OpenGL, layers and scale

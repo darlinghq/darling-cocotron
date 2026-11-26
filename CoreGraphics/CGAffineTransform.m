@@ -35,6 +35,11 @@ COREGRAPHICS_EXPORT CGSize CGSizeApplyAffineTransform(
     return __CGSizeApplyAffineTransform(size, transform);
 }
 
+#undef CGAffineTransformMake
+COREGRAPHICS_EXPORT CGAffineTransform CGAffineTransformMake(CGFloat a, CGFloat b, CGFloat c, CGFloat d, CGFloat tx, CGFloat ty) {
+    return __CGAffineTransformMake(a, b, c, d, tx, ty);
+}
+
 bool CGAffineTransformIsIdentity(CGAffineTransform xform) {
     return xform.a == 1 && xform.b == 0 && xform.c == 0 && xform.d == 1 &&
            xform.tx == 0 && xform.ty == 0;

@@ -125,7 +125,11 @@ typedef NS_OPTIONS(NSUInteger, NSWindowCollectionBehavior) {
     NSWindowCollectionBehaviorFullScreenAuxiliary = 0x100,
     NSWindowCollectionBehaviorFullScreenNone = 0x200,
     NSWindowCollectionBehaviorFullScreenAllowsTiling = 0x800,
-    NSWindowCollectionBehaviorFullScreenDisallowsTiling = 0x1000
+    NSWindowCollectionBehaviorFullScreenDisallowsTiling = 0x1000,
+    // at most one of these three
+    NSWindowCollectionBehaviorPrimary = 1 << 16,
+    NSWindowCollectionBehaviorAuxiliary = 1 << 17,
+    NSWindowCollectionBehaviorCanJoinAllApplications = 1 << 18,
 };
 
 typedef NS_ENUM(NSUInteger, NSWindowSharingType) {
@@ -225,8 +229,13 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidEnterFullScreenNotification
         NS_SWIFT_NAME(NSWindow.didEnterFullScreenNotification);
 APPKIT_EXPORT const NSNotificationName NSWindowDidExitFullScreenNotification
         NS_SWIFT_NAME(NSWindow.didExitFullScreenNotification);
+#ifdef DARLING
+// not in the macOS SDK; code built against it declares them itself
 APPKIT_EXPORT const NSNotificationName NSWindowDidOrderOffScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidOrderOnScreenNotification;
+APPKIT_EXPORT const NSNotificationName NSWindowWillOrderOffScreenNotification;
+APPKIT_EXPORT const NSNotificationName NSWindowWillOrderOnScreenNotification;
+#endif
 APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification
         NS_SWIFT_NAME(NSWindow.willEnterFullScreenNotification);
 APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification
@@ -370,6 +379,10 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
         BOOL _restorable;
         Class _restorationClass;
+        // The window-system session name of this window, used when a window is recreated
+        // from saved state before its native window exists.
+        NSString *_sessionToplevelName;
+        BOOL _restoringSessionToplevel;
         NSWindowTabbingMode _tabbingMode;
         NSWindowCollectionBehavior _collectionBehavior;
         NSWindowTabbingIdentifier _tabbingIdentifier;
@@ -399,6 +412,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSWindowOcclusionState _occlusionState;
         // Made on first use, once the window takes part in tabbing.
         NSWindowTabGroup *_tabGroup;
+        // Views that told the window where their scrolled content is (SPI).
+        NSMutableSet *_separatorTrackingAdapters;
     NS_EXTRA_IVARS_END(NSWindow)
 }
 

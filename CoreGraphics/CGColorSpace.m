@@ -19,6 +19,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGColorSpace.h>
 #import <Onyx2D/O2ColorSpace.h>
+#import <Onyx2D/O2ColorICC.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Onyx2D/O2DataProvider.h>
 
 const CFStringRef kCGColorSpaceDisplayP3 = CFSTR("kCGColorSpaceDisplayP3");
@@ -60,6 +62,27 @@ const CFStringRef kCGColorSpaceExtendedLinearGray =
         CFSTR("kCGColorSpaceExtendedLinearGray");
 const CFStringRef kCGColorSpaceExtendedLinearITUR_2020 =
         CFSTR("kCGColorSpaceExtendedLinearITUR_2020");
+const CFStringRef kCGColorSpaceExtendedITUR_2020 =
+        CFSTR("kCGColorSpaceExtendedITUR_2020");
+const CFStringRef kCGColorSpaceLinearITUR_2020 =
+        CFSTR("kCGColorSpaceLinearITUR_2020");
+
+// The key, in the options of color-space creation, that asks for an extended-range space.
+const CFStringRef kCGColorSpaceExtendedRange = CFSTR("kCGColorSpaceExtendedRange");
+
+// CGColorSpaceRef is an O2ColorSpace; give it CGColorSpace's type ID for
+// CFGetTypeID.
+@implementation O2ColorSpace (CGColorSpaceTypeID)
+
+- (CFTypeID) _cfTypeID {
+    return CGColorSpaceGetTypeID();
+}
+
+@end
+
+CFTypeID CGColorSpaceGetTypeID(void) {
+    return (CFTypeID) [O2ColorSpace self];
+}
 
 CGColorSpaceRef CGColorSpaceRetain(CGColorSpaceRef colorSpace) {
     return (CGColorSpaceRef)O2ColorSpaceRetain((O2ColorSpaceRef)colorSpace);
@@ -130,8 +153,48 @@ CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace) {
     return O2ColorSpaceCopyICCData((O2ColorSpaceRef)colorSpace);
 }
 
+// A property list that CGColorSpaceCreateWithPropertyList makes the space again
+// from. Apple does not document what the list holds, so this is Darling's own:
+// the name of a named space, or else the ICC data; a space that has neither has
+// no property list. A list written on macOS may not be read back here.
+CFPropertyListRef CGColorSpaceCopyPropertyList(CGColorSpaceRef space) {
+    if (space == NULL)
+        return NULL;
+    CFStringRef name = CGColorSpaceCopyName(space);
+    if (name != NULL)
+        return name;
+    return CGColorSpaceCopyICCData(space);
+}
+
+CGColorSpaceRef CGColorSpaceCreateWithPropertyList(CFPropertyListRef plist) {
+    if (plist == NULL)
+        return NULL;
+    if (CFGetTypeID(plist) == CFStringGetTypeID())
+        return CGColorSpaceCreateWithName((CFStringRef) plist);
+    if (CFGetTypeID(plist) == CFDataGetTypeID())
+        return CGColorSpaceCreateWithICCData(plist);
+    return NULL;
+}
+
 CFDataRef CGColorSpaceCopyICCProfile(CGColorSpaceRef colorSpace) {
     return CGColorSpaceCopyICCData(colorSpace);
+}
+
+// The platform colour space of macOS is a ColorSync profile: the legacy profile reference of ColorSync
+// (CMProfileRef) is one. The profile is turned into a colour space through its ICC data.
+extern CFTypeID ColorSyncProfileGetTypeID(void);
+extern CFDataRef ColorSyncProfileCopyData(CFTypeRef profile, CFErrorRef *error);
+
+CGColorSpaceRef CGColorSpaceCreateWithPlatformColorSpace(const void *ref) {
+    if (ref == NULL || CFGetTypeID(ref) != ColorSyncProfileGetTypeID())
+        return NULL;
+
+    CFDataRef data = ColorSyncProfileCopyData((CFTypeRef) ref, NULL);
+    CGColorSpaceRef space = data != NULL ? CGColorSpaceCreateWithICCProfile(data) : NULL;
+
+    if (data != NULL)
+        CFRelease(data);
+    return space;
 }
 
 CGColorSpaceRef CGColorSpaceCreateWithICCProfile(CFDataRef data) {
@@ -188,20 +251,26 @@ CGColorSpaceRef CGColorSpaceCreateICCBased(size_t nComponents, const CGFloat *ra
 
 typedef struct {
     const CFStringRef *name;
+    const CFStringRef *standard;
     const CFStringRef *extended;
     const CFStringRef *extendedLinear;
 } CGColorSpaceRangeForms;
 
+// each named space with the forms of it that use the standard range, the
+// extended range, and the extended range with a linear transfer function
 static const CGColorSpaceRangeForms rangeForms[] = {
-    {&kCGColorSpaceSRGB, &kCGColorSpaceExtendedSRGB, &kCGColorSpaceExtendedLinearSRGB},
-    {&kCGColorSpaceExtendedSRGB, &kCGColorSpaceExtendedSRGB, &kCGColorSpaceExtendedLinearSRGB},
-    {&kCGColorSpaceLinearSRGB, &kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceExtendedLinearSRGB},
-    {&kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceExtendedLinearSRGB},
-    {&kCGColorSpaceDisplayP3, &kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
-    {&kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
-    {&kCGColorSpaceLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
-    {&kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
-    {&kCGColorSpaceExtendedLinearITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020},
+    {&kCGColorSpaceSRGB, &kCGColorSpaceSRGB, &kCGColorSpaceExtendedSRGB, &kCGColorSpaceExtendedLinearSRGB},
+    {&kCGColorSpaceExtendedSRGB, &kCGColorSpaceSRGB, &kCGColorSpaceExtendedSRGB, &kCGColorSpaceExtendedLinearSRGB},
+    {&kCGColorSpaceLinearSRGB, &kCGColorSpaceLinearSRGB, &kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceExtendedLinearSRGB},
+    {&kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceLinearSRGB, &kCGColorSpaceExtendedLinearSRGB, &kCGColorSpaceExtendedLinearSRGB},
+    {&kCGColorSpaceDisplayP3, &kCGColorSpaceDisplayP3, &kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
+    {&kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceDisplayP3, &kCGColorSpaceExtendedDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
+    {&kCGColorSpaceLinearDisplayP3, &kCGColorSpaceLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
+    {&kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3, &kCGColorSpaceExtendedLinearDisplayP3},
+    {&kCGColorSpaceITUR_2020, &kCGColorSpaceITUR_2020, &kCGColorSpaceExtendedITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020},
+    {&kCGColorSpaceExtendedITUR_2020, &kCGColorSpaceITUR_2020, &kCGColorSpaceExtendedITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020},
+    {&kCGColorSpaceLinearITUR_2020, &kCGColorSpaceLinearITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020},
+    {&kCGColorSpaceExtendedLinearITUR_2020, &kCGColorSpaceLinearITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020, &kCGColorSpaceExtendedLinearITUR_2020},
 };
 
 static const CGColorSpaceRangeForms *rangeFormsForSpace(CGColorSpaceRef space) {
@@ -223,6 +292,17 @@ CGColorSpaceRef CGColorSpaceCreateExtended(CGColorSpaceRef space) {
 CGColorSpaceRef CGColorSpaceCreateExtendedLinearized(CGColorSpaceRef space) {
     const CGColorSpaceRangeForms *forms = rangeFormsForSpace(space);
     return forms ? CGColorSpaceCreateWithName(*forms->extendedLinear) : NULL;
+}
+
+// a space that already uses the standard range, or that has no other form,
+// is returned as it is
+CGColorSpaceRef CGColorSpaceCreateCopyWithStandardRange(CGColorSpaceRef space) {
+    if (space == NULL)
+        return NULL;
+    const CGColorSpaceRangeForms *forms = rangeFormsForSpace(space);
+    if (forms == NULL || forms->name == forms->standard)
+        return CGColorSpaceRetain(space);
+    return CGColorSpaceCreateWithName(*forms->standard);
 }
 
 bool CGColorSpaceUsesExtendedRange(CGColorSpaceRef space) {
@@ -264,3 +344,37 @@ bool CGColorSpaceSupportsOutput(CGColorSpaceRef space) {
     CGColorSpaceModel model = CGColorSpaceGetModel(space);
     return model != kCGColorSpaceModelIndexed && model != kCGColorSpaceModelPattern;
 }
+
+bool CGColorSpaceEqualToColorSpace(CGColorSpaceRef space1, CGColorSpaceRef space2) {
+    if (space1 == space2)
+        return true;
+    if (space1 == NULL || space2 == NULL)
+        return false;
+    if (CFEqual(space1, space2))
+        return true;
+    if (CGColorSpaceGetModel(space1) != CGColorSpaceGetModel(space2))
+        return false;
+
+    // Spaces made in different ways (by name, from ICC data) are the same
+    // space when their profiles are the same.
+    CFDataRef data1 = CGColorSpaceCopyICCData(space1);
+    CFDataRef data2 = data1 != NULL ? CGColorSpaceCopyICCData(space2) : NULL;
+    bool equal = data1 != NULL && data2 != NULL && CFEqual(data1, data2);
+    if (data1 != NULL)
+        CFRelease(data1);
+    if (data2 != NULL)
+        CFRelease(data2);
+    return equal;
+}
+
+CFStringRef CGColorSpaceCopyICCProfileDescription(CGColorSpaceRef space) {
+    if (space == NULL)
+        return NULL;
+    CFDataRef data = CGColorSpaceCopyICCData(space);
+    if (data == NULL)
+        return NULL;
+    CFStringRef description = O2ICCProfileCopyDescription(data);
+    CFRelease(data);
+    return description;
+}
+

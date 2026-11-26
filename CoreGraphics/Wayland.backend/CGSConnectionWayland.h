@@ -48,6 +48,7 @@ struct wl_display;
 struct wl_proxy;
 
 @class CGSWindowWayland;
+@class WaylandColorManager;
 
 // Identifies the object a dispatched event belongs to, the way AppKit's backend
 // does: libwayland listener structs are unusable across the Darwin/Linux
@@ -69,9 +70,16 @@ typedef enum {
     CGSWaylandObjectKeyboardSync,
     CGSWaylandObjectPointer,
     CGSWaylandObjectPinchGesture,
+    CGSWaylandObjectTouch,
     CGSWaylandObjectLockedPointer,
     CGSWaylandObjectRelativePointer,
     CGSWaylandObjectWarpLock,
+    CGSWaylandObjectBuffer,
+    CGSWaylandObjectLayerSurface,
+    CGSWaylandObjectPopup,
+    CGSWaylandObjectDataDevice,
+    CGSWaylandObjectDataOffer,
+    CGSWaylandObjectDataSource,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -83,7 +91,13 @@ typedef enum {
 @public
     struct wl_display *_wlDisplay;
     struct wl_proxy *_compositor;
+    struct wl_proxy *_shm; // wl_shm, for the pixels of the windows that are drawn into
     struct wl_proxy *_wmBase;
+    // What places and frames the windows beyond xdg-shell, NULL when the compositor offers none:
+    // wlr-layer-shell (a surface along an edge of the output: the menu bar), the KDE plasma shell
+    // (a position for a toplevel), xdg-decoration (the frame is the compositor's).
+    struct wl_proxy *_layerShell, *_plasmaShell, *_decorationManager;
+    uint32_t _plasmaShellVersion;
 
 @protected
     struct wl_proxy *_registry;
@@ -91,6 +105,8 @@ typedef enum {
     CFSocketRef _cfSocket;
     CFRunLoopSourceRef _source;
     NSMutableArray *_outputs;
+    // Color management and representation, when the compositor offers them (WaylandColorManager).
+    id _color;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
     id _outputManager;
@@ -104,12 +120,34 @@ typedef enum {
     // The seat's pointer, which decodes the pointer into CGEvents (CGSWaylandPointer), and the pinch
     // gesture factory it makes the pinch object from.
     id _pointerDecoder;
+    // The seat's touch screen, which decodes the fingers into CGEvents (CGSWaylandTouch).
+    id _touchDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
     // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers
     // none.
     struct wl_proxy *_pointerConstraints, *_relativePointerManager;
     uint32_t _pointerConstraintsName, _relativePointerManagerName;
+    // The clipboard (CGSWaylandClipboard), made from the data device manager and the seat; nil when the compositor
+    // has no data device manager.
+    struct wl_proxy *_dataDeviceManager;
+    id _clipboard;
+    // The latest input event of the seat that entitles a client to set the clipboard (a key or button press), and
+    // when it was.
+    uint32_t _inputSerial;
+    CFAbsoluteTime _inputSerialTime;
+    // Blocks to run once the events read are dispatched (see -performAfterDispatch:).
+    NSMutableArray *_afterDispatch;
+    BOOL _afterDispatchRunQueued, _dispatching;
+    // pointer-warp-v1, when the compositor offers it: CGWarpMouseCursorPosition() sends a warp request
+    // instead of asking for a short pointer lock.
+    struct wl_proxy *_pointerWarp;
+    uint32_t _pointerWarpName;
+    // IOPM assertions: the queue that asks IOKit about them, the notify(3) token of their change
+    // notification, and whether this process holds one that keeps the display awake.
+    dispatch_queue_t _assertionsQueue;
+    int _assertionsNotifyToken;
+    BOOL _assertionsNotifyRegistered, _displaySleepPrevented;
     // The registered global hot keys (CGSWaylandHotKeyEntry), guarded by @synchronized(self).
     NSMutableArray *_hotKeys;
     // Set when the setup roundtrips are over; an output that is described before that is
@@ -123,17 +161,44 @@ typedef enum {
 }
 
 - (void) flush;
+// The shared color manager, or nil when the compositor offers neither color protocol.
+- (WaylandColorManager *) colorManager;
+- (id) waylandColorManager;
+// Tells the windows that a color global arrived after they were created.
+- (void) notifyWindowsColorManagerAvailable;
+
+// Runs the block after the events the connection has read are dispatched: not inside a listener of the
+// compositor's events, where a request that waits for the compositor would nest in the dispatch. Blocks queued by
+// those blocks wait for the next pass. Main thread.
+- (void) performAfterDispatch: (void (^)(void)) block;
+// A key or a button of the seat was pressed with the serial the compositor gave it: the clipboard can be set
+// with it, and what the process has to publish is published.
+- (void) inputPressedWithSerial: (uint32_t) serial;
+// The serial a request to set the clipboard needs: that of the latest press while a surface of the process has
+// the keyboard focus, and for a short time after the focus went (as when the virtual keyboard that made the key is
+// removed a few milliseconds after it), 0 otherwise.
+- (uint32_t) clipboardSerial;
 
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;
 // The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerConstraints;
 - (struct wl_proxy *) relativePointerManager;
+// The pointer warp global, NULL when the compositor offers none.
+- (struct wl_proxy *) pointerWarp;
+// YES while this process holds a power assertion that keeps the display awake. It is learned from
+// IOKit (IOPMCopyAssertionsByProcess), as the compositor cannot be asked for it.
+- (BOOL) displaySleepPrevented;
+- (void) observeDisplaySleepAssertions;
+- (void) refreshDisplaySleepPrevented;
+- (void) setDisplaySleepPrevented: (BOOL) prevented;
 // The point of one of this connection's windows' surfaces at a global location (the inverse of
 // -globalLocation:ofSurface:point:); NO when the surface is not one of its windows.
 - (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface;
 // Posts what the pointer decoder holds back until the compositor ends it (a scroll frame).
 - (void) flushPendingPointerEvents;
+// Posts the modifier key change the keyboard decoder holds back until the compositor confirms it.
+- (void) flushPendingKeyboardEvents;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
 // Where a point of the surface is in global coordinates, when it is a surface of this connection's windows.

@@ -1115,6 +1115,8 @@ void O2ContextSetShadowWithColor(O2ContextRef self, O2Size offset, O2Float blur,
     [O2ContextCurrentGState(self) setShadowOffset: offset
                                              blur: blur
                                             color: color];
+    // A shadow set directly replaces a style set earlier.
+    O2GStateSetStyle(O2ContextCurrentGState(self), NULL);
 }
 
 void O2ContextSetShadow(O2ContextRef self, O2Size offset, O2Float blur) {
@@ -1122,6 +1124,7 @@ void O2ContextSetShadow(O2ContextRef self, O2Size offset, O2Float blur) {
         return;
 
     [O2ContextCurrentGState(self) setShadowOffset: offset blur: blur];
+    O2GStateSetStyle(O2ContextCurrentGState(self), NULL);
 }
 
 void O2ContextSetShouldAntialias(O2ContextRef self, BOOL yesOrNo) {
@@ -1129,6 +1132,41 @@ void O2ContextSetShouldAntialias(O2ContextRef self, BOOL yesOrNo) {
         return;
 
     [O2ContextCurrentGState(self) setShouldAntialias: yesOrNo];
+}
+
+BOOL O2ContextGetShouldAntialias(O2ContextRef self) {
+    if (self == nil)
+        return NO;
+
+    return O2ContextCurrentGState(self)->_shouldAntialias;
+}
+
+void O2ContextSetShouldAntialiasFonts(O2ContextRef self, BOOL yesOrNo) {
+    if (self == nil)
+        return;
+
+    O2ContextCurrentGState(self)->_shouldAntialiasFonts = yesOrNo;
+}
+
+BOOL O2ContextGetShouldAntialiasFonts(O2ContextRef self) {
+    if (self == nil)
+        return NO;
+
+    return O2ContextCurrentGState(self)->_shouldAntialiasFonts;
+}
+
+O2AffineTransform O2ContextGetBaseCTM(O2ContextRef self) {
+    if (self == nil)
+        return O2AffineTransformIdentity;
+
+    return O2GStateGetBaseCTM(O2ContextCurrentGState(self));
+}
+
+void O2ContextSetBaseCTM(O2ContextRef self, O2AffineTransform transform) {
+    if (self == nil)
+        return;
+
+    O2GStateSetBaseCTM(O2ContextCurrentGState(self), transform);
 }
 
 // drawing
@@ -1206,11 +1244,90 @@ void O2ContextFillEllipseInRect(O2ContextRef self, O2Rect rect) {
     O2ContextFillPath(self);
 }
 
+// Strokes a ring around the outline of shape (a path in the same space as the
+// current path), outside the shape only, with the state's focus ring colour.
+// The width of the ring is the focus ring radius.
+static void O2ContextStrokeFocusRing(O2ContextRef self, O2Path *shape) {
+    O2GState *gState = O2ContextCurrentGState(self);
+    O2Float radius = gState->_focusRingRadius;
+    if (!(radius > 0) || O2PathIsEmpty(shape))
+        return;
+    O2ColorRef color = O2ColorRetain(gState->_focusRingColor);
+    O2Rect bounds = O2PathGetBoundingBox(shape);
+    O2Float margin = 2 * radius + 2;
+
+    O2ContextSaveGState(self);
+    O2GStateSetFocusRing(O2ContextCurrentGState(self), nil, 0, 0);
+
+    // Clip to the outside of the shape: a rectangle larger than the ring with
+    // the shape cut out of it.
+    O2PathReset(self->_path);
+    O2PathAddRect(self->_path, NULL,
+                  O2RectMake(bounds.origin.x - margin, bounds.origin.y - margin,
+                             bounds.size.width + 2 * margin,
+                             bounds.size.height + 2 * margin));
+    O2PathAddPath(self->_path, NULL, shape);
+    O2ContextEOClip(self);
+
+    O2PathReset(self->_path);
+    O2PathAddPath(self->_path, NULL, shape);
+    O2ContextSetStrokeColorWithColor(self, color);
+    O2ContextSetLineWidth(self, 2 * radius);
+    O2ContextSetLineJoin(self, kO2LineJoinRound);
+    O2ContextSetLineDash(self, 0, NULL, 0);
+    [self drawPath: kO2PathStroke];
+    O2PathReset(self->_path);
+
+    O2ContextRestoreGState(self);
+    O2ColorRelease(color);
+}
+
 void O2ContextDrawPath(O2ContextRef self, O2PathDrawingMode pathMode) {
     if (self == nil)
         return;
 
-    [self drawPath: pathMode];
+    O2GState *gState = O2ContextCurrentGState(self);
+    if (gState->_focusRingColor == nil) {
+        [self drawPath: pathMode];
+        return;
+    }
+
+    // A focus ring style: the ring is drawn below the shape, above it, or in
+    // place of it.
+    O2Path *shape = [self->_path copy];
+    int ordering = gState->_focusRingOrdering;
+
+    if (ordering == 1) {
+        O2ContextStrokeFocusRing(self, shape);
+        O2PathReset(self->_path);
+        O2PathAddPath(self->_path, NULL, shape);
+        [self drawPath: pathMode];
+    } else if (ordering == 2) {
+        [self drawPath: pathMode];
+        O2ContextStrokeFocusRing(self, shape);
+    } else {
+        O2ContextStrokeFocusRing(self, shape);
+    }
+    O2PathReset(self->_path);
+    [shape release];
+}
+
+void O2ContextDrawPathDirect(O2ContextRef self, O2PathDrawingMode pathMode,
+                             O2PathRef path)
+{
+    if (self == nil || path == nil)
+        return;
+
+    // The path is drawn on its own; the current path is left as it was.
+    O2MutablePath *saved = self->_path;
+    O2AffineTransform ctm =
+            O2GStateUserSpaceTransform(O2ContextCurrentGState(self));
+
+    self->_path = [[O2MutablePath alloc] init];
+    O2PathAddPath(self->_path, &ctm, path);
+    O2ContextDrawPath(self, pathMode);
+    [self->_path release];
+    self->_path = saved;
 }
 
 void O2ContextStrokePath(O2ContextRef self) {

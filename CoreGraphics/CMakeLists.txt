@@ -20,7 +20,9 @@ set_property(SOURCE
 	CGBitmapContext.m
 	CGColor.m
 	CGColorSpace.m
+	CGColorTransform.m
 	CGContext.m
+	CGContextDelegate.m
 	CGDataConsumer.m
 	CGDataProvider.m
 	CGDirectDisplay.m
@@ -52,6 +54,7 @@ set_property(SOURCE
 	CGPSConverter.m
 	CGRemoteOperation.m
 	CGShading.m
+	CGStyle.m
 	CGWindow.m
 	CGWindowLevel.m
 	CGSubWindow.m
@@ -62,6 +65,7 @@ set_property(SOURCE
 	CGSRegion.m
 	CGSServerSPI.m
 	CGSSymbolicHotKeys.m
+	CGSSelection.m
 
 	APPEND PROPERTY COMPILE_FLAGS "-include Foundation/Foundation.h"
 )
@@ -82,7 +86,9 @@ set(CoreGraphics_sources
 	CGBitmapContext.m
 	CGColor.m
 	CGColorSpace.m
+	CGColorTransform.m
 	CGContext.m
+	CGContextDelegate.m
 	CGDataConsumer.m
 	CGDataProvider.m
 	CGDirectDisplay.m
@@ -97,6 +103,7 @@ set(CoreGraphics_sources
 	CGGeometry.m
 	CGGradient.m
 	CGImage.m
+	CGIOSurfaceContext.m
 	CGLayer.m
 	CGLPixelSurface.m
 	CGPath.m
@@ -114,6 +121,7 @@ set(CoreGraphics_sources
 	CGPDFString.m
 	CGScreenRefresh.m
 	CGShading.m
+	CGStyle.m
 	CGWindow.m
 	CGWindowLevel.m
 	CGSubWindow.m
@@ -128,6 +136,8 @@ set(CoreGraphics_sources
 	CGSScreen.m
 	CGSServerSPI.m
 	CGSSymbolicHotKeys.m
+	CGSSelection.m
+	DarlingFileURIList.m
 	CGEvent.m
 	CGEventKeyboardCharacters.m
 	CGEventSource.m
@@ -163,6 +173,8 @@ add_separated_framework(CoreGraphics
 		Onyx2D
 		GL
 		IOKit
+		IOSurface
+		ColorSync
 )
 
 # NSBundle finds the backends through the framework's Resources link.

@@ -1,11 +1,11 @@
-// Host test for AppKit/X11.backend/X11InputMask.h against a real X server: the server negotiates XInput 2.4, a
+// Host test for CoreGraphics/X11.backend/X11InputMask.h against a real X server: the server negotiates XInput 2.4, a
 // mask with touch and pinch events together is accepted, and it is the only mask the client has, because each
 // XISelectEvents request replaces the one before. Selecting the pinch events without all three is refused with
 // BadValue, as the XI2 protocol says. A server cannot be made to send a pinch without a touchpad, so the delivery
 // of events is covered by tests/appkit-x11-pinch-gesture-dispatch.m. Use tests/x11-gesture-select.sh, which runs it
 // on its own Xvfb.
 // Build: cc x11-gesture-select.c -lX11 -lXi
-#include "../AppKit/X11.backend/X11InputMask.h"
+#include "../CoreGraphics/X11.backend/X11InputMask.h"
 #include <X11/Xlib.h>
 #include <X11/extensions/XInput2.h>
 #include <stdio.h>

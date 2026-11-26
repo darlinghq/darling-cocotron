@@ -46,6 +46,7 @@ extern const NSString *kO2PDFContextCreator;
     size_t _length;
     O2Rect _defaultBoxes[5];
     BOOL _defaultBoxPresent[5];
+    NSMutableDictionary *_destinations;
     NSDictionary *_outline;
 }
 
@@ -80,5 +81,11 @@ extern const NSString *kO2PDFContextCreator;
 
 - (void) encodePDFObject: (O2PDFObject *) object;
 - (O2PDFObject *) encodeIndirectPDFObject: (O2PDFObject *) object;
+
+// links and named destinations on the current page (PDF 1.3, sections 8.2.1
+// and 8.4.5); the point and rect are in user space
+- (void) setURL: (NSURL *) url forRect: (O2Rect) rect;
+- (void) addDestinationWithName: (NSString *) name atPoint: (O2Point) point;
+- (void) setDestinationWithName: (NSString *) name forRect: (O2Rect) rect;
 
 @end

@@ -47,6 +47,14 @@
 	}
 }
 
+-(NSArray<CGSWindow*>*) copyAllWindows
+{
+	@synchronized(_windows)
+	{
+		return [[_windows allValues] retain];
+	}
+}
+
 -(void) _windowInvalidated: (CGSWindowID) winId
 {
 	@synchronized(_windows)
@@ -319,6 +327,20 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 
 -(void) pointerWindowsChanged
 {
+}
+
+-(void) selectTouchInputOnNativeWindow:(unsigned long)window
+{
+}
+
+-(BOOL) displaySleepPrevented
+{
+	return NO;
+}
+
+-(id) waylandColorManager
+{
+	return nil;
 }
 
 -(BOOL) cancelsHiddenUntilMouseMoves

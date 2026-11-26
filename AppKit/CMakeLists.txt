@@ -99,6 +99,7 @@ set(AppKit_sources
 	NSImageSystemTemplates.m
 	NSPICTImageRep.m
 	NSScroller.m
+	NSScrollingMomentum.m
 	NSCustomImageRep.m
 	NSClipView.m
 	NSApplication.m
@@ -141,6 +142,8 @@ set(AppKit_sources
 	NSPoofAnimation.m
 	NSErrors.m
 	NSPopover.m
+	NSKeyboardShortcut.m
+	NSTextPlaceholder.m
 	NSRunningApplication.m
 	NSAccessibilityCustomChooser.m
 
@@ -191,7 +194,6 @@ set(AppKit_sources
 	NSScrollEdgeEffectStyle.m
 	NSImageHintSymbolScale.m
 	NSPasteboard.m
-	DarlingFileURIList.m
 	DarlingPortalFileChooser.m
 	NSSearchFieldCell.m
 	NSOutlineView.m
@@ -407,6 +409,7 @@ set(AppKit_sources
 	NSDockTile.m
 	NSGraphics.m
 	NSColorWell.m
+	NSPopoverColorWell.m
 	NSAlertPanel.m
 	NSPanel.m
 	NSRuleEditorButtonCell.m
@@ -436,10 +439,10 @@ set(AppKit_sources
 	NSClickGestureRecognizer.m
 	NSDraggingItem.m
 	NSDraggingSession.m
+	NSFilePromiseReceiver.m
 	NSGroupTouchBarItem.m
 	NSKeyBindingManager.m
 	NSPasteboardItem.m
-	NSPasteboardHostBridge.m
 	NSPasteboardSupport.m
 	NSPopoverTouchBarItem.m
 	NSSpaceTouchBarItem.m
@@ -676,8 +679,6 @@ add_backend(X11
 		X11.backend/X11Cursor.m
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
-		X11.backend/X11Touch.m
-		X11.backend/X11Gesture.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES
@@ -716,12 +717,13 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Wayland.backend/WaylandAppMenu.m
 			Wayland.backend/WaylandCursor.m
 			Wayland.backend/WaylandDisplay.m
-			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit.
+			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit (and
+			# has the one WaylandColorManager).
 			../CoreGraphics/WaylandSupport/WaylandLibrary.m
 			Wayland.backend/WaylandDropSession.m
 			Wayland.backend/WaylandDraggingManager.m
 			Wayland.backend/WaylandDragIcon.m
-			Wayland.backend/WaylandPasteboard.m
+			Wayland.backend/WaylandDataDevice.m
 			Wayland.backend/WaylandWindow.m
 			Wayland.backend/WaylandToplevelIcon.m
 			Wayland.backend/WaylandSubWindow.m

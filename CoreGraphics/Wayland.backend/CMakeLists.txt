@@ -17,13 +17,18 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CGSConnectionWayland.m
 			CGSWaylandKeyboard.m
 			CGSWaylandPointer.m
+			CGSWaylandClipboard.m
+			CGSWaylandTouch.m
 			CGSWaylandKeymap.m
 			CGSWaylandOutputManager.m
 			CGSWindowWayland.m
 			CGSSurfaceWayland.m
+			# Dead keys and Compose sequences, shared with the X11 backend.
+			../CGSKeyCompose.m
 			# Shared with AppKit's Wayland backend: a dlopen() shim over
 			# Foundation and elfcalls with no AppKit dependency of its own.
 			../WaylandSupport/WaylandLibrary.m
+			../WaylandSupport/WaylandColor.m
 			${CG_WAYLAND_PROTOCOL_SOURCES}
 		INFO_PLIST
 			Info.plist
@@ -33,6 +38,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CoreFoundation
 			Foundation
 			CoreGraphics
+			IOKit
 	)
 	target_include_directories(Wayland_cgbackend PRIVATE
 		../WaylandSupport

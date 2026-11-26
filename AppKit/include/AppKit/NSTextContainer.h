@@ -55,8 +55,10 @@ typedef NS_ENUM(NSUInteger, NSLineMovementDirection) {
     NS_EXTRA_IVARS_END(NSTextContainer)
 }
 
+- (instancetype) initWithSize: (NSSize) size;
 - (instancetype) initWithContainerSize: (NSSize) size;
 
+@property(nonatomic) NSSize size;
 @property(nonatomic) NSSize containerSize;
 
 @property(nullable, nonatomic, retain) NSTextView *textView;
