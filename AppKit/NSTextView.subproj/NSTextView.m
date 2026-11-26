@@ -521,7 +521,7 @@ static NSTextView *s_targetTextView = nil;
 }
 
 - (BOOL) isOpaque {
-    return [self drawsBackground];
+    return [self drawsBackground] && [NS_EXTRA(NSTextView, self)->_backgroundColor alphaComponent] >= 1.0;
 }
 
 - (BOOL) acceptsFirstResponder {
@@ -1047,8 +1047,10 @@ static NSTextView *s_targetTextView = nil;
     NSRange glyphRange;
     NSRect glyphRect = rect;
 
-    [NS_EXTRA(NSTextView, self)->_backgroundColor setFill];
-    NSRectFill(rect);
+    if (NS_EXTRA(NSTextView, self)->_backgroundColor != nil) {
+        [NS_EXTRA(NSTextView, self)->_backgroundColor setFill];
+        NSRectFillUsingOperation(rect, NSCompositeSourceOver);
+    }
 
     glyphRect.origin.x -= NS_EXTRA(NSTextView, self)->_textContainerInset.width;
     glyphRect.origin.y -= NS_EXTRA(NSTextView, self)->_textContainerInset.height;
