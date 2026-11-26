@@ -38,7 +38,7 @@
 //  - Small images are packed into shared "ZZZZPackedAsset" renditions (layout
 //    1004); an image's own rendition (layout 1003) then has a link record
 //    (TLV 1010, starting with the bytes "KLNI") with the frame within the
-//    packed image (top-left origin) and the attribute/value pairs of the
+//    packed image (bottom-left origin) and the attribute/value pairs of the
 //    packed rendition's key.
 //  - A PDF rendition (layout 9) holds the PDF in a "DWAR" record after a flags
 //    word and a length.
@@ -474,9 +474,23 @@ static NSData *decodeBitmapPixels(Span rendition, size_t *strideOut) {
         Span stream;
         if (!spanWithin(body, 32, payloadLen, &stream))
             return nil;
-        pixels = [NSMutableData data];
-        if (!appendLZFSE(pixels, stream, bound))
-            return nil;
+        if (body.bytes[20] == 2 && pixelSize == 2) {
+            size_t planeBound = (size_t) width * height * 4 + height + 4096;
+            NSMutableData *raw = [NSMutableData data];
+            if (!appendLZFSE(raw, stream, planeBound) || [raw length] < (size_t) width * height)
+                return nil;
+            pixels = [NSMutableData dataWithLength: (size_t) width * height * 2];
+            const uint8_t *alpha = [raw bytes];
+            uint8_t *out = [pixels mutableBytes];
+            for (size_t i = 0; i < (size_t) width * height; i++) {
+                out[i * 2] = 0;
+                out[i * 2 + 1] = alpha[i];
+            }
+        } else {
+            pixels = [NSMutableData data];
+            if (!appendLZFSE(pixels, stream, bound))
+                return nil;
+        }
     }
     if (pixels == nil || [pixels length] % height != 0 || [pixels length] / height < (size_t) width * pixelSize)
         return nil;
@@ -587,18 +601,33 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
     if (!spanWithin(link, 30, keyLength, &pairs))
         return nil;
 
+    uint32_t expectedFormat = le32(rendition.bytes + 24);
     NSAssetCatalogRendition *packed = nil;
     for (NSAssetCatalogRendition *candidate in [_renditions objectForKey: [NSNumber numberWithInt: -1]]) {
+        if (le32(candidate->value.bytes + 24) != expectedFormat)
+            continue;
         BOOL matches = YES;
+        size_t pairCount = 0;
         for (size_t i = 0; i + 4 <= pairs.length && matches; i += 4) {
             uint16_t attribute = le16(pairs.bytes + i), value = le16(pairs.bytes + i + 2);
-            if (attribute != 0 && keyAttribute(format, candidate->key, attribute) != value)
-                matches = NO;
+            if (attribute != 0) {
+                pairCount++;
+                if (keyAttribute(format, candidate->key, attribute) != value)
+                    matches = NO;
+            }
         }
-        if (matches) {
+        if (!matches)
+            continue;
+        size_t nonZero = 0;
+        for (size_t i = 0; i + 2 <= candidate->key.length; i += 2)
+            if (le16(candidate->key.bytes + i) != 0)
+                nonZero++;
+        if (nonZero == pairCount) {
             packed = candidate;
             break;
         }
+        if (packed == nil)
+            packed = candidate;
     }
     if (packed == nil)
         return nil;
@@ -613,8 +642,12 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
         decoded = [NSArray arrayWithObjects: pixels, [NSNumber numberWithUnsignedLong: stride], nil];
         [_packedImages setObject: decoded forKey: cacheKey];
     }
+    uint32_t packedHeight = le32(packed->value.bytes + 16);
+    if (y > packedHeight || height > packedHeight - y)
+        return nil;
+    uint32_t topY = packedHeight - y - height;
     return bitmapFromPixels([decoded objectAtIndex: 0], [[decoded objectAtIndex: 1] unsignedLongValue],
-                            le32(packed->value.bytes + 24), x, y, width, height, scale);
+                            le32(packed->value.bytes + 24), x, topY, width, height, scale);
 }
 
 - (NSImageRep *) _representation: (NSAssetCatalogRendition *) rendition format: (const KeyFormat *) format {
