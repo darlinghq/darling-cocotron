@@ -1031,6 +1031,11 @@ CGError CGDisplaySetDisplayMode(CGDirectDisplayID displayID, CGDisplayModeRef mo
     return changeBackendMode(displayID, [modes objectAtIndex: index], YES);
 }
 
+uint32_t CGDisplayGammaTableCapacity(CGDirectDisplayID display) {
+    (void)display;
+    return 256;
+}
+
 // QUIRK: capturing a display ID that is not a display succeeds (and captures
 // nothing). Not documented. Evidence: black-box observation on macOS 10.14.4
 // (tier 2). Test: coregraphics-display-mode-switch, check 12.
