@@ -561,7 +561,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
                                                        : _backgroundColor;
 
             [color setFill];
-            NSRectFill(backRect);
+            NSRectFillUsingOperation(backRect, NSCompositeSourceOver);
         }
     }
 
