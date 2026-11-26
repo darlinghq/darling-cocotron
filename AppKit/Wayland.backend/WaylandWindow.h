@@ -83,6 +83,8 @@ typedef enum {
     struct wl_proxy *_frameCallback;
     // Per-surface color objects and the compositor session this toplevel belongs to.
     struct wl_proxy *_colorSurface, *_representationSurface, *_toplevelSession;
+    // alpha-modifier-v1: how much of the surface alpha the compositor keeps (NSWindow.alphaValue).
+    struct wl_proxy *_alphaModifier;
     // xdg-dialog-v1: the dialog role of a sheet or modal panel, and its current modal hint.
     struct wl_proxy *_dialog;
     BOOL _dialogModal;
@@ -226,6 +228,8 @@ typedef enum {
 - (void) sessionManagerAvailable;
 // Called when the dialog manager arrives later than the window.
 - (void) dialogManagerAvailable;
+// Applies NSWindow.alphaValue to the surface when alpha-modifier-v1 is available.
+- (void) alphaModifierAvailable;
 
 // Overrides of CGWindow's window-system session hooks (see CGWindowPrivate.h).
 - (NSString *) ensureSessionToplevelName;
