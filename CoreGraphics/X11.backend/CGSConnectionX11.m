@@ -727,13 +727,9 @@ static double windowOpacity(Display* display, Window window)
 	if ([_pointer relativeMouseRequested: NULL frozenRoot: &frozen])
 		return [self _cgPointFromRoot: frozen];
 
-	Window child, root = DefaultRootWindow(_display);
-
-    int root_x, root_y;
-    int win_x, win_y;
-    unsigned int mask;
-
-    XQueryPointer(_display, root, &root, &child, &root_x, &root_y, &win_x, &win_y, &mask);
+	int root_x = 0, root_y = 0;
+	unsigned int mask;
+	[_pointer getRootX: &root_x y: &root_y state: &mask];
 
 	CGPoint point = [self _cgPointFromRoot: CGPointMake(root_x, root_y)];
 	return CGPointMake(point.x, point.y);
@@ -742,6 +738,20 @@ static double windowOpacity(Display* display, Window window)
 -(uint64_t) modifierFlags
 {
 	return [_keyboard modifierFlags];
+}
+
+// The server's modifier state (the keyboard of the session, whichever client has the focus); the decoder's device
+// bits are kept while it agrees with the server about which modifiers are down.
+-(uint64_t) hardwareModifierFlags
+{
+	uint64_t decoded = [_keyboard modifierFlags];
+	XkbStateRec state;
+	if (XkbGetState(_display, XkbUseCoreKbd, &state) != Success)
+		return decoded;
+	uint64_t flags = [CGSX11Keyboard flagsForState: state.mods];
+	const uint64_t modifiers = kCGEventFlagMaskShift | kCGEventFlagMaskControl | kCGEventFlagMaskAlphaShift |
+		kCGEventFlagMaskCommand | kCGEventFlagMaskAlternate | kCGEventFlagMaskSecondaryFn;
+	return (decoded & modifiers) == flags ? decoded : flags;
 }
 
 -(BOOL) isKeyDown:(CGKeyCode)keyCode
@@ -778,6 +788,8 @@ static double windowOpacity(Display* display, Window window)
 			return NO;
 	}
 
+	// Asked of the server every time: the buttons can change while another client has the pointer, which the
+	// event stream does not report.
 	Window child, root = DefaultRootWindow(_display);
 	int root_x, root_y, win_x, win_y;
 	unsigned int mask = 0;

@@ -572,6 +572,7 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     // Local mouse motion is suppressed for a while (the pointer itself is the server's, so the events are what
     // can be held back).
     [_connection noteMouseWarp];
+    [self forgetState];
     if (_relativeRequested) {
         // Suspended (focus lost, retry pending): the next grab must resume at the application's target.
         _resumeValid = YES;
@@ -660,6 +661,8 @@ static int64_t buttonNumberForX(unsigned int xButton) {
 }
 
 - (void) reportRelativeMouseGrab {
+    // What was known of the pointer is stale: a grab replaced the pointer's windows' view of it.
+    [self forgetState];
     id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
     if ([observer respondsToSelector: @selector(nativeConnectionRelativeMouseGrabChanged:window:rootX:rootY:)])
         [observer nativeConnectionRelativeMouseGrabChanged: _relative.active
@@ -725,9 +728,62 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     return _relative.active;
 }
 
+// Tracks the pointer from the event stream, so that asking for the mouse location, as applications do every frame,
+// costs no round trip while the pointer moves over the process' windows. Motion over other clients' windows is
+// not reported, which is why every event that can precede such motion forgets it.
+- (void) trackStateOfEvent: (XEvent *) ev {
+    switch (ev->type) {
+    case MotionNotify:
+        @synchronized(self) {
+            _stateKnown = !ev->xmotion.send_event && ev->xmotion.same_screen &&
+                          ev->xmotion.root == DefaultRootWindow(_connection->_display);
+            _stateRootX = ev->xmotion.x_root;
+            _stateRootY = ev->xmotion.y_root;
+            _stateMask = ev->xmotion.state;
+        }
+        break;
+    case ButtonPress:
+    case ButtonRelease:
+    case KeyPress:
+    case KeyRelease:
+    case EnterNotify:
+    case LeaveNotify:
+    case FocusIn:
+    case FocusOut:
+    case KeymapNotify:
+        [self forgetState];
+        break;
+    default:
+        break;
+    }
+}
+
+- (void) forgetState {
+    @synchronized(self) {
+        _stateKnown = NO;
+    }
+}
+
+- (BOOL) getRootX: (int *) x y: (int *) y state: (unsigned int *) state {
+    @synchronized(self) {
+        if (_stateKnown) {
+            *x = _stateRootX;
+            *y = _stateRootY;
+            *state = _stateMask;
+            return YES;
+        }
+    }
+    // Not known from the event stream: ask the server, and again next time.
+    Display *display = _connection->_display;
+    Window root, child;
+    int winX, winY;
+    return XQueryPointer(display, DefaultRootWindow(display), &root, &child, x, y, &winX, &winY, state);
+}
+
 // Every event of the connection: a warp's expected echoes age with the events handled (the motion ages them
 // itself).
 - (void) willHandleEvent: (XEvent *) event {
+    [self trackStateOfEvent: event];
     if (_relative.active && event->type != MotionNotify)
         X11RelativeMouseTick(&_relative);
     if (_echoRemaining > 0 && event->type != MotionNotify)

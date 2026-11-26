@@ -178,14 +178,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                         file: (NSString *) file
                        types: (NSArray *) types;
 
-// The pointer in Cocoa's global space: points, origin at the main screen's
-// bottom-left corner, y up, like screen and window frames.
-- (NSPoint) mouseLocation;
-- (NSUInteger) currentModifierFlags;
-// The buttons held down, as +[NSEvent pressedMouseButtons] reports them: bit 0
-// is the left button, bit 1 the right one and bit n the button numbered n.
-- (NSUInteger) pressedMouseButtons;
-
 - (NSArray *) orderedWindowNumbers;
 
 - (CGRect) insetRect: (CGRect) frame

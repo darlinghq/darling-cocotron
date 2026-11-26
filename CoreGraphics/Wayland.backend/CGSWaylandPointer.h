@@ -59,6 +59,11 @@ struct wl_proxy;
     CGPoint _point;
     // The buttons that are down: 1 left, 2 right, 4 middle, 8 any other, and the code of the last other one.
     unsigned _pressed;
+    // The Cocoa numbers of the buttons that are down (bit n: the button numbered n), and where the pointer was
+    // last in a surface of the process, in global coordinates (the state queries; guarded by @synchronized(self)).
+    uint32_t _pressedNumbers;
+    BOOL _lastGlobalValid;
+    CGPoint _lastGlobal;
     uint32_t _otherButton;
     // The last press, for the click state: its surface, button, compositor time (milliseconds, wraps) and
     // position. The count of the press of each button that is down, which its release reports.
@@ -119,6 +124,12 @@ struct wl_proxy;
 - (void) surfaceDestroyed: (struct wl_proxy *) surface;
 // The framework above moved the pointer within its surface: the next events start from there.
 - (void) setSurfacePointX: (double) x y: (double) y;
+// Whether the button (CGMouseButton numbering) is held, as the compositor's button events say. Any thread.
+- (BOOL) isButtonDown: (uint32_t) button;
+// Where the pointer is in global coordinates: where it was last in a surface of the process while it is over
+// none, since Wayland tells a client nothing of the pointer elsewhere. NO before it has been over a surface.
+// Any thread.
+- (BOOL) getLastGlobalLocation: (CGPoint *) location;
 
 // The lock globals appeared or went away; the relative mouse mode wanted by the connection changed or the
 // surface to lock may be another one; the lock objects go (the globals or the pointer go away).
