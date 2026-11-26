@@ -667,6 +667,12 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 // The window numbers of this app's windows, frontmost first, in the window system's stacking order (the order
 // CGWindowListCopyWindowInfo lists them in).
 - (NSArray *) orderedWindowNumbers {
+    // A window gets its number, and so its place in the registry that maps numbers back to windows, when it is
+    // first asked for it; the numbers CoreGraphics lists have to be known by then.
+    for (id window in [_windowsByID allValues]) {
+        if ([window isKindOfClass: [X11Window class]])
+            [window windowNumber];
+    }
     return _CGSOrderedToplevelWindowIDs();
 }
 

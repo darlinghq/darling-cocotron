@@ -878,7 +878,9 @@ static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
 		return;
 	BOOL ours = X11WindowOwnerPID(_display, (Window) [active[0] unsignedLongValue]) == getpid();
 	_CGSNativeFocusReport(ours);
-	if (!ours)
+	// The application is no longer active when the focus is not in one of its toplevel windows (a
+	// display overlay window of the process is not one).
+	if ([self _toplevelForNativeWindow: (Window) [active[0] unsignedLongValue]] == nil)
 	{
 		id observer = [CGSConnection nativeObserver];
 		if ([observer respondsToSelector: @selector(nativeConnectionFocusMovedToAnotherClient)])
@@ -1309,7 +1311,7 @@ static int ignoreBadWindowWhileOrdering(Display* display, XErrorEvent* errorEven
 	{
 		Window focused = X11OcclusionActiveWindow(_display);
 		// The application's own windows never cover each other here.
-		if ([self _cgsWindowForNativeWindow: focused] != nil)
+		if ([self _toplevelForNativeWindow: focused] != nil)
 			focused = None;
 		_occlusionActive = focused;
 		_occlusionActiveKnown = YES;
@@ -1322,7 +1324,7 @@ static int ignoreBadWindowWhileOrdering(Display* display, XErrorEvent* errorEven
 	// this client's earlier selection on that window.
 	if (active != _occlusionWatchWindow)
 	{
-		X11OcclusionStopWatching(_display, _occlusionWatchWindow, [self _cgsWindowForNativeWindow: _occlusionWatchWindow] != nil);
+		X11OcclusionStopWatching(_display, _occlusionWatchWindow, [self _toplevelForNativeWindow: _occlusionWatchWindow] != nil);
 		_occlusionWatchWindow = active;
 		if (active != None)
 			XSelectInput(_display, active, StructureNotifyMask | PropertyChangeMask);
