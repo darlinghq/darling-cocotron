@@ -27,9 +27,6 @@
 #import <AppKit/NSFileWrapper.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSTextAttachment.h>
-#ifdef WIN32
-#import <malloc.h>
-#endif
 
 @implementation NSRichTextWriter
 

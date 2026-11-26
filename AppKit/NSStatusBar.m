@@ -20,10 +20,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <Foundation/Foundation.h>
-#ifdef WIN32
-#import <AppKit/Win32Window.h>
-#import <windows.h>
-#endif
 #import <AppKit/NSStatusItem+Private.h>
 
 @implementation NSStatusBar
@@ -55,35 +51,12 @@ static NSStatusBar *_statusBar = nil;
 }
 
 - (BOOL) isVertical {
-#ifdef WIN32
-    HWND hTaskbar = FindWindow("Shell_TrayWnd", NULL);
-
-    APPBARDATA abd;
-    RECT taskBarRect = {0};
-    abd.rc = taskBarRect;
-    abd.cbSize = sizeof(APPBARDATA);
-    abd.hWnd = hTaskbar;
-
-    SHAppBarMessage(ABM_GETTASKBARPOS, &abd);
-
-    UINT uEdge = abd.uEdge;
-
-    if (uEdge == ABE_LEFT || uEdge == ABE_RIGHT) {
-        // Vertical
-        return YES;
-    } else {
-        // Horizontal
-        return NO;
-    }
-#endif
     return NO;
 }
 - (void) removeStatusItem: (NSStatusItem *) item {
     // The default name of a removed item is free for the next item to take.
     [_statusItems removeObjectIdenticalTo: item];
-#ifndef WIN32
     [item _detachFromStatusBar];
-#endif
 }
 
 // Default autosave names are "Item-N" with the lowest N no other item holds.
@@ -106,68 +79,19 @@ static NSStatusBar *_statusBar = nil;
     [item setLength: length];
     [item _setDefaultAutosaveName: [self _unusedDefaultAutosaveName]];
     [_statusItems addObject: item];
-#ifndef WIN32
     [item _attachToStatusBar];
-#endif
     return [item autorelease];
 }
 - (CGFloat) thickness {
-#ifdef WIN32
-    HWND hWnd = FindWindow("Shell_TrayWnd", "");
-    if (hWnd != NULL) {
-        RECT rect;
-        GetWindowRect(hWnd, &rect);
-        if ([self isVertical]) {
-            return rect.right - rect.left;
-        } else {
-            return rect.bottom - rect.top;
-        }
-    } else {
-        // Fall back to Windows XP's default taskbar height
-        return 30;
-    }
-#endif
     // The menu bar's thickness, as observed on macOS 10.14 and 26.
     return 22;
 }
 
-#ifdef WIN32
-- (void) _trayNotificationForID: (int) aTrayID event: (int) anEvent {
-    for (int i = 0; i < _statusItems.count; i++) {
-        NSStatusItem *item = [_statusItems objectAtIndex: i];
-        if ([item trayIconID] == aTrayID) {
-            [item _processWin32Event: anEvent];
-        }
-    }
-}
-
-- (Win32Window *) fakeWindow {
-    if (!_fakeWindow) {
-        _fakeWindow = [[Win32Window alloc]
-                initWithFrame: CGRectMake(0, 0, 1, 1)
-                    styleMask: (unsigned) NSBorderlessWindowMask
-                      isPanel: NO
-                  backingType: CGSBackingStoreRetained];
-    }
-    [_fakeWindow makeTransparent];
-    [_fakeWindow showWindowWithoutActivation];
-    return _fakeWindow;
-}
-
-#endif
 
 - (void) handleApplicationClose {
-#ifndef WIN32
     // Leaving the tray before the process goes away spares it a stale icon.
     for (NSStatusItem *item in _statusItems)
         [item _detachFromStatusBar];
-#endif
-#ifdef WIN32
-    for (int i = 0; i < _statusItems.count; i++) {
-        NSStatusItem *item = [_statusItems objectAtIndex: i];
-        [item _removeTrayIcon];
-    }
-#endif
 }
 
 @end

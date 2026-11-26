@@ -22,9 +22,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSButton.h>
 NS_ASSUME_NONNULL_BEGIN
 
-#ifdef WIN32
-#import <windows.h>
-#endif
 
 typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
     NSStatusItemBehaviorRemovalAllowed = (1 << 1),
@@ -60,11 +57,6 @@ typedef NS_OPTIONS(NSUInteger, NSStatusItemBehavior) {
     // Shows the item in the desktop's system tray (NSStatusItemNotifier), nil
     // without a session bus or once the item is removed.
     NSStatusItemNotifier *_notifier;
-#ifdef WIN32
-    int _trayIconID;
-    HICON _trayIcon;
-    HMENU _win32Menu;
-#endif
 }
 - (NSStatusBar *) statusBar;
 

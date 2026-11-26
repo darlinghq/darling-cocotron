@@ -501,13 +501,6 @@ extern CGEventRef _CGSEventStreamCopyNextEvent(void);
 // NULL for both stops the stream and drops what is waiting.
 extern void _CGSEventStreamSetReadySource(CFRunLoopSourceRef _Nullable source, CFRunLoopRef _Nullable runLoop);
 
-// Interim (darlinghq/darling#937, until the window system backends live in CoreGraphics): the
-// poster of a window system event can attach an object to it, which the framework that reads the
-// event from the stream takes back. AppKit attaches the NSEvent its backend built, with what a
-// CGEvent cannot carry yet (input method text, gesture phases, tablet data). The object is not
-// part of the event: copies of the event do not have it, and an active event tap that changes the
-// event or replaces it with another drops it, so the reader then builds what it needs from the
-// event's fields. The event retains the object.
 // Fields of our own on the input events the window system backends post, for what a CGEvent has no
 // field for. They sit above the highest field CGEvent.h defines and belong to every event type.
 enum {
@@ -591,6 +584,13 @@ extern double _CGSDoubleClickInterval(void);
 // The time local mouse motion is dropped after CGWarpMouseCursorPosition() (CGSetLocalEventsSuppressionInterval()).
 extern double _CGSLocalEventsSuppressionInterval(void);
 
+// Identity of the object an event stands for: the framework that makes an event from an object of its
+// own (AppKit queues the NSEvent an application posted) attaches the object to the event, and the
+// framework that reads the event from the stream takes the same object back instead of making a new
+// one. The window system's input does not carry one: the backends post plain CGEvents. The object is
+// not part of the event: copies of the event do not have it, and an active event tap that changes the
+// event or replaces it with another drops it, so the reader then builds the object from the event's
+// fields. The event retains the object.
 extern void _CGSEventSetClientData(CGEventRef event, CFTypeRef _Nullable data);
 extern CFTypeRef _Nullable _CGSEventGetClientData(CGEventRef event);
 

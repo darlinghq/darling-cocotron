@@ -24,7 +24,6 @@ include_directories(
 
 set(CoreData_sources
     CoreDataErrors.m
-    # dllmain.m
     NSAtomicStoreCacheNode.m
     NSAtomicStore.m
     NSAttributeDescription.m

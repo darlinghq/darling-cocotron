@@ -19,6 +19,7 @@
 
 #import <AppKit/NSTouch.h>
 #import <AppKit/NSTouchBackend.h>
+#import "NSEventQueue.h"
 #import <AppKit/NSResponder.h>
 #import <objc/runtime.h>
 #import <AppKit/NSEvent_touch.h>
@@ -318,7 +319,7 @@ void NSTouchPost(NSWindow *window, long long identifier, NSTouchPhase phase, NSP
                  NSTimeInterval timestamp)
 {
     for (NSEvent *event in NSTouchEventsForReport(window, identifier, phase, location, timestamp, NSZeroPoint, NSZeroSize))
-        [[NSDisplay currentDisplay] postEvent: event atStart: NO];
+        _NSEventQueuePost(event, NO);
 }
 
 void NSTouchCancelAll(NSWindow *window) {

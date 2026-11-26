@@ -55,7 +55,7 @@ int main(void) {
         NSEvent *press = [NSEvent keyEventWithType:NSKeyDown location:NSZeroPoint
                 modifierFlags:0 timestamp:0 windowNumber:0 context:nil characters:@"x"
                 charactersIgnoringModifiers:@"x" isARepeat:NO keyCode:0];
-        [display postEvent:press atStart:NO];
+        [display _postEventWithoutCoalescing:press atStart:NO];
         NSEvent *(*next)(id, SEL, NSUInteger, NSDate *, NSString *, BOOL) =
                 (NSEvent *(*)(id, SEL, NSUInteger, NSDate *, NSString *, BOOL)) objc_msgSend;
         SEL sel = @selector(nextEventMatchingMask:untilDate:inMode:dequeue:);
