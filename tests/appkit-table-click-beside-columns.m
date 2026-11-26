@@ -145,12 +145,12 @@ static void test_a_click_in_the_column_is_unchanged(void)
 }
 
 // QUIRK pinned: clickedRow and clickedColumn are meaningful inside the action and double action messages
-// (the documentation of -[NSTableView clickedRow]) and are -1 once the click returned, as observed on macOS 26.1
-// arm64 (probe 659: `action(clickedRow=1,clickedColumn=0,selectedRow=1)` then `clickedRow=-1 clickedColumn=-1`).
+// (the documentation of -[NSTableView clickedRow]) and are -1 once the click returned, and on a table that has not
+// been clicked; observed on macOS 26.7.3 by running this test there.
 static void test_clicked_row_and_column_are_reset_after_the_click(void)
 {
     Source *source = setup();
-    CHECK([table clickedRow] == -1 && [table clickedColumn] == -1); // no click yet: inferred, not a macOS line
+    CHECK([table clickedRow] == -1 && [table clickedColumn] == -1); // no click yet
     click(NSMakePoint(50, NSMidY([table rectOfRow:1])), 1);
     CHECK(source->actions == 1 && source->actionRow == 1 && source->actionColumn == 0); // valid inside the action
     CHECK([table clickedRow] == -1);

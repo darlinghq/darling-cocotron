@@ -139,12 +139,11 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 }
 
 // QUIRK: clickedRow and clickedColumn answer the click only while the click is being handled (the action and
-// double action messages); the click's end puts both back to -1. Observed on macOS 26.1 arm64 (probe 659):
-// `action(clickedRow=1,clickedColumn=0,selectedRow=1)` ... `after: ... clickedRow=-1 clickedColumn=-1`. The
-// documentation of clickedRow and clickedColumn says they are meaningful in the action and double-action
-// methods and does not say what they return afterwards.
+// double action messages); the click's end puts both back to -1, and a table that has not been clicked reports -1
+// too. Observed on macOS 26.7.3 (black-box, tier 2): the test below was run there and passes. The documentation of
+// clickedRow and clickedColumn says they are meaningful in the action and double-action methods and does not say
+// what they return afterwards.
 // Test: test_clicked_row_and_column_are_reset_after_the_click in tests/appkit-table-click-beside-columns.m.
-// INFERENCE: a new table starts at -1 too (the same probe's no-click line reads -1 after a click that sent no action).
 static void forgetClickedCell(NSTableView *table) {
     NS_EXTRA(NSTableView, table)->_clickedColumn = -1;
     NS_EXTRA(NSTableView, table)->_clickedRow = -1;
