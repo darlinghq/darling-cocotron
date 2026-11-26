@@ -11,7 +11,7 @@
 
 #include <X11/Xatom.h>
 #include <X11/Xlib.h>
-#include <X11/extensions/Xrandr.h>
+#include "../../CoreGraphics/X11.backend/X11Xrandr.h"
 #include <stdbool.h>
 
 #include "../DarlingFullscreenPolicy.h"

@@ -55,7 +55,7 @@
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
 #import <X11/extensions/XKBrules.h>
-#import <X11/extensions/Xrandr.h>
+#import "../../CoreGraphics/X11.backend/X11Xrandr.h"
 #import "../../CoreGraphics/X11.backend/X11Monitors.h"
 #import "../../CoreGraphics/X11.backend/X11RandR.h"
 #import <CoreGraphics/CGWindowPrivate.h>

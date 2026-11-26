@@ -36,7 +36,7 @@
 #include <poll.h>
 #include <pthread.h>
 #import <X11/Xutil.h>
-#import <X11/extensions/Xrandr.h>
+#import "X11Xrandr.h"
 #import <X11/XKBlib.h>
 #import <X11/extensions/XKBrules.h>
 // The main-monitor model and conversions shared with AppKit's X11 backend.

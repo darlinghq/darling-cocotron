@@ -13,7 +13,7 @@
 #define X11_RANDR_H
 
 #include <X11/Xlib.h>
-#include <X11/extensions/Xrandr.h>
+#include "X11Xrandr.h"
 #include <stdbool.h>
 
 /* Output properties (the EDID among them) are not part of the layout. The X server rewrites them whenever it
