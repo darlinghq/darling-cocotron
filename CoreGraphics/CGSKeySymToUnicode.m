@@ -1397,7 +1397,11 @@ static const uint32_t keySymToUCSData[][2] = {
 {0xfe0d, 0x0000},
 {0xfe0e, 0x0000},
 {0xfe0f, 0x0000},
-{0xfe20, 0x0000},
+// ISO_Left_Tab, which Shift+Tab produces: the back tab character, U+0019 (NSBackTabCharacter), which is what
+// AppKit reports as the characters of a Shift+Tab key down on macOS 26.7.3 and 10.14.4 (tier 2, black-box
+// observation, mac-probes p793); Shift stays in the modifier flags.
+// Test: appkit-keysym-to-unicode.m, appkit-backtab-key-binding.m
+{0xfe20, 0x0019},
 {0xfe21, 0x0000},
 {0xfe22, 0x0000},
 {0xfe23, 0x0000},

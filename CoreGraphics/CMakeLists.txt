@@ -20,7 +20,9 @@ set_property(SOURCE
 	CGBitmapContext.m
 	CGColor.m
 	CGColorSpace.m
+	CGColorTransform.m
 	CGContext.m
+	CGContextDelegate.m
 	CGDataConsumer.m
 	CGDataProvider.m
 	CGDirectDisplay.m
@@ -52,6 +54,7 @@ set_property(SOURCE
 	CGPSConverter.m
 	CGRemoteOperation.m
 	CGShading.m
+	CGStyle.m
 	CGWindow.m
 	CGWindowLevel.m
 	CGSubWindow.m
@@ -82,7 +85,9 @@ set(CoreGraphics_sources
 	CGBitmapContext.m
 	CGColor.m
 	CGColorSpace.m
+	CGColorTransform.m
 	CGContext.m
+	CGContextDelegate.m
 	CGDataConsumer.m
 	CGDataProvider.m
 	CGDirectDisplay.m
@@ -90,12 +95,14 @@ set(CoreGraphics_sources
 	CGDisplayConfiguration.m
 	CGDisplayStream.m
 	src/CGEvent.c
+	src/CPS.c
 	src/stubs.c
 	CGFont.m
 	CGFunction.m
 	CGGeometry.m
 	CGGradient.m
 	CGImage.m
+	CGIOSurfaceContext.m
 	CGLayer.m
 	CGLPixelSurface.m
 	CGPath.m
@@ -113,6 +120,7 @@ set(CoreGraphics_sources
 	CGPDFString.m
 	CGScreenRefresh.m
 	CGShading.m
+	CGStyle.m
 	CGWindow.m
 	CGWindowLevel.m
 	CGSubWindow.m
@@ -128,6 +136,7 @@ set(CoreGraphics_sources
 	CGSServerSPI.m
 	CGSSymbolicHotKeys.m
 	CGEvent.m
+	CGEventKeyboardCharacters.m
 	CGEventSource.m
 	CGEventTap.m
 	CGEventStream.m
@@ -161,6 +170,8 @@ add_separated_framework(CoreGraphics
 		Onyx2D
 		GL
 		IOKit
+		IOSurface
+		ColorSync
 )
 
 # NSBundle finds the backends through the framework's Resources link.

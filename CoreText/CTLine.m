@@ -529,6 +529,17 @@ failed:
     return NULL;
 }
 
+CTLineRef CTLineCreateWithUniCharProvider(CTUniCharProviderCallback provider,
+                                          CTUniCharDisposeCallback dispose, void *refCon)
+{
+    CFAttributedStringRef text = KTCoreTextCreateAttributedStringWithProvider(provider, dispose, refCon);
+    if (text == NULL)
+        return NULL;
+    CTLineRef line = CTLineCreateWithAttributedString(text);
+    CFRelease(text);
+    return line;
+}
+
 CTLineRef CTLineCreateWithAttributedString(CFAttributedStringRef attrString)
 {
     if (attrString == NULL)

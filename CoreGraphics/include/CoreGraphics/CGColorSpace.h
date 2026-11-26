@@ -14,7 +14,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CGDataProvider.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2ColorSpace *CGColorSpaceRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGColorSpace *CGColorSpaceRef;
+#endif
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
@@ -45,6 +51,9 @@ COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedGray;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceLinearGray;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedLinearGray;
 COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedLinearITUR_2020;
+COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedITUR_2020;
+COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceLinearITUR_2020;
+COREGRAPHICS_EXPORT const CFStringRef kCGColorSpaceExtendedRange;
 
 typedef CF_ENUM(int32_t, CGColorRenderingIntent) {
     kCGRenderingIntentDefault CF_SWIFT_NAME(defaultIntent),
@@ -65,6 +74,7 @@ typedef enum {
     kCGColorSpaceModelPattern,
 } CGColorSpaceModel;
 
+COREGRAPHICS_EXPORT CFTypeID CGColorSpaceGetTypeID(void);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceRetain(CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT void CGColorSpaceRelease(CGColorSpaceRef colorSpace);
 
@@ -88,11 +98,15 @@ COREGRAPHICS_EXPORT CFDataRef CGColorSpaceCopyICCData(CGColorSpaceRef colorSpace
 COREGRAPHICS_EXPORT CFDataRef CGColorSpaceCopyICCProfile(CGColorSpaceRef colorSpace);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithICCProfile(CFDataRef data);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithICCData(CFTypeRef data);
+COREGRAPHICS_EXPORT CFPropertyListRef CGColorSpaceCopyPropertyList(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithPropertyList(CFPropertyListRef plist);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithPlatformColorSpace(const void *ref);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateICCBased(
     size_t nComponents, const CGFloat *range, CGDataProviderRef profile,
     CGColorSpaceRef alternate);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateExtended(CGColorSpaceRef space);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateExtendedLinearized(CGColorSpaceRef space);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateCopyWithStandardRange(CGColorSpaceRef space);
 COREGRAPHICS_EXPORT bool CGColorSpaceUsesExtendedRange(CGColorSpaceRef space);
 
 // True if the space uses a transfer function defined in ITU-R BT.2100 (PQ or HLG).

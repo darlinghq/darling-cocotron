@@ -141,6 +141,8 @@ typedef NS_ENUM(NSInteger, NSPaperOrientation) {
 - (void) setHorizontallyCentered: (BOOL) value;
 - (void) setVerticallyCentered: (BOOL) value;
 
+@property CGFloat scalingFactor;
+
 - (void *) PMPrintSession;
 - (void *) PMPageFormat;
 - (void *) PMPrintSettings;

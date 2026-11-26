@@ -1,5 +1,5 @@
 /* Local XIM interaction smoke test; not remote IME/composition coverage. */
-#include "../AppKit/X11.backend/X11KeyEvent.h"
+#include "../CoreGraphics/X11.backend/X11KeyEvent.h"
 #include <X11/keysym.h>
 #include <assert.h>
 #include <locale.h>

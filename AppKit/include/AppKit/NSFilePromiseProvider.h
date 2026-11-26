@@ -19,8 +19,41 @@
 
 #import <Foundation/NSObject.h>
 #import <AppKit/AppKitIvarLayout.h>
+#import <AppKit/NSPasteboard.h>
 
-@interface NSFilePromiseProvider : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSFilePromiseProviderReserved, 40)
+@class NSError, NSOperationQueue, NSString, NSURL;
+@protocol NSFilePromiseProviderDelegate;
+
+// Writes the promise of a file to a pasteboard; the delegate writes the file
+// when a receiver asks for it. The receiver has to be in the same process:
+// there is no service that would carry the request to another one.
+@interface NSFilePromiseProvider : NSObject <NSPasteboardWriting> {
+    NS_LEGACY_IVAR_PAD(_NSFilePromiseProviderReserved, 36)
+    NS_EXTRA_IVARS_BEGIN(NSFilePromiseProvider)
+        NSString *_fileType;
+        id<NSFilePromiseProviderDelegate> _delegate;
+        id _userInfo;
+        unsigned long long _promiseID;
+    NS_EXTRA_IVARS_END(NSFilePromiseProvider)
 }
+
+@property(copy) NSString *fileType;
+// not retained
+@property(assign) id<NSFilePromiseProviderDelegate> delegate;
+@property(retain) id userInfo;
+
+- (instancetype) initWithFileType: (NSString *) fileType
+                         delegate: (id<NSFilePromiseProviderDelegate>) delegate;
+
+@end
+
+@protocol NSFilePromiseProviderDelegate <NSObject>
+@required
+- (NSString *) filePromiseProvider: (NSFilePromiseProvider *) filePromiseProvider
+                   fileNameForType: (NSString *) fileType;
+- (void) filePromiseProvider: (NSFilePromiseProvider *) filePromiseProvider
+           writePromiseToURL: (NSURL *) url
+           completionHandler: (void (^)(NSError *errorOrNil)) completionHandler;
+@optional
+- (NSOperationQueue *) operationQueueForFilePromiseProvider: (NSFilePromiseProvider *) filePromiseProvider;
 @end

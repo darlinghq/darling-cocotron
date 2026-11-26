@@ -12,7 +12,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #import <CoreFoundation/CFData.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2DataProvider *CGDataProviderRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGDataProvider *CGDataProviderRef;
+#endif
 
 typedef void (*CGDataProviderReleaseDataCallback)(void *info, const void *data, size_t size);
 
@@ -29,6 +35,20 @@ typedef struct CGDataProviderSequentialCallbacks {
 	CGDataProviderReleaseInfoCallback releaseInfo;
 } CGDataProviderSequentialCallbacks;
 
+// A direct provider hands out its data at once (getBytePointer) or a range at
+// a time (getBytesAtPosition).
+typedef const void* __nullable (*CGDataProviderGetBytePointerCallback)(void* __nullable info);
+typedef void (*CGDataProviderReleaseBytePointerCallback)(void* __nullable info, const void* pointer);
+typedef size_t (*CGDataProviderGetBytesAtPositionCallback)(void* __nullable info, void* buffer, off_t position, size_t count);
+
+typedef struct CGDataProviderDirectCallbacks {
+	unsigned int version;
+	CGDataProviderGetBytePointerCallback __nullable getBytePointer;
+	CGDataProviderReleaseBytePointerCallback __nullable releaseBytePointer;
+	CGDataProviderGetBytesAtPositionCallback __nullable getBytesAtPosition;
+	CGDataProviderReleaseInfoCallback __nullable releaseInfo;
+} CGDataProviderDirectCallbacks;
+
 CF_IMPLICIT_BRIDGING_ENABLED
 
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderRetain(CGDataProviderRef provider);
@@ -40,6 +60,7 @@ COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithFilename(const cha
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithData(void *info, const void *data, size_t size, CGDataProviderReleaseDataCallback releaseCallback);
 
 COREGRAPHICS_EXPORT CGDataProviderRef __nullable CGDataProviderCreateSequential(void* info, const CGDataProviderSequentialCallbacks* callbacks);
+COREGRAPHICS_EXPORT CGDataProviderRef __nullable CGDataProviderCreateDirect(void* __nullable info, off_t size, const CGDataProviderDirectCallbacks* __nullable callbacks);
 
 COREGRAPHICS_EXPORT CFDataRef CGDataProviderCopyData(CGDataProviderRef self);
 

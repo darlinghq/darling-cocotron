@@ -19,7 +19,8 @@
 #     the top of the output that stays mapped (it is not recreated), the
 #     window has no strip, and with the pointer a click on a title opens its
 #     menu right below the bar and a click on an item runs its action;
-#   - no global menu and no window at all, or a titled window: the same bar;
+#   - no global menu and no window at all: the same bar; with a titled window the
+#     window has the strip and there is no bar;
 #   - windows ordered out and in, a key window change and windows closing: the\n#     bar stays the same surface and is shown at the end;\n#   - no session bus reachable: the bar is shown;\n#   - a global menu (fake-registrar.c) from the start: no bar;
 #   - a global menu that appears or goes away while the application runs:
 #     the bar goes away and comes back.
@@ -32,7 +33,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import Bus, build_registrar, check, finish, read, wait_for  # noqa: E402
+from common import Bus, build_registrar, check, finish, read, require_no_lockscreen, wait_for  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOCKET = "darling-menu-bar-test"
@@ -59,13 +60,14 @@ class Session:
                         XDG_DATA_HOME=os.path.join(work, "data"), QT_QPA_PLATFORM="offscreen",
                         WAYLAND_DISPLAY=SOCKET)
         self.env.pop("DISPLAY", None)
-        self.kwin = subprocess.Popen(["kwin_wayland", "--virtual", "--socket", SOCKET, "--width", str(WIDTH),
+        self.kwin = subprocess.Popen(["kwin_wayland", "--virtual", "--no-lockscreen", "--socket", SOCKET, "--width", str(WIDTH),
                                       "--height", str(HEIGHT), "sleep", "1000"],
                                      env=self.env, stdout=open(os.path.join(work, "kwin.out"), "w"),
                                      stderr=subprocess.STDOUT)
         end = time.time() + 30
         while time.time() < end and not os.path.exists(os.path.join(self.runtime, SOCKET)):
             time.sleep(0.2)
+        require_no_lockscreen(self.kwin)
         # The pointer: KWin hands out a libei connection over D-Bus.
         import dbus
         self.connection = dbus.bus.BusConnection(self.bus.address)
@@ -135,7 +137,7 @@ class Session:
         self.pointer.stdout.readline()
         time.sleep(0.3)
 
-    def guest(self, mode, tag, seconds=60, extra_env=()):
+    def guest(self, mode, tag, seconds=60, extra_env=(), extra_args=()):
         log = os.path.join(self.work, tag + ".log")
         open(log, "w").close()
         darling = os.environ.get("DARLING", "darling")
@@ -143,7 +145,7 @@ class Session:
                "WAYLAND_DISPLAY=" + os.path.join(self.runtime, SOCKET), "DARLING_APPKIT_BACKEND=wayland"] + list(extra_env)
         process = subprocess.Popen(["timeout", "-s", "KILL", "120", darling, "shell", "env"] + env +
                                    ["/Volumes/SystemRoot" + os.path.abspath(self.program),
-                                    "/Volumes/SystemRoot" + log, mode, str(seconds)],
+                                    "/Volumes/SystemRoot" + log, mode, str(seconds)] + list(extra_args),
                                    stdin=subprocess.DEVNULL, stdout=open(os.path.join(self.work, tag + ".out"), "w"),
                                    stderr=subprocess.STDOUT)
         wait_for(log, "READY", 90)
@@ -231,12 +233,17 @@ def main():
                           "a click on an item runs its action on the main thread")
         stop(process)
 
-        # No window at all, and a titled window.
-        for mode in ("nowindow", "window"):
-            log, process = session.guest(mode, mode)
-            check(len(wait_until(session.bars, 10) or []) == 1, mode + ": the bar is shown")
-            check("strip window=0" in read(log), mode + ": no strip in the window")
-            stop(process)
+        # No window at all: the bar. A titled window carries the menu strip instead (run-kwin-menu-style.py
+        # covers when the bar and the strips come and go).
+        log, process = session.guest("nowindow", "nowindow")
+        check(len(wait_until(session.bars, 10) or []) == 1, "nowindow: the bar is shown")
+        check("strip window=0" in read(log), "nowindow: no strip in the window")
+        stop(process)
+        log, process = session.guest("window", "window")
+        time.sleep(3)
+        check("strip window=1" in read(log), "window: the strip in the window")
+        check(session.bars() == [], "window: no bar")
+        stop(process)
 
         # Windows come and go (ordered out and in, the key window changes, one closes, one replaces
         # another): the bar is not hidden and shown again for each, and it is there at the end.

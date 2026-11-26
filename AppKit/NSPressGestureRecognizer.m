@@ -17,9 +17,14 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#import "NSGestureRecognizer-Private.h"
 #import <AppKit/NSPressGestureRecognizer.h>
 
 @implementation NSPressGestureRecognizer
+
++ (unsigned int) _defaultDelayedEvents {
+    return _NSGestureRecognizerDelaysPrimaryMouseButtonEvents;
+}
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {

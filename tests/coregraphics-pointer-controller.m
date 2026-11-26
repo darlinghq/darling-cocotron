@@ -76,7 +76,20 @@ int main(void) {
         } else {
             CHECK(9, error == kCGErrorSuccess || error == kCGErrorCannotComplete);
         }
-        CHECK(10, CGWarpMouseCursorPosition(CGPointMake(INFINITY, 0)) == kCGErrorIllegalArgument);
+        // A coordinate that is not a finite number is taken as 0 and the warp goes on (the QUIRK of
+        // CGWarpMouseCursorPosition, pinned by coregraphics-warp-mouse-glue): no illegal-argument error. Without a
+        // surface to warp on the result is CannotComplete.
+        error = CGWarpMouseCursorPosition(CGPointMake(INFINITY, 0));
+        CHECK(10, error == kCGErrorSuccess || error == kCGErrorCannotComplete);
+
+        // The X11 and Wayland connections keep the pointer state themselves and do not use a controller (the hide
+        // count, the association, the deltas and the warp are covered by coregraphics-x11-relative-mouse and
+        // appkit-wayland-relative-mouse).
+        if (x11 || getenv("WAYLAND_DISPLAY") != NULL) {
+            CHECK(28, !appKitLoaded());
+            printf("PASS\n");
+            return 0;
+        }
 
         // With a controller.
         Controller *controller = [[Controller alloc] init];

@@ -37,6 +37,14 @@ typedef NS_ENUM(unsigned int, CATransactionPhase) {
 + (void) addCommitHandler: (void (^)(void)) handler
                  forPhase: (CATransactionPhase) phase;
 
+// Whether the calling thread has a transaction open: 0 for none, 1 when its
+// outermost transaction is implicit, 2 when it is explicit.
++ (uint32_t) currentState;
+
+// Darling's own: opens an implicit transaction on the calling thread unless
+// one is open already. A layer calls it when it changes.
++ (void) _openImplicitTransactionIfNeeded;
+
 
 // Private. A block (no arguments) that is called each time an implicit transaction begins.
 + (void) setImplicitTransactionDidBeginHandler: (id) handler;

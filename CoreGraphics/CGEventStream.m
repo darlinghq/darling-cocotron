@@ -47,6 +47,10 @@ void _CGEventStreamEnqueue(CGEventRef event)
 	CFRunLoopSourceRef source = NULL;
 	CFRunLoopRef runLoop = NULL;
 
+	// The event was for the event taps only (kCGSEventTapsOnly)
+	if (((CGEvent*) event)->_fields[kCGSEventTapsOnly] != 0)
+		return;
+
 	pthread_mutex_lock(&g_streamLock);
 
 	if (g_readySource == NULL || g_ringCount >= kStreamCapacityLimit)

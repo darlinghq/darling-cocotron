@@ -8,6 +8,8 @@
 //                -mouseDragged: after a press, offering copy and move, and
 //                prints its NSDraggingSource callbacks:
 //                  SOURCE willBegin / SOURCE moved / SOURCE ended op=<n>
+//                It also has the pre-10.7 source methods, which a session never
+//                sends; each prints SOURCE legacy.
 //   drag-target  takes file URLs, choosing move when the mask has it and copy
 //                otherwise, and prints
 //                  TARGET mask=<n> (whenever the mask it is offered changes)
@@ -22,6 +24,8 @@
 #import <AppKit/AppKit.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#pragma clang diagnostic ignored "-Wdeprecated-implementations"
 
 static void say(NSString *line)
 {
@@ -81,6 +85,19 @@ static void say(NSString *line)
                operation: (NSDragOperation) operation
 {
     say([NSString stringWithFormat: @"SOURCE ended op=%lu", (unsigned long) operation]);
+}
+- (NSDragOperation) draggingSourceOperationMaskForLocal: (BOOL) local {
+    say(@"SOURCE legacy");
+    return NSDragOperationCopy;
+}
+- (void) draggedImage: (NSImage *) image beganAt: (NSPoint) point {
+    say(@"SOURCE legacy");
+}
+- (void) draggedImage: (NSImage *) image movedTo: (NSPoint) point {
+    say(@"SOURCE legacy");
+}
+- (void) draggedImage: (NSImage *) image endedAt: (NSPoint) point operation: (NSDragOperation) operation {
+    say(@"SOURCE legacy");
 }
 @end
 

@@ -37,6 +37,28 @@ NSString *const kCAFilterMultiplyColor = @"multiplyColor";
 NSString *const kCAFilterVariableBlur = @"variableBlur";
 NSString *const kCAFilterVibrantColorMatrix = @"vibrantColorMatrix";
 
+// Blend mode filter names. They are also accepted as CALayer compositingFilter
+// strings. The strings were read from the exported constants on macOS 26.7.3
+// (black-box observation); 10.14.4 exports the same ones, except the color,
+// hue, luminosity and saturation modes.
+NSString *const kCAFilterColorBlendMode = @"colorBlendMode";
+NSString *const kCAFilterColorBurnBlendMode = @"colorBurnBlendMode";
+NSString *const kCAFilterColorDodgeBlendMode = @"colorDodgeBlendMode";
+NSString *const kCAFilterDarkenBlendMode = @"darkenBlendMode";
+NSString *const kCAFilterDifferenceBlendMode = @"differenceBlendMode";
+NSString *const kCAFilterExclusionBlendMode = @"exclusionBlendMode";
+NSString *const kCAFilterHardLightBlendMode = @"hardLightBlendMode";
+NSString *const kCAFilterHueBlendMode = @"hueBlendMode";
+NSString *const kCAFilterLightenBlendMode = @"lightenBlendMode";
+NSString *const kCAFilterLuminosityBlendMode = @"luminosityBlendMode";
+NSString *const kCAFilterOverlayBlendMode = @"overlayBlendMode";
+NSString *const kCAFilterSaturationBlendMode = @"saturationBlendMode";
+NSString *const kCAFilterScreenBlendMode = @"screenBlendMode";
+NSString *const kCAFilterSoftLightBlendMode = @"softLightBlendMode";
+// Read from the exported constants on macOS 26.7.3 and 10.14.4, as above.
+NSString *const kCAFilterPlusD = @"plusD";
+NSString *const kCAFilterPlusL = @"plusL";
+
 NSString *const kCAFilterInputAlphaValues = @"inputAlphaValues";
 NSString *const kCAFilterInputAmount = @"inputAmount";
 NSString *const kCAFilterInputAngle = @"inputAngle";

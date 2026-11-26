@@ -184,6 +184,10 @@ APPKIT_EXPORT const NSViewFullScreenModeOptionKey NSFullScreenModeAllScreens;
         BOOL _prefersCompactControlSizeMetrics;
         // Set by -invalidateRestorableState; such a view with an identifier is saved with its window.
         BOOL _restorableStateInvalidated;
+        // Set by -_setDrawsOwnDescendants:.
+        BOOL _drawsOwnDescendants;
+        // Set by -_setSemanticContext:.
+        NSInteger _semanticContext;
         NSEdgeInsets _additionalSafeAreaInsets;
         // Not retained: the controller whose -view this is, set by its -setView:
         NSViewController *_viewController;

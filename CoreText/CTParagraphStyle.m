@@ -1,6 +1,7 @@
 #import <CoreText/CTParagraphStyle.h>
 #import <CoreText/CTTextTab.h>
 #import <CoreText/CTLine.h>
+#import "CTLineSPI.h"
 #include <CoreFoundation/CFArray.h>
 #include <CoreFoundation/CFRuntime.h>
 #include <pthread.h>
@@ -19,6 +20,9 @@ struct __CTParagraphStyle {
     CFRuntimeBase base;
     union ParagraphValue values[kCTParagraphStyleSpecifierCount];
     CFArrayRef tabs;
+    // Set after creation by CTParagraphStyleSetCompositionLanguage(); Darling's
+    // layout has no East Asian composition rules, so nothing reads it yet.
+    CTCompositionLanguage compositionLanguage;
 };
 
 static void finalizeParagraph(CFTypeRef value) {
@@ -121,6 +125,7 @@ CTParagraphStyleRef CTParagraphStyleCreate(const CTParagraphStyleSetting *settin
             kCFAllocatorDefault, CTParagraphStyleGetTypeID(), sizeof(*style) - sizeof(CFRuntimeBase), NULL);
     if (style == NULL) goto invalid;
     memcpy(style->values, values, sizeof(values));
+    style->compositionLanguage = kCTCompositionLanguageUnset;
     style->tabs = tabs;
     return style;
 invalid:
@@ -144,4 +149,9 @@ bool CTParagraphStyleGetValueForSpecifier(CTParagraphStyleRef style, CTParagraph
     if (spec == kCTParagraphStyleSpecifierTabStops) memcpy(buffer, &style->tabs, sizeof(style->tabs));
     else memcpy(buffer, &style->values[spec], valueSize(spec));
     return true;
+}
+
+void CTParagraphStyleSetCompositionLanguage(CTParagraphStyleRef style, CTCompositionLanguage language) {
+    if (style == NULL || CFGetTypeID(style) != CTParagraphStyleGetTypeID()) return;
+    ((struct __CTParagraphStyle *)style)->compositionLanguage = language;
 }

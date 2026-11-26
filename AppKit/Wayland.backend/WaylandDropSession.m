@@ -316,7 +316,7 @@
 }
 - (NSSpringLoadingHighlight) springLoadingHighlight { return NSSpringLoadingHighlightNone; }
 - (void) resetSpringLoading {}
-- (int) draggingSequenceNumber { return _sequence; }
+- (NSInteger) draggingSequenceNumber { return _sequence; }
 - (void) slideDraggedImageTo: (NSPoint) point {}
 - (NSArray *) namesOfPromisedFilesDroppedAtDestination: (NSURL *) destination { return nil; }
 @end

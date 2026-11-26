@@ -40,6 +40,7 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSEvent_mouse.h>
+#import "NSEvent_gesture.h"
 #import <AppKit/NSEvent_keyboard.h>
 #import <AppKit/NSEvent_other.h>
 #import <AppKit/NSScreen.h>
@@ -361,10 +362,22 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
         NSInteger windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent);
         if (windowNumber == 0)
             windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGMouseEventWindowUnderMousePointer);
+        // An event of the window system's pointer names the window by its native handle: the display knows
+        // the window it belongs to, and where the pointer was in it.
+        NSPoint windowLocation = NSZeroPoint;
+        BOOL hasWindowLocation = NO;
+        if (CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0) {
+            NSInteger nativeNumber = 0;
+            if ([[NSDisplay currentDisplay] windowNumber: &nativeNumber
+                                                location: &windowLocation
+                                             hasLocation: &hasWindowLocation
+                                         forPointerEvent: cgEvent])
+                windowNumber = nativeNumber;
+        }
         NSWindow *window = windowNumber != 0 ? [NSApp windowWithWindowNumber: windowNumber] : nil;
         NSPoint location = screenLocation(cgEvent);
         if (window != nil)
-            location = [window convertScreenToBase: location];
+            location = hasWindowLocation ? windowLocation : [window convertScreenToBase: location];
         else
             windowNumber = 0;
 
@@ -375,8 +388,20 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
                                           modifierFlags: flags
                                                  window: window
                                                  deltaY: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1)];
-            [mouse _setDeltaX: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis2)
-                       deltaY: CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1)];
+            double lineDeltaX = CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis2);
+            double lineDeltaY = CGEventGetDoubleValueField(cgEvent, kCGScrollWheelEventFixedPtDeltaAxis1);
+            // QUIRK: with Shift held, the NSEvent of a wheel of whole lines (not a continuous scroll) moves
+            // the vertical delta to the horizontal axis (the horizontal delta when there is no vertical one)
+            // and has no vertical delta, so that Shift and the wheel scroll sideways. The CGEvent keeps the
+            // deltas it was made with, and a continuous scroll is not converted. Not documented. Evidence:
+            // black-box observation of CGEventCreateScrollWheelEvent2 + NSEvent eventWithCGEvent: on
+            // macOS 26.7.3 (tier 2): line (3,0), (3,2) and (0,3) with Shift give deltaX 3, deltaY 0; pixel
+            // (25,10) with Shift gives the unchanged (1, 2.5). Test: appkit-scroll-cgevents-x11
+            if ((flags & NSShiftKeyMask) && !CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventIsContinuous)) {
+                lineDeltaX = lineDeltaY != 0 ? lineDeltaY : lineDeltaX;
+                lineDeltaY = 0;
+            }
+            [mouse _setDeltaX: lineDeltaX deltaY: lineDeltaY];
             if (CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventIsContinuous))
                 [mouse _setPreciseScrollingDeltaX: CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventPointDeltaAxis2)
                                            deltaY: CGEventGetIntegerValueField(cgEvent, kCGScrollWheelEventPointDeltaAxis1)
@@ -394,8 +419,40 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
             [mouse _setButtonNumber: CGEventGetIntegerValueField(cgEvent, kCGMouseEventButtonNumber)];
             [mouse _setDeltaX: CGEventGetIntegerValueField(cgEvent, kCGMouseEventDeltaX)
                        deltaY: CGEventGetIntegerValueField(cgEvent, kCGMouseEventDeltaY)];
+            // Whether the window was the key window when the press arrived, as the window system's
+            // framework judged it then.
+            int64_t keyState = CGEventGetIntegerValueField(cgEvent, kCGSMouseEventWindowKeyState);
+            if (keyState != 0)
+                [mouse _setWindowWasKeyOnArrival: keyState == 1];
+            [[NSDisplay currentDisplay] pointerEventCreated: mouse fromCGEvent: cgEvent];
         }
         result = mouse;
+        break;
+    }
+    case 18: // NSEventTypeRotate
+    case 30: { // NSEventTypeMagnify
+        // A gesture of the window system's pointer (a touchpad pinch): the window and the location in it as
+        // for the mouse events, the phase and the amount from the fields of our own.
+        NSInteger windowNumber = 0;
+        NSPoint windowLocation = NSZeroPoint;
+        BOOL hasWindowLocation = NO;
+        if (CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0)
+            [[NSDisplay currentDisplay] windowNumber: &windowNumber
+                                            location: &windowLocation
+                                         hasLocation: &hasWindowLocation
+                                     forPointerEvent: cgEvent];
+        NSWindow *window = windowNumber != 0 ? [NSApp windowWithWindowNumber: windowNumber] : nil;
+        NSPoint location = screenLocation(cgEvent);
+        if (window != nil)
+            location = hasWindowLocation ? windowLocation : [window convertScreenToBase: location];
+        result = [[NSEvent_gesture alloc]
+                initWithType: (NSEventType) type
+                    location: location
+               modifierFlags: flags
+                      window: window
+                       phase: (NSEventPhase) CGEventGetIntegerValueField(cgEvent, kCGSGesturePhase)
+               magnification: CGEventGetIntegerValueField(cgEvent, kCGSGestureMagnification) / 1000000.0
+                    rotation: (float) (CGEventGetIntegerValueField(cgEvent, kCGSGestureRotation) / 1000000.0)];
         break;
     }
     case kCGEventKeyDown:
@@ -403,22 +460,60 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
     case kCGEventFlagsChanged: {
         UniChar buffer[256];
         UniCharCount length = 0;
-        NSString *characters = @"";
+        NSString *characters = @"", *charactersIgnoringModifiers = @"";
         if (type != kCGEventFlagsChanged) {
-            CGEventKeyboardGetUnicodeString(cgEvent, 256, &length, buffer);
-            characters = [NSString stringWithCharacters: buffer length: MIN(length, (UniCharCount) 256)];
+            length = _CGEventGetKeyCharacters(cgEvent, false, buffer, 256);
+            characters = [NSString stringWithCharacters: buffer length: length];
+            length = _CGEventGetKeyCharacters(cgEvent, true, buffer, 256);
+            charactersIgnoringModifiers = [NSString stringWithCharacters: buffer length: length];
         }
-        // Keyboard events are for the key window
-        NSWindow *keyWindow = [NSApp keyWindow];
-        result = [[NSEvent_keyboard alloc] initWithType: (NSEventType) type
-                                               location: [keyWindow mouseLocationOutsideOfEventStream]
-                                          modifierFlags: flags
-                                                 window: keyWindow
-                                             characters: characters
-                            charactersIgnoringModifiers: characters
-                                              isARepeat: CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventAutorepeat) != 0
-                                                keyCode: (unsigned short) CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)];
-        break;
+        // The characters without the modifiers other than Shift come with the event when the window system
+        // posted it (the window system's keyboard) and no tap gave the event another key code; otherwise
+        // they are the characters.
+        NSString *unmodified = charactersIgnoringModifiers;
+        int64_t unmodifiedLength = CGEventGetIntegerValueField(cgEvent, kCGSKeyboardEventUnmodifiedLength);
+        if (type != kCGEventFlagsChanged && unmodifiedLength > 0 &&
+            CGEventGetIntegerValueField(cgEvent, kCGSKeyboardEventUnmodifiedKeyCode) ==
+                    CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)) {
+            UniChar units[4];
+            int64_t packed = CGEventGetIntegerValueField(cgEvent, kCGSKeyboardEventUnmodifiedUnicode);
+            if (unmodifiedLength > 4)
+                unmodifiedLength = 4;
+            for (int64_t i = 0; i < unmodifiedLength; i++)
+                units[i] = (UniChar) (packed >> (16 * i));
+            unmodified = [NSString stringWithCharacters: units length: (NSUInteger) unmodifiedLength];
+        }
+        // QUIRK: a key event with Shift in its flags whose string is the tab character U+0009 gives the characters
+        // U+0019 (NSBackTabCharacter), both characters and charactersIgnoringModifiers. The key code does not
+        // matter (it is U+0009 as the layout's result for the Tab key, as UCKeyTranslate gives it, that Shift
+        // turns into the back tab character). Any other Shift or Tab combination keeps the string.
+        // Evidence (tier 2, black-box): NSEvent +eventWithCGEvent: of key down and key up events made with
+        // CGEventCreateKeyboardEvent on macOS 26.7.3 and 10.14.4 (x86_64): Shift, Shift+Command, Shift+Control
+        // and Shift+Option with the Tab key and the string U+0009 give U+0019 while the CGEvent's own string
+        // stays U+0009; the same string with the A key or the Escape key and Shift gives U+0019 too; without
+        // Shift, with Control, Option, Command or Caps Lock alone it stays U+0009, and a string U+0019 stays.
+        // Probe: vd-upstream/mac-probes/937-b2b1-backtab-layer.m.
+        // Test: appkit-nsevent-backtab (and the typed Shift+Tab in appkit-keyboard-cgevents).
+        if (type != kCGEventFlagsChanged && (flags & NSEventModifierFlagShift) && [characters length] == 1 &&
+            [characters characterAtIndex: 0] == '\t')
+            characters = unmodified = [NSString stringWithCharacters: (const unichar[]) { NSBackTabCharacter } length: 1];
+        // The display says which window the event is for
+        NSInteger windowNumber = 0;
+        NSPoint keyLocation = NSZeroPoint;
+        NSDisplay *display = [NSDisplay currentDisplay];
+        if (![display windowNumber: &windowNumber location: &keyLocation forKeyEvent: cgEvent])
+            return nil;
+        result = [NSEvent keyEventWithType: (NSEventType) type
+                                  location: keyLocation
+                             modifierFlags: flags
+                                 timestamp: timestamp
+                              windowNumber: windowNumber
+                                   context: nil
+                                characters: characters
+                charactersIgnoringModifiers: unmodified
+                                 isARepeat: CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventAutorepeat) != 0
+                                   keyCode: (unsigned short) CGEventGetIntegerValueField(cgEvent, kCGKeyboardEventKeycode)];
+        return [[display keyEventCreated: result fromCGEvent: cgEvent] retain];
     }
     case NSAppKitDefined:
     case NSSystemDefined:

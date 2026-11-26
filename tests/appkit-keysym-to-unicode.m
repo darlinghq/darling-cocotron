@@ -27,6 +27,13 @@ int main(void) {
     expect(0x0020, 0x0020, "space");
     expect(0x00e9, 0x00e9, "Latin-1 letter");
     expect(0xff0d, 0x000d, "Return");
+    expect(0xff09, 0x0009, "Tab");
+    // Shift+Tab produces ISO_Left_Tab; AppKit's characters for Shift+Tab are NSBackTabCharacter (U+0019) on
+    // macOS 26.7.3 and 10.14.4.
+    expect(0xfe20, NSBackTabCharacter, "ISO_Left_Tab");
+    // Neighbouring ISO keysyms are not characters.
+    expect(0xfe03, 0, "ISO_Level3_Shift");
+    expect(0xfe21, 0, "ISO_Left_Tab neighbour");
     expect(0xff52, NSUpArrowFunctionKey, "Up");
     expect(0xff54, NSDownArrowFunctionKey, "Down");
     expect(0xff51, NSLeftArrowFunctionKey, "Left");

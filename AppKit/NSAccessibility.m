@@ -593,6 +593,8 @@ NSString *const NSAccessibilitySupportsMainThreadIdleNotificationAttribute =
 NSString *const NSAccessibilityLayoutChangedNotification = @"AXLayoutChanged";
 NSString *const NSAccessibilityUIElementsKey = @"AXUIElementsKey";
 NSString *const NSAccessibilityToggleSubrole = @"AXToggle";
+// macOS 10.15; named like the toggle subrole (not read on macOS)
+NSString *const NSAccessibilitySwitchSubrole = @"AXSwitch";
 
 NSString *const NSAccessibilityFullScreenButtonSubrole = @"AXFullScreenButton";
 
@@ -715,6 +717,7 @@ static NSDictionary *subroleDescriptions(void) {
             pair(NSAccessibilityButtonRole, NSAccessibilityDecrementPageSubrole): @"decrement page button",
             pair(NSAccessibilityButtonRole, NSAccessibilityToggleSubrole): @"toggle button",
             pair(NSAccessibilityCheckBoxRole, NSAccessibilityToggleSubrole): @"toggle button",
+            pair(NSAccessibilityCheckBoxRole, NSAccessibilitySwitchSubrole): @"switch",
             pair(NSAccessibilityTextFieldRole, NSAccessibilitySearchFieldSubrole): @"search text field",
             pair(NSAccessibilityTextFieldRole, NSAccessibilitySecureTextFieldSubrole): @"secure text field",
             pair(NSAccessibilityRowRole, NSAccessibilityOutlineRowSubrole): @"outline row",
@@ -840,6 +843,29 @@ void NSAccessibilityPostNotificationWithUserInfo(id element,
                                                  NSDictionary<NSAccessibilityNotificationUserInfoKey, id> *userInfo)
 {
     // Like NSAccessibilityPostNotification: there is no assistive client to tell.
+}
+
+// Private: tells the accessibility server that the focused element changed, so
+// it asks the application for it again. Darling has no accessibility server
+// (see NSAccessibilityPostNotification), so there is nobody to tell.
+void NSAccessibilityHandleFocusChanged(void) {
+}
+
+// Private: the AXUIElementRef (a Create rule reference) that stands for an
+// accessibility element of this process, for embedding the element in
+// attributed strings handed to assistive clients. Darling's HIServices has no
+// AXUIElement type to make one of, so there is no such reference: NULL, as
+// for an element that cannot be represented.
+CFTypeRef NSAccessibilityCreateAXUIElementRef(id element) {
+    return NULL;
+}
+
+// Private: an element going away tells AppKit to forget the unique id it
+// handed to the accessibility server for that element. Darling has no
+// accessibility server (see NSAccessibilityPostNotification) and hands out no
+// ids, so there is nothing to forget. As on macOS 26.7.3, observed through
+// the call, any object, nil, or one already unregistered is fine.
+void NSAccessibilityUnregisterUniqueIdForUIElement(id element) {
 }
 
 NSString *NSAccessibilityActionDescription(NSString *action) {

@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A description of the virtual pointer and virtual keyboard protocols the
+     test input helper (wl-input.c) uses, written from their public documentation. -->
+<protocol name="test_virtual_input">
+  <interface name="zwlr_virtual_pointer_v1" version="2">
+    <request name="motion">
+      <arg name="time" type="uint"/>
+      <arg name="dx" type="fixed"/>
+      <arg name="dy" type="fixed"/>
+    </request>
+    <request name="motion_absolute">
+      <arg name="time" type="uint"/>
+      <arg name="x" type="uint"/>
+      <arg name="y" type="uint"/>
+      <arg name="x_extent" type="uint"/>
+      <arg name="y_extent" type="uint"/>
+    </request>
+    <request name="button">
+      <arg name="time" type="uint"/>
+      <arg name="button" type="uint"/>
+      <arg name="state" type="uint"/>
+    </request>
+    <request name="axis">
+      <arg name="time" type="uint"/>
+      <arg name="axis" type="uint"/>
+      <arg name="value" type="fixed"/>
+    </request>
+    <request name="frame"/>
+    <request name="axis_source">
+      <arg name="axis_source" type="uint"/>
+    </request>
+    <request name="axis_stop">
+      <arg name="time" type="uint"/>
+      <arg name="axis" type="uint"/>
+    </request>
+    <request name="axis_discrete">
+      <arg name="time" type="uint"/>
+      <arg name="axis" type="uint"/>
+      <arg name="value" type="fixed"/>
+      <arg name="discrete" type="int"/>
+    </request>
+    <request name="destroy" type="destructor"/>
+  </interface>
+  <interface name="zwlr_virtual_pointer_manager_v1" version="2">
+    <request name="create_virtual_pointer">
+      <arg name="seat" type="object" interface="wl_seat" allow-null="true"/>
+      <arg name="id" type="new_id" interface="zwlr_virtual_pointer_v1"/>
+    </request>
+    <request name="destroy" type="destructor"/>
+    <request name="create_virtual_pointer_with_output">
+      <arg name="seat" type="object" interface="wl_seat" allow-null="true"/>
+      <arg name="output" type="object" interface="wl_output" allow-null="true"/>
+      <arg name="id" type="new_id" interface="zwlr_virtual_pointer_v1"/>
+    </request>
+  </interface>
+  <interface name="zwp_virtual_keyboard_v1" version="1">
+    <request name="keymap">
+      <arg name="format" type="uint"/>
+      <arg name="fd" type="fd"/>
+      <arg name="size" type="uint"/>
+    </request>
+    <request name="key">
+      <arg name="time" type="uint"/>
+      <arg name="key" type="uint"/>
+      <arg name="state" type="uint"/>
+    </request>
+    <request name="modifiers">
+      <arg name="mods_depressed" type="uint"/>
+      <arg name="mods_latched" type="uint"/>
+      <arg name="mods_locked" type="uint"/>
+      <arg name="group" type="uint"/>
+    </request>
+    <request name="destroy" type="destructor"/>
+  </interface>
+  <interface name="zwp_virtual_keyboard_manager_v1" version="1">
+    <request name="create_virtual_keyboard">
+      <arg name="seat" type="object" interface="wl_seat"/>
+      <arg name="id" type="new_id" interface="zwp_virtual_keyboard_v1"/>
+    </request>
+  </interface>
+</protocol>

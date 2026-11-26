@@ -317,7 +317,7 @@
 - (void) resetSpringLoading {
 }
 
-- (int) draggingSequenceNumber {
+- (NSInteger) draggingSequenceNumber {
     return _sequence;
 }
 

@@ -74,6 +74,17 @@ void _NSSetKillRingToYankedState(void) {
     [killRingLock unlock];
 }
 
+// Makes the next kill add to the current entry: it undoes a yank's and
+// _NSSetKillRingToYankedState()'s start of a new entry. Observed on macOS
+// 26.7.3 (black-box): after a yank, _NSSetKillRingToYankedState() and this, an
+// append adds to the yanked entry; without this, it starts a new entry.
+// Test: tests/appkit-webkit-private-functions.m
+void _NSResetKillRingOperationFlag(void) {
+    lockKillRing();
+    nextAppendStartsNewEntry = NO;
+    [killRingLock unlock];
+}
+
 NSString *_NSYankFromKillRing(void) {
     NSString *result = nil;
 

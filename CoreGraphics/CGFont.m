@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGFont.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Onyx2D/O2Font.h>
+#import <Onyx2D/O2Font_freetype.h>
 
 CGFontRef CGFontCreateWithFontName(CFStringRef name) {
     return (CGFontRef)O2FontCreateWithFontName((NSString *) name);
@@ -112,6 +113,83 @@ CFStringRef const kCGFontVariationAxisName = CFSTR("kCGFontVariationAxisName");
 CFStringRef const kCGFontVariationAxisMinValue = CFSTR("kCGFontVariationAxisMinValue");
 CFStringRef const kCGFontVariationAxisDefaultValue = CFSTR("kCGFontVariationAxisDefaultValue");
 CFStringRef const kCGFontVariationAxisMaxValue = CFSTR("kCGFontVariationAxisMaxValue");
+
+// The name an axis is known by in the CGFont variation APIs: the name of the font's table, else its tag
+// (the four characters).
+static NSString *variationAxisKey(NSDictionary *axis) {
+    NSString *name = [axis objectForKey: @"name"];
+    if ([name length] > 0)
+        return name;
+    uint32_t tag = (uint32_t) [[axis objectForKey: @"tag"] unsignedIntValue];
+    char chars[4] = {(char) (tag >> 24), (char) (tag >> 16), (char) (tag >> 8), (char) tag};
+    return [[[NSString alloc] initWithBytes: chars length: 4 encoding: NSISOLatin1StringEncoding] autorelease];
+}
+
+static O2Font_freetype *variableFont(CGFontRef font) {
+    return [(id) font isKindOfClass: [O2Font_freetype class]] ? (O2Font_freetype *) font : nil;
+}
+
+// The documented results for a font without variations are NULL. Axes, defaults and the settings come from the
+// font file's fvar table through the font backend; the numbers are doubles.
+CFArrayRef CGFontCopyVariationAxes(CGFontRef font) {
+    NSArray *axes = [variableFont(font) copyVariationAxes];
+    if (axes == nil)
+        return NULL;
+    NSMutableArray *result = [[NSMutableArray alloc] init];
+    for (NSDictionary *axis in axes) {
+        NSMutableDictionary *info = [[NSMutableDictionary alloc] init];
+        [info setObject: variationAxisKey(axis) forKey: (NSString *) kCGFontVariationAxisName];
+        [info setObject: [axis objectForKey: @"minimum"] forKey: (NSString *) kCGFontVariationAxisMinValue];
+        [info setObject: [axis objectForKey: @"default"] forKey: (NSString *) kCGFontVariationAxisDefaultValue];
+        [info setObject: [axis objectForKey: @"maximum"] forKey: (NSString *) kCGFontVariationAxisMaxValue];
+        [result addObject: info];
+        [info release];
+    }
+    [axes release];
+    return (CFArrayRef) result;
+}
+
+CFDictionaryRef CGFontCopyVariations(CGFontRef font) {
+    O2Font_freetype *freeType = variableFont(font);
+    NSArray *axes = [freeType copyVariationAxes];
+    if (axes == nil)
+        return NULL;
+    NSDictionary *settings = [freeType copyVariationSettings];
+    NSMutableDictionary *result = [[NSMutableDictionary alloc] init];
+    for (NSDictionary *axis in axes) {
+        NSNumber *value = [settings objectForKey: [axis objectForKey: @"tag"]];
+        [result setObject: value != nil ? value : [axis objectForKey: @"default"] forKey: variationAxisKey(axis)];
+    }
+    [settings release];
+    [axes release];
+    return (CFDictionaryRef) result;
+}
+
+CGFontRef CGFontCreateCopyWithVariations(CGFontRef font, CFDictionaryRef variations) {
+    if (font == NULL)
+        return NULL;
+    O2Font_freetype *freeType = variableFont(font);
+    NSArray *axes = [freeType copyVariationAxes];
+    if (axes == nil || variations == NULL || CFDictionaryGetCount(variations) == 0) {
+        [axes release];
+        return CGFontRetain(font);
+    }
+    // Axis names to tags; a name that is not an axis of the font, or a value that is not a number, is skipped.
+    NSMutableDictionary *byTag = [[NSMutableDictionary alloc] init];
+    for (NSDictionary *axis in axes) {
+        id value = [(NSDictionary *) variations objectForKey: variationAxisKey(axis)];
+        if ([value isKindOfClass: [NSNumber class]])
+            [byTag setObject: value forKey: [axis objectForKey: @"tag"]];
+    }
+    [axes release];
+    CGFontRef result = font;
+    if ([byTag count] == 0)
+        result = CGFontRetain(font);
+    else
+        result = (CGFontRef) [freeType copyWithVariation: byTag];
+    [byTag release];
+    return result;
+}
 
 CFArrayRef CGFontCopyTableTags(CGFontRef font) {
     return font ? O2FontCopyTableTags((O2FontRef)font) : NULL;

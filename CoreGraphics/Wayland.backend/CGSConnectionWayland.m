@@ -19,18 +19,26 @@
  SOFTWARE. */
 
 #import "CGSConnectionWayland.h"
+#import "CGSWaylandKeyboard.h"
+#import "CGSWaylandPointer.h"
+#import "CGSWaylandKeymap.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import <CoreGraphics/CGSNativeConnection.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 
+#import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNumber.h>
 #import <Foundation/NSString.h>
 
+#include <dispatch/dispatch.h>
 #include <math.h>
+#include <notify.h>
 #include <poll.h>
 #include <stdlib.h>
 #include <string.h>
@@ -86,9 +94,14 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             switch (objectKind) {
             case CGSWaylandObjectXdgSurface:
             case CGSWaylandObjectToplevel:
+            case CGSWaylandObjectLayerSurface:
+            case CGSWaylandObjectPopup:
                 [(CGSWindowWayland *) object handleEvent: opcode
                                                     kind: objectKind
                                                arguments: args];
+                break;
+            case CGSWaylandObjectBuffer:
+                [(CGSWindowWayland *) object bufferReleased: (struct wl_proxy *) proxy opcode: opcode];
                 break;
             case CGSWaylandObjectOutput:
             case CGSWaylandObjectLogicalOutput:
@@ -106,6 +119,23 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                                                                      proxy: proxy
                                                                  arguments: args];
                 break;
+            case CGSWaylandObjectPointer:
+                [(CGSWaylandPointer *) object pointerEvent: opcode arguments: args];
+                break;
+            case CGSWaylandObjectPinchGesture:
+                [(CGSWaylandPointer *) object pinchEvent: opcode arguments: args];
+                break;
+            case CGSWaylandObjectLockedPointer:
+            case CGSWaylandObjectRelativePointer:
+            case CGSWaylandObjectWarpLock:
+                [(CGSWaylandPointer *) object lockEvent: opcode kind: objectKind proxy: (struct wl_proxy *) proxy arguments: args];
+                break;
+            case CGSWaylandObjectKeyboardSync:
+                if (opcode == WP_CALLBACK_EV_DONE)
+                    [(CGSWaylandKeyboard *) object modifierSyncDone: (struct wl_proxy *) proxy];
+                break;
+            case CGSWaylandObjectSeat:
+            case CGSWaylandObjectKeyboard:
             default:
                 [(CGSConnectionWayland *) object handleEvent: opcode
                                                         kind: objectKind
@@ -123,6 +153,9 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
 
 @interface CGSConnectionWayland ()
 - (void) processPendingEvents;
+- (void) seatCapabilities: (uint32_t) capabilities;
+- (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
+- (void) releaseKeyboard;
 @end
 
 static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
@@ -130,6 +163,23 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 {
     [(CGSConnectionWayland *) info processPendingEvents];
 }
+
+// One registered global hot key
+@interface CGSWaylandHotKeyEntry : NSObject {
+@public
+    int uid;
+    CGKeyCode virtualKey;
+    CGEventFlags flags;
+    BOOL enabled;
+}
+@end
+
+@implementation CGSWaylandHotKeyEntry
+@end
+
+// The modifier flags a hot key is matched on.
+static const CGEventFlags kHotKeyModifierMask =
+    kCGEventFlagMaskShift | kCGEventFlagMaskControl | kCGEventFlagMaskAlternate | kCGEventFlagMaskCommand;
 
 @implementation CGSConnectionWayland
 
@@ -160,6 +210,11 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         return nil;
 
     _outputs = [NSMutableArray new];
+    // The keyboard layout is described from the system default until the compositor's keymap arrives.
+    _keymap = [[CGSWaylandKeymap alloc] init];
+    if (_keymap != nil)
+        _keyboardDecoder = [[CGSWaylandKeyboard alloc] initWithConnection: self keymap: _keymap];
+    _pointerDecoder = [[CGSWaylandPointer alloc] initWithConnection: self];
 
     _wlDisplay = WL.wl_display_connect(NULL);
     if (_wlDisplay == NULL) {
@@ -219,6 +274,21 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     }
     CFRunLoopAddSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
 
+    // Another process asks for the activation of this one's windows with a libnotify notification named
+    // after this process (see _CGSActivateProcess). Only the process can ask the compositor for it, with
+    // a token its windows' input gives it, so the observer that owns the windows is told, on the main
+    // queue, which the run loop serves.
+    char notificationName[64];
+    snprintf(notificationName, sizeof(notificationName),
+             kCGSProcessActivationNotificationPrefix "%d", (int) getpid());
+    // The block does not keep the connection alive (a __block variable is not retained); the token is
+    // cancelled before the connection goes.
+    __block CGSConnectionWayland *connection = self;
+    _activationRegistered = notify_register_dispatch(notificationName, &_activationNotifyToken,
+                                                     dispatch_get_main_queue(),
+                                                     ^(int ignored) { [connection activationRequested]; }) ==
+                            NOTIFY_STATUS_OK;
+
     _setupDone = YES;
     [self flush];
     return self;
@@ -232,6 +302,8 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         [_windows removeAllObjects];
     }
 
+    if (_activationRegistered)
+        notify_cancel(_activationNotifyToken);
     if (_source != NULL) {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
         CFRelease(_source);
@@ -242,6 +314,16 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     }
 
     [_outputManager release];
+    [self releaseKeyboard];
+    [_keyboardDecoder release];
+    [(CGSWaylandPointer *) _pointerDecoder stop];
+    [_pointerDecoder release];
+    if (_pointerGestures != NULL)
+        WL.wl_proxy_destroy(_pointerGestures);
+    [_hotKeys release];
+    if (_seat != NULL)
+        WL.wl_proxy_destroy(_seat);
+    [_keymap release];
     if (_legacyLogicalOutputManager != NULL)
         WL.wl_proxy_destroy(_legacyLogicalOutputManager);
     if (_logicalOutputManager != NULL)
@@ -344,7 +426,24 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
         [self connectionFailed];
 
+    // What the framework with the windows lives on the same connection: every listener of every
+    // object on it has run, so the observer sends what it queued meanwhile. A change of the displays
+    // is reported once the objects of both have seen it (a client's wl_output objects all get their
+    // events from the same read).
+    id observer = [CGSConnection nativeObserver];
+    if (_layoutChangedForObserver) {
+        _layoutChangedForObserver = NO;
+        if ([observer respondsToSelector: @selector(nativeConnectionDisplayLayoutChanged)])
+            [observer nativeConnectionDisplayLayoutChanged];
+    }
+    if ([observer respondsToSelector: @selector(nativeConnectionDidProcessEvents)])
+        [observer nativeConnectionDidProcessEvents];
+
     WL.wl_display_flush(_wlDisplay);
+}
+
++ (int) nativeConnectionKind {
+    return CGSNativeConnectionKindWayland;
 }
 
 #pragma mark - Events
@@ -357,10 +456,50 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         _compositor = [self bindGlobal: name interface: &wl_compositor_interface
                                version: MIN(version, 4u)
                                    kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "wl_shm") == 0 && _shm == NULL) {
+        _shm = [self bindGlobal: name interface: &wl_shm_interface
+                        version: 1
+                           kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name interface: &xdg_wm_base_interface
                            version: MIN(version, 2u)
                               kind: CGSWaylandObjectWmBase object: self];
+    } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
+        _layerShell = [self bindGlobal: name interface: &zwlr_layer_shell_v1_interface
+                               version: MIN(version, 4u)
+                                  kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "org_kde_plasma_shell") == 0 && _plasmaShell == NULL) {
+        // Version 2 adds set_skip_taskbar, version 5 set_skip_switcher.
+        _plasmaShellVersion = MIN(version, 5u);
+        _plasmaShell = [self bindGlobal: name interface: &org_kde_plasma_shell_interface
+                                version: _plasmaShellVersion
+                                   kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 && _decorationManager == NULL) {
+        _decorationManager = [self bindGlobal: name interface: &zxdg_decoration_manager_v1_interface
+                                      version: 1
+                                         kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
+        // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame and 8 wl_pointer.axis_value120. A
+        // protocol table older than that offers less.
+        _seat = [self bindGlobal: name interface: &wl_seat_interface
+                         version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
+                            kind: CGSWaylandObjectSeat object: self];
+    } else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0 && _pointerConstraints == NULL) {
+        _pointerConstraintsName = name;
+        _pointerConstraints = [self bindGlobal: name interface: &zwp_pointer_constraints_v1_interface
+                                       version: 1 kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+    } else if (strcmp(interface, "zwp_relative_pointer_manager_v1") == 0 && _relativePointerManager == NULL) {
+        _relativePointerManagerName = name;
+        _relativePointerManager = [self bindGlobal: name interface: &zwp_relative_pointer_manager_v1_interface
+                                           version: 1 kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+    } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
+        // Version 2 adds the release request.
+        _pointerGesturesName = name;
+        _pointerGestures = [self bindGlobal: name interface: &zwp_pointer_gestures_v1_interface
+                                    version: MIN(version, 2u) kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandPointer *) _pointerDecoder pointerGesturesChanged];
     } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
         _logicalOutputManagerName = name;
         _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
@@ -429,6 +568,32 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 }
 
 - (void) registryGlobalRemove: (uint32_t) name {
+    if ((_pointerConstraints != NULL && name == _pointerConstraintsName) ||
+        (_relativePointerManager != NULL && name == _relativePointerManagerName)) {
+        // The lock objects go before the global that made them.
+        [(CGSWaylandPointer *) _pointerDecoder releasePointerLockObjects];
+        struct wl_proxy **global = name == _pointerConstraintsName ? &_pointerConstraints : &_relativePointerManager;
+        WL.wl_proxy_destroy(*global);
+        *global = NULL;
+        if (name == _pointerConstraintsName)
+            _pointerConstraintsName = 0;
+        else
+            _relativePointerManagerName = 0;
+        [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+        return;
+    }
+    if (_pointerGestures != NULL && name == _pointerGesturesName) {
+        struct wl_proxy *gestures = _pointerGestures;
+        _pointerGestures = NULL;
+        _pointerGesturesName = 0;
+        [(CGSWaylandPointer *) _pointerDecoder pointerGesturesChanged];
+        // wl_pointer_gestures.release exists from version 2.
+        if (WL.wl_proxy_get_version(gestures) >= 2)
+            WaylandMarshal(gestures, WP_GESTURES_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        else
+            WL.wl_proxy_destroy(gestures);
+        return;
+    }
     if (_outputManager != nil && name == _outputManagerName) {
         [_outputManager release];
         _outputManager = nil;
@@ -468,9 +633,10 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 
 // What changed in the outputs is a change of the displays, for the callbacks once the setup is over.
 - (void) outputsChanged {
-    if (_setupDone)
+    if (_setupDone) {
         [self displayLayoutChanged];
-    else
+        _layoutChangedForObserver = YES;
+    } else
         [self invalidateScreens];
 }
 
@@ -601,6 +767,15 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
         [self outputEvent: opcode output: (CGSWaylandOutput *) object arguments: args];
         break;
 
+    case CGSWaylandObjectSeat:
+        if (opcode == WP_SEAT_EV_CAPABILITIES)
+            [self seatCapabilities: args[0].u];
+        break;
+
+    case CGSWaylandObjectKeyboard:
+        [self keyboardEvent: opcode arguments: args];
+        break;
+
     case CGSWaylandObjectLogicalOutput:
         [self logicalOutputEvent: opcode output: (CGSWaylandOutput *) object arguments: args];
         break;
@@ -608,6 +783,189 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     default:
         break;
     }
+}
+
+#pragma mark - Keyboard
+
+- (void) seatCapabilities: (uint32_t) capabilities {
+    [(CGSWaylandPointer *) _pointerDecoder seatCapabilities: capabilities seat: _seat];
+    if ((capabilities & WP_SEAT_CAPABILITY_KEYBOARD) && _keyboard == NULL) {
+        union wl_argument args[1] = {{.o = NULL}};
+        _keyboard = [self createObject: _seat
+                                opcode: WP_SEAT_GET_KEYBOARD
+                             interface: &wl_keyboard_interface
+                             arguments: args
+                                  kind: CGSWaylandObjectKeyboard
+                                object: self];
+    } else if (!(capabilities & WP_SEAT_CAPABILITY_KEYBOARD)) {
+        // Also with no wl_keyboard object: the decoder may still hold state (a pending modifier key).
+        [self releaseKeyboard];
+    }
+}
+
+- (void) releaseKeyboard {
+    [(CGSWaylandKeyboard *) _keyboardDecoder stop];
+    if (_keyboard == NULL)
+        return;
+    // wl_keyboard.release exists from version 3.
+    if (WL.wl_proxy_get_version(_keyboard) >= 3) {
+        union wl_argument args[1] = {{.o = NULL}};
+        WaylandMarshal(_keyboard, WP_KEYBOARD_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, args);
+    } else {
+        WL.wl_proxy_destroy(_keyboard);
+    }
+    _keyboard = NULL;
+}
+
+// The events of the wl_keyboard: the keymap and the modifier state are the keymap's, the keys become
+// CGEvents (CGSWaylandKeyboard).
+- (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    if (_keyboardDecoder != nil) {
+        [(CGSWaylandKeyboard *) _keyboardDecoder keyboardEvent: opcode arguments: args];
+        return;
+    }
+    // Without xkbcommon there is no keymap object. The descriptor is the connection's to close.
+    if (opcode == WP_KEYBOARD_EV_KEYMAP)
+        close(args[1].h);
+}
+
+- (void *) keyboardFocus {
+    return [(CGSWaylandKeyboard *) _keyboardDecoder focusSurface];
+}
+
+- (uint64_t) modifierFlags {
+    return [(CGSWaylandKeyboard *) _keyboardDecoder modifierFlags];
+}
+
+- (void) nativeObjectDestroyed: (void *) object {
+    [(CGSWaylandPointer *) _pointerDecoder surfaceDestroyed: (struct wl_proxy *) object];
+    [(CGSWaylandKeyboard *) _keyboardDecoder surfaceDestroyed: (struct wl_proxy *) object];
+}
+
+- (void *) nativePointer {
+    return [(CGSWaylandPointer *) _pointerDecoder pointerProxy];
+}
+
+- (void) setPointerSurfacePointX: (double) x y: (double) y {
+    [(CGSWaylandPointer *) _pointerDecoder setSurfacePointX: x y: y];
+}
+
+- (void) flushPendingPointerEvents {
+    [(CGSWaylandPointer *) _pointerDecoder flushPending];
+}
+
+- (struct wl_proxy *) pointerGestures {
+    return _pointerGestures;
+}
+
+- (struct wl_proxy *) pointerConstraints {
+    return _pointerConstraints;
+}
+
+- (struct wl_proxy *) relativePointerManager {
+    return _relativePointerManager;
+}
+
+#pragma mark - Pointer state
+
+- (BOOL) managesPointer {
+    return YES;
+}
+
+- (BOOL) cancelsHiddenUntilMouseMoves {
+    return YES;
+}
+
+// Wayland requests are made on the main thread, where the connection is read.
+- (void) cursorHiddenStateChanged: (BOOL) hidden {
+    if ([NSThread isMainThread])
+        [(CGSWaylandPointer *) _pointerDecoder cursorHiddenChanged];
+    else
+        [_pointerDecoder performSelectorOnMainThread: @selector(cursorHiddenChanged) withObject: nil waitUntilDone: NO];
+}
+
+- (void) mouseAssociationChanged: (BOOL) associated {
+    if ([NSThread isMainThread])
+        [(CGSWaylandPointer *) _pointerDecoder updatePointerLock];
+    else
+        [_pointerDecoder performSelectorOnMainThread: @selector(updatePointerLock) withObject: nil waitUntilDone: NO];
+}
+
+- (CGError) warpPointerToPoint: (CGPoint) point {
+    if ([NSThread isMainThread])
+        return [(CGSWaylandPointer *) _pointerDecoder warpToGlobalPoint: point];
+    // A warp of another thread is carried out by the main one; whether it could be is not reported back.
+    [self performSelectorOnMainThread: @selector(warpOnMainThread:)
+                           withObject: [NSValue valueWithBytes: &point objCType: @encode(CGPoint)]
+                        waitUntilDone: YES];
+    return kCGErrorSuccess;
+}
+
+- (void) warpOnMainThread: (NSValue *) value {
+    CGPoint point;
+    [value getValue: &point];
+    [(CGSWaylandPointer *) _pointerDecoder warpToGlobalPoint: point];
+}
+
+- (void) pointerLockTargetMayHaveChanged {
+    [(CGSWaylandPointer *) _pointerDecoder updatePointerLock];
+}
+
+- (BOOL) pointerLocked {
+    return [(CGSWaylandPointer *) _pointerDecoder pointerLocked];
+}
+
+// The point of a window of this connection that is at a global location, when that is one of its own.
+- (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface {
+    uint32_t windowID = [self windowIDForSurface: surface];
+    CGSWindowWayland *window = windowID != 0 ? (CGSWindowWayland *) [self windowForId: (CGSWindowID) windowID] : nil;
+
+    if (window == nil)
+        return NO;
+    *point = CGPointMake(location.x - [window frameOrigin].x, location.y - [window frameOrigin].y);
+    return YES;
+}
+
+- (uint32_t) windowIDForSurface: (struct wl_proxy *) surface {
+    if (surface == NULL)
+        return 0;
+    @synchronized (_windows) {
+        for (NSNumber *key in _windows) {
+            CGSWindow *window = [_windows objectForKey: key];
+
+            if ([window isKindOfClass: [CGSWindowWayland class]] && ((CGSWindowWayland *) window)->_surface == surface)
+                return (uint32_t) [key intValue];
+        }
+    }
+    return 0;
+}
+
+- (BOOL) globalLocation: (CGPoint *) location ofSurface: (struct wl_proxy *) surface point: (CGPoint) point {
+    uint32_t windowID = [self windowIDForSurface: surface];
+    CGSWindowWayland *window = windowID != 0 ? (CGSWindowWayland *) [self windowForId: (CGSWindowID) windowID] : nil;
+
+    if (window == nil)
+        return NO;
+    *location = CGPointMake([window frameOrigin].x + point.x, [window frameOrigin].y + point.y);
+    return YES;
+}
+
+- (void) flushPendingKeyboardEvents {
+    [(CGSWaylandKeyboard *) _keyboardDecoder flushPendingModifier];
+}
+
+- (int) keyboardLayoutGroup {
+    return [(CGSWaylandKeymap *) _keymap layoutGroup];
+}
+
+- (NSString *) keyboardLayoutName {
+    return [(CGSWaylandKeymap *) _keymap layoutName];
+}
+
+// The layout of the keymap in force, which this connection's keyboard received from the compositor.
+// Nil without xkbcommon.
+- (CGSKeyboardLayout *) createKeyboardLayout {
+    return [(CGSWaylandKeymap *) _keymap copyLayout];
 }
 
 #pragma mark - CGSConnection
@@ -629,6 +987,90 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
               @"to report");
     }
     return CGPointMake(CGFLOAT_MAX, CGFLOAT_MAX);
+}
+
+#pragma mark - Hot keys
+
+// Wayland has no request to grab a key for the whole session, so the hot keys of this connection are
+// matched against the keys the compositor sends to the process' own wl_keyboard (CGSWaylandKeyboard asks
+// -activeHotKeyUIDsForKeyCode:flags:), which is while one of the process' surfaces has the keyboard focus.
+// Registration always succeeds, since no other client can hold a key combination here.
+// Limitation: while none of the process' surfaces has the keyboard focus the hot keys do not report. Wayland
+// itself has no global key request; the compositor-specific ways (the xdg-desktop-portal GlobalShortcuts
+// interface, KDE's KGlobalAccel) are not used, since they ask the user to confirm and assign each shortcut.
+- (CGSWaylandHotKeyEntry *) _hotKeyWithUID: (int) uid {
+    for (CGSWaylandHotKeyEntry *entry in _hotKeys) {
+        if (entry->uid == uid)
+            return entry;
+    }
+    return nil;
+}
+
+- (void) setHotKeyWithUID: (int) uid keyCode: (CGKeyCode) keyCode flags: (CGEventFlags) flags exclusion: (int) exclusion {
+    [self removeHotKeyWithUID: uid];
+    CGSWaylandHotKeyEntry *entry = [[CGSWaylandHotKeyEntry alloc] init];
+    entry->uid = uid;
+    entry->virtualKey = keyCode;
+    entry->flags = flags & kHotKeyModifierMask;
+    entry->enabled = YES;
+    @synchronized(self) {
+        if (_hotKeys == nil)
+            _hotKeys = [[NSMutableArray alloc] init];
+        [_hotKeys addObject: entry];
+    }
+    [entry release];
+}
+
+- (BOOL) getHotKeyWithUID: (int) uid keyCode: (CGKeyCode *) outKeyCode flags: (CGEventFlags *) outFlags {
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        if (entry == nil)
+            return NO;
+        if (outKeyCode)
+            *outKeyCode = entry->virtualKey;
+        if (outFlags)
+            *outFlags = entry->flags;
+        return YES;
+    }
+}
+
+- (void) removeHotKeyWithUID: (int) uid {
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        if (entry != nil)
+            [_hotKeys removeObject: entry];
+    }
+}
+
+- (BOOL) isHotKeyEnabledWithUID: (int) uid {
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        return entry != nil && entry->enabled;
+    }
+}
+
+- (void) setHotKeyWithUID: (int) uid enabled: (BOOL) enabled {
+    @synchronized(self) {
+        CGSWaylandHotKeyEntry *entry = [self _hotKeyWithUID: uid];
+        if (entry != nil)
+            entry->enabled = enabled;
+    }
+}
+
+- (NSArray *) activeHotKeyUIDsForKeyCode: (CGKeyCode) keyCode flags: (uint64_t) flags {
+    NSMutableArray *uids = nil;
+    if (_hotKeyOperatingMode != 0)
+        return nil;
+    @synchronized(self) {
+        for (CGSWaylandHotKeyEntry *entry in _hotKeys) {
+            if (entry->enabled && entry->virtualKey == keyCode && entry->flags == (flags & kHotKeyModifierMask)) {
+                if (uids == nil)
+                    uids = [NSMutableArray array];
+                [uids addObject: @(entry->uid)];
+            }
+        }
+    }
+    return uids;
 }
 
 // The outputs that have reported a mode, in the order the compositor announced them. The first is
@@ -740,12 +1182,6 @@ static NSDictionary *modeDictionary(int32_t width, int32_t height, double refres
         x += bounds.size.width;
     }
     return [[screens copy] autorelease];
-}
-
-// Brings the layout up to date with what the compositor has sent.
-- (void) refreshDisplayLayout {
-    [self processPendingEvents];
-    [self invalidateScreens];
 }
 
 // Modes can be changed only through wlr-output-management; a compositor without it keeps its

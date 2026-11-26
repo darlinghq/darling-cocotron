@@ -8,16 +8,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
-#include "WaylandLibrary.h"
-#include "WaylandProtocol.h"
 
-// Private-compositor regression fixture, like scroll-frame-dispatch.m: it drives the real
-// WaylandDisplay protocol entry point and records the AppKit events it posts. It checks how
+// Private-compositor regression fixture, like scroll-frame-dispatch.m: it drives the protocol entry point
+// of CoreGraphics' pointer decoder (the process' wl_pointer) and takes the AppKit events made from the CGEvents
+// it posts. It checks how
 // wl_pointer axis events from a finger source become precise scroll events. Written from the
 // Wayland core protocol, https://gitlab.freedesktop.org/wayland/wayland/-/blob/main/protocol/wayland.xml
 // (wl_pointer.axis, axis_source, axis_stop, frame), and from the NSEvent documentation of
 // hasPreciseScrollingDeltas, scrollingDeltaX/Y and phase. The began/changed/ended mapping and the
-// sign and line deltas are marked GUESS in WaylandDisplay.m and tested here as the chosen behavior.
+// sign and line deltas are guesses (see CGSWaylandPointer.m) and tested here as the chosen behavior.
 // Run it in a Darling guest with DARLING_APPKIT_BACKEND=wayland on a compositor whose seat has a pointer
 // (a headless sway has none until a virtual pointer exists: keep tests/wayland-virtual-pointer.c running
 // while it runs); the fixture's window must be on that compositor. Prints PASS/FAIL lines and RESULT.
@@ -27,18 +26,32 @@ union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; 
 - (id) platformWindow;
 - (void *) surface;
 - (void) windowUnmapped: (id) window;
-- (void) seatCapabilities: (uint32_t) capabilities;
+- (void) seatCapabilities: (uint32_t) capabilities seat: (void *) seat;
 - (void) pointerEvent: (uint32_t) opcode arguments: (union Argument *) args;
 @end
+
+
+static id decoder, connection;
+
+// The decoder is CoreGraphics': what it posts becomes NSEvents in AppKit's queue
+static void drain(NSMutableArray *events) {
+    NSEvent *event;
+    while ((event = [NSApp nextEventMatchingMask: NSEventMaskAny
+                                       untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.05]
+                                          inMode: NSDefaultRunLoopMode
+                                         dequeue: YES]) != nil)
+        [events addObject: event];
+}
+
+static id ivarOf(id object, const char *name) {
+    Ivar ivar = class_getInstanceVariable(object_getClass(object), name);
+    return ivar ? object_getIvar(object, ivar) : nil;
+}
 
 static NSMutableArray *events;
 static id display;
 static NSWindow *window;
 static int failures, checks;
-
-static void capture(id self, SEL command, NSEvent *event, BOOL atStart) {
-    [events addObject: event];
-}
 
 static void preciseCheck(BOOL passed, const char *description) {
     checks++;
@@ -53,21 +66,22 @@ enum { Wheel = 0, Finger = 1 };
 
 static void axis(uint32_t which, double value) {
     union Argument args[3] = {{.u = 0}, {.u = which}, {.i = (int32_t) (value * 256.0)}};
-    [display pointerEvent: Axis arguments: args];
+    [decoder pointerEvent: Axis arguments: args];
 }
 
 static void source(uint32_t kind) {
     union Argument args[1] = {{.u = kind}};
-    [display pointerEvent: AxisSource arguments: args];
+    [decoder pointerEvent: AxisSource arguments: args];
 }
 
 static void stop(uint32_t which) {
     union Argument args[2] = {{.u = 0}, {.u = which}};
-    [display pointerEvent: AxisStop arguments: args];
+    [decoder pointerEvent: AxisStop arguments: args];
 }
 
 static void frame(void) {
-    [display pointerEvent: Frame arguments: NULL];
+    [decoder pointerEvent: Frame arguments: NULL];
+    drain(events);
 }
 
 static NSEvent *last(void) {
@@ -80,19 +94,18 @@ static NSEvent *last(void) {
 @implementation PreciseScrollApplication
 - (void) test: (id) sender {
     display = [NSClassFromString(@"NSDisplay") currentDisplay];
-    Class original = object_getClass(display);
-    Class recorder = objc_allocateClassPair(original, "PreciseScrollRecordingDisplay", 0);
-    Method method = class_getInstanceMethod(original, @selector(postEvent:atStart:));
-    preciseCheck(method != NULL, "backend event method exists");
-    class_addMethod(recorder, @selector(postEvent:atStart:), (IMP) capture,
-                    method_getTypeEncoding(method));
-    objc_registerClassPair(recorder);
+    connection = _CGSConnectionForID(CGSMainConnectionID());
+    decoder = ivarOf(connection, "_pointerDecoder");
+    preciseCheck(decoder != nil, "CoreGraphics has the pointer decoder");
     events = [NSMutableArray new];
-    object_setClass(display, recorder);
+    drain(events);
+    [events removeAllObjects];
+    // A headless compositor has no pointer device: take the capability so the decoder has a wl_pointer
+    [decoder seatCapabilities: 1 seat: (void *) ivarOf(connection, "_seat")];
 
     union Argument enter[4] = {{.u = 1},
         {.o = [[window platformWindow] surface]}, {.i = 20 * 256}, {.i = 30 * 256}};
-    [display pointerEvent: 0 arguments: enter];
+    [decoder pointerEvent: 0 arguments: enter];
 
     // A finger sequence: began, changed, ended.
     source(Finger);
@@ -140,11 +153,12 @@ static NSEvent *last(void) {
 
     // Leaving in the middle of a sequence cancels it.
     union Argument leave[2] = {{.u = 2}, {.o = [[window platformWindow] surface]}};
-    [display pointerEvent: 1 arguments: leave];
+    [decoder pointerEvent: 1 arguments: leave];
+    drain(events);
     preciseCheck([events count] == 6 && [last() phase] == NSEventPhaseCancelled &&
               [last() hasPreciseScrollingDeltas],
           "pointer leave cancels a sequence in progress");
-    [display pointerEvent: 0 arguments: enter];
+    [decoder pointerEvent: 0 arguments: enter];
     source(Finger);
     axis(Vertical, 4.0);
     frame();
@@ -162,8 +176,8 @@ static NSEvent *last(void) {
     axis(Vertical, 6.5);
     frame();
     preciseCheck([events count] == base + 2 && [last() phase] == NSEventPhaseChanged &&
-              [last() hasPreciseScrollingDeltas] && [last() scrollingDeltaY] == -6.5,
-          "motion in a frame without a source continues the sequence");
+              [last() hasPreciseScrollingDeltas] && [last() scrollingDeltaY] == -6.0,
+          "motion in a frame without a source continues the sequence (a scroll wheel CGEvent's point delta is a whole number: the half point waits for the next frame)");
     stop(Vertical);
     frame();
     preciseCheck([events count] == base + 3 && [last() phase] == NSEventPhaseEnded,
@@ -195,12 +209,13 @@ static NSEvent *last(void) {
     source(Finger);
     axis(Vertical, 2.0);
     frame();
-    [display seatCapabilities: 0];
+    [decoder seatCapabilities: 0 seat: NULL];
+    drain(events);
     preciseCheck([events count] == base + 9 && [last() phase] == NSEventPhaseCancelled &&
               [last() hasPreciseScrollingDeltas],
           "seat pointer loss cancels a sequence in progress");
-    [display seatCapabilities: 1];
-    [display pointerEvent: 0 arguments: enter];
+    [decoder seatCapabilities: 1 seat: (void *) ivarOf(connection, "_seat")];
+    [decoder pointerEvent: 0 arguments: enter];
 
     // Other sources and seats without a source stay legacy wheel events.
     base = [events count];
@@ -225,11 +240,11 @@ static NSEvent *last(void) {
     axis(Vertical, 2.0);
     frame();
     [display windowUnmapped: [window platformWindow]];
+    drain(events);
     preciseCheck([events count] == base + 4 && [last() phase] == NSEventPhaseCancelled &&
               [last() hasPreciseScrollingDeltas],
           "window unmap cancels a sequence in progress");
 
-    object_setClass(display, original);
     [events release];
     printf("RESULT checks=%d failures=%d\n", checks, failures);
     exit(failures ? 1 : 0);

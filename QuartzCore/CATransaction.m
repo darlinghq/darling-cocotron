@@ -180,10 +180,30 @@ static void scheduleCompletionBlocks(void) {
     return [self valueForKey: kCATransactionCompletionBlock];
 }
 
+// Reading a value doesn't open an implicit transaction (observed on macOS
+// 26.7.3; test: tests/quartzcore-transaction-current-state.m); with none open
+// the defaults are returned.
 + valueForKey: (NSString *) key {
-    CATransactionGroup *group = createImplicitTransactionGroupIfNeeded();
+    CATransactionGroup *group = currentTransactionGroup();
 
+    if (group == nil)
+        group = [[[CATransactionGroup alloc] init] autorelease];
     return [group valueForKey: key];
+}
+
++ (void) _openImplicitTransactionIfNeeded {
+    createImplicitTransactionGroupIfNeeded();
+}
+
+// SPI. Whether the calling thread has a transaction open, from its outermost
+// transaction: 0 for none, 1 for an implicit transaction (an explicit one
+// nested in it doesn't change that) and 2 for an explicit one.
++ (uint32_t) currentState {
+    NSArray *stack = transactionStack();
+
+    if ([stack count] == 0)
+        return 0;
+    return [[stack objectAtIndex: 0] isImplicit] ? 1 : 2;
 }
 
 + (void) setAnimationDuration: (CFTimeInterval) value {

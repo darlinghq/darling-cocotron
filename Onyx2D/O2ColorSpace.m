@@ -173,6 +173,8 @@ O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
         CFSTR("kCGColorSpaceITUR_2100_PQ"),
         CFSTR("kCGColorSpaceITUR_2100_HLG"),
         CFSTR("kCGColorSpaceExtendedLinearITUR_2020"),
+        CFSTR("kCGColorSpaceExtendedITUR_2020"),
+        CFSTR("kCGColorSpaceLinearITUR_2020"),
         kO2ColorSpaceGenericRGB,
         kO2ColorSpaceGenericRGBLinear,
         kO2ColorSpaceAdobeRGB1998,
@@ -258,6 +260,32 @@ static const char *profileDescription(const char *suffix) {
     return NULL;
 }
 
+// ColorSync is the layer below that owns the profiles of the platform spaces which no standard defines. Generic RGB and
+// Generic Gray take their ICC data from the ColorSync profile of that name, so CGColorSpaceCopyICCData, the profile file of the
+// ColorSync profile folder and ColorSyncProfileCreateWithName give the same bytes.
+extern CFStringRef kColorSyncGenericRGBProfile;
+extern CFStringRef kColorSyncGenericGrayProfile;
+extern CFTypeRef ColorSyncProfileCreateWithName(CFStringRef name);
+extern CFDataRef ColorSyncProfileCopyData(CFTypeRef profile, CFErrorRef *error);
+
+static CFDataRef copyColorSyncICCData(const char *suffix) {
+    CFStringRef profileName;
+
+    if (strcmp(suffix, "GenericRGB") == 0)
+        profileName = kColorSyncGenericRGBProfile;
+    else if (strcmp(suffix, "GenericGray") == 0)
+        profileName = kColorSyncGenericGrayProfile;
+    else
+        return NULL;
+
+    CFTypeRef profile = ColorSyncProfileCreateWithName(profileName);
+    CFDataRef data = profile != NULL ? ColorSyncProfileCopyData(profile, NULL) : NULL;
+
+    if (profile != NULL)
+        CFRelease(profile);
+    return data;
+}
+
 CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self) {
     O2ColorProfile profile;
     char name[64];
@@ -270,6 +298,9 @@ CFDataRef O2ColorSpaceCopyICCData(O2ColorSpaceRef self) {
         return NULL;
 
     const char *suffix = name + strlen("kCGColorSpace");
+    CFDataRef platformData = copyColorSyncICCData(suffix);
+    if (platformData != NULL)
+        return platformData;
     if (strncmp(suffix, "Extended", 8) == 0)
         suffix += 8;
     const char *description = profileDescription(suffix);

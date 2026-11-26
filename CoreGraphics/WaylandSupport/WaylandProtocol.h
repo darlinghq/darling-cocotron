@@ -184,6 +184,9 @@ enum {
     WP_POINTER_EV_AXIS_SOURCE = 6,
     WP_POINTER_EV_AXIS_STOP = 7,
     WP_POINTER_EV_AXIS_DISCRETE = 8,
+    // Version 8 of wl_seat (wl_pointer.axis_value120). Not in the opcode check: an older protocol table has
+    // no such event and the pointer then has no high resolution wheel steps.
+    WP_POINTER_EV_AXIS_VALUE120 = 9,
 
     WP_GESTURES_GET_PINCH = 1,
     WP_GESTURES_RELEASE = 2,
@@ -311,6 +314,7 @@ enum {
 
     WP_PLASMA_SHELL_GET_SURFACE = 0,
     WP_PLASMA_SURFACE_DESTROY = 0,
+    WP_PLASMA_SURFACE_SET_POSITION = 2,
     WP_PLASMA_SURFACE_SET_SKIP_TASKBAR = 5,  /* version 2 */
     WP_PLASMA_SURFACE_SET_SKIP_SWITCHER = 9, /* version 5 */
 
@@ -373,12 +377,14 @@ enum {
     // protocol, https://gitlab.freedesktop.org/wayland/wayland/-/blob/main/protocol/wayland.xml
     // (also https://wayland.app/protocols/wayland#wl_pointer).
     WP_POINTER_AXIS_SOURCE_FINGER = 1,
+    WP_POINTER_AXIS_SOURCE_CONTINUOUS = 2,
     WP_KEYBOARD_KEYMAP_FORMAT_NO_KEYMAP = 0,
     WP_KEYBOARD_KEYMAP_FORMAT_XKB_V1 = 1,
     WP_KEYBOARD_KEY_STATE_PRESSED = 1,
     WP_OUTPUT_MODE_CURRENT = 1,
     WP_SHM_FORMAT_ARGB8888 = 0,
     WP_SHM_FORMAT_XRGB8888 = 1,
+    WP_POINTER_CONSTRAINTS_LIFETIME_ONESHOT = 1,
     WP_POINTER_CONSTRAINTS_LIFETIME_PERSISTENT = 2,
     WP_TOPLEVEL_STATE_ACTIVATED = 4,
     WP_TOPLEVEL_STATE_MAXIMIZED = 1,

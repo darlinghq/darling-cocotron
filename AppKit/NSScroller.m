@@ -28,20 +28,157 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
 #import <Foundation/NSUserDefaults.h>
+#import <QuartzCore/CALayer.h>
+
+// The overlay states a scroller imp pair can be locked in.
+enum {
+    NSOverlayScrollerStateHidden = 0,
+    NSOverlayScrollerStateThumbShown = 1,
+    NSOverlayScrollerStateAllShown = 2,
+    NSOverlayScrollerStatePulseThumb = 3,
+};
+typedef NSUInteger NSOverlayScrollerState;
+
+// Private: the painter of one scroller, for clients (such as web engines) that
+// draw scrollers of their own instead of using NSScroller views. It keeps the
+// state a scroller has (value, knob proportion, size, style, alphas) and draws
+// through an NSScroller it owns, so it looks like the scrollers of NSScrollView.
+// Given a layer, it draws into a sublayer of it.
+@interface NSScrollerImp : NSObject <CALayerDelegate> {
+    NSScroller *_painter;
+    CALayer *_layer;
+    CALayer *_contentLayer;
+    id _delegate;
+    NSScrollerStyle _style;
+    NSControlSize _controlSize;
+    BOOL _horizontal;
+    BOOL _enabled;
+    BOOL _usePresentationValue;
+    BOOL _expanded;
+    BOOL _tracking;
+    BOOL _mouseInScroller;
+    NSScrollerKnobStyle _knobStyle;
+    NSSize _boundsSize;
+    double _doubleValue;
+    double _presentationValue;
+    CGFloat _knobProportion;
+    CGFloat _uiStateTransitionProgress;
+    CGFloat _expansionTransitionProgress;
+    CGFloat _trackAlpha;
+    CGFloat _knobAlpha;
+    NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
+}
++ (NSScrollerImp *) scrollerImpWithStyle: (NSScrollerStyle) style
+                             controlSize: (NSControlSize) controlSize
+                              horizontal: (BOOL) horizontal
+                    replacingScrollerImp: (id) previous;
++ (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize scrollerStyle: (NSScrollerStyle) style;
+@property (retain) CALayer *layer;
+@property (assign) id delegate;
+@property (readonly) NSScrollerStyle scrollerStyle;
+@property (readonly) NSControlSize controlSize;
+@property (getter=isHorizontal) BOOL horizontal;
+@property (getter=isEnabled) BOOL enabled;
+@property (getter=shouldUsePresentationValue) BOOL usePresentationValue;
+@property (getter=isExpanded) BOOL expanded;
+@property (getter=isTracking) BOOL tracking;
+@property NSScrollerKnobStyle knobStyle;
+@property NSSize boundsSize;
+@property double doubleValue;
+@property double presentationValue;
+@property CGFloat knobProportion;
+@property CGFloat uiStateTransitionProgress;
+@property CGFloat expansionTransitionProgress;
+@property CGFloat trackAlpha;
+@property CGFloat knobAlpha;
+@property NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;
+@property (readonly) CGFloat trackBoxWidth;
+@property (readonly) CGFloat trackWidth;
+@property (readonly) CGFloat trackSideInset;
+@property (readonly) CGFloat trackEndInset;
+@property (readonly) CGFloat knobEndInset;
+@property (readonly) CGFloat knobMinLength;
+@property (readonly) CGFloat knobOverlapEndInset;
+@property (readonly) CGFloat trackOverlapEndInset;
+- (void) setNeedsDisplay: (BOOL) flag;
+- (NSRect) rectForPart: (NSScrollerPart) part;
+- (void) drawKnobSlotInRect: (NSRect) slotRect highlight: (BOOL) flag alpha: (CGFloat) alpha;
+- (void) drawKnobSlotInRect: (NSRect) slotRect highlight: (BOOL) flag;
+- (void) drawKnob;
+- (void) mouseEnteredScroller;
+- (void) mouseExitedScroller;
+@end
+
+@interface NSObject (NSScrollerImpDelegateMethods)
+- (void) scrollerImp: (NSScrollerImp *) scrollerImp animateKnobAlphaTo: (CGFloat) alpha duration: (NSTimeInterval) duration;
+- (void) scrollerImp: (NSScrollerImp *) scrollerImp animateTrackAlphaTo: (CGFloat) alpha duration: (NSTimeInterval) duration;
+- (void) scrollerImp: (NSScrollerImp *) scrollerImp overlayScrollerStateChangedTo: (NSOverlayScrollerState) state;
+- (void) scrollerImpPair: (id) pair updateScrollerStyleForNewRecommendedScrollerStyle: (NSScrollerStyle) style;
+@end
 
 // Private: coordinates a scroll view's two scrollers. Apps create one, set its
 // delegate and ask for the scroller layout direction.
 @interface NSScrollerImpPair : NSObject {
     id _delegate;
     NSScrollerStyle _scrollerStyle;
-    id _verticalScrollerImp;
-    id _horizontalScrollerImp;
+    NSScrollerImp *_verticalScrollerImp;
+    NSScrollerImp *_horizontalScrollerImp;
+    BOOL _overlayStateLocked;
+    NSOverlayScrollerState _overlayState;
 }
 @property (assign) id delegate;
 @property NSScrollerStyle scrollerStyle;
-@property (retain) id verticalScrollerImp;
-@property (retain) id horizontalScrollerImp;
+@property (retain) NSScrollerImp *verticalScrollerImp;
+@property (retain) NSScrollerImp *horizontalScrollerImp;
 @end
+
+// Every live pair, not retained, for +_updateAllScrollerImpPairsForNewRecommendedScrollerStyle:.
+static CFMutableSetRef allScrollerImpPairs;
+static NSLock *allScrollerImpPairsLock;
+
+static void lockScrollerImpPairs(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        allScrollerImpPairsLock = [[NSLock alloc] init];
+        allScrollerImpPairs = CFSetCreateMutable(kCFAllocatorDefault, 0, NULL);
+    });
+    [allScrollerImpPairsLock lock];
+}
+
+// Fades the overlay scrollers of the pair to the alphas of a state, through
+// the scroller imps' delegates, which run the animation (or directly when an
+// imp has no delegate). Legacy scrollers are always shown.
+// Observed on macOS 26.7.3 (black-box, through the delegate calls): a pair
+// starts with its overlay scrollers hidden and tells the delegates only of a
+// change of state, and of the track only when its alpha changes; nothing
+// changes while the pair's own style is legacy, nor for a scroller that is
+// not enabled. A flash fades the knob in
+// over 0.5 s; scrolling shows it, and hiding or locking sets the state, at
+// once. Test: tests/appkit-scrolling-spi.m
+static const NSTimeInterval kOverlayScrollerFlashDuration = 0.5;
+
+static void showOverlayScroller(NSScrollerImp *imp, NSOverlayScrollerState state, NSTimeInterval duration,
+                                BOOL trackChanges) {
+    if (imp == nil || [imp scrollerStyle] != NSScrollerStyleOverlay || ![imp isEnabled])
+        return;
+
+    CGFloat knobAlpha = state == NSOverlayScrollerStateHidden ? 0 : 1;
+    CGFloat trackAlpha = state == NSOverlayScrollerStateAllShown ? 1 : 0;
+    id delegate = [imp delegate];
+
+    if ([delegate respondsToSelector: @selector(scrollerImp:animateKnobAlphaTo:duration:)])
+        [delegate scrollerImp: imp animateKnobAlphaTo: knobAlpha duration: duration];
+    else
+        [imp setKnobAlpha: knobAlpha];
+    if (trackChanges) {
+        if ([delegate respondsToSelector: @selector(scrollerImp:animateTrackAlphaTo:duration:)])
+            [delegate scrollerImp: imp animateTrackAlphaTo: trackAlpha duration: duration];
+        else
+            [imp setTrackAlpha: trackAlpha];
+    }
+    if ([delegate respondsToSelector: @selector(scrollerImp:overlayScrollerStateChangedTo:)])
+        [delegate scrollerImp: imp overlayScrollerStateChangedTo: state];
+}
 
 @implementation NSScrollerImpPair
 
@@ -51,6 +188,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @synthesize horizontalScrollerImp = _horizontalScrollerImp;
 
 - (void) dealloc {
+    lockScrollerImpPairs();
+    CFSetRemoveValue(allScrollerImpPairs, self);
+    [allScrollerImpPairsLock unlock];
     [_verticalScrollerImp release];
     [_horizontalScrollerImp release];
     [super dealloc];
@@ -58,8 +198,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (instancetype) init {
     self = [super init];
-    if (self != nil)
+    if (self != nil) {
         _scrollerStyle = [NSScroller preferredScrollerStyle];
+        _overlayState = NSOverlayScrollerStateHidden;
+        lockScrollerImpPairs();
+        CFSetAddValue(allScrollerImpPairs, self);
+        [allScrollerImpPairsLock unlock];
+    }
     return self;
 }
 
@@ -67,22 +212,81 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return NSUserInterfaceLayoutDirectionLeftToRight;
 }
 
-- (void) flashScrollers {
-    // Legacy scrollers remain visible; refresh both painters when an app
-    // requests the transient overlay flash used by Apple's implementation.
+// Asks each pair's delegate to switch to the new recommended style; the
+// delegate replaces its scroller imps.
++ (void) _updateAllScrollerImpPairsForNewRecommendedScrollerStyle: (NSScrollerStyle) style {
+    lockScrollerImpPairs();
+    CFIndex count = CFSetGetCount(allScrollerImpPairs);
+    const void **values = malloc(sizeof(void *) * (count > 0 ? count : 1));
+    CFSetGetValues(allScrollerImpPairs, values);
+    NSArray *pairs = [[NSArray alloc] initWithObjects: (id *) values count: count];
+    free(values);
+    [allScrollerImpPairsLock unlock];
+
+    for (NSScrollerImpPair *pair in pairs) {
+        id delegate = [pair delegate];
+        if ([delegate respondsToSelector: @selector(scrollerImpPair:updateScrollerStyleForNewRecommendedScrollerStyle:)])
+            [delegate scrollerImpPair: pair updateScrollerStyleForNewRecommendedScrollerStyle: style];
+    }
+    [pairs release];
+}
+
+- (void) _redrawScrollers {
     [_verticalScrollerImp setNeedsDisplay: YES];
     [_horizontalScrollerImp setNeedsDisplay: YES];
 }
 
+- (void) _showOverlayScrollers: (NSOverlayScrollerState) state duration: (NSTimeInterval) duration {
+    if (_overlayStateLocked || _scrollerStyle != NSScrollerStyleOverlay || state == _overlayState)
+        return;
+    BOOL trackChanges = (state == NSOverlayScrollerStateAllShown) != (_overlayState == NSOverlayScrollerStateAllShown);
+    _overlayState = state;
+    showOverlayScroller(_verticalScrollerImp, state, duration, trackChanges);
+    showOverlayScroller(_horizontalScrollerImp, state, duration, trackChanges);
+}
+
+// Overlay scrollers are shown when the content scrolls or is flashed, and stay
+// shown until hidden: Darling has no timer that hides them after a while, as
+// its NSScrollView keeps overlay scrollers visible.
+- (void) flashScrollers {
+    [self _showOverlayScrollers: NSOverlayScrollerStateThumbShown duration: kOverlayScrollerFlashDuration];
+    [self _redrawScrollers];
+}
+
+- (void) hideOverlayScrollers {
+    [self _showOverlayScrollers: NSOverlayScrollerStateHidden duration: 0];
+}
+
+// The overlay scrollers take the state and keep it until unlocked; scrolling
+// and flashing do not change them meanwhile.
+- (void) lockOverlayScrollerState: (NSOverlayScrollerState) state {
+    _overlayStateLocked = NO;
+    [self _showOverlayScrollers: state duration: 0];
+    _overlayStateLocked = YES;
+}
+
+- (void) unlockOverlayScrollerState {
+    _overlayStateLocked = NO;
+}
+
+- (BOOL) overlayScrollerStateIsLocked {
+    return _overlayStateLocked;
+}
+
 - (void) contentAreaDidResize {
-    [_verticalScrollerImp setNeedsDisplay: YES];
-    [_horizontalScrollerImp setNeedsDisplay: YES];
+    [self _redrawScrollers];
 }
 
 - (void) movedToNewWindow {
     // Scroller appearance may change with its window. Both painters should be
     // redrawn after a scroll view is attached to another window.
     [self contentAreaDidResize];
+}
+
+- (void) mouseEnteredContentArea {
+}
+
+- (void) mouseMovedInContentArea {
 }
 
 - (void) mouseExitedContentArea {
@@ -97,11 +301,43 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 - (void) contentAreaScrolled {
     // Clients report each scroll through this, with no argument, so the imp
-    // pair redraws its painters.
+    // pair shows the overlay scrollers and redraws its painters.
+    [self _showOverlayScrollers: NSOverlayScrollerStateThumbShown duration: 0];
     [self contentAreaDidResize];
 }
 
+- (void) contentAreaScrolledInDirection: (NSPoint) direction {
+    [self contentAreaScrolled];
+}
+
+- (void) windowOrderedOut {
+}
+
+- (void) windowOrderedIn {
+    [self _redrawScrollers];
+}
+
+- (void) startLiveResize {
+}
+
+- (void) endLiveResize {
+    [self _redrawScrollers];
+}
+
+- (void) beginScrollGesture {
+    [self _showOverlayScrollers: NSOverlayScrollerStateThumbShown duration: 0];
+}
+
+- (void) endScrollGesture {
+}
+
 @end
+
+// The scroller style the system recommends, the one of the "Show scroll bars"
+// setting.
+NSScrollerStyle _NSRecommendedScrollerStyle(void) {
+    return [NSScroller preferredScrollerStyle];
+}
 
 @implementation NSScroller
 
@@ -411,6 +647,10 @@ static inline CGFloat roundFloat(CGFloat value) {
     return (int) value;
 }
 
+// How far inside each end of the slot the knob's travel stops, and the shortest knob (see below).
+static const CGFloat kScrollerKnobEndInset = 2;
+static const CGFloat kScrollerKnobMinLength = 20;
+
 // The scroller's own geometry along its length: the knob's travel starts and ends two points inside the
 // slot, and the knob is as long as the knob proportion of that travel, and at least 20 points.
 // QUIRK: not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2) of the part
@@ -425,9 +665,9 @@ static inline CGFloat roundFloat(CGFloat value) {
 static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat value, CGFloat *knobStart,
                                  CGFloat *knobLength, CGFloat *positionBeforeRounding,
                                  CGFloat *lengthBeforeRounding) {
-    CGFloat travel = MAX(length - 4, 0);
-    CGFloat rawLength = MIN(MAX(proportion * travel, 20), MAX(travel, 0));
-    CGFloat rawStart = 2 + (travel - rawLength) * value;
+    CGFloat travel = MAX(length - 2 * kScrollerKnobEndInset, 0);
+    CGFloat rawLength = MIN(MAX(proportion * travel, kScrollerKnobMinLength), MAX(travel, 0));
+    CGFloat rawStart = kScrollerKnobEndInset + (travel - rawLength) * value;
 
     *lengthBeforeRounding = rawLength;
     *positionBeforeRounding = rawStart;
@@ -655,7 +895,42 @@ static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat val
     [self highlight: NO];
 }
 
+// The "Click in the scroll bar to" setting: AppleScrollerPagingBehavior is 0 (or not set) to scroll
+// by a page toward the click, 1 to jump to the clicked spot.
+static BOOL scrollerJumpsToClickedSpot(void) {
+    return [[NSUserDefaults standardUserDefaults] integerForKey: @"AppleScrollerPagingBehavior"] == 1;
+}
+
+// A click in the page area scrolls a page toward the click, repeating while the button is held and
+// until the knob reaches the pointer. The scroller's action sees the page part in -hitPart.
+- (void) trackPaging: (NSEvent *) event {
+    NSScrollerPart page = [self hitPart];
+    BOOL paging = YES;
+
+    [self sendAction: NS_EXTRA(NSScroller, self)->_action to: NS_EXTRA(NSScroller, self)->_target];
+    [NSEvent startPeriodicEventsAfterDelay: 0.4 withPeriod: 0.1];
+    do {
+        event = [[self window] nextEventMatchingMask: NSPeriodicMask |
+                                                      NSLeftMouseUpMask |
+                                                      NSLeftMouseDraggedMask];
+        if ([event type] != NSLeftMouseUp) {
+            NSPoint point = [self convertPoint: [[self window] mouseLocationOutsideOfEventStream] fromView: nil];
+
+            paging = ([self testPart: point] == page);
+            if (paging) {
+                NS_EXTRA(NSScroller, self)->_hitPart = page;
+                [self sendAction: NS_EXTRA(NSScroller, self)->_action to: NS_EXTRA(NSScroller, self)->_target];
+            }
+        }
+    } while ([event type] != NSLeftMouseUp);
+    [NSEvent stopPeriodicEvents];
+}
+
 - (void) trackPageSlots: (NSEvent *) event {
+    if (!scrollerJumpsToClickedSpot()) {
+        [self trackPaging: event];
+        return;
+    }
     do {
         NSPoint point = [self convertPoint: [event locationInWindow]
                                   fromView: nil];
@@ -757,3 +1032,344 @@ static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat val
 @end
 
 NSNotificationName const NSPreferredScrollerStyleDidChangeNotification = @"NSPreferredScrollerStyleDidChangeNotification";
+
+@implementation NSScrollerImp
+
+@synthesize delegate = _delegate;
+@synthesize scrollerStyle = _style;
+@synthesize controlSize = _controlSize;
+@synthesize expanded = _expanded;
+@synthesize uiStateTransitionProgress = _uiStateTransitionProgress;
+@synthesize expansionTransitionProgress = _expansionTransitionProgress;
+@synthesize userInterfaceLayoutDirection = _userInterfaceLayoutDirection;
+
++ (NSScrollerImp *) scrollerImpWithStyle: (NSScrollerStyle) style
+                             controlSize: (NSControlSize) controlSize
+                              horizontal: (BOOL) horizontal
+                    replacingScrollerImp: (id) previous
+{
+    return [[[self alloc] _initWithStyle: style controlSize: controlSize horizontal: horizontal
+                                previous: previous] autorelease];
+}
+
++ (CGFloat) scrollerWidthForControlSize: (NSControlSize) controlSize scrollerStyle: (NSScrollerStyle) style {
+    return [NSScroller scrollerWidthForControlSize: controlSize scrollerStyle: style];
+}
+
+// The painter's orientation comes from the shape of its first frame.
+- (NSScroller *) _makePainter {
+    CGFloat width = [NSScroller scrollerWidthForControlSize: _controlSize scrollerStyle: _style];
+    NSRect frame = _horizontal ? NSMakeRect(0, 0, 2 * width, width) : NSMakeRect(0, 0, width, 2 * width);
+    NSScroller *painter = [[NSScroller alloc] initWithFrame: frame];
+
+    [painter setControlSize: _controlSize];
+    [painter setScrollerStyle: _style];
+    return painter;
+}
+
+- (void) _updatePainter {
+    [_painter setFrameSize: _boundsSize];
+    [_painter setEnabled: _enabled];
+    [_painter setKnobStyle: _knobStyle];
+    [_painter setKnobProportion: _knobProportion];
+    [_painter setDoubleValue: _usePresentationValue ? _presentationValue : _doubleValue];
+    [_painter highlight: _tracking];
+}
+
+- (instancetype) _initWithStyle: (NSScrollerStyle) style
+                    controlSize: (NSControlSize) controlSize
+                     horizontal: (BOOL) horizontal
+                       previous: (NSScrollerImp *) previous
+{
+    if ((self = [super init]) == nil)
+        return nil;
+
+    _style = style;
+    _controlSize = controlSize;
+    _horizontal = horizontal;
+    // An overlay scroller starts hidden, knob and track, also when it
+    // replaces a legacy one (observed on macOS 26.7.3); its pair shows it.
+    _knobAlpha = style == NSScrollerStyleOverlay ? 0 : 1;
+    _trackAlpha = style == NSScrollerStyleOverlay ? 0 : 1;
+    _userInterfaceLayoutDirection = NSUserInterfaceLayoutDirectionLeftToRight;
+
+    // A replacement (another style or size) keeps the state of the imp it
+    // replaces.
+    if ([previous isKindOfClass: [NSScrollerImp class]]) {
+        _enabled = [previous isEnabled];
+        _knobStyle = [previous knobStyle];
+        _boundsSize = [previous boundsSize];
+        _doubleValue = [previous doubleValue];
+        _presentationValue = [previous presentationValue];
+        _usePresentationValue = [previous shouldUsePresentationValue];
+        _knobProportion = [previous knobProportion];
+        _userInterfaceLayoutDirection = [previous userInterfaceLayoutDirection];
+        _delegate = [previous delegate];
+        [self setLayer: [previous layer]];
+    }
+
+    _painter = [self _makePainter];
+    [self _updatePainter];
+    return self;
+}
+
+- (instancetype) init {
+    return [self _initWithStyle: NSScrollerStyleLegacy controlSize: NSControlSizeRegular horizontal: NO previous: nil];
+}
+
+- (void) dealloc {
+    [_contentLayer setDelegate: nil];
+    [_contentLayer removeFromSuperlayer];
+    [_contentLayer release];
+    [_layer release];
+    [_painter release];
+    [super dealloc];
+}
+
+- (BOOL) isHorizontal {
+    return _horizontal;
+}
+
+// Changing the orientation makes a new painter, whose orientation is fixed.
+- (void) setHorizontal: (BOOL) horizontal {
+    if (horizontal == _horizontal)
+        return;
+    _horizontal = horizontal;
+    [_painter release];
+    _painter = [self _makePainter];
+    [self _updatePainter];
+    [self setNeedsDisplay: YES];
+}
+
+- (BOOL) isEnabled {
+    return _enabled;
+}
+
+- (void) setEnabled: (BOOL) enabled {
+    _enabled = enabled;
+    [self _updatePainter];
+}
+
+- (NSScrollerKnobStyle) knobStyle {
+    return _knobStyle;
+}
+
+- (void) setKnobStyle: (NSScrollerKnobStyle) style {
+    _knobStyle = style;
+    [self _updatePainter];
+}
+
+- (NSSize) boundsSize {
+    return _boundsSize;
+}
+
+- (void) setBoundsSize: (NSSize) size {
+    _boundsSize = size;
+    [self _updatePainter];
+}
+
+- (double) doubleValue {
+    return _doubleValue;
+}
+
+- (void) setDoubleValue: (double) value {
+    _doubleValue = value;
+    [self _updatePainter];
+}
+
+- (double) presentationValue {
+    return _presentationValue;
+}
+
+- (void) setPresentationValue: (double) value {
+    _presentationValue = value;
+    [self _updatePainter];
+}
+
+// With it set, the knob is drawn at the presentation value instead of the
+// value.
+- (BOOL) shouldUsePresentationValue {
+    return _usePresentationValue;
+}
+
+- (void) setUsePresentationValue: (BOOL) flag {
+    _usePresentationValue = flag;
+    [self _updatePainter];
+}
+
+- (CGFloat) knobProportion {
+    return _knobProportion;
+}
+
+- (void) setKnobProportion: (CGFloat) proportion {
+    _knobProportion = proportion;
+    [self _updatePainter];
+}
+
+- (BOOL) isTracking {
+    return _tracking;
+}
+
+// The knob is highlighted while it is being dragged.
+- (void) setTracking: (BOOL) tracking {
+    _tracking = tracking;
+    [self _updatePainter];
+}
+
+- (CGFloat) knobAlpha {
+    return _knobAlpha;
+}
+
+- (void) setKnobAlpha: (CGFloat) alpha {
+    _knobAlpha = alpha;
+    [self setNeedsDisplay: YES];
+}
+
+- (CGFloat) trackAlpha {
+    return _trackAlpha;
+}
+
+- (void) setTrackAlpha: (CGFloat) alpha {
+    _trackAlpha = alpha;
+    [self setNeedsDisplay: YES];
+}
+
+// The metrics follow the NSScroller drawn: the track is the scroller's whole
+// width and length, and the knob travels between kScrollerKnobEndInset points
+// inside each end and is at least kScrollerKnobMinLength long.
+- (CGFloat) trackBoxWidth {
+    return [NSScroller scrollerWidthForControlSize: _controlSize scrollerStyle: _style];
+}
+
+- (CGFloat) trackWidth {
+    return [self trackBoxWidth];
+}
+
+- (CGFloat) trackSideInset {
+    return 0;
+}
+
+- (CGFloat) trackEndInset {
+    return 0;
+}
+
+- (CGFloat) knobEndInset {
+    return kScrollerKnobEndInset;
+}
+
+- (CGFloat) knobMinLength {
+    return kScrollerKnobMinLength;
+}
+
+- (CGFloat) knobOverlapEndInset {
+    return 0;
+}
+
+- (CGFloat) trackOverlapEndInset {
+    return 0;
+}
+
+// In the coordinates of the scroller's bounds, origin at the top left.
+- (NSRect) rectForPart: (NSScrollerPart) part {
+    return [_painter rectForPart: part];
+}
+
+- (void) drawKnobSlotInRect: (NSRect) slotRect highlight: (BOOL) flag alpha: (CGFloat) alpha {
+    if (alpha <= 0)
+        return;
+
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+
+    CGContextSaveGState(context);
+    CGContextSetAlpha(context, MIN(alpha, 1));
+    [_painter drawKnobSlotInRect: slotRect highlight: flag];
+    CGContextRestoreGState(context);
+}
+
+// The knob and track alphas fade overlay scrollers in and out; a legacy
+// scroller is drawn whole whatever they are (observed on macOS 26.7.3 and
+// 10.14.4).
+- (CGFloat) _drawingAlpha: (CGFloat) alpha {
+    return _style == NSScrollerStyleOverlay ? alpha : 1;
+}
+
+- (void) drawKnobSlotInRect: (NSRect) slotRect highlight: (BOOL) flag {
+    [self drawKnobSlotInRect: slotRect highlight: flag alpha: [self _drawingAlpha: _trackAlpha]];
+}
+
+- (void) drawKnob {
+    CGFloat alpha = [self _drawingAlpha: _knobAlpha];
+
+    if (alpha <= 0)
+        return;
+
+    CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
+
+    CGContextSaveGState(context);
+    CGContextSetAlpha(context, MIN(alpha, 1));
+    [_painter drawKnob];
+    CGContextRestoreGState(context);
+}
+
+// Darling's overlay scrollers do not grow under the pointer, so hovering only
+// is recorded.
+- (void) mouseEnteredScroller {
+    _mouseInScroller = YES;
+}
+
+- (void) mouseExitedScroller {
+    _mouseInScroller = NO;
+}
+
+- (CALayer *) layer {
+    return _layer;
+}
+
+- (void) setLayer: (CALayer *) layer {
+    if (layer == _layer)
+        return;
+
+    [_contentLayer removeFromSuperlayer];
+    [_layer release];
+    _layer = [layer retain];
+    if (_layer != nil) {
+        if (_contentLayer == nil) {
+            _contentLayer = [[CALayer alloc] init];
+            [_contentLayer setDelegate: self];
+        }
+        [_layer addSublayer: _contentLayer];
+    }
+    [self setNeedsDisplay: YES];
+}
+
+// Redraws the scroller's sublayer of the layer it was given; without a layer
+// the client draws the scroller with -drawKnobSlotInRect:highlight: and
+// -drawKnob itself.
+- (void) setNeedsDisplay: (BOOL) flag {
+    if (!flag || _layer == nil)
+        return;
+    [_contentLayer setFrame: [_layer bounds]];
+    [_contentLayer setNeedsDisplay];
+}
+
+- (void) drawLayer: (CALayer *) layer inContext: (CGContextRef) context {
+    if (layer != _contentLayer)
+        return;
+
+    CGRect bounds = [layer bounds];
+    NSGraphicsContext *graphicsContext = [NSGraphicsContext graphicsContextWithCGContext: context flipped: YES];
+
+    // The parts are laid out from the top left.
+    CGContextSaveGState(context);
+    CGContextTranslateCTM(context, bounds.origin.x, bounds.origin.y + bounds.size.height);
+    CGContextScaleCTM(context, 1, -1);
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext: graphicsContext];
+    [self drawKnobSlotInRect: [self rectForPart: NSScrollerKnobSlot] highlight: NO];
+    if (_enabled)
+        [self drawKnob];
+    [NSGraphicsContext restoreGraphicsState];
+    CGContextRestoreGState(context);
+}
+
+@end

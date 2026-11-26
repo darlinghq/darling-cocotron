@@ -48,17 +48,17 @@ typedef NS_ENUM(NSUInteger, NSTextViewSelectionGranularity) {
 };
 typedef NSTextViewSelectionGranularity NSSelectionGranularity;
 
-typedef NS_ENUM(NSUInteger, NSTextViewSelectionAffinity) {
-    NSTextViewSelectionAffinityUpstream = 0,
-    NSTextViewSelectionAffinityDownstream = 1,
+typedef NS_ENUM(NSUInteger, NSSelectionAffinity) {
+    NSSelectionAffinityUpstream = 0,
+    NSSelectionAffinityDownstream = 1,
 };
 
-// Names used before the modern spellings; plain constants, so Swift does not see them.
+// Other names Darling has had for them; plain constants, so Swift does not see them.
 enum {
-    NSSelectionAffinityUpstream = NSTextViewSelectionAffinityUpstream,
-    NSSelectionAffinityDownstream = NSTextViewSelectionAffinityDownstream,
+    NSTextViewSelectionAffinityUpstream = NSSelectionAffinityUpstream,
+    NSTextViewSelectionAffinityDownstream = NSSelectionAffinityDownstream,
 };
-typedef NSTextViewSelectionAffinity NSSelectionAffinity;
+typedef NSSelectionAffinity NSTextViewSelectionAffinity;
 
 typedef enum {
     NSFindPanelActionShowFindPanel = 1,

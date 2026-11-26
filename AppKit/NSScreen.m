@@ -81,7 +81,9 @@ static NSString *monitorNameFromEDID(NSData *edid) {
 }
 
 + (NSArray *) screens {
-    return [[NSDisplay currentDisplay] screens];
+    // Without a display (connections to the window system denied) there are no screens.
+    NSArray *screens = [[NSDisplay currentDisplay] screens];
+    return screens != nil ? screens : @[];
 }
 
 - (NSWindowDepth) depth {

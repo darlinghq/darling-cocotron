@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import "NSFilePromise-Private.h"
 #import <AppKit/NSPasteboard.h>
 #import <AppKit/NSPasteboardItem.h>
 #import <AppKit/NSRaise.h>
@@ -60,6 +61,11 @@ const NSPasteboardType NSURLPboardType = @"Apple URL pasteboard type";
 const NSPasteboardType NSHTMLPboardType = @"Apple HTML pasteboard type";
 const NSPasteboardType NSVCardPboardType = @"Apple VCard pasteboard type";
 const NSPasteboardType NSInkTextPboardType = @"Apple InkText pasteboard type";
+// Private: the type that marks pasteboard contents as copied by a smart (word
+// level) selection, so pasting adds the spaces around it. The string is the
+// one WebKit gives for it (BSD-licensed, Source/WebCore/platform/mac/
+// PasteboardMac.mm, WebSmartPastePboardType).
+NSString *const _NXSmartPaste = @"NeXT smart paste pasteboard type";
 const NSPasteboardType NSMultipleTextSelectionPboardType = @"Apple multiple text selection pasteboard type";
 
 const NSPasteboardType NSFilesPromisePboardType =
@@ -934,6 +940,20 @@ static NSMutableDictionary *uniquePasteboards;
         [self setPropertyList: paths forType: NSFilenamesPboardType];
     }
 
+    // File promises are also the legacy promise type, listing the files' types
+    // (macOS 26.7.3 adds it to the types of a written NSFilePromiseProvider).
+    NSMutableArray *promisedTypes = [NSMutableArray array];
+    for (NSPasteboardItem *item in items) {
+        NSData *data = [item _storedDataForType: NSFilePromiseContentTypeType];
+        NSString *type = data != nil ? [[[NSString alloc] initWithData: data encoding: NSUTF8StringEncoding] autorelease] : nil;
+        if ([type length] > 0)
+            [promisedTypes addObject: type];
+    }
+    if ([promisedTypes count] > 0) {
+        [self addTypes: [NSArray arrayWithObject: NSFilesPromisePboardType] owner: nil];
+        [self setPropertyList: promisedTypes forType: NSFilesPromisePboardType];
+    }
+
     // The 10.0 URL type holds the URL of the first item that is one.
     for (NSPasteboardItem *item in items) {
         NSData *data = [item _storedDataForType: NSPasteboardTypeURL];
@@ -1075,6 +1095,13 @@ static BOOL urlPassesReadingOptions(NSURL *url, NSDictionary *options)
         NSPasteboardType type = readableTypeOfItem(item, cls, self, options);
         if (type == nil)
             continue;
+        if ([cls isSubclassOfClass: [NSFilePromiseReceiver class]]) {
+            // A promise is made of several of the item's types.
+            id receiver = [[[cls alloc] _initWithPasteboardItem: item] autorelease];
+            if (receiver != nil)
+                return receiver;
+            continue;
+        }
         id value = readingValue(item, type, cls, self);
         if (value == nil)
             continue;
