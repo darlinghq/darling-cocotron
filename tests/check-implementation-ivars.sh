@@ -22,8 +22,14 @@ else
 fi
 [ "${#files[@]}" -gt 0 ] || exit 0
 
+awk_command=${AWK:-awk}
+if ! command -v "$awk_command" >/dev/null 2>&1; then
+	echo "error: $awk_command not found, the files were not checked" >&2
+	exit 2
+fi
+
 status=0
-${AWK:-awk} '
+$awk_command '
 FNR == 1 { incomment = 0; pending = 0 }
 {
 	line = $0
