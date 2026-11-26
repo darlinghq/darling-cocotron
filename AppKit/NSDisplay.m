@@ -507,13 +507,6 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
         *dy = (int32_t) wholeY;
 }
 
-- (void) postEvent: (NSEvent *) event atStart: (BOOL) atStart {
-    if (atStart)
-        _NSEventQueuePost(event, YES);
-    else
-        _NSEventQueuePostWindowSystemEvent(event, [self _mainScreenMaxY]);
-}
-
 // QUIRK: what an application posts with -[NSApplication postEvent:atStart:] is queued as it is: posted drags are
 // dequeued one by one, never coalesced. Not documented. Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2; darling's tests/collection-view.md).
 // Test: appkit-posted-events-not-coalesced.m

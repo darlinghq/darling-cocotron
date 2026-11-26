@@ -25,13 +25,10 @@ NS_ASSUME_NONNULL_BEGIN
 #define NSVariableStatusItemLength (-1)
 #define NSSquareStatusItemLength (-2)
 
-@class NSStatusItem, Win32Window;
+@class NSStatusItem;
 
 @interface NSStatusBar : NSObject {
     NSMutableArray *_statusItems;
-#ifdef WIN32
-    Win32Window *_fakeWindow;
-#endif
     NS_LEGACY_IVAR_PAD(_NSStatusBarReserved, 12)
 }
 + (NSStatusBar *) systemStatusBar;

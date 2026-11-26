@@ -362,45 +362,11 @@ static NSRect boundsToTitleAreaRect(NSRect rect) {
             if (atitle != nil && [atitle length] > 0) {
                 CENTER_PART_RECT_VERTICALLY([[self graphicsStyle]
                         menuItemAttributedTextSize: atitle]);
-#if WINDOWS
-                // On Windows, when using the AGG graphics context, enabling
-                // font smoothing switches to using AGG for text drawing,
-                // instead of the native Win32 API.
-                // In case we're using a lot of different fonts, like for a
-                // styled for menu, that's leading to much faster drawing thanks
-                // to fonts caching done by this context. However, drawing is
-                // more smoothed that when traditional Win32 text rendering,
-                // leading to a different look than standard Win32 menus - so
-                // we'll do that only if we're just drawing "normal" text,
-                // without any special attributes It would probably be better to
-                // add font caching to the regular Win32 drawing context
-                CGContextSetShouldSmoothFonts(
-                        (CGContextRef)[[NSGraphicsContext
-                                currentContext] graphicsPort],
-                        YES);
-#endif
                 [[self graphicsStyle] drawAttributedMenuItemText: atitle
                                                           inRect: partRect
                                                          enabled: showsEnabled
                                                         selected: selected];
             } else {
-#if WINDOWS
-                // On Windows, when using the AGG graphics context, enabling
-                // font smoothing switches to using AGG for text drawing,
-                // instead of the native Win32 API.
-                // In case we're using a lot of different fonts, like for a
-                // styled for menu, that's leading to much faster drawing thanks
-                // to fonts caching done by this context. However, drawing is
-                // more smoothed that when traditional Win32 text rendering,
-                // leading to a different look than standard Win32 menus - so
-                // we'll do that only if we're just drawing "normal" text,
-                // without any special attributes It would probably be better to
-                // add font caching to the regular Win32 drawing context
-                CGContextSetShouldSmoothFonts(
-                        (CGContextRef)[[NSGraphicsContext
-                                currentContext] graphicsPort],
-                        NO);
-#endif
                 NSString *title = [item title];
                 if (useCustomFont) {
                     NSDictionary *attributes = [self itemAttributes];

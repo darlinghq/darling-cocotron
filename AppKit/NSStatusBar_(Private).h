@@ -8,10 +8,6 @@
 
 #import <CoreFoundation/CFBase.h>
 #import <Foundation/NSObject.h>
-#ifdef Win32Assert
-#import <AppKit.h/NSWindow.h>
-#import <AppKit.h/Win32Window.h>
-#endif
 
 #define NSVariableStatusItemLength (-1)
 #define NSSquareStatusItemLength (-2)
@@ -22,8 +18,4 @@
 // Whether the application has put any item in the status bar. Does not create
 // the status bar.
 + (BOOL) _hasStatusItems;
-#ifdef WIN32
-- (void) _trayNotificationForID: (int) aTrayID event: (int) anEvent;
-- (Win32Window *) fakeWindow;
-#endif
 @end

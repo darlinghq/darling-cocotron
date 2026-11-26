@@ -62,8 +62,8 @@ extern CGEventClass _CGEventClassOfType(CGEventType type);
 
 	CGSEventRecordPtr _eventRecord;
 	uint32_t _eventRecordLength;
-	// What the poster of a window system event attached for the frameworks that read the event
-	// stream (_CGSEventSetClientData); not part of the event, so copies do not get it.
+	// The object the event stands for, attached by the framework that made the event from it
+	// (_CGSEventSetClientData); not part of the event, so copies do not get it.
 	id _clientData;
 }
 -(instancetype) initWithSource:(CGEventSourceRef) source;
