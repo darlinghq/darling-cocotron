@@ -145,6 +145,7 @@ static const struct {
     { "doc.plaintext", "document-new-symbolic" },
     { "doc.text", "document-new-symbolic" },
     { "dt.info.circle", "dialog-information-symbolic" },
+    { "dt.lightbulb", "dialog-information-symbolic" },
     { "dt.window.top.on.rectangle", "window-new-symbolic" },
     { "ellipsis", "view-more-horizontal-symbolic" },
     { "ellipsis.circle", "view-more-horizontal-symbolic" },
