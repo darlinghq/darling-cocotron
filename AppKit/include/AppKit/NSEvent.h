@@ -364,6 +364,7 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @property(class, readonly) NSPoint mouseLocation;
 @property (class, readonly) NSEventModifierFlags modifierFlags;
 @property(class, readonly) NSUInteger pressedMouseButtons;
+@property(class, readonly) NSTimeInterval doubleClickInterval;
 
 + (nullable id) addLocalMonitorForEventsMatchingMask: (NSEventMask) mask
                                     handler: (NSEvent *_Nullable (^)(NSEvent *_Nonnull event)) block;
