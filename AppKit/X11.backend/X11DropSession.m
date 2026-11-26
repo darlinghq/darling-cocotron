@@ -20,7 +20,7 @@
 
 #import "X11DropSession.h"
 #import <AppKit/NSDraggingManager.h>
-#import "DarlingFileURIList.h"
+#import <CoreGraphics/DarlingFileURIList.h>
 #import "NSPasteboardAliases.h"
 #import "X11Window.h"
 #import "X11Display.h"

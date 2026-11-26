@@ -164,6 +164,7 @@ static unsigned maskForCode(uint32_t code) {
     _focus = NULL;
     _enterSerial = 0;
     _pressed = 0;
+    [self setPressedNumbers: 0];
     _lastClickSurface = NULL;
     _located = NO;
     [_downClickState removeAllObjects];
@@ -189,6 +190,7 @@ static unsigned maskForCode(uint32_t code) {
         _focus = NULL;
         _enterSerial = 0;
         _pressed = 0;
+        [self setPressedNumbers: 0];
         _located = NO;
         [_downClickState removeAllObjects];
     }
@@ -197,6 +199,55 @@ static unsigned maskForCode(uint32_t code) {
 - (void) setSurfacePointX: (double) x y: (double) y {
     _point = CGPointMake(x, y);
     _lastPoint = _point;
+    [self noteGlobalLocation];
+}
+
+- (void) setPressedNumbers: (uint32_t) numbers {
+    @synchronized(self) {
+        _pressedNumbers = numbers;
+    }
+}
+
+- (void) setButtonNumber: (int64_t) number pressed: (BOOL) pressed {
+    if (number < 0 || number > 31)
+        return;
+    @synchronized(self) {
+        if (pressed)
+            _pressedNumbers |= (uint32_t) 1 << number;
+        else
+            _pressedNumbers &= ~((uint32_t) 1 << number);
+    }
+}
+
+- (BOOL) isButtonDown: (uint32_t) button {
+    if (button > 31)
+        return NO;
+    @synchronized(self) {
+        return (_pressedNumbers & ((uint32_t) 1 << button)) != 0;
+    }
+}
+
+// The pointer is at _point of the surface that has it: that is where the state queries put it from now on.
+- (void) noteGlobalLocation {
+    if (_focus == NULL)
+        return;
+    CGPoint global = [self globalLocationOfSurface: _focus point: _point];
+    @synchronized(self) {
+        _lastGlobal = global;
+        _lastGlobalValid = YES;
+    }
+}
+
+- (BOOL) getLastGlobalLocation: (CGPoint *) location {
+    // On the main thread the surface's window may have moved under the stationary pointer.
+    if ([NSThread isMainThread])
+        [self noteGlobalLocation];
+    @synchronized(self) {
+        if (!_lastGlobalValid)
+            return NO;
+        *location = _lastGlobal;
+        return YES;
+    }
 }
 
 #pragma mark - Posting
@@ -290,6 +341,7 @@ static unsigned maskForCode(uint32_t code) {
         _located = YES;
         _lastPoint = _point;
         _remainderX = _remainderY = 0;
+        [self noteGlobalLocation];
         // The cursor of a process that hid it stays hidden over its surfaces (the compositor starts a new
         // surface with no cursor image of ours).
         if (![_connection cursorIsVisible])
@@ -302,6 +354,7 @@ static unsigned maskForCode(uint32_t code) {
     case WP_POINTER_EV_LEAVE:
         [self cancelFingerScroll];
         _pressed = 0;
+        [self setPressedNumbers: 0];
         [_downClickState removeAllObjects];
         if ([observer respondsToSelector: @selector(nativeConnectionPointerLeft)])
             [observer nativeConnectionPointerLeft];
@@ -361,6 +414,7 @@ static unsigned maskForCode(uint32_t code) {
                 [observer nativeConnectionPointerMovedToX: x y: y];
     if (_focus == NULL)
         return;
+    [self noteGlobalLocation];
     _lastPoint = _point;
     _located = YES;
     if (used)
@@ -439,6 +493,9 @@ static unsigned maskForCode(uint32_t code) {
 - (void) button: (uint32_t) code pressed: (BOOL) pressed time: (uint32_t) time serial: (uint32_t) serial {
     id<CGSNativeConnectionObserver> observer = [self observer];
 
+    if (pressed)
+        [_connection inputPressedWithSerial: serial];
+
     // A window decoration (title bar buttons, resize edges) takes the button for itself.
     if ([observer respondsToSelector: @selector(nativeConnectionPointerButton:pressed:serial:)] &&
         [observer nativeConnectionPointerButton: code pressed: pressed serial: serial])
@@ -449,6 +506,7 @@ static unsigned maskForCode(uint32_t code) {
     NSNumber *key = [NSNumber numberWithUnsignedInt: code];
     int64_t clickState;
 
+    [self setButtonNumber: button pressed: pressed];
     if (pressed) {
         _pressed |= mask;
         if (mask == 8)

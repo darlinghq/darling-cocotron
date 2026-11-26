@@ -23,7 +23,7 @@
 // org.freedesktop.portal.Request (Response).
 
 #import "DarlingPortalFileChooser.h"
-#import "DarlingFileURIList.h"
+#import <CoreGraphics/DarlingFileURIList.h>
 #import <AppKit/NSDBusMenu.h>
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSBox.h>

@@ -16,38 +16,24 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import <AppKit/NSPasteboard.h>
+#import <Foundation/Foundation.h>
 #import "WaylandDisplay.h"
-#import "NSPasteboardHostBridge.h"
 
+// Writes the data to the descriptor from a short-lived thread once the events being dispatched are handled.
 void WaylandSendData(WaylandDisplay *display, NSData *data, int fd);
 
-// The compositor's clipboard (wl_data_device selection) and the data of a drag: the host clipboard of the
-// general pasteboard (see NSPasteboardHostClipboard) and the source of drop sessions.
-@interface WaylandPasteboard : NSPasteboard <NSPasteboardHostClipboard> {
-    WaylandDisplay *_display; // display owns pasteboards
-    NSString *_name;
-    struct wl_proxy *_manager, *_device, *_source, *_selection, *_dragOffer;
+// The data device that handles drag and drop (the data of a drag arrives as offers on it). The compositor's
+// clipboard is CoreGraphics' (see CGSSelection.h), which has a data device of its own on the same seat.
+@interface WaylandDataDevice : NSObject {
+    WaylandDisplay *_display; // display owns the data device
+    struct wl_proxy *_manager, *_device, *_selection, *_dragOffer;
     NSMutableDictionary *_offers, *_offerActions;
     id _dragSession;
-    NSMutableArray *_types;
-    NSMutableDictionary *_data, *_owners;
-    NSDictionary *_sourceData;
-    NSInteger _changeCount;
-    NSUInteger _selectionGeneration;
-    uint32_t _changeSerial; // Serial of the input that made the pending change; 0 if none.
-    BOOL _owned, _needsPublish, _publishQueued, _publishing;
-    void (^_hostChangeHandler)(void);
 }
-- (id) initWithName: (NSString *) name display: (WaylandDisplay *) display
-           manager: (struct wl_proxy *) manager seat: (struct wl_proxy *) seat;
+- (id) initWithDisplay: (WaylandDisplay *) display
+               manager: (struct wl_proxy *) manager seat: (struct wl_proxy *) seat;
 - (struct wl_proxy *) dataDevice;
-+ (NSArray *) mimeTypesForType: (NSString *) type;
-+ (NSArray *) typesForMime: (NSString *) mime;
-+ (NSData *) encodeData: (NSData *) data forType: (NSString *) type;
-+ (NSData *) decodeData: (NSData *) data forType: (NSString *) type mime: (NSString *) mime;
 - (void) invalidate;
-- (void) inputAvailable;
 - (void) handleEvent: (uint32_t) opcode kind: (WaylandObjectKind) kind
               proxy: (struct wl_proxy *) proxy arguments: (union wl_argument *) args;
 @end

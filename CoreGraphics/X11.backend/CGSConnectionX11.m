@@ -20,6 +20,7 @@
 #import "CGSWindowX11.h"
 #import "CGSX11Keyboard.h"
 #import "CGSX11Pointer.h"
+#import "CGSX11Selection.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -196,6 +197,10 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 
 	_keyboard = [[CGSX11Keyboard alloc] initWithConnection: self];
 	_pointer = [[CGSX11Pointer alloc] initWithConnection: self];
+
+	// The general pasteboard shows the CLIPBOARD selection. This goes before the process makes its first
+	// pasteboard, which is why the connection does it, not the framework with the windows.
+	[self _startHostClipboard];
 
 	return self;
 }
@@ -722,13 +727,9 @@ static double windowOpacity(Display* display, Window window)
 	if ([_pointer relativeMouseRequested: NULL frozenRoot: &frozen])
 		return [self _cgPointFromRoot: frozen];
 
-	Window child, root = DefaultRootWindow(_display);
-
-    int root_x, root_y;
-    int win_x, win_y;
-    unsigned int mask;
-
-    XQueryPointer(_display, root, &root, &child, &root_x, &root_y, &win_x, &win_y, &mask);
+	int root_x = 0, root_y = 0;
+	unsigned int mask;
+	[_pointer getRootX: &root_x y: &root_y state: &mask];
 
 	CGPoint point = [self _cgPointFromRoot: CGPointMake(root_x, root_y)];
 	return CGPointMake(point.x, point.y);
@@ -737,6 +738,20 @@ static double windowOpacity(Display* display, Window window)
 -(uint64_t) modifierFlags
 {
 	return [_keyboard modifierFlags];
+}
+
+// The server's modifier state (the keyboard of the session, whichever client has the focus); the decoder's device
+// bits are kept while it agrees with the server about which modifiers are down.
+-(uint64_t) hardwareModifierFlags
+{
+	uint64_t decoded = [_keyboard modifierFlags];
+	XkbStateRec state;
+	if (XkbGetState(_display, XkbUseCoreKbd, &state) != Success)
+		return decoded;
+	uint64_t flags = [CGSX11Keyboard flagsForState: state.mods];
+	const uint64_t modifiers = kCGEventFlagMaskShift | kCGEventFlagMaskControl | kCGEventFlagMaskAlphaShift |
+		kCGEventFlagMaskCommand | kCGEventFlagMaskAlternate | kCGEventFlagMaskSecondaryFn;
+	return (decoded & modifiers) == flags ? decoded : flags;
 }
 
 -(BOOL) isKeyDown:(CGKeyCode)keyCode
@@ -773,6 +788,8 @@ static double windowOpacity(Display* display, Window window)
 			return NO;
 	}
 
+	// Asked of the server every time: the buttons can change while another client has the pointer, which the
+	// event stream does not report.
 	Window child, root = DefaultRootWindow(_display);
 	int root_x, root_y, win_x, win_y;
 	unsigned int mask = 0;
@@ -801,6 +818,10 @@ static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
 // on to the observer.
 -(BOOL) processXEvent:(XEvent*) event
 {
+	// The requests, replies and clears of the selections the process owns or reads, and the property changes
+	// that pace their transfers, belong to the selections.
+	if (CGSX11SelectionHandleEvent(event))
+		return YES;
 	[self _windowSystemEvent: event];
 	[_pointer willHandleEvent: event];
 	switch (event->type)

@@ -75,6 +75,8 @@
 
 // The modifier flags in effect, with the device-dependent bits of the keys held down.
 - (uint64_t) modifierFlags;
+// The CGEventFlags the X server's modifier state (the core event state mask) stands for.
++ (uint64_t) flagsForState: (unsigned int) state;
 
 @end
 

@@ -326,11 +326,15 @@ void CGEventSourceSetPixelsPerLine(CGEventSourceRef source,
     src.pixelsPerLine = pixelsPerLine;
 }
 
+static CGSConnection *hardwareStateConnection(CGEventSourceStateID stateID);
+
+// The flags of the posted events, and for the combined and the HID state also the modifiers the window system
+// reports as held (what the keys decoded so far say), like the key and button state.
 CGEventFlags CGEventSourceFlagsState(CGEventSourceStateID stateID) {
     CGEventFlags flags = 0;
 
     _CGEventStateFlags(stateID, &flags);
-    return flags;
+    return flags | (CGEventFlags) [hardwareStateConnection(stateID) hardwareModifierFlags];
 }
 
 // The time the local mouse events are suppressed after CGWarpMouseCursorPosition(), for the whole session

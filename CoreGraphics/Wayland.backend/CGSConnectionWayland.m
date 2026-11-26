@@ -23,6 +23,7 @@
 #import "CGSWaylandPointer.h"
 #import "CGSWaylandTouch.h"
 #import "CGSWaylandKeymap.h"
+#import "CGSWaylandClipboard.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
 #import "WaylandColor.h"
@@ -145,6 +146,14 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectWarpLock:
                 [(CGSWaylandPointer *) object lockEvent: opcode kind: objectKind proxy: (struct wl_proxy *) proxy arguments: args];
                 break;
+            case CGSWaylandObjectDataDevice:
+            case CGSWaylandObjectDataOffer:
+            case CGSWaylandObjectDataSource:
+                [(CGSWaylandClipboard *) object handleEvent: opcode
+                                                       kind: objectKind
+                                                      proxy: (struct wl_proxy *) proxy
+                                                  arguments: args];
+                break;
             case CGSWaylandObjectKeyboardSync:
                 if (opcode == WP_CALLBACK_EV_DONE)
                     [(CGSWaylandKeyboard *) object modifierSyncDone: (struct wl_proxy *) proxy];
@@ -168,6 +177,8 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
 
 @interface CGSConnectionWayland ()
 - (void) processPendingEvents;
+- (void) scheduleAfterDispatchRun;
+- (void) runAfterDispatchBlocks;
 - (void) seatCapabilities: (uint32_t) capabilities;
 - (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
 - (void) releaseKeyboard;
@@ -306,6 +317,15 @@ static const CGEventFlags kHotKeyModifierMask =
                                                      ^(int ignored) { [connection activationRequested]; }) ==
                             NOTIFY_STATUS_OK;
 
+    _afterDispatch = [NSMutableArray new];
+
+    // The clipboard: the general pasteboard shows the compositor's selection. This goes before the process makes its
+    // first pasteboard, which is why the connection does it, not the framework with the windows.
+    if (_dataDeviceManager != NULL && _seat != NULL) {
+        _clipboard = [[CGSWaylandClipboard alloc] initWithConnection: self manager: _dataDeviceManager seat: _seat];
+        if (_clipboard != nil)
+            _CGSHostClipboardStart(_clipboard);
+    }
     [self observeDisplaySleepAssertions];
 
     _setupDone = YES;
@@ -320,6 +340,12 @@ static const CGEventFlags kHotKeyModifierMask =
     @synchronized (_windows) {
         [_windows removeAllObjects];
     }
+
+    [_clipboard invalidate];
+    [_clipboard release];
+    if (_dataDeviceManager != NULL)
+        WL.wl_proxy_destroy(_dataDeviceManager);
+    [_afterDispatch release];
 
     if (_activationRegistered)
         notify_cancel(_activationNotifyToken);
@@ -456,6 +482,7 @@ static const CGEventFlags kHotKeyModifierMask =
     if (_wlDisplay == NULL)
         return;
 
+    _dispatching = YES;
     while (WL.wl_display_prepare_read(_wlDisplay) != 0) {
         if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
             [self connectionFailed];
@@ -472,6 +499,8 @@ static const CGEventFlags kHotKeyModifierMask =
 
     if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
         [self connectionFailed];
+    _dispatching = NO;
+    [self runAfterDispatchBlocks];
 
     // What the framework with the windows lives on the same connection: every listener of every
     // object on it has run, so the observer sends what it queued meanwhile. A change of the displays
@@ -491,6 +520,63 @@ static const CGEventFlags kHotKeyModifierMask =
 
 + (int) nativeConnectionKind {
     return CGSNativeConnectionKindWayland;
+}
+
+#pragma mark - After the dispatch
+
+- (void) performAfterDispatch: (void (^)(void)) block {
+    [_afterDispatch addObject: [[block copy] autorelease]];
+    // Outside a dispatch nothing would run the block before the compositor sends something.
+    if (!_dispatching)
+        [self scheduleAfterDispatchRun];
+}
+
+- (void) scheduleAfterDispatchRun {
+    if (_afterDispatchRunQueued)
+        return;
+    _afterDispatchRunQueued = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      self->_afterDispatchRunQueued = NO;
+      [self runAfterDispatchBlocks];
+    });
+}
+
+// Runs the blocks that were queued before this pass. Blocks queued by those blocks wait for the next run loop
+// iteration, so that work which keeps queueing more work cannot keep the main thread here and starve the run loop.
+- (void) runAfterDispatchBlocks {
+    if ([_afterDispatch count] == 0)
+        return;
+    NSArray *blocks = [_afterDispatch copy];
+    [_afterDispatch removeAllObjects];
+    @try {
+        for (void (^block)(void) in blocks)
+            block();
+    } @finally {
+        [blocks release];
+        if ([_afterDispatch count] > 0)
+            [self scheduleAfterDispatchRun];
+    }
+}
+
+#pragma mark - Clipboard
+
+// How long the serial of a press stays good for the clipboard after the keyboard focus left.
+static const CFTimeInterval kInputSerialGrace = 1.0;
+
+- (void) inputPressedWithSerial: (uint32_t) serial {
+    _inputSerial = serial;
+    _inputSerialTime = CFAbsoluteTimeGetCurrent();
+    [(CGSWaylandClipboard *) _clipboard inputAvailable];
+}
+
+- (uint32_t) clipboardSerial {
+    if (_inputSerial == 0)
+        return 0;
+    if ([self keyboardFocus] != NULL)
+        return _inputSerial;
+    // A key or click still being handled entitles its writes to the selection even when the focus left right
+    // after it, as when a virtual keyboard is removed a few milliseconds after its key.
+    return CFAbsoluteTimeGetCurrent() - _inputSerialTime < kInputSerialGrace ? _inputSerial : 0;
 }
 
 #pragma mark - Events
@@ -550,6 +636,10 @@ static const CGEventFlags kHotKeyModifierMask =
         _seat = [self bindGlobal: name interface: &wl_seat_interface
                          version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
                             kind: CGSWaylandObjectSeat object: self];
+    } else if (strcmp(interface, "wl_data_device_manager") == 0 && _dataDeviceManager == NULL) {
+        _dataDeviceManager = [self bindGlobal: name interface: &wl_data_device_manager_interface
+                                      version: MIN(version, 3u)
+                                         kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0 && _pointerConstraints == NULL) {
         _pointerConstraintsName = name;
         _pointerConstraints = [self bindGlobal: name interface: &zwp_pointer_constraints_v1_interface
@@ -1194,8 +1284,13 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
 
 - (CGPoint) mouseLocation {
     // Wayland reports the pointer only through wl_pointer events over a client's
-    // own surfaces, which these are not. A made-up origin would be
-    // indistinguishable from a real one, so this is CGEventObjC.m's sentinel.
+    // own surfaces: where it was last over one is all there is to report (its
+    // position outside them is not known).
+    CGPoint last;
+    if ([(CGSWaylandPointer *) _pointerDecoder getLastGlobalLocation: &last])
+        return last;
+    // A made-up origin would be indistinguishable from a real one, so this is
+    // CGEventObjC.m's sentinel.
     static BOOL warned;
     if (!warned) {
         warned = YES;
@@ -1204,6 +1299,10 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
               @"to report");
     }
     return CGPointMake(CGFLOAT_MAX, CGFLOAT_MAX);
+}
+
+- (BOOL) isMouseButtonDown: (CGMouseButton) button {
+    return [(CGSWaylandPointer *) _pointerDecoder isButtonDown: button];
 }
 
 #pragma mark - Hot keys
