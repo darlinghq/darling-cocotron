@@ -64,4 +64,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _delegate = delegate;
 }
 
+static NSString *joinedTokensString(id value) {
+    if (![value isKindOfClass: [NSArray class]])
+        return nil;
+    NSArray *array = (NSArray *) value;
+    if ([array count] == 0)
+        return @"";
+    NSMutableArray *parts = [NSMutableArray arrayWithCapacity: [array count]];
+    for (id item in array) {
+        NSString *s = [item isKindOfClass: [NSString class]] ? item : [item description];
+        if (s != nil)
+            [parts addObject: s];
+    }
+    return [parts componentsJoinedByString: @", "];
+}
+
+- (NSString *) stringValue {
+    NSString *joined = joinedTokensString([self objectValue]);
+    return joined != nil ? joined : [super stringValue];
+}
+
 @end
