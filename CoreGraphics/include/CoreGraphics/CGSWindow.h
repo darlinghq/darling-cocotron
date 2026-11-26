@@ -64,6 +64,28 @@
 -(CGError) becomeDisplayOverlay:(void**) drawable;
 -(void) invalidate;
 
+// Toplevel windows of an application's UI layer (AppKit). Such a window is made by
+// -[CGSConnection newToplevelWindowWithAttributes:] and is a window of its connection like any other (its
+// id is the number the UI layer gives the window; CGWindowListCopyWindowInfo() lists it under that
+// number), but its pixels, input, ordering and decorations are the UI layer's, which draws into the
+// window handle -nativeWindow gives. Backends that cannot make such windows keep the defaults, which
+// refuse. The title is the kCGSWindowTitle property (-setProperty:value:), showing and hiding are
+// -orderWindow:relativeTo: with kCGSOrderIn and kCGSOrderOut.
+//
+// Gives the window a new native window made with the attributes (its handle changes), which keeps the
+// children of the old one. For a window that has not been shown yet, to follow what the UI layer
+// learned about the window after it was made (that it shows what is behind it). On failure the window
+// keeps its native window.
+-(CGError) recreateToplevelWithAttributes:(const CGSToplevelAttributes*) attributes;
+// Places and sizes the window; frame is in the global space of CGSToplevelAttributes.
+-(CGError) setToplevelFrame:(CGRect) frame;
+// The window's own size limits, in points, which the window system's manager keeps to when the user
+// resizes it. A zero or very large extent is no limit in that dimension; limits that are both absent
+// leave the size free.
+-(CGError) setToplevelMinimumSize:(CGSize) minimum maximumSize:(CGSize) maximum;
+// The window's opacity, 0 to 1, for a window system that composites windows.
+-(CGError) setToplevelAlpha:(CGFloat) alpha;
+
 // The window's own pixels. A process that has no GL surface for the window draws into it with
 // -drawImage:atPoint: and the window shows them. The contents are kept by the window, so they
 // survive the window being covered, hidden and shown again, and can be read back (-copyContentsImage,
@@ -102,5 +124,13 @@
 -(void) _surfaceInvalidated:(CGSSurfaceID) surfaceId;
 
 @end
+
+// A toplevel window of the application's UI layer on the process' connection to the window system, or
+// nil when the window system cannot make one (the window then has to be made by the UI layer itself).
+// The window is owned by the connection until the UI layer releases it with CGSReleaseWindow() or
+// [CGSConnection destroyWindow:]; the caller retains it for as long as it uses it.
+COREGRAPHICS_EXPORT CGSWindow* _CGSNewToplevelWindow(const CGSToplevelAttributes* attributes);
+// Whether the window system can show what is behind a toplevel window through its alpha.
+COREGRAPHICS_EXPORT BOOL _CGSToplevelWindowsSupportTranslucency(void);
 
 #endif

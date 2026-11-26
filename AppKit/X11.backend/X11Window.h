@@ -27,7 +27,7 @@
 #import <X11/Xresource.h>
 #import <X11/Xlocale.h>
 
-@class X11Display, CAWindowOpenGLContext, NSWindow, O2Context;
+@class X11Display, CAWindowOpenGLContext, NSWindow, O2Context, CGSWindow;
 
 // Posted, with the window as the object, after its backing pixels were flushed.
 extern NSString *const X11WindowBackingDidFlushNotification;
@@ -37,6 +37,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     Display *_display;
     XVisualInfo *_visualInfo;
     Window _window;
+    // The CoreGraphics window that is the window system's window: made, shown, hidden, placed, sized,
+    // titled, made translucent and destroyed through it; _window is its native handle.
+    CGSWindow *_cgsWindow;
     CGLContextObj _cglContext;
     CGLWindowRef _cglWindow;
     CAWindowOpenGLContext *_caContext;

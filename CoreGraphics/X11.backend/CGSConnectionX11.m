@@ -567,7 +567,12 @@ static double windowOpacity(Display* display, Window window)
 		CFDictionaryRef boundsDictionary = CGRectCreateDictionaryRepresentation(bounds);
 		BOOL own = owner == self_pid;
 
-		NSInteger number = own ? [CGWindow windowNumberForPlatformWindowID: client] : 0;
+		// A toplevel window of the UI layer is listed under its CGS window id, which is the number the UI layer
+		// gives the window.
+		CGSWindowX11* toplevel = own ? [self _cgsWindowForNativeWindow: client] : nil;
+		NSInteger number = [toplevel isToplevel] ? (NSInteger) toplevel.windowId : 0;
+		if (number == 0 && own)
+			number = [CGWindow windowNumberForPlatformWindowID: client];
 		if (number == 0)
 			number = (NSInteger) client;
 
@@ -656,7 +661,8 @@ static double windowOpacity(Display* display, Window window)
 	}
 
 	CGSWindowX11* window = [self _cgsWindowForNativeWindow: event->xany.window];
-	if (window == nil)
+	// The window of the UI layer, which handles what the window system says about it.
+	if (window == nil || [window isToplevel])
 		return;
 
 	switch (event->type)
@@ -1621,7 +1627,8 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 		{
 			CGSWindow* window = [_windows objectForKey: key];
 
-			if (![window isKindOfClass: [CGSWindowX11 class]])
+			// A window of the UI layer shows the cursor the UI layer gives it.
+			if (![window isKindOfClass: [CGSWindowX11 class]] || [(CGSWindowX11*) window isToplevel])
 				continue;
 			if (blank)
 				XDefineCursor(_display, ((CGSWindowX11*) window)->_window, cursor);
@@ -1630,6 +1637,28 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 		}
 	}
 	XFlush(_display);
+}
+
+-(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes
+{
+	CGSWindowID windowID = _nextWindowId++;
+	CGSWindowX11* window = [[CGSWindowX11 alloc] initToplevelWithAttributes: attributes
+		connection: self
+		windowID: windowID];
+	if (window == nil)
+		return nil;
+
+	@synchronized (_windows)
+	{
+		[_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
+	}
+	[window release];
+	return window;
+}
+
+-(BOOL) supportsTranslucentToplevels
+{
+	return [CGSWindowX11 translucentVisualAvailableOnDisplay: _display];
 }
 
 -(CGSWindow*) newWindow:(CGSRegionRef)region

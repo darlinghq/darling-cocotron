@@ -23,9 +23,12 @@
 
 #import <Foundation/NSString.h>
 #import <Foundation/NSThread.h>
+#import <Foundation/NSProcessInfo.h>
 #import <X11/Xutil.h>
 #import <X11/Xatom.h>
 #import <X11/extensions/shape.h>
+#import <GL/glx.h>
+#include <math.h>
 
 // X11's stacking requests need both windows mapped, which is the only precondition
 // XConfigureWindow() does not check for us.
@@ -34,6 +37,70 @@ static BOOL isViewable(Display* display, Window window)
 	XWindowAttributes attributes;
 	return XGetWindowAttributes(display, window, &attributes) &&
 		attributes.map_state == IsViewable;
+}
+
+// The visual of the opaque toplevel windows. Rendering goes through EGL, and a visual that glXChooseVisual
+// picks can be one that only GLX can draw to (some EGL implementations reject such visuals), so the default
+// visual comes first when it is TrueColor with at least 24 bits.
+static XVisualInfo* opaqueToplevelVisualInfo(Display* display)
+{
+	static XVisualInfo* visualInfo;
+
+	if (visualInfo != NULL)
+		return visualInfo;
+
+	int screen = DefaultScreen(display);
+	XVisualInfo visualTemplate = {
+		.visualid = XVisualIDFromVisual(DefaultVisual(display, screen)),
+		.screen = screen,
+	};
+	int count = 0;
+	visualInfo = XGetVisualInfo(display, VisualIDMask | VisualScreenMask, &visualTemplate, &count);
+	if (visualInfo != NULL && (visualInfo->class != TrueColor || visualInfo->depth < 24))
+	{
+		XFree(visualInfo);
+		visualInfo = NULL;
+	}
+
+	if (visualInfo == NULL)
+	{
+		int attributes[] = {GLX_RGBA, GLX_DOUBLEBUFFER, GLX_RED_SIZE, 4, GLX_GREEN_SIZE, 4,
+			GLX_BLUE_SIZE, 4, GLX_DEPTH_SIZE, 4, None};
+		visualInfo = glXChooseVisual(display, screen, attributes);
+		if (visualInfo == NULL)
+			NSLog(@"CoreGraphics X11 backend: glXChooseVisual failed");
+	}
+	return visualInfo;
+}
+
+// A 32-bit TrueColor visual with an alpha channel, for the toplevel windows that let what is behind them show
+// through, or NULL if the screen has none.
+static XVisualInfo* translucentToplevelVisualInfo(Display* display)
+{
+	static XVisualInfo visualInfo;
+	static BOOL looked;
+
+	if (!looked)
+	{
+		looked = YES;
+		XVisualInfo visualTemplate = {
+			.screen = DefaultScreen(display),
+			.depth = 32,
+			.class = TrueColor,
+		};
+		int count = 0;
+		XVisualInfo* visuals = XGetVisualInfo(display, VisualScreenMask | VisualDepthMask | VisualClassMask,
+			&visualTemplate, &count);
+		for (int i = 0; i < count && visualInfo.visual == NULL; i++)
+		{
+			if (visuals[i].red_mask == 0xff0000 && visuals[i].green_mask == 0x00ff00 &&
+				visuals[i].blue_mask == 0x0000ff)
+				visualInfo = visuals[i];
+		}
+		if (visuals != NULL)
+			XFree(visuals);
+	}
+	return visualInfo.visual != NULL ? &visualInfo : NULL;
 }
 
 @implementation CGSWindowX11
@@ -115,6 +182,8 @@ static BOOL isViewable(Display* display, Window window)
 		XFreeGC(_display, _gc);
 	if (_display != NULL && _window != None)
 		XDestroyWindow(_display, _window);
+	if (_display != NULL && _colormap != None)
+		XFreeColormap(_display, _colormap);
 
 	[super dealloc];
 }
@@ -246,7 +315,9 @@ static BOOL isViewable(Display* display, Window window)
 		return kCGErrorIllegalArgument;
 
 	XMoveWindow(_display, _window, lround(point->x), lround(point->y));
-	[self _setSizeHints];
+	// The UI layer of a toplevel window keeps its size hints.
+	if (!_toplevel)
+		[self _setSizeHints];
 	return kCGSErrorSuccess;
 }
 
@@ -263,6 +334,9 @@ static BOOL isViewable(Display* display, Window window)
 
 	XMoveResizeWindow(_display, _window, lround(frame.origin.x), lround(frame.origin.y),
 		lround(frame.size.width), lround(frame.size.height));
+	// The UI layer of a toplevel window keeps its size hints and draws its pixels itself.
+	if (_toplevel)
+		return kCGSErrorSuccess;
 	[self _setSizeHints];
 	// The server needs the request before the contents are put on the resized window
 	XSync(_display, False);
@@ -556,6 +630,244 @@ static BOOL isViewable(Display* display, Window window)
 
 	XFlush(_display);
 	return kCGSErrorSuccess;
+}
+
+#pragma mark - Toplevel windows of the UI layer
+
++(BOOL) translucentVisualAvailableOnDisplay:(Display*) display
+{
+	return translucentToplevelVisualInfo(display) != NULL;
+}
+
+-(BOOL) isToplevel
+{
+	return _toplevel;
+}
+
+-(XVisualInfo*) visualInfo
+{
+	return _visualInfo;
+}
+
+-(instancetype) initToplevelWithAttributes:(const CGSToplevelAttributes*) attributes
+								connection:(CGSConnection*) connection
+								  windowID:(CGSWindowID) windowID
+{
+	self = [super initWithRegion: NULL connection: connection windowID: windowID];
+	if (self == nil)
+		return nil;
+
+	_x11Connection = (CGSConnectionX11*) connection;
+	_display = _x11Connection->_display;
+	_toplevel = YES;
+
+	if (_display == NULL || ![self _makeNativeToplevelWithAttributes: attributes])
+	{
+		[self release];
+		return nil;
+	}
+	return self;
+}
+
+// The extent in device pixels of one extent in points: rounded to the nearest pixel, and at least one pixel,
+// as a zero-sized X window is invalid. The origin is rounded the same way, so that the window and what is
+// drawn into it agree.
+static CGFloat toplevelDeviceOrigin(CGFloat points, CGFloat scale)
+{
+	return floor(points * scale + 0.5);
+}
+
+static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
+{
+	return fmax(toplevelDeviceOrigin(points, scale), 1.0);
+}
+
+// The root-window rectangle in device pixels of a frame in the application's global space (points, y up, the
+// origin at the bottom left of the main display).
+-(CGRect) _deviceRectForToplevelFrame:(CGRect) frame
+{
+	CGFloat scale = (CGFloat) _CGSDisplayBackingScaleFactor(CGMainDisplayID());
+	X11Frame primary = [_x11Connection _primaryRoot];
+	X11Frame primaryPoints = {primary.x / scale, primary.y / scale, primary.width / scale, primary.height / scale};
+	X11Frame root = X11FrameToRoot(primaryPoints, (X11Frame){frame.origin.x, frame.origin.y,
+		frame.size.width, frame.size.height});
+
+	return CGRectMake(toplevelDeviceOrigin(root.x, scale), toplevelDeviceOrigin(root.y, scale),
+		toplevelDeviceExtent(root.width, scale), toplevelDeviceExtent(root.height, scale));
+}
+
+// Makes the native window of the attributes, and when there is one already moves its children to the new one
+// and destroys it. NO, with the old window kept, when no visual can be found.
+-(BOOL) _makeNativeToplevelWithAttributes:(const CGSToplevelAttributes*) attributes
+{
+	BOOL translucent = attributes->translucent && translucentToplevelVisualInfo(_display) != NULL;
+	XVisualInfo* visualInfo = translucent ? translucentToplevelVisualInfo(_display) : opaqueToplevelVisualInfo(_display);
+	if (visualInfo == NULL)
+		return NO;
+
+	XSetWindowAttributes xattr;
+	xattr.override_redirect = attributes->unmanaged ? True : False;
+	xattr.border_pixel = 0;
+	xattr.colormap = XCreateColormap(_display, RootWindow(_display, visualInfo->screen), visualInfo->visual, AllocNone);
+	// A window of another depth than its parent needs a border pixel of its own, or creating it fails with
+	// BadMatch.
+	unsigned long mask = CWOverrideRedirect | CWColormap | (translucent ? CWBorderPixel : 0);
+
+	CGRect device = [self _deviceRectForToplevelFrame: attributes->frame];
+	Window window = XCreateWindow(_display, DefaultRootWindow(_display), (int) device.origin.x, (int) device.origin.y,
+		(unsigned) device.size.width, (unsigned) device.size.height, 0, visualInfo->depth, InputOutput,
+		visualInfo->visual, mask, &xattr);
+
+	// The window manager asks the window to close with a message instead of destroying it.
+	Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);
+	XSetWMProtocols(_display, window, &deleteWindow, 1);
+
+	const char* name = [[[NSProcessInfo processInfo] processName] UTF8String];
+	XClassHint classHint = {.res_name = (char*) name, .res_class = (char*) name};
+	XSetClassHint(_display, window, &classHint);
+
+	// _NET_WM_PID and WM_CLIENT_MACHINE, so that other clients, and other Darling processes listing windows,
+	// know whose window this is.
+	X11WindowOwnerPublish(_display, window);
+
+	// Until the first frame, a translucent window shows its background: make that transparent rather than
+	// black.
+	if (translucent)
+		XSetWindowBackground(_display, window, 0);
+	else
+		XSetWindowBackgroundPixmap(_display, window, None);
+
+	Window old = _window;
+	if (old != None)
+	{
+		Window root, parent, *children = NULL;
+		unsigned int count = 0;
+		if (XQueryTree(_display, old, &root, &parent, &children, &count))
+		{
+			for (unsigned int i = 0; i < count; i++)
+			{
+				XWindowAttributes childAttributes;
+				if (XGetWindowAttributes(_display, children[i], &childAttributes))
+					XReparentWindow(_display, children[i], window, childAttributes.x, childAttributes.y);
+			}
+			if (children != NULL)
+				XFree(children);
+		}
+		XDestroyWindow(_display, old);
+		// The old colormap stays: the children that moved may still have it.
+	}
+
+	_window = window;
+	_visualInfo = visualInfo;
+	_colormap = xattr.colormap;
+	_toplevelUnmanaged = attributes->unmanaged;
+	XFlush(_display);
+	return YES;
+}
+
+-(CGError) recreateToplevelWithAttributes:(const CGSToplevelAttributes*) attributes
+{
+	if (!_toplevel || attributes == NULL)
+		return kCGErrorIllegalArgument;
+	return [self _makeNativeToplevelWithAttributes: attributes] ? kCGSErrorSuccess : kCGErrorFailure;
+}
+
+-(CGError) setToplevelFrame:(CGRect) frame
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+
+	CGRect device = [self _deviceRectForToplevelFrame: frame];
+	XMoveResizeWindow(_display, _window, (int) device.origin.x, (int) device.origin.y,
+		(unsigned) device.size.width, (unsigned) device.size.height);
+	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
+// ICCCM 4.1.2.3 minimum and maximum sizes, in device pixels. A minimum of zero and a maximum of zero or too
+// large for a window are no limit, and a limit is hinted only when it applies in some dimension.
+-(CGError) setToplevelMinimumSize:(CGSize) minimum maximumSize:(CGSize) maximum
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+
+	const CGFloat largest = 65535;
+	CGFloat scale = (CGFloat) _CGSDisplayBackingScaleFactor(CGMainDisplayID());
+	CGSize deviceMinimum = CGSizeMake(toplevelDeviceExtent(minimum.width, scale), toplevelDeviceExtent(minimum.height, scale));
+	CGSize deviceMaximum = CGSizeMake(toplevelDeviceExtent(maximum.width, scale), toplevelDeviceExtent(maximum.height, scale));
+
+	XSizeHints* hints = XAllocSizeHints();
+	if (hints == NULL)
+		return kCGErrorFailure;
+	hints->flags = 0;
+	if (minimum.width > 0 || minimum.height > 0)
+	{
+		hints->flags |= PMinSize;
+		hints->min_width = minimum.width > 0 ? (int) fmin(deviceMinimum.width, largest) : 1;
+		hints->min_height = minimum.height > 0 ? (int) fmin(deviceMinimum.height, largest) : 1;
+	}
+	BOOL limitedWidth = maximum.width > 0 && deviceMaximum.width < largest;
+	BOOL limitedHeight = maximum.height > 0 && deviceMaximum.height < largest;
+	if (limitedWidth || limitedHeight)
+	{
+		hints->flags |= PMaxSize;
+		// A maximum below the minimum would make the hints inconsistent.
+		hints->max_width = limitedWidth ? (int) fmax(deviceMaximum.width, hints->min_width) : (int) largest;
+		hints->max_height = limitedHeight ? (int) fmax(deviceMaximum.height, hints->min_height) : (int) largest;
+	}
+
+	// The program always gives a window an explicit frame, so every window the window manager manages
+	// positions itself: say so, or the manager may place it as it likes, typically in the middle of the screen
+	// or over its parent. The frame is the client window's own rectangle, so a move must put the client window,
+	// not the window manager's frame around it, where the frame says: StaticGravity.
+	if (!_toplevelUnmanaged)
+	{
+		hints->flags |= USPosition | PPosition | PWinGravity;
+		hints->win_gravity = StaticGravity;
+	}
+
+	XSetWMSizeHints(_display, _window, hints, XA_WM_NORMAL_HINTS);
+	XFree(hints);
+	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
+// The window's opacity through the EWMH _NET_WM_WINDOW_OPACITY property (a CARDINAL where 0xffffffff is fully
+// opaque), which a compositing window manager applies.
+-(CGError) setToplevelAlpha:(CGFloat) alpha
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+
+	Atom opacity = XInternAtom(_display, "_NET_WM_WINDOW_OPACITY", False);
+	if (alpha >= 1.0)
+	{
+		XDeleteProperty(_display, _window, opacity);
+	}
+	else
+	{
+		unsigned long cardinal = (unsigned long) (fmax(alpha, 0.0) * (double) 0xffffffffUL);
+		XChangeProperty(_display, _window, opacity, XA_CARDINAL, 32, PropModeReplace,
+			(unsigned char*) &cardinal, 1);
+	}
+	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
+// The UI layer ends the window: the native window goes with its children, at once rather than when the last
+// reference to this object is gone.
+-(void) invalidate
+{
+	if (_toplevel && _window != None)
+	{
+		@synchronized (_surfaces)
+		{
+			[_surfaces removeAllObjects];
+		}
+		XDestroyWindow(_display, _window);
+		_window = None;
+	}
+	[super invalidate];
 }
 
 @end
