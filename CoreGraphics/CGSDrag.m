@@ -21,6 +21,7 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 #import <CoreGraphics/CGSConnection.h>
 #import <CoreGraphics/CGSWindow.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
+#import <CoreGraphics/CGSServerSPI.h>
 #import <Foundation/Foundation.h>
 
 // What a connection that has drag and drop offers. A backend without any leaves the base class' answer, which is
