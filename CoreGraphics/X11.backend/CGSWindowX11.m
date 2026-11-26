@@ -833,9 +833,9 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 		(unsigned) device.size.width, (unsigned) device.size.height, 0, visualInfo->depth, InputOutput,
 		visualInfo->visual, mask, &xattr);
 
-	// The window's frame and the repaints it is asked for are reported to the UI layer (its own selection of
-	// input replaces this one, and includes it).
-	XSelectInput(_display, window, StructureNotifyMask | ExposureMask);
+	// The window's frame, the repaints it is asked for, the keyboard focus and the window manager's state of
+	// the window are reported to the UI layer (its own selection of input replaces this one, and includes it).
+	XSelectInput(_display, window, StructureNotifyMask | ExposureMask | FocusChangeMask | PropertyChangeMask);
 
 	// The window manager asks the window to close with a message instead of destroying it.
 	Atom deleteWindow = XInternAtom(_display, "WM_DELETE_WINDOW", False);

@@ -512,6 +512,8 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     // A menu, pop-up and the menu bar are not stacked by level: they are above the windows they belong to by
     // their own means.
     [_cgsWindow setToplevelStacksByLevel: !_dock && !_menuWindow];
+    // The level may have been set before the window system window was made.
+    [_cgsWindow setToplevelLevel: _level];
 
     [self updateWindowManagerHints];
 
