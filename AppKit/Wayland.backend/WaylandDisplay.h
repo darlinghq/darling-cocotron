@@ -190,6 +190,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // The keyboard focus was in a window of the application that was unmapped; its leave event has not arrived.
     BOOL _keyboardWindowUnmapped;
 
+    // cursor-shape-v1: when the compositor offers named cursors, the shape device for CoreGraphics'
+    // wl_pointer replaces the cursor surface image.
+    struct wl_proxy *_cursorShapeManager, *_cursorShapeDevice;
+    uint32_t _cursorShapeManagerName;
     struct wl_cursor_theme *_cursorTheme;
     uint32_t _cursorThemeScale120;
     struct wl_proxy *_cursorSurface, *_cursorFractionalScale;
@@ -230,6 +234,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
+// Creates or destroys the cursor shape device to follow the availability of the manager and the pointer.
+- (void) updateCursorShapeDevice;
 // Fills `result` and `proxies` with up to `max` outputs in -screens order (the order of the displays): their
 // logical sizes and whether they are in `entered` (NSValue pointers, as
 // WaylandWindow keeps its entered outputs). Returns 0 until an output has

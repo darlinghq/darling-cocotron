@@ -116,3 +116,14 @@ honour `CGWarpMouseCursorPosition()` when the compositor offers it, instead of a
 - Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
 - Copyright: 2024 Neal Gompa, 2024 Xaver Hugl, 2024 Matthias Klumpp, 2024 Vlad Zahorodnii
 - Licence: the MIT permission notice at the top of the file.
+
+## cursor-shape
+
+`cursor-shape-v1.xml` is the staging `wp_cursor_shape_manager_v1` protocol. The AppKit Wayland backend uses it
+to set a themed cursor by name instead of a surface image when the compositor offers it.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/cursor-shape/cursor-shape-v1.xml`
+  (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2018 The Chromium Authors, 2023 Simon Ser
+- Licence: the MIT permission notice at the top of the file.
