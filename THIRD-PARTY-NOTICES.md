@@ -120,6 +120,16 @@ and the licence.
 - Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
   generates the interface tables from it at build time.
 
+## xdg-toplevel-tag-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/xdg-toplevel-tag-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/xdg-toplevel-tag/xdg-toplevel-tag-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2024 Xaver Hugl
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
 ## DejaVuSans.ttf
 
 - Location: `tests/fixtures/fonts/DejaVuSans.ttf`, licence text in `tests/fixtures/fonts/DejaVu-LICENSE.txt`

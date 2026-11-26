@@ -328,7 +328,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _cursorShapeDevice, _cursorShapeManager, _dialogManager, _bell,
-                                      _alphaModifierManager, _textInput, _textInputManager,
+                                      _alphaModifierManager, _toplevelTagManager,
+                                      _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
@@ -464,6 +465,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) alphaModifierManagerAvailable {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) alphaModifierAvailable];
+}
+
+- (void) toplevelTagManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateToplevelTags];
 }
 
 - (void) applicationIconImageChanged {
@@ -629,6 +635,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                             kind: 0
                                           object: nil];
         [self alphaModifierManagerAvailable];
+    } else if (strcmp(interface, "xdg_toplevel_tag_manager_v1") == 0 && _toplevelTagManager == NULL) {
+        _toplevelTagManagerName = name;
+        _toplevelTagManager = [self bindGlobal: name
+                                     interface: &xdg_toplevel_tag_manager_v1_interface
+                                       version: 1
+                                          kind: 0
+                                        object: nil];
+        [self toplevelTagManagerAvailable];
     } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
         ((WaylandColorManager *) _color)->_colorManager == NULL) {
         uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
@@ -800,6 +814,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        WL_MARSHAL_FLAG_DESTROY, NULL);
         _alphaModifierManager = NULL;
         _alphaModifierManagerName = 0;
+        return;
+    }
+    if (_toplevelTagManager != NULL && name == _toplevelTagManagerName) {
+        WaylandMarshal(_toplevelTagManager, XDG_TOPLEVEL_TAG_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _toplevelTagManager = NULL;
+        _toplevelTagManagerName = 0;
         return;
     }
     if (_cursorShapeManager != NULL && name == _cursorShapeManagerName) {

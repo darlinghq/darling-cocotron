@@ -149,6 +149,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // alpha-modifier-v1: the manager that creates per-surface opacity modifiers.
     struct wl_proxy *_alphaModifierManager;
     uint32_t _alphaModifierManagerName;
+    // xdg-toplevel-tag-v1: stable window tags for compositor-side window rules.
+    struct wl_proxy *_toplevelTagManager;
+    uint32_t _toplevelTagManagerName;
 
 @protected
     struct wl_proxy *_seat;
@@ -236,6 +239,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) dialogManagerAvailable;
 // Tells windows that the alpha modifier manager arrived after their surfaces were created.
 - (void) alphaModifierManagerAvailable;
+// Tells windows that the toplevel tag manager arrived after their toplevels were created.
+- (void) toplevelTagManagerAvailable;
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
