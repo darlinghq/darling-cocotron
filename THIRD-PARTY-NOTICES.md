@@ -130,16 +130,6 @@ and the licence.
 - Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
   generates the interface tables from it at build time.
 
-## ext-idle-notify-v1.xml
-
-- Location: `CoreGraphics/WaylandSupport/protocols/ext-idle-notify-v1.xml`
-- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
-  (`staging/ext-idle-notify/ext-idle-notify-v1.xml`, wayland-protocols 1.50)
-- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
-- Copyright: 2015 Martin Gräßlin, 2022 Simon Ser
-- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
-  generates the interface tables from it at build time.
-
 ## idle-inhibit-unstable-v1.xml
 
 - Location: `CoreGraphics/WaylandSupport/protocols/idle-inhibit-unstable-v1.xml`

@@ -329,6 +329,10 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
     [_pendingOutputDescriptions setObject: key forKey: Key(description)];
 }
 
+- (BOOL) hasColorGlobals {
+    return _colorManager != NULL || _representationManager != NULL;
+}
+
 - (NSDictionary *) infoForOutput: (struct wl_proxy *) output {
     return output == NULL ? nil : [_outputInfos objectForKey: Key(output)];
 }

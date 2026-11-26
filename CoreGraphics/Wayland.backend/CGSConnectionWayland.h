@@ -76,7 +76,6 @@ typedef enum {
     CGSWaylandObjectBuffer,
     CGSWaylandObjectLayerSurface,
     CGSWaylandObjectPopup,
-    CGSWaylandObjectIdleNotification,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -127,10 +126,11 @@ typedef enum {
     // instead of asking for a short pointer lock.
     struct wl_proxy *_pointerWarp;
     uint32_t _pointerWarpName;
-    // ext-idle-notify-v1: the compositor's idle state, used for CGDisplayIsAsleep().
-    struct wl_proxy *_idleNotifier, *_idleNotification;
-    uint32_t _idleNotifierName, _idleNotifierVersion, _seatName;
-    BOOL _displayIdle;
+    // IOPM assertions: the queue that asks IOKit about them, the notify(3) token of their change
+    // notification, and whether this process holds one that keeps the display awake.
+    dispatch_queue_t _assertionsQueue;
+    int _assertionsNotifyToken;
+    BOOL _assertionsNotifyRegistered, _displaySleepPrevented;
     // The registered global hot keys (CGSWaylandHotKeyEntry), guarded by @synchronized(self).
     NSMutableArray *_hotKeys;
     // Set when the setup roundtrips are over; an output that is described before that is
@@ -146,6 +146,7 @@ typedef enum {
 - (void) flush;
 // The shared color manager, or nil when the compositor offers neither color protocol.
 - (WaylandColorManager *) colorManager;
+- (id) waylandColorManager;
 // Tells the windows that a color global arrived after they were created.
 - (void) notifyWindowsColorManagerAvailable;
 
@@ -156,12 +157,12 @@ typedef enum {
 - (struct wl_proxy *) relativePointerManager;
 // The pointer warp global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerWarp;
-// YES after ext-idle-notification's idled event and until resumed. The compositor decides what
-// inactivity means and when the display actually blanks; this is the closest core graphics has.
-- (BOOL) displayIdle;
-// Creates or drops the notification as the manager and wl_seat become available.
-- (void) updateIdleNotification;
-- (void) idleNotificationEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
+// YES while this process holds a power assertion that keeps the display awake. It is learned from
+// IOKit (IOPMCopyAssertionsByProcess), as the compositor cannot be asked for it.
+- (BOOL) displaySleepPrevented;
+- (void) observeDisplaySleepAssertions;
+- (void) refreshDisplaySleepPrevented;
+- (void) setDisplaySleepPrevented: (BOOL) prevented;
 // The point of one of this connection's windows' surfaces at a global location (the inverse of
 // -globalLocation:ofSurface:point:); NO when the surface is not one of its windows.
 - (BOOL) surfacePoint: (CGPoint *) point forGlobalLocation: (CGPoint) location ofSurface: (struct wl_proxy *) surface;

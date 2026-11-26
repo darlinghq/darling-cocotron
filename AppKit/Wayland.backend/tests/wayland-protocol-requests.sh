@@ -5,8 +5,10 @@
 # Runs tests/wayland-protocol-requests.m against a private headless compositor and checks, from the
 # client's WAYLAND_DEBUG log, that the AppKit and CoreGraphics Wayland backends send the requests of the
 # staging protocols the compositor offers (xdg-system-bell, alpha-modifier, xdg-toplevel-tag,
-# xdg-dialog, cursor-shape, pointer-warp, ext-idle-notify, idle-inhibit, color-management,
-# xdg-session-management) and send nothing of a protocol the compositor lacks. Usage:
+# xdg-dialog, cursor-shape, pointer-warp, idle-inhibit, color-management, xdg-session-management) and
+# send nothing of a protocol the compositor lacks. An idle inhibitor must exist only while the process
+# holds a power assertion that prevents display sleep, and the client must never ask the compositor for
+# the user's idle state. Usage:
 #   wayland-protocol-requests.sh sway|kwin <command that runs the guest binary, such as "darling shell /path/probe">
 # The command's arguments get the number of seconds to wait for the pointer appended. The compositor is a
 # private one (sway with the headless backend, or kwin_wayland --virtual --no-lockscreen); nothing of the
@@ -96,6 +98,9 @@ steps() { # first marker, last marker (or end)
         b != "" && index($0, b) == 1 { on = 0 }
         on { print }' "$guest_out" | grep -- ' -> '
 }
+before() { # the requests sent before a marker
+    awk -v b="STEP $1" 'index($0, b) == 1 { exit } { print }' "$guest_out" | grep -- ' -> '
+}
 expect_req() { # global, step, last step, regex, description
     local out
     out=$(steps "$2" "$3")
@@ -122,21 +127,40 @@ anywhere wp_alpha_modifier_v1 'wp_alpha_modifier_surface_v1#[0-9]+\.set_multipli
 anywhere wp_alpha_modifier_v1 'wp_alpha_modifier_surface_v1#[0-9]+\.set_multiplier\(4294967295\)' "alphaValue 1 as a multiplier"
 anywhere xdg_toplevel_tag_manager_v1 'xdg_toplevel_tag_manager_v1#[0-9]+\.set_toplevel_tag\(' "toplevel tag"
 anywhere xdg_toplevel_tag_manager_v1 'xdg_toplevel_tag_manager_v1#[0-9]+\.set_toplevel_description\(.*"Protocol probe"' "toplevel description"
-expect_req xdg_toplevel_tag_manager_v1 title alpha 'set_toplevel_description\(.*"Retitled probe"' "retitled description"
+expect_req xdg_toplevel_tag_manager_v1 title sheet 'set_toplevel_description\(.*"Retitled probe"' "retitled description"
 expect_req xdg_wm_dialog_v1 sheet modal 'xdg_dialog_v1#[0-9]+\.set_modal\(' "a sheet is a modal dialog"
 expect_req xdg_wm_dialog_v1 modal pointer 'xdg_dialog_v1#[0-9]+\.set_modal\(' "a window in a modal session is a modal dialog"
-anywhere ext_idle_notifier_v1 'ext_idle_notifier_v1#[0-9]+\.get_idle_notification\(' "idle notification"
-anywhere zwp_idle_inhibit_manager_v1 'zwp_idle_inhibit_manager_v1#[0-9]+\.create_inhibitor\(' "idle inhibitor for the visible window"
+# The idle state of the user is not the display's power state: nothing is asked of the compositor.
+if grep -Eq -- '-> ext_idle_notifier_v1#[0-9]+\.get_(input_)?idle_notification\(' "$guest_out"; then
+    fail "an idle notification was requested"; else ok "no idle notification is requested"; fi
+if [ "$(grep -E '^ASLEEP ' "$guest_out" | head -n 1)" = "ASLEEP 0" ]; then ok "the display is not reported asleep"
+else fail "CGDisplayIsAsleep() reported the display asleep"; fi
+grep -q '^ASSERTION created=1' "$guest_out" || fail "the display sleep assertion could not be created"
+grep -q '^ASSERTION released=1' "$guest_out" || fail "the display sleep assertion could not be released"
+# A visible window holds an idle inhibitor exactly while the process holds the assertion.
+if has zwp_idle_inhibit_manager_v1; then
+    if before assert | grep -Eq 'zwp_idle_inhibit_manager_v1#[0-9]+\.create_inhibitor\('; then
+        fail "an idle inhibitor was created without a display sleep assertion"
+    else ok "no idle inhibitor while no display sleep assertion is held"; fi
+    expect_req zwp_idle_inhibit_manager_v1 assert release 'zwp_idle_inhibit_manager_v1#[0-9]+\.create_inhibitor\(' "idle inhibitor while the assertion is held"
+    expect_req zwp_idle_inhibit_manager_v1 release alpha 'zwp_idle_inhibitor_v1#[0-9]+\.destroy\(' "idle inhibitor dropped when the assertion is released"
+else
+    ok "no idle inhibitor: the compositor has no zwp_idle_inhibit_manager_v1"
+fi
 anywhere wp_color_manager_v1 'wp_color_manager_v1#[0-9]+\.get_surface\(' "surface color management object"
 anywhere xdg_session_manager_v1 'xdg_session_manager_v1#[0-9]+\.get_session\(' "compositor session"
 if [ "$which" = kwin ]; then
     grep -q '^POINTER entered=1' "$guest_out" || fail "the pointer never entered the window"
-    expect_req wp_cursor_shape_manager_v1 pointer alpha 'wp_cursor_shape_device_v1#[0-9]+\.set_shape\([0-9]+, 4\)' "pointing hand cursor is the pointer shape"
-    expect_req wp_cursor_shape_manager_v1 pointer alpha 'wp_cursor_shape_device_v1#[0-9]+\.set_shape\([0-9]+, 9\)' "I-beam cursor is the text shape"
-    expect_req wp_pointer_warp_v1 pointer alpha 'wp_pointer_warp_v1#[0-9]+\.warp_pointer\(' "pointer warp"
+    expect_req wp_cursor_shape_manager_v1 pointer idle 'wp_cursor_shape_device_v1#[0-9]+\.set_shape\([0-9]+, 4\)' "pointing hand cursor is the pointer shape"
+    expect_req wp_cursor_shape_manager_v1 pointer idle 'wp_cursor_shape_device_v1#[0-9]+\.set_shape\([0-9]+, 9\)' "I-beam cursor is the text shape"
+    expect_req wp_pointer_warp_v1 pointer idle 'wp_pointer_warp_v1#[0-9]+\.warp_pointer\(' "pointer warp"
 else
     echo "SKIP: cursor shape and pointer warp need a pointer, which the headless sway has none of"
 fi
+# The color manager is one class, the one of the CoreGraphics backend: AppKit's backend must not carry a copy.
+if grep -q 'Class WaylandColorManager is implemented in both' "$guest_out"; then
+    fail "WaylandColorManager is implemented twice: $(grep 'Class WaylandColorManager is implemented in both' "$guest_out" | head -n 1)"
+else ok "one WaylandColorManager class"; fi
 kill -0 "$comp_pid" 2>/dev/null || fail "the compositor exited"
 grep -Eqi 'protocol error|error:.*wl_|invalid (method|object)' "$work/comp.out" "$guest_out" && fail "a protocol error was reported: $(grep -Ehi 'protocol error' "$work/comp.out" "$guest_out" | head -n 2)"
 [ $status = 0 ] && echo "PASS: $which"

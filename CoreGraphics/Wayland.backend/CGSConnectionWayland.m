@@ -25,6 +25,8 @@
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
 #import "WaylandColor.h"
+#import <IOKit/pwr_mgt/IOPMLib.h>
+#import <IOKit/pwr_mgt/IOPMLibPrivate.h>
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -142,9 +144,6 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectKeyboardSync:
                 if (opcode == WP_CALLBACK_EV_DONE)
                     [(CGSWaylandKeyboard *) object modifierSyncDone: (struct wl_proxy *) proxy];
-                break;
-            case CGSWaylandObjectIdleNotification:
-                [(CGSConnectionWayland *) object idleNotificationEvent: opcode arguments: args];
                 break;
             case CGSWaylandObjectSeat:
             case CGSWaylandObjectKeyboard:
@@ -302,6 +301,8 @@ static const CGEventFlags kHotKeyModifierMask =
                                                      ^(int ignored) { [connection activationRequested]; }) ==
                             NOTIFY_STATUS_OK;
 
+    [self observeDisplaySleepAssertions];
+
     _setupDone = YES;
     [self flush];
     return self;
@@ -317,6 +318,8 @@ static const CGEventFlags kHotKeyModifierMask =
 
     if (_activationRegistered)
         notify_cancel(_activationNotifyToken);
+    if (_assertionsNotifyRegistered)
+        notify_cancel(_assertionsNotifyToken);
     if (_source != NULL) {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
         CFRelease(_source);
@@ -336,10 +339,6 @@ static const CGEventFlags kHotKeyModifierMask =
     if (_pointerGestures != NULL)
         WL.wl_proxy_destroy(_pointerGestures);
     [_hotKeys release];
-    if (_idleNotification != NULL)
-        WL.wl_proxy_destroy(_idleNotification);
-    if (_idleNotifier != NULL)
-        WL.wl_proxy_destroy(_idleNotifier);
     if (_seat != NULL)
         WL.wl_proxy_destroy(_seat);
     [_keymap release];
@@ -420,7 +419,15 @@ static const CGEventFlags kHotKeyModifierMask =
     return _color;
 }
 
+- (id) waylandColorManager {
+    return _color;
+}
+
 - (void) notifyWindowsColorManagerAvailable {
+    // The windows of the framework above share this manager (see -waylandColorManager).
+    id observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionColorManagerAvailable)])
+        [observer nativeConnectionColorManagerAvailable];
     @synchronized (_windows) {
         for (NSNumber *key in _windows) {
             CGSWindow *window = [_windows objectForKey: key];
@@ -536,17 +543,6 @@ static const CGEventFlags kHotKeyModifierMask =
         _seat = [self bindGlobal: name interface: &wl_seat_interface
                          version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
                             kind: CGSWaylandObjectSeat object: self];
-        _seatName = name;
-        [self updateIdleNotification];
-    } else if (strcmp(interface, "ext_idle_notifier_v1") == 0 && _idleNotifier == NULL) {
-        _idleNotifierName = name;
-        _idleNotifierVersion = MIN(version, (uint32_t) ext_idle_notifier_v1_interface.version);
-        _idleNotifier = [self bindGlobal: name
-                               interface: &ext_idle_notifier_v1_interface
-                                 version: _idleNotifierVersion
-                                    kind: CGSWaylandObjectNone
-                                  object: nil];
-        [self updateIdleNotification];
     } else if (strcmp(interface, "zwp_pointer_constraints_v1") == 0 && _pointerConstraints == NULL) {
         _pointerConstraintsName = name;
         _pointerConstraints = [self bindGlobal: name interface: &zwp_pointer_constraints_v1_interface
@@ -655,23 +651,6 @@ static const CGEventFlags kHotKeyModifierMask =
         WaylandMarshal(_pointerWarp, WP_POINTER_WARP_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _pointerWarp = NULL;
         _pointerWarpName = 0;
-        return;
-    }
-    if (_idleNotification != NULL && _seat != NULL && name == _seatName) {
-        // The notification is tied to the seat, unlike the manager's other objects.
-        WaylandMarshal(_idleNotification, EXT_IDLE_NOTIFICATION_DESTROY, NULL,
-                       WL_MARSHAL_FLAG_DESTROY, NULL);
-        _idleNotification = NULL;
-        _displayIdle = NO;
-        return;
-    }
-    if (_idleNotifier != NULL && name == _idleNotifierName) {
-        // ext-idle-notify says objects created with the manager remain valid.
-        WaylandMarshal(_idleNotifier, EXT_IDLE_NOTIFIER_DESTROY, NULL,
-                       WL_MARSHAL_FLAG_DESTROY, NULL);
-        _idleNotifier = NULL;
-        _idleNotifierName = 0;
-        _idleNotifierVersion = 0;
         return;
     }
     if (_pointerGestures != NULL && name == _pointerGesturesName) {
@@ -980,33 +959,85 @@ static const CGEventFlags kHotKeyModifierMask =
     return _pointerWarp;
 }
 
-#pragma mark - Idle notification
+#pragma mark - Power assertions
 
-// The timeout is a minimum: the compositor may keep its own, longer inactivity policy. The regular
-// notification is used rather than the input-only one, so this application's visible windows (which
-// hold idle inhibitors) count as activity.
-- (void) updateIdleNotification {
-    if (_idleNotifier == NULL || _seat == NULL || _idleNotification != NULL)
+// Whether this process holds an assertion that keeps the display from sleeping on idle: the current
+// kIOPMAssertPreventUserIdleDisplaySleep, or the older kIOPMAssertionTypeNoDisplaySleep which names the
+// same thing. The assertions are listed by power management (iokitd), which keeps them for every process.
+static BOOL ProcessHoldsDisplaySleepAssertion(void) {
+    CFDictionaryRef byProcess = NULL;
+    BOOL held = NO;
+
+    if (IOPMCopyAssertionsByProcess(&byProcess) != kIOReturnSuccess || byProcess == NULL)
+        return NO;
+
+    int pid = (int) getpid();
+    CFNumberRef key = CFNumberCreate(NULL, kCFNumberIntType, &pid);
+    CFArrayRef assertions = key != NULL ? CFDictionaryGetValue(byProcess, key) : NULL;
+    if (key != NULL)
+        CFRelease(key);
+
+    if (assertions != NULL && CFGetTypeID(assertions) == CFArrayGetTypeID()) {
+        for (CFIndex i = 0; i < CFArrayGetCount(assertions) && !held; i++) {
+            CFDictionaryRef assertion = CFArrayGetValueAtIndex(assertions, i);
+            if (CFGetTypeID(assertion) != CFDictionaryGetTypeID())
+                continue;
+            CFTypeRef type = CFDictionaryGetValue(assertion, kIOPMAssertionTypeKey);
+            CFTypeRef level = CFDictionaryGetValue(assertion, kIOPMAssertionLevelKey);
+            int levelValue = 0;
+            if (type == NULL || CFGetTypeID(type) != CFStringGetTypeID() || level == NULL ||
+                CFGetTypeID(level) != CFNumberGetTypeID() ||
+                !CFNumberGetValue(level, kCFNumberIntType, &levelValue) || levelValue == kIOPMAssertionLevelOff)
+                continue;
+            held = CFEqual(type, kIOPMAssertPreventUserIdleDisplaySleep) ||
+                   CFEqual(type, kIOPMAssertionTypeNoDisplaySleep);
+        }
+    }
+    CFRelease(byProcess);
+    return held;
+}
+
+// The window system has to be told that the display should stay awake, and power management does not
+// reach the compositor, so the connection watches this process' assertions. Power management is asked
+// on a queue of its own (it may be slow to answer), and the answer is applied on the main queue,
+// where the observer that owns the windows runs.
+- (void) observeDisplaySleepAssertions {
+    _assertionsQueue = dispatch_queue_create("CoreGraphics.Wayland.assertions", DISPATCH_QUEUE_SERIAL);
+    // The blocks do not keep the connection alive; the token is cancelled before it goes.
+    __block CGSConnectionWayland *connection = self;
+    dispatch_async(_assertionsQueue, ^{
+        // Power management posts the change notification to clients that registered for it, so register
+        // before the first listing: a change in between is then seen by the notification.
+        if (IOPMAssertionNotify((char *) kIOPMAssertionsAnyChangedNotifyString, kIOPMNotifyRegister) ==
+                    kIOReturnSuccess &&
+            notify_register_dispatch(kIOPMAssertionsAnyChangedNotifyString, &connection->_assertionsNotifyToken,
+                                     connection->_assertionsQueue,
+                                     ^(int ignored) { [connection refreshDisplaySleepPrevented]; }) ==
+                    NOTIFY_STATUS_OK)
+            connection->_assertionsNotifyRegistered = YES;
+        [connection refreshDisplaySleepPrevented];
+    });
+}
+
+- (void) refreshDisplaySleepPrevented {
+    BOOL held = ProcessHoldsDisplaySleepAssertion();
+    __block CGSConnectionWayland *connection = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [connection setDisplaySleepPrevented: held];
+    });
+}
+
+- (void) setDisplaySleepPrevented: (BOOL) prevented {
+    if (_displaySleepPrevented == prevented)
         return;
-    union wl_argument args[3] = {{.o = NULL}, {.u = 60000}, {.o = (struct wl_object *) _seat}};
-    _idleNotification = [self createObject: _idleNotifier
-                                   opcode: EXT_IDLE_NOTIFIER_GET_IDLE_NOTIFICATION
-                                interface: &ext_idle_notification_v1_interface
-                                arguments: args
-                                     kind: CGSWaylandObjectIdleNotification
-                                   object: self];
+    _displaySleepPrevented = prevented;
+    id observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionDisplaySleepPreventionChanged)])
+        [observer nativeConnectionDisplaySleepPreventionChanged];
 }
 
-- (void) idleNotificationEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    (void) args;
-    if (opcode == EXT_IDLE_NOTIFICATION_EV_IDLED)
-        _displayIdle = YES;
-    else if (opcode == EXT_IDLE_NOTIFICATION_EV_RESUMED)
-        _displayIdle = NO;
-}
-
-- (BOOL) displayIdle {
-    return _displayIdle;
+- (BOOL) displaySleepPrevented {
+    return _displaySleepPrevented;
 }
 
 #pragma mark - Pointer state

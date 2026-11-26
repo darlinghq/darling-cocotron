@@ -20,7 +20,6 @@
 #import "CGDisplayGeometry.h"
 #import "CGDisplayReconfiguration.h"
 #import <CoreGraphics/CGSConnection.h>
-#import <CoreGraphics/CGSNativeConnection.h>
 #import <CoreGraphics/CGSPointerController.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
@@ -1266,12 +1265,10 @@ static bool mainDisplayIsBuiltin(void) {
     return builtin;
 }
 
-// A Wayland compositor reports inactivity with ext-idle-notify-v1; use it as the display sleep state.
-// The other backends list displays that stay drawable and report none asleep.
+// The display backends report no display power state, and a display
+// they list stays drawable, so no display is ever reported asleep.
 boolean_t CGDisplayIsAsleep(CGDirectDisplayID display) {
-    if (display == kCGNullDirectDisplay)
-        return false;
-    return _CGSNativeConnectionDisplayIdle() ? true : false;
+    return false;
 }
 
 boolean_t CGDisplayIsBuiltin(CGDirectDisplayID display) {

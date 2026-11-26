@@ -10,12 +10,15 @@
 //   STEP sheet       a sheet on the window, closed again
 //   STEP modal       a window in an application modal session, closed again
 //   STEP pointer     [NSCursor set] and CGWarpMouseCursorPosition(), when the pointer entered the window
+//   STEP idle        no power assertion is held: CGDisplayIsAsleep() is queried, the display is not asleep
+//   STEP assert      kIOPMAssertPreventUserIdleDisplaySleep is taken, as an application that plays video does
+//   STEP release     the assertion is released again
 //   STEP alpha       NSWindow.alphaValue 0.5, then 0 (the window is unmapped), then 1
-//   STEP idle        CGDisplayIsAsleep() is queried
 // Needs no compositor feature: every step must also work, and do nothing special, on a compositor
 // without the protocol.
 #import <AppKit/AppKit.h>
 #import <CoreGraphics/CoreGraphics.h>
+#import <IOKit/pwr_mgt/IOPMLib.h>
 #include <stdio.h>
 #include <unistd.h>
 
@@ -111,16 +114,30 @@ int main(int argc, char **argv) {
             }
         }
 
+        step("idle");
+        // The window is visible and nothing asks for the display to stay awake.
+        fprintf(stderr, "ASLEEP %d\n", CGDisplayIsAsleep(CGMainDisplayID()) ? 1 : 0);
+        runLoop(1);
+
+        step("assert");
+        IOPMAssertionID assertion = kIOPMNullAssertionID;
+        IOReturn created = IOPMAssertionCreateWithName(kIOPMAssertPreventUserIdleDisplaySleep,
+                                                       kIOPMAssertionLevelOn, CFSTR("Protocol probe"),
+                                                       &assertion);
+        fprintf(stderr, "ASSERTION created=%d\n", created == kIOReturnSuccess);
+        // Power management tells the process, which asks the compositor, from other threads and queues.
+        runLoop(2);
+
+        step("release");
+        fprintf(stderr, "ASSERTION released=%d\n", IOPMAssertionRelease(assertion) == kIOReturnSuccess);
+        runLoop(2);
+
         step("alpha");
         [window setAlphaValue: 0.5];
         runLoop(0.5);
         [window setAlphaValue: 0];
         runLoop(0.5);
         [window setAlphaValue: 1];
-        runLoop(0.5);
-
-        step("idle");
-        fprintf(stderr, "ASLEEP %d\n", CGDisplayIsAsleep(CGMainDisplayID()) ? 1 : 0);
         runLoop(0.5);
         fprintf(stderr, "PROBE done\n");
     }

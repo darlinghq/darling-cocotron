@@ -98,14 +98,6 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
     // An exception can't unwind through libwayland's native frames.
     @autoreleasepool {
         @try {
-            if (objectKind >= WaylandColorObjectManager &&
-                objectKind <= WaylandColorObjectLast) {
-                [(WaylandColorManager *) object handleEvent: opcode
-                                                       kind: (WaylandColorObjectKind) objectKind
-                                                      proxy: (struct wl_proxy *) proxy
-                                                  arguments: args];
-                return 0;
-            }
             switch (objectKind) {
             case WaylandObjectSurface:
             case WaylandObjectXdgSurface:
@@ -205,7 +197,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         return nil;
 
     _outputs = [NSMutableArray new];
-    _color = [[WaylandColorManager alloc] initWithDispatcher: WaylandDispatch owner: self];
     _afterDispatch = [NSMutableArray new];
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
 
@@ -318,7 +309,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     _toplevelIcons = nil;
     if (_wlDisplay != NULL) {
         // wl_display_disconnect() doesn't free proxies.
-        [(WaylandColorManager *) _color shutdown];
         // Destroying the session preserves the compositor's state for the next launch. The windows
         // have already released their toplevel session objects before this display is deallocated.
         if (_session != NULL)
@@ -342,7 +332,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     [_cursor release];
     [_inputEvent release];
-    [_color release];
     [_sessionIdentifier release];
     [_outputs release];
     [_afterDispatch release];
@@ -359,8 +348,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         WL.wl_display_flush(_wlDisplay);
 }
 
+// The connection is CoreGraphics', and so is the color manager: it binds the compositor's color globals
+// and describes the outputs, and this display's windows use the same manager (and so one set of
+// color objects per surface).
 - (WaylandColorManager *) colorManager {
-    return _color;
+    return _CGSNativeConnectionWaylandColorManager();
 }
 
 #pragma mark - Window-system session
@@ -565,11 +557,19 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        forModes: nil];
 }
 
-// A color manager global went away: its surface descriptions are inert, so let the windows
-// refresh theirs and let the screens drop the compositor's color space.
-- (void) waylandColorManagerDidLoseGlobal: (WaylandColorManager *) manager {
-    (void) manager;
-    [self nativeConnectionDisplayColorSpaceChanged];
+// CoreGraphics bound a color management or color representation global after the windows were made.
+- (void) nativeConnectionColorManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) colorManagerAvailable];
+    [self flush];
+}
+
+// The process took or dropped the power assertion that keeps the display awake: the windows hold
+// an idle inhibitor only while it is held.
+- (void) nativeConnectionDisplaySleepPreventionChanged {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateIdleInhibitor];
+    [self flush];
 }
 
 // Another process asked for the activation of this one's windows (see _CGSActivateProcess).
@@ -660,28 +660,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                           kind: 0
                                         object: nil];
         [self idleInhibitManagerAvailable];
-    } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
-        ((WaylandColorManager *) _color)->_colorManager == NULL) {
-        uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
-        struct wl_proxy *proxy = [self bindGlobal: name
-                                         interface: &wp_color_manager_v1_interface
-                                          version: managerVersion
-                                             kind: (WaylandObjectKind) WaylandColorObjectManager
-                                           object: _color];
-        [(WaylandColorManager *) _color bindColorManager: proxy
-                                                 version: managerVersion name: name];
-        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) colorManagerAvailable];
-    } else if (strcmp(interface, "wp_color_representation_manager_v1") == 0 &&
-               ((WaylandColorManager *) _color)->_representationManager == NULL) {
-        struct wl_proxy *proxy = [self bindGlobal: name
-                                         interface: &wp_color_representation_manager_v1_interface
-                                          version: 1
-                                             kind: (WaylandObjectKind) WaylandColorObjectRepresentationManager
-                                           object: _color];
-        [(WaylandColorManager *) _color bindRepresentationManager: proxy version: 1 name: name];
-        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) colorManagerAvailable];
     } else if (strcmp(interface, "wl_compositor") == 0 && _compositor == NULL) {
         // Version 4 has wl_surface.damage_buffer.
         _compositorVersion = MIN(version, 4);
@@ -785,10 +763,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                   version: output->_version
                                      kind: WaylandObjectOutput
                                    object: output];
-        if (output->_proxy != NULL) {
+        if (output->_proxy != NULL)
             [_outputs addObject: output];
-            [(WaylandColorManager *) _color observeOutput: output->_proxy];
-        }
     }
 }
 
@@ -800,7 +776,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 }
 
 - (void) registryGlobalRemoved: (uint32_t) name {
-    [(WaylandColorManager *) _color globalRemoved: name];
     if (_sessionManager != NULL && name == _sessionManagerName) {
         // The manager global is gone; an existing session keeps working (see the protocol's
         // manager destructor), so only the factory is dropped here.

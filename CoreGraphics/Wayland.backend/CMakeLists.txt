@@ -36,6 +36,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CoreFoundation
 			Foundation
 			CoreGraphics
+			IOKit
 	)
 	target_include_directories(Wayland_cgbackend PRIVATE
 		../WaylandSupport

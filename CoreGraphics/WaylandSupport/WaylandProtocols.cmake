@@ -63,7 +63,6 @@ set(WAYLAND_PROTOCOL_FILES
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-system-bell-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/alpha-modifier-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-toplevel-tag-v1.xml"
-	"${CMAKE_CURRENT_LIST_DIR}/protocols/ext-idle-notify-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/idle-inhibit-unstable-v1.xml")
 
 set(WAYLAND_PROTOCOLS_USABLE TRUE)

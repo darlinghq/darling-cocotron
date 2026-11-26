@@ -77,6 +77,9 @@ typedef enum {
                            version: (uint32_t) version
                              name: (uint32_t) name;
 - (void) globalRemoved: (uint32_t) name;
+// Whether the compositor offers color management or color representation. The framework above uses
+// this instead of the instance variables, as the class lives in another image.
+- (BOOL) hasColorGlobals;
 - (void) observeOutput: (struct wl_proxy *) output;
 - (NSDictionary *) infoForOutput: (struct wl_proxy *) output;
 

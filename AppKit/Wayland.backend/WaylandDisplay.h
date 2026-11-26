@@ -152,7 +152,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // xdg-toplevel-tag-v1: stable window tags for compositor-side window rules.
     struct wl_proxy *_toplevelTagManager;
     uint32_t _toplevelTagManagerName;
-    // idle-inhibit-unstable-v1: visible, unoccluded toplevels keep the display awake.
+    // idle-inhibit-unstable-v1: visible, unoccluded toplevels keep the display awake while the process holds a
+    // power assertion that prevents display sleep.
     struct wl_proxy *_idleInhibitManager;
     uint32_t _idleInhibitManagerName;
 
@@ -177,8 +178,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // A change of the outputs waits for the end of the pass over the events.
     BOOL _outputsChangePending;
     NSMutableArray *_outputs;
-    // Color management and representation shared with the CoreGraphics backend (WaylandColorManager).
-    id _color;
     // WaylandWindows, not retained, most recently activated first.
     CFMutableArrayRef _windows;
     NSMutableArray *_afterDispatch;

@@ -197,7 +197,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     WaylandColorManager *color = [_display colorManager];
     if (_surface == NULL || color == nil)
         return;
-    if (color->_colorManager != NULL || color->_representationManager != NULL)
+    if ([color hasColorGlobals])
         [self updateSurfaceColor];
 }
 
@@ -1290,11 +1290,15 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                    XDG_TOPLEVEL_TAG_MANAGER_SET_TOPLEVEL_DESCRIPTION, NULL, 0, args);
 }
 
-// The inhibitor is only useful while the surface is mapped and visible. A compositor ignores it when
-// the surface is unmapped, occluded or already idle, so it is dropped as soon as any of those happens.
+// The display stays awake for a window only while the process holds a power assertion that prevents display
+// sleep (kIOPMAssertPreventUserIdleDisplaySleep), which is what macOS does; the compositor only takes
+// an inhibitor made for a surface. The inhibitor is only useful while the surface is mapped and visible:
+// a compositor ignores it when the surface is unmapped or occluded, so it is dropped as soon as either
+// happens.
 - (void) updateIdleInhibitor {
     BOOL inhibit = !_invalidated && _mapped && !_suspended && !_fullyTransparent &&
-                   _surface != NULL && _display->_idleInhibitManager != NULL;
+                   _surface != NULL && _display->_idleInhibitManager != NULL &&
+                   _CGSNativeConnectionDisplaySleepPrevented();
     if (inhibit && _idleInhibitor == NULL) {
         union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
         _idleInhibitor = WaylandCreateObject(_display->_idleInhibitManager,
