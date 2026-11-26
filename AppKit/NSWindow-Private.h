@@ -18,8 +18,9 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSWindow.h>
+#import <AppKit/NSDisplay.h>
 
-@class CGWindow, NSDisplay;
+@class CGWindow;
 
 // style flag for private windows (that NSApp doesn't have to know about)
 #define NSAppKitPrivateWindow 0x8000000
