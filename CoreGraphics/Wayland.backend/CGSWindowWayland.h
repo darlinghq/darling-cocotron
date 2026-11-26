@@ -30,7 +30,7 @@
 #import <CoreGraphics/CGSWindow.h>
 #import "CGSConnectionWayland.h"
 
-@class CGSSurfaceWayland;
+@class CGSSurfaceWayland, WaylandColorManager;
 
 @interface CGSWindowWayland : CGSWindow {
 @public
@@ -40,6 +40,8 @@
 @protected
     struct wl_proxy *_xdgSurface;
     struct wl_proxy *_toplevel;
+    // Per-surface color objects, when the compositor offers the protocols.
+    struct wl_proxy *_colorSurface, *_representationSurface;
     // The rect the caller asked for. Wayland never reports where the compositor
     // put a toplevel, so the origin stays the requested one; the size follows
     // the compositor's configure once it sends a non-zero one.
@@ -53,6 +55,8 @@
            arguments: (union wl_argument *) args;
 
 - (void) surfaceDestroyed: (CGSSurfaceWayland *) surface;
+// A color global arrived after the window was made: create its per-surface objects now.
+- (void) colorManagerAvailable;
 // Where the window is, as far as the connection knows (the rect that was asked for).
 - (CGPoint) frameOrigin;
 

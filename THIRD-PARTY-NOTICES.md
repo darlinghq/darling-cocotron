@@ -39,6 +39,29 @@ and the licence.
 - Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
   generates the interface tables from it at build time.
 
+## color-management-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/color-management-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/color-management/color-management-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2019 Sebastian Wick, 2019 Erwin Burema, 2020 AMD, 2020-2024 Collabora, Ltd., 2024 Xaver Hugl,
+  2022-2025 Red Hat, Inc.
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## color-representation-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/color-representation-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/color-representation/color-representation-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2022 Simon Ser, 2022 Red Hat, Inc., 2022 Collabora, Ltd., 2022-2025 Red Hat, Inc.
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## DejaVuSans.ttf
+
 ## DejaVuSans.ttf
 
 - Location: `tests/fixtures/fonts/DejaVuSans.ttf`, licence text in `tests/fixtures/fonts/DejaVu-LICENSE.txt`

@@ -81,6 +81,8 @@ typedef enum {
     int32_t _pendingPopupX, _pendingPopupY;
     struct wl_proxy *_decoration;
     struct wl_proxy *_frameCallback;
+    // Per-surface color objects, when the compositor offers the color protocols.
+    struct wl_proxy *_colorSurface, *_representationSurface;
     struct WaylandBuffer _buffers[2];
     int32_t _pendingWidth, _pendingHeight;
     BOOL _pendingActivated;
@@ -203,5 +205,12 @@ typedef enum {
 
 // Gives the toplevel the application icon (xdg-toplevel-icon), when the compositor has the protocol.
 - (void) updateToplevelIcon;
+
+// Describes the surface's content color to the compositor, when it supports color management.
+- (void) updateSurfaceColor;
+// Creates the color objects once a surface exists and the manager has been bound.
+- (void) updateSurfaceColorIfNeeded;
+// Called by the display when a color manager arrives later than the window.
+- (void) colorManagerAvailable;
 
 @end

@@ -49,7 +49,10 @@ set(WAYLAND_PROTOCOL_FILES
 	# Likewise wlr-layer-shell (wlroots).
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/wlr-layer-shell-unstable-v1.xml"
 	# xdg-toplevel-icon (wayland-protocols 1.34), kept in this tree so older systems still build the backend.
-	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-toplevel-icon-v1.xml")
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-toplevel-icon-v1.xml"
+	# The following staging protocols are vendored for the same reason. See protocols/README.md.
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/color-management-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/color-representation-v1.xml")
 
 set(WAYLAND_PROTOCOLS_USABLE TRUE)
 foreach (protocol ${WAYLAND_PROTOCOL_FILES})
