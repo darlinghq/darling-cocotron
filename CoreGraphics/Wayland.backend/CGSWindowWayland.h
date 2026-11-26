@@ -46,6 +46,8 @@
     CGRect _frame;
     NSString *_title;
     CGSSurfaceWayland *_surfaceObject; // Not retained; held by _surfaces.
+    BOOL _activated;
+    BOOL _usesContents; // a program draws into the window with -drawImage:atPoint: (it set a style)
 }
 
 - (void) handleEvent: (uint32_t) opcode
@@ -53,6 +55,8 @@
            arguments: (union wl_argument *) args;
 
 - (void) surfaceDestroyed: (CGSSurfaceWayland *) surface;
+// A wl_buffer of the window's contents was released (or not used any more) by the compositor.
+- (void) bufferReleased: (struct wl_proxy *) buffer opcode: (uint32_t) opcode;
 // Where the window is, as far as the connection knows (the rect that was asked for).
 - (CGPoint) frameOrigin;
 

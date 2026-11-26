@@ -269,12 +269,24 @@ void CGContextClipToRects(CGContextRef context, const CGRect *rects,
 void CGContextSetStrokeColorSpace(CGContextRef context,
                                   CGColorSpaceRef colorSpace)
 {
+    // QUIRK: a NULL colour space does not crash: the colour becomes black, the initial colour of a colour space.
+    // Not documented. Evidence: black-box observation on macOS 10.14.4 x86_64 (tier 2).
+    // Test: tests/src/coregraphics_null_colorspace.c (test_quirk_null_colorspace_black)
+    if (colorSpace == NULL) {
+        CGContextSetGrayStrokeColor(context, 0, 1);
+        return;
+    }
     O2ContextSetStrokeColorSpace((O2ContextRef)context, (O2ColorSpaceRef)colorSpace);
 }
 
 void CGContextSetFillColorSpace(CGContextRef context,
                                 CGColorSpaceRef colorSpace)
 {
+    // QUIRK: see CGContextSetStrokeColorSpace
+    if (colorSpace == NULL) {
+        CGContextSetGrayFillColor(context, 0, 1);
+        return;
+    }
     O2ContextSetFillColorSpace((O2ContextRef)context, (O2ColorSpaceRef)colorSpace);
 }
 

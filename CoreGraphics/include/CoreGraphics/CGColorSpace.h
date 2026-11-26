@@ -100,6 +100,7 @@ COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithICCProfile(CFDataRef d
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithICCData(CFTypeRef data);
 COREGRAPHICS_EXPORT CFPropertyListRef CGColorSpaceCopyPropertyList(CGColorSpaceRef space);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithPropertyList(CFPropertyListRef plist);
+COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateWithPlatformColorSpace(const void *ref);
 COREGRAPHICS_EXPORT CGColorSpaceRef CGColorSpaceCreateICCBased(
     size_t nComponents, const CGFloat *range, CGDataProviderRef profile,
     CGColorSpaceRef alternate);

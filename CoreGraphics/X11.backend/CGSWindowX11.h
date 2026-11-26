@@ -35,7 +35,14 @@
 	Display* _display; // Borrowed from _x11Connection.
 	Window _window;
 	NSString* _title;
+	GC _gc;                  // for putting the contents on the window; created when first needed
+	BOOL _contentsShaped;    // the window's shape follows the alpha of its contents
 }
+
+// The window system asked for the window to be painted again (an expose event): the contents are put on it.
+-(void) windowSystemDidExpose:(const XExposeEvent*) event;
+// The window changed place or size (a configure event): follows with the contents and reports the bounds.
+-(void) windowSystemDidConfigure;
 
 -(instancetype) initWithRegion:(CGSRegionRef) region
 					connection:(CGSConnection*) connection

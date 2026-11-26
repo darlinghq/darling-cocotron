@@ -113,6 +113,40 @@ extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
 extern CGError CGSSetWindowShape(CGSConnectionID cid, CGSWindowID wid, float x_offset, float y_offset, const CGSRegionRef shape);
 extern OSStatus CGSOrderWindow(CGSConnectionID cid, CGSWindowID wid, CGSWindowOrderingMode place, CGSWindowID relativeToWindow);
 extern CGError CGSMoveWindow(CGSConnectionID cid, CGSWindowID wid, const CGPoint *window_pos);
+// The pixels and the events of a CGS window, for a process that has no UI framework of its own above
+// CoreGraphics (the Window Manager of HIToolbox). See -[CGSWindow drawImage:atPoint:].
+// Replaces the part of the window's contents the image covers (top left origin, y down) and shows it.
+extern CGError _CGSWindowDrawImage(CGSConnectionID cid, CGSWindowID wid, CGImageRef image, CGPoint origin);
+// A snapshot of the window's contents, NULL for none.
+extern CGImageRef _CGSWindowCopyContents(CGSConnectionID cid, CGSWindowID wid);
+// Style bits of a window
+enum {
+	kCGSWindowStyleFloating = 1 << 0,     // stays above the ordinary windows
+	kCGSWindowStyleUtility = 1 << 1,      // a tool window: not in the task lists
+	kCGSWindowStyleBorderless = 1 << 2,   // no title bar and frame of the window system
+	kCGSWindowStyleIgnoresMouse = 1 << 3, // pointer input goes to the windows below
+	kCGSWindowStyleTransparent = 1 << 4,  // the pixels' alpha shows what is below
+	kCGSWindowStyleFixedSize = 1 << 5,    // the user cannot resize it
+	kCGSWindowStyleNoFocus = 1 << 6,      // never takes the keyboard focus
+	kCGSWindowStyleNoClose = 1 << 7,      // the window system offers no close control
+	kCGSWindowStyleUnmanaged = 1 << 8,    // the window system neither places nor decorates it
+};
+extern CGError _CGSWindowSetStyle(CGSConnectionID cid, CGSWindowID wid, uint32_t styleFlags);
+
+// What the window system tells about the windows, on the thread that runs the main run loop.
+// kCGSWindowEventBounds: the window's content rectangle in global coordinates (y down) changed.
+typedef enum {
+	kCGSWindowEventCloseRequested = 1, // the user asked the window system to close the window
+	kCGSWindowEventActivated = 2,      // the window got the keyboard focus
+	kCGSWindowEventDeactivated = 3,    // the window lost it
+	kCGSWindowEventBounds = 4,
+} CGSWindowEventKind;
+typedef void (*CGSWindowEventProc)(CGSWindowEventKind kind, CGSWindowID window, CGRect rect, void* info);
+// Sets the process' one handler of the window events (NULL removes it).
+extern void _CGSSetWindowEventProc(CGSWindowEventProc proc, void* info);
+// For the backends: reports a window event to that handler.
+extern void _CGSPostWindowEvent(CGSWindowEventKind kind, CGSWindowID window, CGRect rect);
+
 extern CGError CGSSetWindowOpacity(CGSConnectionID cid, CGSWindowID wid, bool isOpaque);
 extern CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level);
 extern CGError CGSSetWindowTransform(CGSConnectionID cid, CGSWindowID wid, CGAffineTransform transform);

@@ -26,6 +26,7 @@ add_backend(X11
 		OpenGL
 		# native libraries
 		X11
+		Xext
 		Xi
 		XRandR
 		Xcursor

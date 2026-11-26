@@ -171,6 +171,7 @@ add_separated_framework(CoreGraphics
 		GL
 		IOKit
 		IOSurface
+		ColorSync
 )
 
 # NSBundle finds the backends through the framework's Resources link.

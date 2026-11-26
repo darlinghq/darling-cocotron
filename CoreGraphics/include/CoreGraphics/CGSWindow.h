@@ -31,6 +31,11 @@
 	CGSWindowID _windowId;
 	_Atomic CGSSurfaceID _nextSurfaceId;
 	NSMutableDictionary<NSNumber*, CGSSurface*>* _surfaces;
+	// The window contents (see -drawImage:atPoint:): 32 bits per pixel, premultiplied alpha, the
+	// first row on top, as big as the window. Guarded by @synchronized(self).
+	CGContextRef _contents;
+	CGSize _contentsSize;
+	uint32_t _styleFlags;
 }
 
 -(instancetype) initWithRegion:(CGSRegionRef) region
@@ -56,6 +61,29 @@
 // cannot do this keep the default, which refuses.
 -(CGError) becomeDisplayOverlay:(void**) drawable;
 -(void) invalidate;
+
+// The window's own pixels. A process that has no GL surface for the window draws into it with
+// -drawImage:atPoint: and the window shows them. The contents are kept by the window, so they
+// survive the window being covered, hidden and shown again, and can be read back (-copyContentsImage,
+// CGWindowListCreateImage() for a window of this process).
+// The image replaces (source copy, not blended with what is there) the part of the contents it
+// covers; origin is the top left corner in the window's coordinates, y down.
+-(CGError) drawImage:(CGImageRef) image atPoint:(CGPoint) origin;
+// A snapshot of the contents, or NULL while nothing was drawn. The caller releases it.
+-(CGImageRef) copyContentsImage;
+// The backends show the contents: called after the part of the contents in rect has changed, and by
+// the backend itself when the window system asks for a repaint. The default shows nothing.
+-(void) presentRect:(CGRect) rect;
+// Sets the style bits (kCGSWindowStyle...). The backends override it to apply them to their
+// windows (it may be called before the window is first ordered in, and again later).
+-(CGError) setStyle:(uint32_t) styleFlags;
+@property (readonly) uint32_t styleFlags;
+// For the backends, when the window's size is not what the contents have: resizes the contents
+// (what was in them stays at the top left, the rest is transparent).
+-(void) resizeContentsTo:(CGSize) size;
+// For the backends: runs the block with the pixels (BGRA, premultiplied), their row length and
+// size, with the contents locked. Not called when there are no contents yet.
+-(BOOL) withContents:(void (^)(const void* bytes, size_t rowBytes, CGSize size)) block;
 
 // Used, for example, by CGWindowContextCreate()
 -(void*) nativeWindow;

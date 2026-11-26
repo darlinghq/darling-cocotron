@@ -47,6 +47,14 @@
 	}
 }
 
+-(NSArray<CGSWindow*>*) copyAllWindows
+{
+	@synchronized(_windows)
+	{
+		return [[_windows allValues] retain];
+	}
+}
+
 -(void) _windowInvalidated: (CGSWindowID) winId
 {
 	@synchronized(_windows)

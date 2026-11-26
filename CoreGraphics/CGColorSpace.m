@@ -180,6 +180,23 @@ CFDataRef CGColorSpaceCopyICCProfile(CGColorSpaceRef colorSpace) {
     return CGColorSpaceCopyICCData(colorSpace);
 }
 
+// The platform colour space of macOS is a ColorSync profile: the legacy profile reference of ColorSync
+// (CMProfileRef) is one. The profile is turned into a colour space through its ICC data.
+extern CFTypeID ColorSyncProfileGetTypeID(void);
+extern CFDataRef ColorSyncProfileCopyData(CFTypeRef profile, CFErrorRef *error);
+
+CGColorSpaceRef CGColorSpaceCreateWithPlatformColorSpace(const void *ref) {
+    if (ref == NULL || CFGetTypeID(ref) != ColorSyncProfileGetTypeID())
+        return NULL;
+
+    CFDataRef data = ColorSyncProfileCopyData((CFTypeRef) ref, NULL);
+    CGColorSpaceRef space = data != NULL ? CGColorSpaceCreateWithICCProfile(data) : NULL;
+
+    if (data != NULL)
+        CFRelease(data);
+    return space;
+}
+
 CGColorSpaceRef CGColorSpaceCreateWithICCProfile(CFDataRef data) {
     return (CGColorSpaceRef) O2ColorSpaceCreateWithICCData(data);
 }

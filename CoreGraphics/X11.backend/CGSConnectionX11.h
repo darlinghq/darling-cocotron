@@ -27,6 +27,7 @@
 #import <CoreFoundation/CFSocket.h>
 #import "X11Monitors.h"
 
+@class CGSWindowX11;
 @class CGSX11Keyboard;
 @class CGSX11Pointer;
 
@@ -86,6 +87,7 @@
 -(CGPoint) _cgPointFromRoot:(CGPoint)root;
 // The CGS window that has this X window, 0 when none.
 -(CGSWindowID) _windowIDForNativeWindow:(Window)native;
+-(CGSWindowX11*) _cgsWindowForNativeWindow:(Window)native;
 // The device pixel position of a point of CoreGraphics' global space (rounded).
 -(void) _getRootX:(int*)x y:(int*)y forPoint:(CGPoint)point;
 // Shows a blank cursor on the windows of this connection, or the cursor they had (the process' cursor is hidden).
