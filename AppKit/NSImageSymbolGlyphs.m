@@ -101,6 +101,7 @@ static const struct {
     const char *name;
     GlyphDrawer draw;
 } glyphs[] = {
+    { "dt.finder", drawFolder },
     { "eject.fill", drawEjectFill },
     { "folder", drawFolder },
     { "network", drawNetwork },
