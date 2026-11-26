@@ -4,6 +4,7 @@
  Licensed under the MIT license, the same as the rest of this project.
 */
 #import <AppKit/AppKit.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <objc/runtime.h>
 #include <dlfcn.h>
 #include <math.h>
@@ -14,8 +15,8 @@
 // Direct touch dispatch of the windowing backends, run on a real display
 // server or compositor. The fingers reach AppKit as touch CGEvents (E1 of
 // darlinghq/darling#937). Neither Xvfb nor a headless compositor has a touch
-// device, so the backend's own touch handlers are fed the events a device
-// would produce: XI_TouchBegin/Update/End for the X11 backend (build with
+// device, so the touch decoders of CoreGraphics' backends are fed the events a
+// device would produce: XI_TouchBegin/Update/End for the X11 backend (build with
 // -DTOUCH_X11) and wl_touch down/motion/up/cancel for the Wayland backend.
 // The test captures what the display is asked to post, hands it to the window
 // as the event loop would, and checks the NSEvents and NSTouch objects.
@@ -44,7 +45,7 @@ enum { WL_DOWN = 0, WL_UP = 1, WL_MOTION = 2, WL_CANCEL = 4 };
 static void (*cancelAll)(NSWindow *);
 
 static NSMutableArray *events;
-static id display;
+static id display, decoder;
 static NSWindow *window;
 static int failures, checks;
 static const CGFloat height = 200;
@@ -73,7 +74,7 @@ static void fingerDown(int finger, double x, double y) {
 #else
     union Argument a[6] = {{.u = 1}, {.u = 0}, {.o = [[window platformWindow] surface]}, {.i = finger},
                            {.f = (int32_t)(x * 256)}, {.f = (int32_t)(y * 256)}};
-    [display touchEvent:WL_DOWN arguments:a];
+    [decoder touchEvent:WL_DOWN arguments:a];
 #endif
     pump();
 }
@@ -83,7 +84,7 @@ static void fingerMove(int finger, double x, double y) {
                           x:x y:y rootX:x rootY:y];
 #else
     union Argument a[4] = {{.u = 0}, {.i = finger}, {.f = (int32_t)(x * 256)}, {.f = (int32_t)(y * 256)}};
-    [display touchEvent:WL_MOTION arguments:a];
+    [decoder touchEvent:WL_MOTION arguments:a];
 #endif
     pump();
 }
@@ -93,7 +94,7 @@ static void fingerUp(int finger, double x, double y) {
                           x:x y:y rootX:x rootY:y];
 #else
     union Argument a[3] = {{.u = 1}, {.u = 0}, {.i = finger}};
-    [display touchEvent:WL_UP arguments:a];
+    [decoder touchEvent:WL_UP arguments:a];
 #endif
     pump();
 }
@@ -132,9 +133,11 @@ static void deliver(void) {
 #ifdef TOUCH_X11
     SEL feed = @selector(touchEventType:device:detail:window:x:y:rootX:rootY:);
 #else
+    Ivar decoderIvar = class_getInstanceVariable(object_getClass(_CGSConnectionForID(CGSMainConnectionID())), "_touchDecoder");
+    decoder = decoderIvar ? object_getIvar(_CGSConnectionForID(CGSMainConnectionID()), decoderIvar) : nil;
     SEL feed = @selector(touchEvent:arguments:);
 #endif
-    if (![display respondsToSelector:feed] || cancelAll == NULL) {
+    if (![decoder respondsToSelector:feed] || cancelAll == NULL) {
         expect(NO, "the backend handles touch events");
         printf("RESULT checks=%d failures=%d\n", checks, failures); fflush(stdout);
         exit(1);
@@ -212,7 +215,7 @@ static void deliver(void) {
     if (cancelAll) cancelAll(window);
 #else
     union Argument none[1] = {{.u = 0}};
-    [display touchEvent:WL_CANCEL arguments:none];
+    [decoder touchEvent:WL_CANCEL arguments:none];
 #endif
     pump();
     e = [events count] == 1 ? [events objectAtIndex:0] : nil;
