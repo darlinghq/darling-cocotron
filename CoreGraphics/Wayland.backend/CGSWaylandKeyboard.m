@@ -256,13 +256,45 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 
 #pragma mark - Key repeat
 
+// The user's key repeat settings, the KeyRepeat and InitialKeyRepeat global defaults that the Keyboard
+// pane of System Preferences writes: the interval between repeats and the delay before the first one,
+// both counted in 15 ms ticks. They take the place of what the compositor reports while they are set.
+// A compositor that reports no repeat at all keeps it off.
+// QUIRK: the 15 ms tick is not documented. Evidence: independent public reports (tier 4) read the value
+// in 15 ms steps: the slowest delay the pane offers, InitialKeyRepeat 15, is 225 ms and the fastest repeat
+// it offers, KeyRepeat 2, is 30 ms (https://www.jeffgeerling.com/blog/2011/supercharge-your-key-repeat/,
+// https://dev.classmethod.jp/articles/mac-keyboard-speed-2/), and the values are listed as global defaults
+// (https://eclecticlight.co/2019/08/15/global-defaults-in-macos-mojave).
+// Test: CoreGraphics/Wayland.backend/tests/key-repeat-preferences.m (quirk_tick_is_15_ms)
+static double repeatPreferenceMilliseconds(CFStringRef key) {
+    CFPropertyListRef value = CFPreferencesCopyValue(key, kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+    double milliseconds = -1;
+    int ticks;
+    if (value != NULL) {
+        if (CFGetTypeID(value) == CFNumberGetTypeID() && CFNumberGetValue(value, kCFNumberIntType, &ticks) && ticks > 0)
+            milliseconds = ticks * 15.0;
+        else if (CFGetTypeID(value) == CFStringGetTypeID() && CFStringGetIntValue(value) > 0)
+            milliseconds = CFStringGetIntValue(value) * 15.0;
+        CFRelease(value);
+    }
+    return milliseconds;
+}
+
 - (void) startKeyRepeat: (uint32_t) keycode {
     [self stopKeyRepeat];
     _repeatKeycode = keycode;
 
+    double delay = _repeatDelay, interval = 1000.0 / _repeatRate;
+    double preferred = repeatPreferenceMilliseconds(CFSTR("InitialKeyRepeat"));
+    if (preferred > 0)
+        delay = preferred;
+    preferred = repeatPreferenceMilliseconds(CFSTR("KeyRepeat"));
+    if (preferred > 0)
+        interval = preferred;
+
     CFRunLoopTimerContext context = {.version = 0, .info = self};
-    _repeatTimer = CFRunLoopTimerCreate(NULL, CFAbsoluteTimeGetCurrent() + _repeatDelay / 1000.0,
-                                        1.0 / _repeatRate, 0, 0, repeatTimerCallback, &context);
+    _repeatTimer = CFRunLoopTimerCreate(NULL, CFAbsoluteTimeGetCurrent() + delay / 1000.0,
+                                        interval / 1000.0, 0, 0, repeatTimerCallback, &context);
     CFRunLoopAddTimer(CFRunLoopGetMain(), _repeatTimer, kCFRunLoopCommonModes);
 }
 
