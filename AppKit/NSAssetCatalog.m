@@ -479,6 +479,13 @@ static NSData *decodeBitmapPixels(Span rendition, size_t *strideOut) {
             NSMutableData *raw = [NSMutableData data];
             if (!appendLZFSE(raw, stream, planeBound) || [raw length] < (size_t) width * height)
                 return nil;
+            // Only the alpha plane, the first, is read. The planes after it hold the grey of the pixels, which
+            // are all zero for black images (the template images this form is used for); a catalog with grey
+            // that varies is not decoded rather than shown with the wrong pixels.
+            const uint8_t *rawBytes = [raw bytes];
+            for (size_t i = (size_t) width * height; i < [raw length]; i++)
+                if (rawBytes[i] != 0)
+                    return nil;
             pixels = [NSMutableData dataWithLength: (size_t) width * height * 2];
             const uint8_t *alpha = [raw bytes];
             uint8_t *out = [pixels mutableBytes];
