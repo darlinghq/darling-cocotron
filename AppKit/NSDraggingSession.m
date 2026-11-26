@@ -72,6 +72,32 @@ static NSInteger nextSequenceNumber(void) {
     return atomic_fetch_add(&last, 1) + 1;
 }
 
+// The session that was begun and whose drag has not finished yet, and whether its source was told the drag
+// ended. Drags run on the main thread, one at a time.
+static NSDraggingSession *activeSession;
+static BOOL activeSessionEnded;
+
+// The index of the item nearest to the point (in the items' coordinates): the documented leader is the item
+// under the mouse.
+static NSInteger nearestItem(NSArray<NSDraggingItem *> *items, NSPoint point) {
+    NSInteger best = 0, index = 0;
+    CGFloat bestDistance = 0;
+    for (NSDraggingItem *item in items) {
+        NSRect frame = NSRectFromCGRect(CGRectStandardize(NSRectToCGRect([item draggingFrame])));
+        CGFloat dx = point.x < NSMinX(frame) ? NSMinX(frame) - point.x
+                   : point.x > NSMaxX(frame) ? point.x - NSMaxX(frame) : 0;
+        CGFloat dy = point.y < NSMinY(frame) ? NSMinY(frame) - point.y
+                   : point.y > NSMaxY(frame) ? point.y - NSMaxY(frame) : 0;
+        CGFloat distance = dx * dx + dy * dy;
+        if (index == 0 || distance < bestDistance) {
+            best = index;
+            bestDistance = distance;
+        }
+        index++;
+    }
+    return best;
+}
+
 // The items of a pasteboard read as the first of the classes each can be read as, with their frames, in order.
 // The block may change an item's frame and image; what it sets is written back through `update`.
 static void enumerateItems(NSPasteboard *pasteboard, NSArray<NSValue *> *frames, NSArray<NSDraggingItem *> *images,
@@ -122,6 +148,7 @@ static void enumerateItems(NSPasteboard *pasteboard, NSArray<NSValue *> *frames,
         _animates = YES;
         _sequenceNumber = nextSequenceNumber();
         _location = screenPointOfEvent(event);
+        _leaderIndex = nearestItem(items, [view convertPoint: [event locationInWindow] fromView: nil]);
     }
     return self;
 }
@@ -195,16 +222,29 @@ static void enumerateItems(NSPasteboard *pasteboard, NSArray<NSValue *> *frames,
     NSWindow *window = [_view window];
     if (window != nil)
         origin = [window convertRectFromScreen: NSMakeRect(origin.x, origin.y, 0, 0)].origin;
-    [_view _dragImage: image
-        atWindowLocation: origin
-                  offset: NSZeroSize
-                   event: _event
-              pasteboard: _pasteboard
-                  source: self
-               slideBack: _animates];
+    activeSessionEnded = NO;
+    @try {
+        [_view _dragImage: image
+            atWindowLocation: origin
+                      offset: NSZeroSize
+                       event: _event
+                  pasteboard: _pasteboard
+                      source: self
+                   slideBack: _animates];
+        // A drag the backend could not start still ends for the source
+        if (!activeSessionEnded) {
+            _location = [NSEvent mouseLocation];
+            if ([_source respondsToSelector: @selector(draggingSession:endedAtPoint:operation:)])
+                [_source draggingSession: self endedAtPoint: _location operation: NSDragOperationNone];
+        }
+    } @finally {
+        if (activeSession == self)
+            activeSession = nil;
+    }
 }
 
 - (void) _scheduleStart {
+    activeSession = self;
     [[NSRunLoop currentRunLoop]
         performSelector: @selector(_start)
                  target: self
@@ -249,6 +289,8 @@ static void enumerateItems(NSPasteboard *pasteboard, NSArray<NSValue *> *frames,
 }
 
 - (void) draggedImage: (NSImage *) image endedAt: (NSPoint) point operation: (NSDragOperation) operation {
+    if (activeSession == self)
+        activeSessionEnded = YES;
     _location = [self _mousePointForImagePoint: point];
     if ([_source respondsToSelector: @selector(draggingSession:endedAtPoint:operation:)])
         [_source draggingSession: self endedAtPoint: _location operation: operation];
@@ -257,6 +299,10 @@ static void enumerateItems(NSPasteboard *pasteboard, NSArray<NSValue *> *frames,
 @end
 
 @implementation NSDraggingSession (NSDraggingManager)
+
++ (BOOL) _isSessionPendingOrRunning {
+    return activeSession != nil;
+}
 
 + (id) _sourceForDestination: (id) dragSource {
     return [dragSource isKindOfClass: [NSDraggingSession class]] ? [dragSource _draggingSource] : dragSource;

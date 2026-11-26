@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "CGGradientPrivate.h"
+#include <CoreGraphics/CoreGraphicsPrivate.h>
 
 static CFTypeID gradientTypeID;
 static CFRuntimeClass gradientClass;
@@ -97,6 +98,7 @@ static CFTypeRef CGGradientCreate(CGColorSpaceRef colorSpace,
         return NULL;
 
     gradient->colorSpace = (CGColorSpaceRef)CGColorSpaceRetain(colorSpace);
+    gradient->interpolatesPremultiplied = false;
     gradient->count = count;
     gradient->numberOfComponents = numberOfComponents;
     gradient->locations = (CGFloat *)calloc(count, sizeof(CGFloat));
@@ -271,6 +273,45 @@ void CGGradientColorAtLocation(CGGradientRef gradient, CGFloat t,
         CGFloat to = gradient->components[(segment + 1) * n + j];
         components[j] = from + (to - from) * fraction;
     }
+
+    /* Premultiplied interpolation mixes the colour components weighted by
+     * their alpha (the last component), then divides the mix by the mixed
+     * alpha, so a transparent stop does not tint its neighbour. */
+    if (gradient->interpolatesPremultiplied && n > 1) {
+        CGFloat fromAlpha = gradient->components[segment * n + n - 1];
+        CGFloat toAlpha = gradient->components[(segment + 1) * n + n - 1];
+        CGFloat alpha = components[n - 1];
+
+        if (alpha > 0) {
+            for (j = 0; j < n - 1; j++) {
+                CGFloat from = gradient->components[segment * n + j] * fromAlpha;
+                CGFloat to = gradient->components[(segment + 1) * n + j] * toAlpha;
+                components[j] = (from + (to - from) * fraction) / alpha;
+            }
+        }
+    }
+}
+
+const CFStringRef kCGGradientInterpolatesPremultiplied =
+        CFSTR("kCGGradientInterpolatesPremultiplied");
+
+/* Options other than kCGGradientInterpolatesPremultiplied are not known and
+ * are ignored. */
+CGGradientRef CGGradientCreateWithColorComponentsAndOptions(
+        CGColorSpaceRef colorSpace, const CGFloat components[],
+        const CGFloat locations[], size_t count, CFDictionaryRef options) {
+    CGGradientRef gradient = CGGradientCreateWithColorComponents(
+            colorSpace, components, locations, count);
+
+    if (gradient != NULL && options != NULL) {
+        CFTypeRef premultiplied = CFDictionaryGetValue(
+                options, kCGGradientInterpolatesPremultiplied);
+        if (premultiplied != NULL &&
+            CFGetTypeID(premultiplied) == CFBooleanGetTypeID())
+            gradient->interpolatesPremultiplied =
+                    CFBooleanGetValue((CFBooleanRef)premultiplied);
+    }
+    return gradient;
 }
 
 void CGGradientRelease(CGGradientRef self) {

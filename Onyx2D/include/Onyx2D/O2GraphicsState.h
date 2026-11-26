@@ -74,6 +74,18 @@ extern "C" {
 
     int _antialiasingQuality;
     uint32_t _fontSmoothingStyle;
+
+    // The base CTM: the transform a context reports as the start of its user
+    // space. It is stored and reported; drawing does not depend on it.
+    O2AffineTransform _baseCTM;
+    // The CGStyle set on the state (a CF object owned by the state), or NULL.
+    CFTypeRef _style;
+    BOOL _shouldAntialiasFonts;
+    // A focus ring drawn around filled and stroked paths, set from a focus
+    // ring style; no ring when the colour is nil.
+    O2ColorRef _focusRingColor;
+    O2Float _focusRingRadius;
+    int _focusRingOrdering;
 }
 
 - initWithDeviceTransform: (O2AffineTransform) deviceTransform;
@@ -179,6 +191,16 @@ void O2GStateSetAlpha(O2GState *self, O2Float alpha);
 - (void) setShadowOffset: (O2Size) offset blur: (O2Float) blur;
 
 - (void) setShouldAntialias: (BOOL) flag;
+
+O2AffineTransform O2GStateGetBaseCTM(O2GState *self);
+void O2GStateSetBaseCTM(O2GState *self, O2AffineTransform transform);
+CFTypeRef O2GStateGetStyle(O2GState *self);
+// Retains the style and releases the previous one; NULL clears it.
+void O2GStateSetStyle(O2GState *self, CFTypeRef style);
+// ordering: 0 draws only the ring, 1 draws it below the shape, 2 above it.
+// A nil colour removes the ring.
+void O2GStateSetFocusRing(O2GState *self, O2ColorRef color, O2Float radius,
+                          int ordering);
 
 // temporary?
 - (void) setAntialiasingQuality: (int) value;

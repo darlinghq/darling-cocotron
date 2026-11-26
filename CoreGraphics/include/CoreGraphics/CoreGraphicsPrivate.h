@@ -3,6 +3,7 @@
 #include <CoreGraphics/CoreGraphics.h>
 #include <IOKit/hidsystem/IOLLEvent.h>
 #include <CoreFoundation/CoreFoundation.h>
+#include <mach/mach_types.h>
 #include <CoreGraphics/CGSServerSPI.h>
 
 __BEGIN_DECLS
@@ -186,6 +187,8 @@ extern CGError CGSAddTrackingRect(CGSConnectionID cid, CGSWindowID wid, CGRect r
 extern CGError CGSRemoveAllTrackingAreas(CGSConnectionID cid, CGSWindowID wid);
 extern CFStringRef CGSCopyManagedDisplayForWindow(const CGSConnectionID cid, CGSWindowID wid);
 extern CGError CGSGetScreenRectForWindow(CGSConnectionID cid, CGSWindowID wid, CGRect *outRect);
+// The IOHIDEvent an event was made from; Darling's events have none, so always NULL.
+extern CFTypeRef CGEventCopyIOHIDEvent(CGEventRef event);
 
 extern const CFStringRef kCGSWindowTitle;
 extern CGError CGSSetWindowTitle(CGSConnectionID cid, CGSWindowID wid, CFStringRef title);
@@ -413,6 +416,7 @@ extern size_t CGContextGetLineDashCount(CGContextRef context);
 extern void CGContextGetLineDashPattern(CGContextRef context, CGFloat *phase, CGFloat *lengths, size_t capacity);
 extern int CGContextGetCompositeOperation(CGContextRef context);
 extern void CGContextSetCompositeOperation(CGContextRef context, int operation);
+extern void CGContextSetOwnerIdentity(CGContextRef context, task_id_token_t owner);
 
 // Private numeric helpers.
 extern bool CGFloatIsValid(CGFloat value);
@@ -518,6 +522,105 @@ CGSConnection* _CGSConnectionForID(CGSConnectionID connId);
 CGSConnection* _CGSConnectionFromEventRecord(const CGSEventRecordPtr record);
 #endif
 
+// Draws a PDF page like CGContextDrawPDFPage, asking the callback whether to
+// draw each of the page's annotations (NULL draws them all).
+typedef struct CGPDFAnnotation *CGPDFAnnotationRef;
+#if defined(__BLOCKS__)
+typedef bool (^CGPDFAnnotationDrawCallbackType)(CGContextRef context, CGPDFPageRef page, CGPDFAnnotationRef annotation);
+#else
+typedef void *CGPDFAnnotationDrawCallbackType;
+#endif
+extern void CGContextDrawPDFPageWithAnnotations(CGContextRef context, CGPDFPageRef page, CGPDFAnnotationDrawCallbackType callback);
+
+// More private context functions, as WebKit (BSD licensed,
+// Source/WebCore/PAL/pal/spi/cg/CoreGraphicsSPI.h) declares them.
+// The base CTM is the transform the CTM started from, kept in the graphics
+// state (identity for a new context); setting it leaves the CTM as it is, and
+// drawing does not depend on it.
+extern CGAffineTransform CGContextGetBaseCTM(CGContextRef context);
+extern void CGContextSetBaseCTM(CGContextRef context, CGAffineTransform transform);
+// The current fill and stroke colours, owned by the context.
+extern CGColorRef CGContextGetFillColorAsColor(CGContextRef context);
+extern CGColorRef CGContextGetStrokeColorAsColor(CGContextRef context);
+extern bool CGContextGetShouldAntialias(CGContextRef context);
+// Kept in the graphics state; Onyx2D antialiases glyphs either way.
+extern void CGContextSetShouldAntialiasFonts(CGContextRef context, bool shouldAntialiasFonts);
+extern bool CGContextGetShouldAntialiasFonts(CGContextRef context);
+// The colour space of the context's destination (a new reference), NULL for a
+// NULL context.
+extern CGColorSpaceRef CGContextCopyDeviceColorSpace(CGContextRef context);
+// Draws path as CGContextDrawPath would, without changing the current path.
+// boundingBox, when given, is a hint and is not used.
+extern void CGContextDrawPathDirect(CGContextRef context, CGPathDrawingMode mode, CGPathRef path, const CGRect *boundingBox);
+// Draws the gradient around center: its start location at angle radians, and
+// its locations going counterclockwise in user space (from the positive x axis
+// towards the positive y axis) for one full turn.
+extern void CGContextDrawConicGradient(CGContextRef context, CGGradientRef gradient, CGPoint center, CGFloat angle);
+// A shading that evaluates function as CGContextDrawConicGradient sweeps a
+// gradient; it covers the whole clip.
+extern CGShadingRef CGShadingCreateConic(CGColorSpaceRef space, CGPoint center, CGFloat angle, CGFunctionRef function);
+
+// Adds a rectangle with elliptical corners of their own sizes. Inferred order
+// (WebKit's use): the corners at (minX, maxY), (maxX, maxY), (maxX, minY) and
+// (minX, minY), each size the horizontal and vertical radius. NULL corners add
+// a plain rectangle.
+extern void CGPathAddUnevenCornersRoundedRect(CGMutablePathRef path, const CGAffineTransform *transform, CGRect rect, const CGSize corners[4]);
+
+// A colored pattern that tiles image, one copy every image width and height
+// in pattern space; transform maps pattern space to the default user space.
+extern CGPatternRef CGPatternCreateWithImage2(CGImageRef image, CGAffineTransform transform, CGPatternTiling tiling);
+
+// Hints on how long an image's decoded data is worth keeping. Inferred values.
+// Kept with the image and reported; Onyx2D does not cache by them.
+enum {
+    kCGImageCachingTransient = 1,
+    kCGImageCachingTemporary = 3,
+};
+typedef uint32_t CGImageCachingFlags;
+extern void CGImageSetCachingFlags(CGImageRef image, CGImageCachingFlags flags);
+extern CGImageCachingFlags CGImageGetCachingFlags(CGImageRef image);
+
+// Converts colours to the destination colour space it was created with.
+typedef const struct CGColorTransform *CGColorTransformRef;
+// NULL for a NULL space. The attributes are not used.
+extern CGColorTransformRef CGColorTransformCreate(CGColorSpaceRef destination, CFDictionaryRef attributes);
+extern CFTypeID CGColorTransformGetTypeID(void);
+// Converts the colour components (without alpha) of a colour in source to the
+// destination space's components (without alpha). False, and the destination
+// left as it was, when the colours cannot be converted.
+extern bool CGColorTransformConvertColorComponents(CGColorTransformRef transform, CGColorSpaceRef source, CGColorRenderingIntent intent, const CGFloat sourceComponents[], CGFloat destinationComponents[]);
+// The colour in the transform's destination space, alpha kept.
+extern CGColorRef CGColorTransformConvertColor(CGColorTransformRef transform, CGColorRef color, CGColorRenderingIntent intent);
+
+// Whether two spaces are the same space: the same object, equal spaces
+// (CFEqual), or spaces of one model with the same ICC data. False when only one
+// of them is NULL.
+extern bool CGColorSpaceEqualToColorSpace(CGColorSpaceRef space1, CGColorSpaceRef space2);
+// The description ('desc' tag) of the space's ICC profile, or NULL when it has
+// no profile or the profile has no readable description.
+extern CFStringRef CGColorSpaceCopyICCProfileDescription(CGColorSpaceRef space);
+
+// Gradient creation with options. With kCGGradientInterpolatesPremultiplied
+// true, the colours between the stops are interpolated with their alpha
+// premultiplied.
+extern const CFStringRef kCGGradientInterpolatesPremultiplied;
+extern CGGradientRef CGGradientCreateWithColorComponentsAndOptions(CGColorSpaceRef space, const CGFloat components[], const CGFloat locations[], size_t count, CFDictionaryRef options);
+
+// A provider of a copy of the bytes, made when it is created. NULL for NULL
+// data with a size other than 0.
+extern CGDataProviderRef CGDataProviderCreateWithCopyOfData(const void *data, size_t size);
+
+// Walks the rectangles of a region. Each CGSNextRect returns the next one
+// (owned by the enumerator) and NULL after the last.
+typedef struct CGSRegionEnumeratorObject *CGSRegionEnumeratorObj;
+extern CGSRegionEnumeratorObj CGSRegionEnumerator(CGSRegionRef region);
+extern CGRect *CGSNextRect(const CGSRegionEnumeratorObj enumerator);
+extern CGError CGSReleaseRegionEnumerator(const CGSRegionEnumeratorObj enumerator);
+extern CGError CGSReleaseRegion(const CGSRegionRef region);
+
 __END_DECLS
+
+#include <CoreGraphics/CGContextDelegatePrivate.h>
+#include <CoreGraphics/CGStylePrivate.h>
 
 #endif

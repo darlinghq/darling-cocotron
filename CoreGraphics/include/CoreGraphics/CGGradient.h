@@ -7,7 +7,7 @@
 
 typedef struct CGGradient *CGGradientRef;
 
-typedef CF_ENUM(uint32_t, CGGradientDrawingOptions)
+typedef CF_OPTIONS(uint32_t, CGGradientDrawingOptions)
 {
     kCGGradientDrawsBeforeStartLocation = 0x01,
     kCGGradientDrawsAfterEndLocation = 0x02

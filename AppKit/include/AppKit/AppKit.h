@@ -75,6 +75,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSDragging.h>
 #import <AppKit/NSDraggingItem.h>
 #import <AppKit/NSDraggingSession.h>
+#import <AppKit/NSFilePromiseProvider.h>
+#import <AppKit/NSFilePromiseReceiver.h>
 #import <AppKit/NSDrawer.h>
 #import <AppKit/NSEPSImageRep.h>
 #import <AppKit/NSEvent.h>
@@ -87,6 +89,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSForm.h>
 #import <AppKit/NSFormCell.h>
 #import <AppKit/NSGestureRecognizer.h>
+#import <AppKit/NSPanGestureRecognizer.h>
 #import <AppKit/NSGlyphGenerator.h>
 #import <AppKit/NSGlyphInfo.h>
 #import <AppKit/NSGradient.h>
@@ -99,6 +102,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImageCell.h>
 #import <AppKit/NSImageRep.h>
 #import <AppKit/NSImageView.h>
+#import <AppKit/NSInputManager.h>
 #import <AppKit/NSInputServer.h>
 #import <AppKit/NSInterfaceStyle.h>
 #import <AppKit/NSKeyBindingManager.h>
@@ -207,6 +211,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTextFieldCell.h>
 #import <AppKit/NSTextFinder.h>
 #import <AppKit/NSTextList.h>
+#import <AppKit/NSTextAlternatives.h>
 #import <AppKit/NSTextStorage.h>
 #import <AppKit/NSTextRange.h>
 #import <AppKit/NSTextContentManager.h>

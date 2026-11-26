@@ -369,6 +369,13 @@ void O2ContextSetShadowWithColor(O2ContextRef self, O2Size offset, O2Float blur,
 void O2ContextSetShadow(O2ContextRef self, O2Size offset, O2Float blur);
 
 void O2ContextSetShouldAntialias(O2ContextRef self, BOOL yesOrNo);
+BOOL O2ContextGetShouldAntialias(O2ContextRef self);
+// Stored in the graphics state; glyph rendering does not depend on it.
+void O2ContextSetShouldAntialiasFonts(O2ContextRef self, BOOL yesOrNo);
+BOOL O2ContextGetShouldAntialiasFonts(O2ContextRef self);
+// The base CTM, kept in the graphics state (identity for a new context).
+O2AffineTransform O2ContextGetBaseCTM(O2ContextRef self);
+void O2ContextSetBaseCTM(O2ContextRef self, O2AffineTransform transform);
 
 // drawing
 void O2ContextStrokeLineSegments(O2ContextRef self, const O2Point *points,
@@ -388,6 +395,9 @@ void O2ContextDrawPath(O2ContextRef self, O2PathDrawingMode pathMode);
 void O2ContextStrokePath(O2ContextRef self);
 void O2ContextFillPath(O2ContextRef self);
 void O2ContextEOFillPath(O2ContextRef self);
+// Draws path (in user space) without using or changing the current path.
+void O2ContextDrawPathDirect(O2ContextRef self, O2PathDrawingMode pathMode,
+                             O2PathRef path);
 
 void O2ContextClearRect(O2ContextRef self, O2Rect rect);
 

@@ -99,6 +99,7 @@ set(AppKit_sources
 	NSImageSystemTemplates.m
 	NSPICTImageRep.m
 	NSScroller.m
+	NSScrollingMomentum.m
 	NSCustomImageRep.m
 	NSClipView.m
 	NSApplication.m
@@ -141,6 +142,8 @@ set(AppKit_sources
 	NSPoofAnimation.m
 	NSErrors.m
 	NSPopover.m
+	NSKeyboardShortcut.m
+	NSTextPlaceholder.m
 	NSRunningApplication.m
 	NSAccessibilityCustomChooser.m
 
@@ -407,6 +410,7 @@ set(AppKit_sources
 	NSDockTile.m
 	NSGraphics.m
 	NSColorWell.m
+	NSPopoverColorWell.m
 	NSAlertPanel.m
 	NSPanel.m
 	NSRuleEditorButtonCell.m
@@ -436,6 +440,7 @@ set(AppKit_sources
 	NSClickGestureRecognizer.m
 	NSDraggingItem.m
 	NSDraggingSession.m
+	NSFilePromiseReceiver.m
 	NSGroupTouchBarItem.m
 	NSKeyBindingManager.m
 	NSPasteboardItem.m

@@ -23,7 +23,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGPDFDictionary.h>
 #import <CoreGraphics/CGGeometry.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2PDFPage *CGPDFPageRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGPDFPage *CGPDFPageRef;
+#endif
 
 typedef enum {
     kCGPDFMediaBox = 0,

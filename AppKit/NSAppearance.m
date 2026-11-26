@@ -24,6 +24,8 @@
 #import <Foundation/NSException.h>
 #import <Foundation/NSThread.h>
 #import <AppKit/NSColor.h>
+#import <AppKit/NSColorSpace.h>
+#import <CoreGraphics/CoreGraphics.h>
 
 NSString *const NSAppearanceNameAqua = @"NSAppearanceNameAqua";
 NSString *const NSAppearanceNameDarkAqua = @"NSAppearanceNameDarkAqua";
@@ -83,11 +85,68 @@ static NSString *const NSAppearanceThreadKey = @"NSAppearanceCurrentDrawingAppea
 
 - (void) dealloc {
     [_name release];
+    if (NS_EXTRA_ALLOCATED(NSAppearance, self))
+        [NS_EXTRA(NSAppearance, self)->_tintColor release];
+    NS_EXTRA_FREE(NSAppearance, self);
     [super dealloc];
+}
+
+// SPI. The color controls drawn in this appearance are tinted with: the
+// accent color, or the one given to -appearanceByApplyingTintColor:. Observed
+// on macOS 26.7.3 (test tests/appkit-appearance-private.m): every named
+// appearance reports the accent color in sRGB.
+- (NSColor *) tintColor {
+    if (NS_EXTRA_ALLOCATED(NSAppearance, self) && NS_EXTRA(NSAppearance, self)->_hasTintColor)
+        return NS_EXTRA(NSAppearance, self)->_tintColor;
+    NSColor *accent = [NSColor controlAccentColor];
+    NSColor *srgb = [accent colorUsingColorSpace: [NSColorSpace sRGBColorSpace]];
+    return srgb != nil ? srgb : accent;
+}
+
+// SPI. A new appearance of the same name whose tint color is the given one,
+// also when that is nil. Two such appearances with equal names and tint colors
+// are equal. Observed on macOS 26.7.3 (test tests/appkit-appearance-private.m).
+- (NSAppearance *) appearanceByApplyingTintColor: (NSColor *) tintColor {
+    NSAppearance *tinted = [[NSAppearance alloc] init];
+    tinted->_name = [_name copy];
+    NS_EXTRA(NSAppearance, tinted)->_hasTintColor = YES;
+    NS_EXTRA(NSAppearance, tinted)->_tintColor = [tintColor retain];
+    return [tinted autorelease];
+}
+
+- (BOOL) isEqual: (id) other {
+    if (other == self)
+        return YES;
+    if (![other isKindOfClass: [NSAppearance class]])
+        return NO;
+    NSAppearance *appearance = other;
+    if (!(_name == appearance->_name || [_name isEqualToString: appearance->_name]))
+        return NO;
+    BOOL tinted = NS_EXTRA_ALLOCATED(NSAppearance, self) && NS_EXTRA(NSAppearance, self)->_hasTintColor;
+    BOOL otherTinted = NS_EXTRA_ALLOCATED(NSAppearance, appearance) && NS_EXTRA(NSAppearance, appearance)->_hasTintColor;
+    if (tinted != otherTinted)
+        return NO;
+    if (!tinted)
+        return YES;
+    NSColor *tint = NS_EXTRA(NSAppearance, self)->_tintColor;
+    NSColor *otherTint = NS_EXTRA(NSAppearance, appearance)->_tintColor;
+    return tint == otherTint || [tint isEqual: otherTint];
+}
+
+- (NSUInteger) hash {
+    return [_name hash];
 }
 
 - (NSAppearanceName) name {
     return _name;
+}
+
+// SPI. Whether controls are laid out with the current (macOS 26) metrics. Observed on macOS
+// 26.7.3: YES for every named appearance, light, dark, vibrant and high contrast alike; the
+// controls Darling draws follow the same metrics as its other appearances, so the answer is
+// the same. Test: tests/appkit-scroll-view-separator-tracking.m.
+- (BOOL) _usesMetricsAppearance {
+    return YES;
 }
 
 BOOL NSAccessibilityDisplayShouldIncreaseContrast(void);
@@ -182,6 +241,48 @@ static const CGFloat NSAppearanceLightnessAdjustment = 0.1;
     NSColor *result = [color blendedColorWithFraction: NSAppearanceLightnessAdjustment
                                               ofColor: target];
     return result ? result : color;
+}
+
+// The CoreUI option strings _drawInRect:context:options: understands (the
+// values of kCUIWidgetKey, kCUIWidgetScrollBarTrackCorner and kCUIIsFlippedKey).
+static NSString *const NSAppearanceWidgetKey = @"widget";
+static NSString *const NSAppearanceWidgetScrollBarTrackCorner = @"kCUIWidgetScrollBarTrackCorner";
+static NSString *const NSAppearanceIsFlippedKey = @"is.flipped";
+
+// The square of scroll bar track corner artwork, in points.
+static const CGFloat NSAppearanceTrackCornerSize = 15;
+
+// SPI. Draws the system artwork for the widget the options name (CoreUI option
+// keys) into the context. Darling has artwork for the scroll bar track corner;
+// other widgets draw nothing, as on macOS for a widget it does not know.
+// QUIRK: the track corner is a fixed 15 x 15 square centered in the rect, not
+// scaled to it: light gray (250/255) in light appearances, light gray at about
+// 7% opacity in dark ones. A half-point offset rounds down, except vertically
+// when the options say the context is flipped, where it rounds up. Not
+// documented. Evidence: black-box observation on macOS 26.7.3 x86_64 of the
+// pixels drawn into bitmap contexts (tier 2).
+// Test: tests/appkit-appearance-private.m.
+- (void) _drawInRect: (NSRect) rect context: (CGContextRef) context options: (NSDictionary *) options {
+    if (context == NULL)
+        return;
+    id widget = [options objectForKey: NSAppearanceWidgetKey];
+    if (![widget isKindOfClass: [NSString class]] ||
+        ![widget isEqualToString: NSAppearanceWidgetScrollBarTrackCorner])
+        return;
+
+    BOOL flipped = [[options objectForKey: NSAppearanceIsFlippedKey] boolValue];
+    CGFloat y = NSMidY(rect) - NSAppearanceTrackCornerSize / 2;
+    CGRect square = CGRectMake(
+            floor(NSMidX(rect) - NSAppearanceTrackCornerSize / 2),
+            flipped ? ceil(y) : floor(y),
+            NSAppearanceTrackCornerSize, NSAppearanceTrackCornerSize);
+    CGContextSaveGState(context);
+    if (isDarkAppearanceName(_name))
+        CGContextSetRGBFillColor(context, 0.79, 0.79, 0.79, 0.075);
+    else
+        CGContextSetRGBFillColor(context, 250.0 / 255, 250.0 / 255, 250.0 / 255, 1);
+    CGContextFillRect(context, square);
+    CGContextRestoreGState(context);
 }
 
 - (void) encodeWithCoder: (NSCoder *) aCoder {

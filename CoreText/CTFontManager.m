@@ -3,6 +3,7 @@
 #import "KTFontSuitcase.h"
 #import <Foundation/Foundation.h>
 #import <Onyx2D/O2Font_freetype.h>
+#include <errno.h>
 
 const CFStringRef kCTFontManagerErrorDomain = CFSTR("com.apple.CoreText.CTFontManagerErrorDomain");
 const CFStringRef kCTFontManagerErrorFontURLsKey = CFSTR("CTFontManagerErrorFontURLs");
@@ -61,6 +62,29 @@ bool CTFontManagerRegisterFontsForURL(CFURLRef fontURL, CTFontManagerScope scope
                                (CFDictionaryRef) userInfo);
     }
     return false;
+}
+
+// The handler is called once, before the function returns, with every error and done set, as on
+// macOS 26.7.3 (tests/coretext-manager-register-font-urls.m). Without a URL to register, its one
+// error is EINVAL, as there. The fonts are enabled whatever enabled says: the setting is for
+// persistent registrations, and registrations last for the process here.
+void CTFontManagerRegisterFontURLs(CFArrayRef fontURLs, CTFontManagerScope scope, bool enabled,
+                                   bool (^registrationHandler)(CFArrayRef errors, bool done))
+{
+    NSMutableArray *errors = [NSMutableArray array];
+    CFIndex count = fontURLs != NULL ? CFArrayGetCount(fontURLs) : 0;
+    if (count == 0)
+        [errors addObject: [NSError errorWithDomain: NSPOSIXErrorDomain code: EINVAL userInfo: nil]];
+    for (CFIndex i = 0; i < count; i++) {
+        CFErrorRef error = NULL;
+        if (!CTFontManagerRegisterFontsForURL((CFURLRef) CFArrayGetValueAtIndex(fontURLs, i), scope, &error)
+                && error != NULL) {
+            [errors addObject: (id) error];
+            CFRelease(error);
+        }
+    }
+    if (registrationHandler != NULL)
+        registrationHandler((CFArrayRef) errors, true);
 }
 
 // The descriptor of one face of font data: the naming attributes are those of the face, and the

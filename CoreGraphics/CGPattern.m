@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import "CGConversions.h"
 #import <CoreGraphics/CGPattern.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Onyx2D/O2Pattern.h>
 
 CGPatternRef CGPatternRetain(CGPatternRef self) {
@@ -58,4 +59,31 @@ CGPatternTiling CGPatternGetTiling(CGPatternRef self) {
 
 bool CGPatternIsColored(CGPatternRef self) {
     return O2PatternIsColored((O2PatternRef)self);
+}
+
+static void drawImagePattern(void *info, CGContextRef context) {
+    CGImageRef image = info;
+    CGContextDrawImage(context,
+                       CGRectMake(0, 0, CGImageGetWidth(image), CGImageGetHeight(image)),
+                       image);
+}
+
+static void releaseImagePattern(void *info) {
+    CGImageRelease((CGImageRef) info);
+}
+
+CGPatternRef CGPatternCreateWithImage2(CGImageRef image, CGAffineTransform transform,
+                                       CGPatternTiling tiling)
+{
+    if (image == NULL || CGImageGetWidth(image) == 0 || CGImageGetHeight(image) == 0)
+        return NULL;
+
+    static const CGPatternCallbacks callbacks = {0, drawImagePattern, releaseImagePattern};
+    CGFloat width = CGImageGetWidth(image), height = CGImageGetHeight(image);
+    CGPatternRef pattern = CGPatternCreate((void *) CGImageRetain(image),
+                                           CGRectMake(0, 0, width, height), transform,
+                                           width, height, tiling, true, &callbacks);
+    if (pattern == NULL)
+        CGImageRelease(image);
+    return pattern;
 }

@@ -422,6 +422,25 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
     return 0;
 }
 
+// Darling has no pressure-sensitive input, so no event carries pressure stages
+// and only mouse events (NSEvent_mouse) have a pressure.
+- (float) pressure {
+    return 0;
+}
+
+- (NSInteger) stage {
+    return 0;
+}
+
+- (CGFloat) stageTransition {
+    return 0;
+}
+
+// The private spelling, which returns the same event.
+- (void *) _eventRef {
+    return (void *) [self eventRef];
+}
+
 - (float) rotation {
     return 0;
 }

@@ -748,6 +748,16 @@ static NSMutableDictionary *cellClassDictionary = nil;
     [self setFrameSize: cellSize];
 }
 
+// The size the cell needs within the given one; a wrapping text cell wraps at
+// its width. A control without a cell keeps the size it has.
+- (NSSize) sizeThatFits: (NSSize) size {
+    NSCell *cell = [self cell];
+
+    if (cell == nil)
+        return [self frame].size;
+    return [cell cellSizeForBounds: NSMakeRect(0, 0, size.width, size.height)];
+}
+
 - (void) setNeedsDisplay {
     [self setNeedsDisplay: YES];
 }

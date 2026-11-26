@@ -1,6 +1,6 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
-// CGRectStandardize, CGImageGetTypeID/CGColorGetTypeID,
+// CGRectStandardize, CGImageGetTypeID/CGColorGetTypeID/CGColorSpaceGetTypeID,
 // CGDataProviderCreateWithFilename and CGContextBeginTransparencyLayerWithRect.
 // The edge cases (CGRectNull and CGRectInfinite unchanged, a size of -0 becoming
 // +0, a missing file giving NULL) were observed on macOS 26.7.3.
@@ -37,6 +37,11 @@ int main(void) {
     CHECK(CFGetTypeID(image) == CGImageGetTypeID(), "CGImage type ID");
     CHECK(CFGetTypeID(color) == CGColorGetTypeID(), "CGColor type ID");
     CHECK(CGImageGetTypeID() != CGColorGetTypeID(), "distinct type IDs");
+    CHECK(CFGetTypeID(space) == CGColorSpaceGetTypeID(), "CGColorSpace type ID");
+    CGColorSpaceRef gray = CGColorSpaceCreateDeviceGray();
+    CHECK(CFGetTypeID(gray) == CGColorSpaceGetTypeID(), "CGColorSpace type ID, gray space");
+    CGColorSpaceRelease(gray);
+    CHECK(CGColorSpaceGetTypeID() != CGColorGetTypeID() && CGColorSpaceGetTypeID() != CGImageGetTypeID(), "color space type ID is distinct");
 
     CGContextBeginTransparencyLayerWithRect(context, CGRectMake(0, 0, 1, 1), NULL);
     CGContextSetRGBFillColor(context, 1, 0, 0, 1);

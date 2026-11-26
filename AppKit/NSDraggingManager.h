@@ -57,6 +57,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
                      pasteboard: (NSPasteboard *) pasteboard;
 - (void) _scheduleStart;
 
+// Whether a session was begun and its drag has not finished yet
++ (BOOL) _isSessionPendingOrRunning;
+
 // The object a drag's destination sees as its source: a session's source, or the source given to
 // -dragImage:at:offset:event:pasteboard:source:slideBack:
 + (id) _sourceForDestination: (id) dragSource;

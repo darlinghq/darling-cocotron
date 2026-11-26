@@ -2,6 +2,7 @@
 #import <CoreText/CTLine.h>
 #import <CoreText/CTRun.h>
 #import <CoreText/CTStringAttributes.h>
+#import "CTLineSPI.h"
 
 CTLineRef KTCoreTextCreateLineWithRange(CFAttributedStringRef string, CFRange range);
 void KTCoreTextFinalizeObject(CFTypeRef object);
@@ -40,3 +41,11 @@ void KTCoreTextDictionarySetIndex(CFMutableDictionaryRef dictionary,
                                   CFStringRef key, CFIndex value);
 void KTCoreTextDictionarySetFloat(CFMutableDictionaryRef dictionary,
                                   CFStringRef key, CGFloat value);
+
+// The text a CTUniCharProviderCallback supplies, with the attributes of each
+// piece, as an immutable attributed string; every piece is handed to dispose
+// (when given) once it has been copied. NULL without a provider.
+__attribute__((visibility("hidden")))
+CFAttributedStringRef KTCoreTextCreateAttributedStringWithProvider(CTUniCharProviderCallback provider,
+                                                                  CTUniCharDisposeCallback dispose,
+                                                                  void *refCon);

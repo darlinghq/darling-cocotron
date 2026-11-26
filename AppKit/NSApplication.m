@@ -250,6 +250,21 @@ static NSInteger cachedLayoutDirection = -1;
     return (NSUserInterfaceLayoutDirection) cachedLayoutDirection;
 }
 
+// SPI. Asks AppKit not to connect the process to the Dock; WebKit's web content process calls it,
+// before or after NSApp exists. On macOS 26.7.3 the process sees no difference (its activation
+// policy and setActivationPolicy: are unchanged). Darling's AppKit never connects to a Dock, so
+// there is nothing to prevent.
++ (void) _preventDockConnections {
+}
+
+// SPI. Prepares the process for accessibility; WebKit's web content process calls it when it
+// is asked to initialize accessibility. On macOS 26.7.3 the observable effect is that NSApp
+// exists afterwards, an instance of the receiving class, as +sharedApplication makes it, and a
+// second call is harmless. Test: tests/appkit-accessibility-initialize.m.
++ (void) _accessibilityInitialize {
+    [self sharedApplication];
+}
+
 + (NSApplication *) sharedApplication {
     if (NSApp == nil) {
         [[self alloc] init]; // NSApp must be nil inside init
@@ -1920,6 +1935,7 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
                 makeObjectsPerformSelector: @selector(_makeSureIsOnAScreen)];
 
         [self _checkForAppActivation];
+        [self _updateWindowsIfNeededInMode: mode];
         [self _displayAllWindowsIfNeeded];
 
         // One wait in HIToolbox's event queue, which holds AppKit's events
@@ -2088,9 +2104,31 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     return NO;
 }
 
+// The next -nextEventMatchingMask:... in the default or modal panel run loop
+// mode updates the windows.
 - (void) setWindowsNeedUpdate: (BOOL) value {
     NS_EXTRA(NSApplication, self)->_windowsNeedUpdate = value;
-    NSUnimplementedMethod();
+}
+
+// SPI. An accent color the application chose for itself, nil unless set; it
+// doesn't change +[NSColor controlAccentColor]. The application object lives
+// for the whole process, so the color is never released.
+- (NSColor *) _accentColor {
+    return NS_EXTRA(NSApplication, self)->_accentColor;
+}
+
+- (void) _setAccentColor: (NSColor *) color {
+    color = [color copy];
+    [NS_EXTRA(NSApplication, self)->_accentColor release];
+    NS_EXTRA(NSApplication, self)->_accentColor = color;
+}
+
+// SPI. The accent color the application's interface uses when it has its own:
+// the one set with -_setAccentColor:. (Darling doesn't read the color that
+// NSAccentColorName names in the Info.plist, as it would come from an asset
+// catalog.)
+- (NSColor *) _effectiveAccentColor {
+    return [[NS_EXTRA(NSApplication, self)->_accentColor retain] autorelease];
 }
 
 // The windows are updated between the two notifications; only the windows on screen are updated (and their
@@ -2101,6 +2139,15 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
         if ([window isVisible])
             [window update];
     [[NSNotificationCenter defaultCenter] postNotificationName: NSApplicationDidUpdateNotification object: self];
+}
+
+- (void) _updateWindowsIfNeededInMode: (NSRunLoopMode) mode {
+    if (!NS_EXTRA(NSApplication, self)->_windowsNeedUpdate)
+        return;
+    if (![mode isEqualToString: NSDefaultRunLoopMode] && ![mode isEqualToString: NSModalPanelRunLoopMode])
+        return;
+    NS_EXTRA(NSApplication, self)->_windowsNeedUpdate = NO;
+    [self updateWindows];
 }
 
 // Whether a window of this application may ask the window system for the input focus now. Ordering a

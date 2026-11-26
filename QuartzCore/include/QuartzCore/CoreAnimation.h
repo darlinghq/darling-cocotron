@@ -15,6 +15,7 @@
 #import <QuartzCore/CARenderer.h>
 #import <QuartzCore/CATextLayer.h>
 #import <QuartzCore/CATransaction.h>
+#import <QuartzCore/CAValueFunction.h>
 
 #import <QuartzCore/CAEDRMetadata.h>
 #import <QuartzCore/CAGradientLayer.h>

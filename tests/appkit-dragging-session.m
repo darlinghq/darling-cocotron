@@ -4,9 +4,20 @@
 // The dragging object model: NSDraggingItem, NSDraggingImageComponent and the
 // NSDraggingSession -[NSView beginDraggingSessionWithItems:event:source:]
 // returns before the drag runs. Observed on macOS 26.7.3 and 10.14.4
-// (darling's tests/collection-view.md, "Dragging sessions"); the program
-// passes unchanged on both. It returns before the run loop runs, so no drag
-// takes place.
+// (darling's tests/collection-view.md, "Dragging sessions"). It returns before
+// the run loop runs, so no drag takes place.
+// Also, as observed on macOS 26.7.3:
+//  - the component -setDraggingFrame:contents: makes is the same one each time
+//    the item is asked for its components;
+//  - quirk (see the QUIRK comment in -[NSView beginDraggingSessionWithItems:
+//    event:source:]): while a session waits for the run loop, another one is
+//    not begun and nil is returned (an item without a frame still raises);
+//  - the file promises of 10.12: a provider writes a promise as the metadata,
+//    name, suggested name, content type and ID types (the names promised), and
+//    the pasteboard adds the legacy promise type; a receiver reads such an
+//    item, and nothing else, with the provider's file type, and no file names
+//    until asked for them. (Receiving the file could not be observed outside a
+//    real drag.)
 //
 // Prints PASS or FAIL lines, then ALL PASSED or FAILED n.
 #import <AppKit/AppKit.h>
@@ -42,6 +53,21 @@ static const char *rectString(NSRect rect)
 }
 @end
 
+@interface PromiseDelegate : NSObject <NSFilePromiseProviderDelegate>
+@end
+
+@implementation PromiseDelegate
+- (NSString *) filePromiseProvider: (NSFilePromiseProvider *) provider fileNameForType: (NSString *) type {
+    return @"promised.txt";
+}
+- (void) filePromiseProvider: (NSFilePromiseProvider *) provider
+           writePromiseToURL: (NSURL *) url
+           completionHandler: (void (^)(NSError *)) completion
+{
+    completion(nil);
+}
+@end
+
 static void test_dragging_item_frame_and_components(void)
 {
     NSImage *image = [[[NSImage alloc] initWithSize: NSMakeSize(10, 20)] autorelease];
@@ -61,6 +87,7 @@ static void test_dragging_item_frame_and_components(void)
                [icon contents] == image && NSEqualRects([icon frame], NSMakeRect(0, 0, 30, 40)),
            "whose one component is the icon, the contents, at the origin with the frame's size (%lu, %s, %s)",
            (unsigned long) [components count], [[icon key] UTF8String], rectString([icon frame]));
+    expect([[item imageComponents] firstObject] == icon, "the provider gives the same component each time");
 
     NSDraggingItem *provided = [[[NSDraggingItem alloc] initWithPasteboardWriter: @"other"] autorelease];
     __block int calls = 0;
@@ -161,8 +188,7 @@ static void test_begin_returns_session_with_pasteboard_items(NSView *view, NSEve
     NSDraggingSession *another = [view beginDraggingSessionWithItems: draggingItems([NSArray arrayWithObject: @"x"])
                                                                event: down
                                                               source: source];
-    expect([another draggingSequenceNumber] != [session draggingSequenceNumber],
-           "a later session has another sequence number");
+    expect(another == nil, "quirk: a second session waits for none, it is not begun");
 
     BOOL raised = NO;
     @try {
@@ -176,11 +202,63 @@ static void test_begin_returns_session_with_pasteboard_items(NSView *view, NSEve
     expect(raised, "an item without a frame raises NSRangeException");
 }
 
+static void test_file_promises(void)
+{
+    NSArray *readable = [NSFilePromiseReceiver readableDraggedTypes];
+    expect(readable.count == 3 && [readable containsObject: @"com.apple.NSFilePromiseItemMetaData"]
+           && [readable containsObject: @"com.apple.pasteboard.promised-file-content-type"],
+           "the types a receiver reads");
+
+    PromiseDelegate *delegate = [[PromiseDelegate alloc] init];
+    NSFilePromiseProvider *provider = [[NSFilePromiseProvider alloc] initWithFileType: @"public.plain-text"
+                                                                             delegate: delegate];
+    expect([provider.fileType isEqualToString: @"public.plain-text"] && provider.delegate == delegate
+           && provider.userInfo == nil, "a provider keeps its file type and delegate");
+
+    NSPasteboard *scratch = [NSPasteboard pasteboardWithUniqueName];
+    NSArray *writable = [provider writableTypesForPasteboard: scratch];
+    NSArray *expected = @[ @"com.apple.NSFilePromiseItemMetaData", @"com.apple.pasteboard.promised-file-name",
+                           @"com.apple.pasteboard.promised-suggested-file-name",
+                           @"com.apple.pasteboard.promised-file-content-type",
+                           @"com.apple.pasteboard.NSFilePromiseID" ];
+    expect([writable isEqualToArray: expected], "the types a provider writes");
+    expect([provider writingOptionsForType: expected[1] pasteboard: scratch] == NSPasteboardWritingPromised
+           && [provider writingOptionsForType: expected[2] pasteboard: scratch] == NSPasteboardWritingPromised
+           && [provider writingOptionsForType: expected[0] pasteboard: scratch] == 0
+           && [provider writingOptionsForType: expected[3] pasteboard: scratch] == 0,
+           "the names are promised");
+    expect([[provider pasteboardPropertyListForType: expected[0]]
+            isEqual: @{ @"com.apple.pasteboard.promised-file-content-type": @"public.plain-text" }],
+           "the metadata names the file type");
+    expect([[provider pasteboardPropertyListForType: expected[2]] isEqual: @"promised.txt"],
+           "the suggested name is the delegate's");
+    expect([[provider pasteboardPropertyListForType: expected[3]] isEqual: @"public.plain-text"],
+           "the content type is the file type");
+    expect([provider pasteboardPropertyListForType: expected[1]] == nil, "the file name is not known yet");
+
+    NSPasteboard *pasteboard = [NSPasteboard pasteboardWithUniqueName];
+    [pasteboard clearContents];
+    expect([pasteboard writeObjects: @[ provider ]], "a provider can be written");
+    expect([pasteboard.types containsObject: NSFilesPromisePboardType], "the legacy promise type is added");
+
+    NSArray *receivers = [pasteboard readObjectsForClasses: @[ [NSFilePromiseReceiver class] ] options: nil];
+    expect(receivers.count == 1, "a promise is read as a receiver");
+    NSFilePromiseReceiver *receiver = receivers.firstObject;
+    expect([receiver.fileTypes isEqualToArray: @[ @"public.plain-text" ]], "the receiver has the file type");
+    expect(receiver.fileNames.count == 0, "the receiver has no file names yet");
+
+    [pasteboard clearContents];
+    [pasteboard writeObjects: @[ @"text" ]];
+    expect([[pasteboard readObjectsForClasses: @[ [NSFilePromiseReceiver class] ] options: nil] count] == 0,
+           "text is not a promise");
+}
+
 int main(void)
 {
     NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
     [NSApplication sharedApplication];
     test_dragging_item_frame_and_components();
+    test_file_promises();
 
     NSWindow *window = [[NSWindow alloc] initWithContentRect: NSMakeRect(100, 100, 300, 200)
                                                    styleMask: NSWindowStyleMaskTitled

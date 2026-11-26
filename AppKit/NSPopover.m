@@ -17,6 +17,7 @@
  along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+#import <AppKit/NSApplication.h>
 #import "NSDelegateNotifications.h"
 #import <AppKit/NSPanel.h>
 #import <AppKit/NSPopover.h>
@@ -78,8 +79,43 @@ NSNotificationName const NSPopoverDidShowNotification = @"NSPopoverDidShowNotifi
     [self setDelegate: nil];
     [_panel orderOut: nil];
     [_panel release];
+    [_appearance release];
     [_contentViewController release];
     [super dealloc];
+}
+
+- (NSAppearance *) appearance {
+    return _appearance;
+}
+
+- (void) setAppearance: (NSAppearance *) appearance {
+    [self willChangeValueForKey: @"effectiveAppearance"];
+    [appearance retain];
+    [_appearance release];
+    _appearance = appearance;
+    [self didChangeValueForKey: @"effectiveAppearance"];
+    [_panel setAppearance: [self effectiveAppearance]];
+}
+
+// Private API: asks that the content be drawn with the popover's appearance. The content is
+// always given the popover's effective appearance here (see -showRelativeToRect:...), so there
+// is nothing to change.
+- (void) _setRequiresCorrectContentAppearance: (BOOL) flag {
+}
+
+- (NSAppearance *) effectiveAppearance {
+    if (_appearance != nil)
+        return _appearance;
+    // QUIRK: without an appearance of its own, a popover's effective
+    // appearance is NSAppearanceNameVibrantLight or NSAppearanceNameVibrantDark,
+    // whichever matches the application's effective appearance, not the
+    // application's appearance itself. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 (tier 2). Test: tests/appkit-popover-appearance.m
+    NSAppearanceName name = [[NSApp effectiveAppearance]
+            bestMatchFromAppearancesWithNames: @[ NSAppearanceNameAqua, NSAppearanceNameDarkAqua ]];
+    return [NSAppearance appearanceNamed: [name isEqualToString: NSAppearanceNameDarkAqua]
+                                                  ? NSAppearanceNameVibrantDark
+                                                  : NSAppearanceNameVibrantLight];
 }
 
 - (BOOL) isShown {
@@ -136,6 +172,7 @@ NSNotificationName const NSPopoverDidShowNotification = @"NSPopoverDidShowNotifi
         [_panel setReleasedWhenClosed: NO];
         [_panel setLevel: NSPopUpMenuWindowLevel];
     }
+    [_panel setAppearance: [self effectiveAppearance]];
     [_panel setContentView: content];
     [_panel setFrame: NSMakeRect(origin.x, origin.y, size.width, size.height) display: NO];
 

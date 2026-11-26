@@ -23,14 +23,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGGeometry.h>
 #import <CoreGraphics/CoreGraphicsExport.h>
 
-typedef struct {
+// named as in macOS's SDK, so that the struct can be forward-declared
+struct CGAffineTransform {
     CGFloat a;
     CGFloat b;
     CGFloat c;
     CGFloat d;
     CGFloat tx;
     CGFloat ty;
-} CGAffineTransform;
+};
+typedef struct CGAffineTransform CGAffineTransform;
 
 COREGRAPHICS_EXPORT const CGAffineTransform CGAffineTransformIdentity;
 

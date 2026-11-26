@@ -173,6 +173,8 @@ O2ColorSpaceRef O2ColorSpaceCreateWithName(CFStringRef name) {
         CFSTR("kCGColorSpaceITUR_2100_PQ"),
         CFSTR("kCGColorSpaceITUR_2100_HLG"),
         CFSTR("kCGColorSpaceExtendedLinearITUR_2020"),
+        CFSTR("kCGColorSpaceExtendedITUR_2020"),
+        CFSTR("kCGColorSpaceLinearITUR_2020"),
         kO2ColorSpaceGenericRGB,
         kO2ColorSpaceGenericRGBLinear,
         kO2ColorSpaceAdobeRGB1998,

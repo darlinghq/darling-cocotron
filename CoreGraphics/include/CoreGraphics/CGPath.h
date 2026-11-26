@@ -51,8 +51,15 @@ typedef struct {
 
 typedef void (*CGPathApplierFunction)(void *info, const CGPathElement *element);
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2MutablePath *CGPathRef;
 typedef struct CF_BRIDGED_TYPE(id) O2MutablePath *CGMutablePathRef;
+#else
+typedef const struct CF_BRIDGED_TYPE(id) CGPath *CGPathRef;
+typedef struct CF_BRIDGED_MUTABLE_TYPE(id) CGPath *CGMutablePathRef;
+#endif
 
 CF_IMPLICIT_BRIDGING_ENABLED
 CF_ASSUME_NONNULL_BEGIN
