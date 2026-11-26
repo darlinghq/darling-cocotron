@@ -30,11 +30,6 @@
     BOOL _desktopMenuProbed, _desktopMenuPresent;
 
     id lastFocusedWindow;
-    // The click counts per button are in DarlingDisplay.
-    Time _lastClickTime;       // X server milliseconds, wraps modulo 2^32.
-    unsigned int _lastClickButton;
-    XID _lastClickWindow;
-    NSPoint _lastClickPoint;   // Logical points, so the radius is scale-independent.
     X11Cursor *_blankCursor, *_defaultCursor;
     // A pinch gesture in progress (see X11Gesture.h): its window, the scale it last
     // reported, and where and with which modifiers its last event was.
@@ -50,14 +45,6 @@
     // arrive as their Command shortcuts.
     BOOL _controlActsAsCommand;
     Window _confinedWindow;
-    // Display overlay windows (CGLSetFullScreen) belong to no NSWindow; their
-    // key and pointer input is taken up here and reaches the application as
-    // events with no window and screen coordinates. _overlayWindow is the one
-    // that holds the keyboard focus and the relative mouse grab.
-    NSMutableSet *_overlayWindows;
-    Window _overlayWindow;
-    BOOL _overlayPointerKnown;
-    int _overlayPointerX, _overlayPointerY;
     // The menu and pop-up windows that are on the screen, oldest first, while
     // the pointer is held for them (see -menuWindowMapped:).
     NSMutableArray *_openMenuWindows;

@@ -21,6 +21,7 @@
 #import "CGSSurfaceX11.h"
 
 #import <Foundation/NSString.h>
+#import <Foundation/NSThread.h>
 #import <X11/Xutil.h>
 #import <X11/Xatom.h>
 #import <X11/extensions/shape.h>
@@ -176,6 +177,8 @@ static BOOL isViewable(Display* display, Window window)
 			// pointer on the window once it is announced, so it must be
 			// mapped on the server by then.
 			XSync(_display, False);
+			if (_displayOverlay)
+				[self _displayOverlayShown];
 			return kCGSErrorSuccess;
 		case kCGSOrderBelow:
 		default:
@@ -196,6 +199,9 @@ static BOOL isViewable(Display* display, Window window)
 	// focuses the window, and it stays where it was stacked when it was mapped.
 	XSetWindowAttributes attributes = { .override_redirect = True };
 	XChangeWindowAttributes(_display, _window, CWOverrideRedirect, &attributes);
+	// Its keys and buttons are selected like those of every CGS window; the events it gets name no CGS window
+	// (see CGSX11Pointer.m), as those of a captured display do not.
+	_displayOverlay = YES;
 
 	// The drawable is used through other connections to the server (the GL
 	// library's), which only know the window once this connection's requests
@@ -205,6 +211,26 @@ static BOOL isViewable(Display* display, Window window)
 	// The window itself is the drawable: it is the one that gets mapped.
 	*drawable = (void*) (uintptr_t) _window;
 	return kCGSErrorSuccess;
+}
+
+-(BOOL) isDisplayOverlay
+{
+	return _displayOverlay;
+}
+
+// The overlay is on the screen: the keyboard focus goes to it (it is override-redirect, so the window manager
+// does not give it any), and a pointer grab the application wanted for it that could not be taken before is
+// taken now. The pointer is reached on the main thread, where its events are handled.
+-(void) _displayOverlayShown
+{
+	if (![NSThread isMainThread])
+	{
+		[self performSelectorOnMainThread: _cmd withObject: nil waitUntilDone: YES];
+		return;
+	}
+	XSetInputFocus(_display, _window, RevertToPointerRoot, CurrentTime);
+	XFlush(_display);
+	[_x11Connection pointerWindowsChanged];
 }
 
 -(CGError) moveTo:(const CGPoint*) point
