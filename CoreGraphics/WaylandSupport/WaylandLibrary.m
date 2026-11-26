@@ -228,6 +228,7 @@ bool WaylandCheckOpcodes(void) {
 
             {&org_kde_plasma_shell_interface, false, WP_PLASMA_SHELL_GET_SURFACE, "get_surface"},
             {&org_kde_plasma_surface_interface, false, WP_PLASMA_SURFACE_DESTROY, "destroy"},
+            {&org_kde_plasma_surface_interface, false, WP_PLASMA_SURFACE_SET_POSITION, "set_position"},
             {&org_kde_plasma_surface_interface, false, WP_PLASMA_SURFACE_SET_SKIP_TASKBAR, "set_skip_taskbar"},
             {&org_kde_plasma_surface_interface, false, WP_PLASMA_SURFACE_SET_SKIP_SWITCHER, "set_skip_switcher"},
             {&xdg_toplevel_icon_manager_v1_interface, false, WP_ICON_MANAGER_DESTROY, "destroy"},

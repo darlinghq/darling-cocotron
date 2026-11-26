@@ -112,6 +112,13 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     return kCGSErrorSuccess;
 }
 
+@synthesize level = _level;
+
+- (CGError) setLevel: (CGWindowLevel) level {
+    _level = level;
+    return kCGSErrorSuccess;
+}
+
 - (void) presentRect: (CGRect) rect {
 }
 
@@ -447,6 +454,19 @@ CGError _CGSWindowSetStyle(CGSConnectionID cid, CGSWindowID wid, uint32_t styleF
     if (window == nil)
         return kCGErrorIllegalArgument;
     CGError error = [window setStyle: styleFlags];
+    [window release];
+    return error;
+}
+
+CGError CGSSetWindowLevel(CGSConnectionID cid, CGSWindowID wid, CGWindowLevel level)
+{
+    CGSConnection *connection = _CGSConnectionForID(cid);
+    if (connection == nil)
+        return kCGErrorInvalidConnection;
+    CGSWindow *window = [[connection windowForId: wid] retain];
+    if (window == nil)
+        return kCGErrorIllegalArgument;
+    CGError error = [window setLevel: level];
     [window release];
     return error;
 }

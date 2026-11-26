@@ -94,6 +94,8 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             switch (objectKind) {
             case CGSWaylandObjectXdgSurface:
             case CGSWaylandObjectToplevel:
+            case CGSWaylandObjectLayerSurface:
+            case CGSWaylandObjectPopup:
                 [(CGSWindowWayland *) object handleEvent: opcode
                                                     kind: objectKind
                                                arguments: args];
@@ -462,6 +464,20 @@ static const CGEventFlags kHotKeyModifierMask =
         _wmBase = [self bindGlobal: name interface: &xdg_wm_base_interface
                            version: MIN(version, 2u)
                               kind: CGSWaylandObjectWmBase object: self];
+    } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
+        _layerShell = [self bindGlobal: name interface: &zwlr_layer_shell_v1_interface
+                               version: MIN(version, 4u)
+                                  kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "org_kde_plasma_shell") == 0 && _plasmaShell == NULL) {
+        // Version 2 adds set_skip_taskbar, version 5 set_skip_switcher.
+        _plasmaShellVersion = MIN(version, 5u);
+        _plasmaShell = [self bindGlobal: name interface: &org_kde_plasma_shell_interface
+                                version: _plasmaShellVersion
+                                   kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 && _decorationManager == NULL) {
+        _decorationManager = [self bindGlobal: name interface: &zxdg_decoration_manager_v1_interface
+                                      version: 1
+                                         kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame and 8 wl_pointer.axis_value120. A
         // protocol table older than that offers less.

@@ -36,6 +36,7 @@
 	CGContextRef _contents;
 	CGSize _contentsSize;
 	uint32_t _styleFlags;
+	CGWindowLevel _level;
 }
 
 -(instancetype) initWithRegion:(CGSRegionRef) region
@@ -78,6 +79,12 @@
 // windows (it may be called before the window is first ordered in, and again later).
 -(CGError) setStyle:(uint32_t) styleFlags;
 @property (readonly) uint32_t styleFlags;
+// The window's level (see CGWindowLevel.h), 0 until set. A window system that stacks windows by
+// role rather than by number (Wayland) reads from it what the window is: a menu bar, a menu, a
+// floating window. The backends override it to apply the level to their windows (it may be called
+// before the window is first ordered in, and again later).
+-(CGError) setLevel:(CGWindowLevel) level;
+@property (readonly) CGWindowLevel level;
 // For the backends, when the window's size is not what the contents have: resizes the contents
 // (what was in them stays at the top left, the rest is transparent).
 -(void) resizeContentsTo:(CGSize) size;
