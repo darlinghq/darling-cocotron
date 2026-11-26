@@ -45,13 +45,9 @@
 #import "../../CoreGraphics/X11.backend/CGSWindowX11.h"
 #import <CoreGraphics/CGSServerSPI.h>
 #import "X11Fullscreen.h"
-#import "X11InputShape.h"
-#import "X11RoundedShape.h"
-#import "X11InvisibleWindow.h"
 #import "X11PointerMotion.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
-#import "X11OpaqueRegion.h"
 #import "X11AppMenu.h"
 #import <X11/Xatom.h>
 #import <X11/Xutil.h>
@@ -388,52 +384,26 @@ static void preeditCaretCallback(XIC ic, XPointer clientData, XPointer callData)
 // title bar, task bar or switcher best.
 static const int WindowIconSides[] = {16, 32, 48, 64, 128, 256};
 
-// _NET_WM_ICON: for each size the width and height, then width * height ARGB pixels (not premultiplied),
-// every value in a long as the property is a 32 bit format. nil when the application has no icon.
-static NSData *makeWindowIcon(X11Display *display) {
-    NSMutableData *res = nil;
+// The application icon at each of the sizes the window manager is offered, as the display makes them (32-bit
+// premultiplied ARGB pixels); nil when the application has no icon.
+static NSArray<NSData *> *windowIconImages(X11Display *display) {
+    NSMutableArray<NSData *> *images = nil;
 
     for (size_t i = 0; i < sizeof(WindowIconSides) / sizeof(WindowIconSides[0]); i++) {
-        int side = WindowIconSides[i];
-        NSData *pixels = [display applicationIconPixelsOfSide: side];
+        NSData *pixels = [display applicationIconPixelsOfSide: WindowIconSides[i]];
         if (pixels == nil)
             return nil;
-        if (res == nil)
-            res = [NSMutableData data];
-
-        long header[2] = {side, side};
-        [res appendBytes: header length: sizeof(header)];
-        NSMutableData *data = [NSMutableData dataWithLength: (size_t) side * side * sizeof(long)];
-        long *out = (long *) [data mutableBytes];
-        const uint32_t *in = (const uint32_t *) [pixels bytes];
-        for (int p = 0; p < side * side; p++) {
-            uint32_t argb = in[p];
-            uint32_t alpha = argb >> 24;
-            if (alpha != 0 && alpha != 255) {
-                uint32_t red = MIN(255u, ((argb >> 16) & 0xff) * 255 / alpha);
-                uint32_t green = MIN(255u, ((argb >> 8) & 0xff) * 255 / alpha);
-                uint32_t blue = MIN(255u, (argb & 0xff) * 255 / alpha);
-                argb = (alpha << 24) | (red << 16) | (green << 8) | blue;
-            }
-            out[p] = argb;
-        }
-        [res appendData: data];
+        if (images == nil)
+            images = [NSMutableArray array];
+        [images addObject: pixels];
     }
-    return res;
+    return images;
 }
 
-// Sets _NET_WM_ICON from the application icon, or removes it when there is none (so the window manager
-// falls back to its own choice).
+// The icon the window manager shows for the window is the application icon, or the manager's own choice when
+// there is none.
 - (void) setWindowIcon {
-    Atom property = XInternAtom(_display, "_NET_WM_ICON", False);
-    NSData *data = makeWindowIcon((X11Display *) [NSDisplay currentDisplay]);
-
-    if (data == nil) {
-        XDeleteProperty(_display, _window, property);
-        return;
-    }
-    XChangeProperty(_display, _window, property, XInternAtom(_display, "CARDINAL", False), 32, PropModeReplace,
-                    [data bytes], [data length] / sizeof(long));
+    [_cgsWindow setToplevelIcons: windowIconImages((X11Display *) [NSDisplay currentDisplay])];
 }
 
 - (instancetype) initWithDelegate: (NSWindow *) delegate {
@@ -446,7 +416,8 @@ static NSData *makeWindowIcon(X11Display *display) {
     X11Display* x11disp = (X11Display *) [NSDisplay currentDisplay];
     _display = [x11disp display];
 
-    _frame = [self transformFrame: [delegate frame]];
+    _frame = [delegate frame];
+    _frame.size = NSMakeSize(fmax(_frame.size.width, 1.0), fmax(_frame.size.height, 1.0));
     BOOL isPanel = [delegate isKindOfClass: [NSPanel class]];
     BOOL isSheetPanel = isPanel && (_styleMask & NSDocModalWindowMask);
     if (isSheetPanel)
@@ -513,6 +484,9 @@ static NSData *makeWindowIcon(X11Display *display) {
             _cgsWindow = [_CGSNewToplevelWindow(&attributes) retain];
             if (_cgsWindow == nil)
                 return NO;
+            // What the window system says about the window: the user asks to close it, it is placed or
+            // sized, painted again or moved to another scale.
+            [_cgsWindow setToplevelEventProc: X11WindowToplevelEvent info: self];
         } else if ([_cgsWindow recreateToplevelWithAttributes: &attributes] != kCGSErrorSuccess) {
             return NO;
         }
@@ -550,8 +524,6 @@ static NSData *makeWindowIcon(X11Display *display) {
 
     [self setWindowIcon];
 
-    // The new X window has no region yet.
-    _opaqueRegionSize = NSZeroSize;
     [self updateOpaqueRegion];
 
     return YES;
@@ -578,37 +550,31 @@ static NSData *makeWindowIcon(X11Display *display) {
     // FIXME: There should be no need for this.
     _isModal |= [delegate isKindOfClass: NSClassFromString(@"NSSavePanel")];
 
-    const char *windowType;
+    CGSToplevelKind kind;
     BOOL isTransient = YES;
     if (_isModal) {
-        windowType = "_NET_WM_WINDOW_TYPE_DIALOG";
+        kind = kCGSToplevelKindDialog;
     } else if (_dock) {
-        windowType = "_NET_WM_WINDOW_TYPE_DOCK";
+        kind = kCGSToplevelKindDock;
         isTransient = NO;
     } else if (isMenu) {
         // EWMH: _MENU is for torn-off managed windows; the menus of a menu bar
         // are dropdown menus, which are typically unmanaged.
-        windowType = "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU";
+        kind = kCGSToplevelKindDropdownMenu;
     } else if (isPopUp) {
-        windowType = "_NET_WM_WINDOW_TYPE_POPUP_MENU";
+        kind = kCGSToplevelKindPopupMenu;
     } else if (presentation == DarlingWindowPresentationPopup) {
         // A tool tip never takes the focus and does not react to the mouse; any other pop-up is a
         // pop-up menu to the window manager.
-        windowType = !canBecomeKey && [delegate ignoresMouseEvents] ? "_NET_WM_WINDOW_TYPE_TOOLTIP"
-                                                                    : "_NET_WM_WINDOW_TYPE_POPUP_MENU";
+        kind = !canBecomeKey && [delegate ignoresMouseEvents] ? kCGSToplevelKindTooltip : kCGSToplevelKindPopupMenu;
     } else if (isPanel) {
-        windowType = "_NET_WM_WINDOW_TYPE_UTILITY";
+        kind = kCGSToplevelKindUtility;
     } else if (presentation == DarlingWindowPresentationAuxiliary) {
-        windowType = "_NET_WM_WINDOW_TYPE_NORMAL";
+        kind = kCGSToplevelKindNormal;
     } else {
-        windowType = "_NET_WM_WINDOW_TYPE_NORMAL";
+        kind = kCGSToplevelKindNormal;
         isTransient = NO;
     }
-    long windowTypeAtom = (long) XInternAtom(_display, windowType, False);
-    XChangeProperty(_display, _window,
-                    XInternAtom(_display, "_NET_WM_WINDOW_TYPE", False),
-                    XA_ATOM, 32, PropModeReplace,
-                    (const unsigned char *) &windowTypeAtom, 1);
 
     _skipTaskbar = !_dock && presentation != DarlingWindowPresentationApplication;
 
@@ -634,53 +600,29 @@ static NSData *makeWindowIcon(X11Display *display) {
         [_transientParent release];
         _transientParent = parent;
     }
-    if (parent != nil)
-        XSetTransientForHint(_display, _window, parent->_window);
-    else
-        XDeleteProperty(_display, _window, XA_WM_TRANSIENT_FOR);
 
     // Whether the window takes the input focus when the window manager maps it (ICCCM 4.1.7). A
     // window that is not an application window, or one of an application that is not active, is
-    // not given the focus by being shown either: the user time 0 says no user action caused it
-    // (EWMH _NET_WM_USER_TIME). Making it the key window
+    // not given the focus by being shown either. Making it the key window
     // asks for the focus explicitly (-requestInputFocus).
-    XWMHints hints = {0};
-    hints.flags = InputHint;
-    hints.input = canBecomeKey ? True : False;
-    XSetWMHints(_display, _window, &hints);
-    Atom userTime = XInternAtom(_display, "_NET_WM_USER_TIME", False);
-    // An application that is not active does not take the focus by showing a window either.
-    if (!_dock && (presentation != DarlingWindowPresentationApplication || ![NSApp _mayTakeInputFocus])) {
-        unsigned long zero = 0;
-        XChangeProperty(_display, _window, userTime, XA_CARDINAL, 32, PropModeReplace,
-                        (const unsigned char *) &zero, 1);
-    } else {
-        XDeleteProperty(_display, _window, userTime);
-    }
+    CGSToplevelHints hints = {
+        .kind = kind,
+        .acceptsKeyboardInput = canBecomeKey,
+        .takesFocusWhenShown = _dock || (presentation == DarlingWindowPresentationApplication && [NSApp _mayTakeInputFocus]),
+        .skipsTaskList = _skipTaskbar,
+        .transientFor = parent != nil ? parent->_cgsWindow : nil,
+    };
+    [_cgsWindow setToplevelHints: &hints];
     [self updateSizeHints: _styleMask];
 }
 
-// The window's presentation can change while it is on screen (its collection behavior): tell the window
-// manager whether the window is listed in the task bar and pager now.
+// The window's presentation can change while it is on screen (its collection behavior): the window manager
+// is told whether the window is listed in the task bar and pager now.
 - (void) presentationChanged {
     if (!_mapped || _window == 0 || _dock)
         return;
-    BOOL wasSkipping = _skipTaskbar;
+    // The window manager is told at once of a change in the task list entry of the shown window.
     [self updateWindowManagerHints];
-    if (_skipTaskbar == wasSkipping)
-        return;
-    XEvent event = {0};
-    event.xclient.type = ClientMessage;
-    event.xclient.window = _window;
-    event.xclient.message_type = XInternAtom(_display, "_NET_WM_STATE", False);
-    event.xclient.format = 32;
-    event.xclient.data.l[0] = _skipTaskbar ? 1 : 0; // add or remove
-    event.xclient.data.l[1] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False);
-    event.xclient.data.l[2] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False);
-    event.xclient.data.l[3] = 1; // source indication: application
-    XSendEvent(_display, DefaultRootWindow(_display), False,
-               SubstructureRedirectMask | SubstructureNotifyMask, &event);
-    XFlush(_display);
 }
 
 - (void) dealloc {
@@ -732,7 +674,7 @@ static NSData *makeWindowIcon(X11Display *display) {
     BOOL coversMonitor = NO;
     // The monitor test is a server round trip; skip it when it cannot change the answer.
     if (!_overrideRedirect && !styleFullScreen && !titled) {
-        O2Rect device = [self deviceRect: [self transformFrame: frame]];
+        O2Rect device = NSRectFromCGRect([_cgsWindow toplevelDeviceRectForFrame: NSRectToCGRect(frame)]);
         X11FullscreenRect rect = {(int) device.origin.x, (int) device.origin.y,
                                   (unsigned int) device.size.width,
                                   (unsigned int) device.size.height};
@@ -884,11 +826,8 @@ static NSData *makeWindowIcon(X11Display *display) {
     // second title bar on top of it.
     BOOL titlebarInvisible = [self hasInvisibleTitlebarForStyleMask: mask];
 
-    if ([self hasTitlebarForStyleMask: mask] && !_invisibleWithoutCompositor && !titlebarInvisible)
-        XDeleteProperty(_display, _window,
-                        XInternAtom(_display, "_MOTIF_WM_HINTS", False));
-    else
-        [[self class] removeDecorationForWindow: _window onDisplay: _display];
+    [_cgsWindow setToplevelDecorated: [self hasTitlebarForStyleMask: mask] && !_invisibleWithoutCompositor &&
+                                      !titlebarInvisible];
     BOOL chromeless = titlebarInvisible && (mask & NSWindowStyleMaskTitled) != 0;
     if (_window != 0 && chromeless != _chromeless) {
         _chromeless = chromeless;
@@ -920,32 +859,20 @@ static NSData *makeWindowIcon(X11Display *display) {
 // Test: tests/x11-chromeless-corners.sh (shape of the window), tests/x11-rounded-shape.c (the shape).
 static const int X11ChromelessCornerRadius = 5;
 
-// The bounding shape follows the window's size and whether it is drawn without a frame; a window that is
-// invisible without a compositor keeps its empty shape.
+// The window's corners are rounded while it is drawn without a frame (the window keeps an empty shape that
+// it was given for being invisible).
 - (void) updateWindowShape {
-    if (_window == 0 || _invisibleWithoutCompositor || (!_chromeless && !_roundedShapeSet))
+    if (_window == 0)
         return;
-    CGFloat scale = [self backingScaleFactor];
-    NSSize device = [self deviceSize: _frame.size];
-    if (X11WindowSetRoundedCorners(_display, _window, (int) device.width, (int) device.height,
-                                   _chromeless ? (int) lround(X11ChromelessCornerRadius * scale) : 0))
-        _roundedShapeSet = _chromeless;
+    [_cgsWindow setToplevelCornerRadius: _chromeless ? X11ChromelessCornerRadius : 0];
 }
 
-// The promise to a compositing manager that all of an opaque window with an alpha channel is opaque, an occlusion
-// hint it may ignore (see X11OpaqueRegion.h).
-// Asked again when the opacity or the size changes; a request is made only for a change.
+// Whether the window promises a compositing manager that all of it is opaque, an occlusion hint it may
+// ignore; the window system's window follows its size.
 - (void) updateOpaqueRegion {
-    if (_window == 0 || _delegate == nil || _visualInfo == NULL)
+    if (_window == 0 || _delegate == nil)
         return;
-    BOOL windowIsOpaque = [_delegate isOpaque];
-    NSSize device = [self deviceSize: _frame.size];
-    NSSize wanted = X11OpaqueRegionApplies(_visualInfo->depth, windowIsOpaque) ? device : NSZeroSize;
-    if (NSEqualSizes(wanted, _opaqueRegionSize))
-        return;
-    X11WindowSetOpaqueRegion(_display, _window, _visualInfo->depth, windowIsOpaque, (int) device.width,
-                             (int) device.height);
-    _opaqueRegionSize = wanted;
+    [_cgsWindow setToplevelContentsOpaque: [_delegate isOpaque]];
 }
 
 // The outline of a window without a frame: one device pixel along the rounded edge, drawn over the content
@@ -1013,22 +940,6 @@ static const int X11ChromelessCornerRadius = 5;
     _styleMask = mask;
 }
 
-+ (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy {
-    struct {
-        unsigned long flags;
-        unsigned long functions;
-        unsigned long decorations;
-        long input_mode;
-        unsigned long status;
-    } hints = {
-            2, 0, 0, 0, 0,
-    };
-    XChangeProperty(dpy, w, XInternAtom(dpy, "_MOTIF_WM_HINTS", False),
-                    XInternAtom(dpy, "_MOTIF_WM_HINTS", False), 32,
-                    PropModeReplace, (const unsigned char *) &hints,
-                    sizeof(hints) / sizeof(long));
-}
-
 // Whether what is behind the window can show through it: a window that is not
 // opaque and whose background has alpha (a pattern image may have).
 - (BOOL) isTranslucent {
@@ -1079,8 +990,7 @@ static const int X11ChromelessCornerRadius = 5;
     [(X11Display *) [NSDisplay currentDisplay] setWindow: nil
                                                    forID: oldWindow];
 
-    // The new window has no input shape or presentation hints yet.
-    _ignoresMouseEvents = NO;
+    // The new window has no presentation hints yet.
     _bypassCompositorHint = NO;
     _variableRefreshHint = NO;
     _hasAlpha = alpha;
@@ -1138,36 +1048,10 @@ static const int X11ChromelessCornerRadius = 5;
     }
 }
 
-// What a dock window tells the window manager before it is mapped: it is on
-// every desktop, outside the taskbar and pager, above other windows, and
-// reserves the strip it covers along the top edge of the screen (EWMH
-// _NET_WM_STRUT_PARTIAL, and _NET_WM_STRUT for older managers).
+// What a dock window tells the window manager before it is mapped: it is on every desktop, outside the
+// taskbar and pager, above other windows, and reserves the strip it covers along the top edge of the screen.
 - (void) publishDockHints {
-    long state[4] = {
-        (long) XInternAtom(_display, "_NET_WM_STATE_STICKY", False),
-        (long) XInternAtom(_display, "_NET_WM_STATE_ABOVE", False),
-        (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False),
-        (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False)};
-    long desktop = (long) 0xFFFFFFFFul;
-    long top = (long) (_frame.origin.y + _frame.size.height);
-    long left = (long) _frame.origin.x;
-    long right = (long) (_frame.origin.x + _frame.size.width) - 1;
-    long partial[12] = {0, 0, top, 0, 0, 0, 0, 0, left, right, 0, 0};
-    long strut[4] = {0, 0, top, 0};
-
-    XChangeProperty(_display, _window,
-                    XInternAtom(_display, "_NET_WM_STATE", False), XA_ATOM, 32,
-                    PropModeReplace, (const unsigned char *) state, 4);
-    XChangeProperty(_display, _window,
-                    XInternAtom(_display, "_NET_WM_DESKTOP", False), XA_CARDINAL,
-                    32, PropModeReplace, (const unsigned char *) &desktop, 1);
-    XChangeProperty(_display, _window,
-                    XInternAtom(_display, "_NET_WM_STRUT_PARTIAL", False),
-                    XA_CARDINAL, 32, PropModeReplace,
-                    (const unsigned char *) partial, 12);
-    XChangeProperty(_display, _window,
-                    XInternAtom(_display, "_NET_WM_STRUT", False), XA_CARDINAL,
-                    32, PropModeReplace, (const unsigned char *) strut, 4);
+    [_cgsWindow reserveToplevelDockStrip];
 }
 
 // Restacking a window only maps it while AppKit shows it.
@@ -1215,12 +1099,8 @@ static const int X11ChromelessCornerRadius = 5;
 
     // Click-through windows (overlays, tooltips) must not take the pointer from
     // the window below. Only a change needs a request.
-    BOOL ignoresMouseEvents = [_delegate ignoresMouseEvents] || _invisibleWithoutCompositor;
-    if (ignoresMouseEvents != _ignoresMouseEvents && _window != 0 &&
-        X11WindowSetIgnoresMouseEvents(_display, _window, ignoresMouseEvents)) {
-        _ignoresMouseEvents = ignoresMouseEvents;
-        XFlush(_display);
-    }
+    if (_window != 0)
+        [_cgsWindow setToplevelIgnoresMouseEvents: [_delegate ignoresMouseEvents] || _invisibleWithoutCompositor];
 
     // An alpha value set before the window had its X window (or its delegate) is applied now.
     if (_window != 0 && _delegate != nil && [_delegate alphaValue] != _appliedAlpha)
@@ -1251,20 +1131,19 @@ static const int X11ChromelessCornerRadius = 5;
 // opacity property is all that is needed. The compositor is looked for whenever the alpha changes, not watched
 // for: a compositor that starts or stops while the window has alpha 0 takes effect at the next change.
 - (void) updateInvisibility {
-    BOOL invisible = _alphaIsZero && !X11CompositorRunning(_display, DefaultScreen(_display));
-
-    if (invisible == _invisibleWithoutCompositor || _window == 0)
+    if (_window == 0)
         return;
-    if (!X11WindowSetBoundingEmpty(_display, _window, invisible))
+    BOOL invisible = _alphaIsZero && ![_cgsWindow toplevelWindowSystemComposites];
+
+    if (invisible == _invisibleWithoutCompositor)
+        return;
+    if ([_cgsWindow setToplevelShapeEmpty: invisible] != kCGSErrorSuccess)
         return;
     _invisibleWithoutCompositor = invisible;
     // A frame follows the shape, but its decorations would come back with a window manager that draws them
     // outside the client, and the window must not take pointer events from what is below it either.
     [self updateDecorationsForStyleMask: _styleMask];
-    BOOL ignoresMouseEvents = invisible || [_delegate ignoresMouseEvents];
-    if (ignoresMouseEvents != _ignoresMouseEvents &&
-        X11WindowSetIgnoresMouseEvents(_display, _window, ignoresMouseEvents))
-        _ignoresMouseEvents = ignoresMouseEvents;
+    [_cgsWindow setToplevelIgnoresMouseEvents: invisible || [_delegate ignoresMouseEvents]];
 }
 
 - (void) invalidate {
@@ -1273,6 +1152,9 @@ static const int X11ChromelessCornerRadius = 5;
     // several times, so set everything to nil/NULL/0.
     [_context release];
     _context = nil;
+
+    // The window system's window is not heard any more.
+    [_cgsWindow setToplevelEventProc: NULL info: NULL];
 
     // An active pinch on this window ends while its delegate can still be told.
     if (_window != 0)
@@ -1385,7 +1267,6 @@ static const int X11ChromelessCornerRadius = 5;
 
 - (void) setFrame: (O2Rect) frame {
     O2Rect cocoaFrame = frame;
-    O2Rect transformed = [self transformFrame: frame];
     NSSize previousSize = _frame.size;
     // Leave fullscreen before moving to a frame that does not cover a monitor,
     // or the manager keeps imposing its fullscreen size, and before moving a
@@ -1393,18 +1274,15 @@ static const int X11ChromelessCornerRadius = 5;
     // moving onto a monitor.
     BOOL fullscreen = [self wantsFullscreenWithStyleMask: _styleMask
                                                    frame: frame];
-    BOOL moved = _frame.origin.x != transformed.origin.x ||
-                 _frame.origin.y != transformed.origin.y;
+    BOOL moved = _frame.origin.x != frame.origin.x || _frame.origin.y != frame.origin.y;
     if (X11FullscreenLeaveBeforeMove(fullscreen, _fullscreenRequested, moved))
         [self requestFullscreen: NO force: NO];
-    frame = transformed;
-    // _frame stays in points; only the window system's window and the surface are in device
-    // pixels.
+    // The frame stays in points; only the window system's window and the surface are in device
+    // pixels. The window system's window follows its size with its shape and opaque region.
+    frame.size = NSMakeSize(fmax(frame.size.width, 1.0), fmax(frame.size.height, 1.0));
     [_cgsWindow setToplevelFrame: NSRectToCGRect(cocoaFrame)];
     [self invalidateContextWithNewSize: frame.size];
     _frame = frame;
-    [self updateWindowShape];
-    [self updateOpaqueRegion];
     // A non-resizable window hints PMinSize == PMaxSize, and a window manager
     // refuses any resize that falls outside the pair, so the hints have to follow
     // the size. Only on a real change so a drag does not re-issue them per pixel.
@@ -1416,6 +1294,7 @@ static const int X11ChromelessCornerRadius = 5;
 
 - (void) setHasShadow: (BOOL) value {
     _hasShadow = value;
+    [_cgsWindow setToplevelHasShadow: value];
 }
 
 - (void) setLevel: (int) value {
@@ -1888,19 +1767,6 @@ static BOOL X11WindowManagerSupports(Display *display, const char *name) {
     CGLSetCurrentContext(prevContext);
 }
 
-- (BOOL) addExposedRect: (O2Rect) rect isLast: (BOOL) last exposedUnion: (O2Rect *) exposedUnion {
-    if (_hasPendingExpose)
-        rect = NSUnionRect(_pendingExpose, rect);
-    if (!last) {
-        _pendingExpose = rect;
-        _hasPendingExpose = YES;
-        return NO;
-    }
-    _hasPendingExpose = NO;
-    *exposedUnion = rect;
-    return YES;
-}
-
 - (void) flushBuffer {
     if (_context == nil)
         return;
@@ -1945,65 +1811,73 @@ static BOOL X11WindowManagerSupports(Display *display, const char *name) {
                                              devicePoint.y / scale)];
 }
 
-// _frame is kept in root coordinates; -frame is in Cocoa's global space.
+// The window's frame in Cocoa's global space, as the window system's window has it (it follows the layout of the
+// monitors).
 - (O2Rect) frame {
-    return [self untransformFrame: _frame];
+    CGRect frame = [_cgsWindow toplevelFrame];
+    return CGRectIsNull(frame) ? _frame : NSRectFromCGRect(frame);
 }
 
 NSString *const X11WindowBackingDidFlushNotification = @"X11WindowBackingDidFlush";
 
-static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
-    if (errorEvent->error_code == BadWindow)
-        return 0;
-    char buf[512];
-    XGetErrorText(display, errorEvent->error_code, buf, 512);
-    [NSException raise: NSInternalInconsistencyException
-                format: @"X11 error: %s", buf];
-    return 0;
+static void X11WindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent *event, void *info) {
+    X11Window *platform = [(X11Window *) info retain];
+    [platform toplevelEvent: event];
+    [platform release];
 }
 
-- (void) frameChanged {
-    XErrorHandler previousHandler = XSetErrorHandler(ignoreBadWindow);
-    @try {
-        Window root, parent;
-        Window window = _window;
-        int x, y;
-        unsigned int w, h, d, b, nchild;
-        Window *children;
-        O2Rect rect = NSZeroRect;
-        // Walk up the parents to get the absolute position. The root window has
-        // no parent (QueryTree reports None), which ends the walk; the depth is
-        // bounded as well so that a parent cycle cannot hold the ConfigureNotify
-        // path. A reparenting window manager makes the chain deeper.
-        for (int depth = 0; window && depth < 64; depth++) {
-            XGetGeometry(_display, window, &root, &x, &y, &w, &h, &b, &d);
+// What the window system said about the window (see CGSToplevelEvent), told to the window's delegate.
+- (void) toplevelEvent: (const CGSToplevelEvent *) event {
+    switch (event->kind) {
+    case kCGSToplevelEventCloseRequested:
+        // The close request is acted on from the run loop, not from the middle of reading window system events.
+        [[NSRunLoop currentRunLoop] cancelPerformSelector: @selector(platformWindowWillClose:)
+                                                   target: _delegate
+                                                 argument: self];
+        [[NSRunLoop currentRunLoop] performSelector: @selector(platformWindowWillClose:)
+                                             target: _delegate
+                                           argument: self
+                                              order: 0
+                                              modes: @[
+                                                    NSDefaultRunLoopMode, NSModalPanelRunLoopMode,
+                                                    NSEventTrackingRunLoopMode
+                                                ]];
+        break;
 
-            // first iteration: save our own w, h
-            if (window == _window)
-                rect = NSMakeRect(0, 0, w, h);
-            rect.origin.x += x;
-            rect.origin.y += y;
+    case kCGSToplevelEventFrameChanged: {
+        // A pure move is reported too, and every pixel of a drag: the delegate is told whether the size changed
+        // (resizing the background view, resetting the cursor rects and saving the frame is not for a move).
+        O2Rect frame = NSRectFromCGRect(event->rect);
+        [self invalidateContextWithNewSize: frame.size];
+        _frame = frame;
+        [_delegate platformWindow: self frameChanged: [self frame] didSize: event->resized];
+        break;
+    }
 
-            if (!XQueryTree(_display, window, &root, &parent, &children, &nchild))
-                break;
-            if (children)
-                XFree(children);
-            if (parent == window)
-                break;
-            window = parent;
-        }
+    case kCGSToplevelEventExposed: {
+        // The exposed area is in points from the top-left corner; the delegate takes y up. The window is
+        // flushed and the delegate told once, for the union of the areas the window system reported.
+        O2Rect rect = NSRectFromCGRect(event->rect);
+        rect.origin.y = _frame.size.height - rect.origin.y - rect.size.height;
+        [self flushBuffer];
+        [_delegate platformWindowExposed: self inRect: rect];
+        break;
+    }
 
-        // XGetGeometry reports device pixels, _frame is in points: convert once
-        // here rather than at every reader.
-        CGFloat scale = [self backingScaleFactor];
-        rect = NSMakeRect(rect.origin.x / scale, rect.origin.y / scale,
-                          rect.size.width / scale, rect.size.height / scale);
-        [self invalidateContextWithNewSize: rect.size];
-        _frame = rect;
-        [self updateWindowShape];
-        [self updateOpaqueRegion];
-    } @finally {
-        XSetErrorHandler(previousHandler);
+    case kCGSToplevelEventBackingScaleChanged:
+        // The window kept its size in points, and so its frame, at the new scale: the backing surface is rebuilt
+        // at the new device size, and the window and its views are told before they redraw.
+        [_context release];
+        _context = nil;
+        [_delegate platformWindowDidInvalidateCGContext: self];
+        if ([_delegate respondsToSelector: @selector(platformWindow:didChangeBackingScaleFrom:)])
+            [_delegate platformWindow: self didChangeBackingScaleFrom: event->oldScale];
+        [_delegate platformWindowExposed: self
+                                  inRect: NSMakeRect(0, 0, _frame.size.width, _frame.size.height)];
+        break;
+
+    default:
+        break;
     }
 }
 
@@ -2020,72 +1894,21 @@ static int ignoreBadWindow(Display *display, XErrorEvent *errorEvent) {
     [_deviceDictionary addEntriesFromDictionary: entries];
 }
 
-// Cocoa's global origin is the bottom-left corner of the main monitor, so both
-// axes are relative to that monitor's rectangle, not to the root window. With one
-// monitor that is the whole root and this is the plain flip against its height.
-- (O2Rect) transformFrame: (O2Rect) frame {
-    X11Frame root = X11FrameToRoot([self primaryFrameInPoints],
-                                   (X11Frame){frame.origin.x, frame.origin.y,
-                                              frame.size.width, frame.size.height});
-    return NSMakeRect(root.x, root.y, fmax(root.width, 1.0), fmax(root.height, 1.0));
-}
-
-// The inverse of -transformFrame:, root coordinates to Cocoa's global space.
-- (O2Rect) untransformFrame: (O2Rect) rect {
-    X11Frame frame = X11FrameFromRoot([self primaryFrameInPoints],
-                                      (X11Frame){rect.origin.x, rect.origin.y,
-                                                 rect.size.width, rect.size.height});
-    return NSMakeRect(frame.x, frame.y, frame.width, frame.height);
-}
-
-// The main monitor in root coordinates, in the unit of _frame.
-- (X11Frame) primaryFrameInPoints {
-    return [(X11Display *) [NSDisplay currentDisplay] primaryFrameInPoints];
-}
-
+// Device pixels per point, as the window system's window has it.
 - (CGFloat) backingScaleFactor {
+    if (_cgsWindow != nil)
+        return [_cgsWindow toplevelBackingScaleFactor];
     return [(X11Display *) [NSDisplay currentDisplay] backingScale];
 }
 
-// The display's device pixels per point changed. _frame stays in points, so the
-// X window is resized to the same points at the new scale, the backing surface
-// is rebuilt at the new device size, and the window and its views are told
-// before they redraw.
-- (void) displayBackingScaleChangedFrom: (CGFloat) oldScale {
-    [_cgsWindow setToplevelFrame: NSRectToCGRect([self frame])];
-    [_context release];
-    _context = nil;
-    [_delegate platformWindowDidInvalidateCGContext: self];
-    if ([_delegate respondsToSelector: @selector(platformWindow:didChangeBackingScaleFrom:)])
-        [_delegate platformWindow: self didChangeBackingScaleFrom: oldScale];
-    [_delegate platformWindowExposed: self
-                              inRect: NSMakeRect(0, 0, _frame.size.width,
-                                                 _frame.size.height)];
-}
-
-// Rounds points to whole device pixels. Origins are rounded plainly, extents
-// are at least one pixel (a zero-size X window is invalid); one rounding for
-// both keeps the X window and the backing surface in agreement.
-static CGFloat X11ScaledOrigin(CGFloat logical, CGFloat scale) {
-    return floor(logical * scale + 0.5);
-}
-
-static CGFloat X11ScaledExtent(CGFloat logical, CGFloat scale) {
-    return fmax(X11ScaledOrigin(logical, scale), 1.0);
-}
-
+// Points to the device pixels the window system takes, rounded as its window is: origins to the nearest
+// pixel, extents to at least one pixel. One rounding serves the window and the backing surface.
 - (NSSize) deviceSize: (NSSize) size {
-    CGFloat scale = [self backingScaleFactor];
-    return NSMakeSize(X11ScaledExtent(size.width, scale),
-                      X11ScaledExtent(size.height, scale));
+    return NSSizeFromCGSize([_cgsWindow toplevelDeviceSizeForSize: NSSizeToCGSize(size)]);
 }
 
 - (O2Rect) deviceRect: (O2Rect) rect {
-    CGFloat scale = [self backingScaleFactor];
-    NSSize size = [self deviceSize: rect.size];
-    return NSMakeRect(X11ScaledOrigin(rect.origin.x, scale),
-                      X11ScaledOrigin(rect.origin.y, scale), size.width,
-                      size.height);
+    return NSRectFromCGRect([_cgsWindow toplevelDeviceRectForRect: NSRectToCGRect(rect)]);
 }
 
 - (NSPoint) transformPoint: (NSPoint) pos; {
