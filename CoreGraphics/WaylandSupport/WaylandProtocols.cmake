@@ -56,6 +56,8 @@ set(WAYLAND_PROTOCOL_FILES
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-session-management-v1.xml"
 	# pointer-warp-v1 (wayland-protocols 1.50), kept in this tree so older systems still build the backend.
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/pointer-warp-v1.xml"
+	# cursor-shape-v1 refers to the tablet tool interface of tablet-v2, so its table needs that one linked in.
+	"${WAYLAND_PROTOCOLS_DIR}/unstable/tablet/tablet-unstable-v2.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/cursor-shape-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-dialog-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-system-bell-v1.xml"
