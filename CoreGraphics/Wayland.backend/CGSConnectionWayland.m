@@ -21,6 +21,7 @@
 #import "CGSConnectionWayland.h"
 #import "CGSWaylandKeyboard.h"
 #import "CGSWaylandPointer.h"
+#import "CGSWaylandCursor.h"
 #import "CGSWaylandTouch.h"
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandClipboard.h"
@@ -138,6 +139,10 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectPinchGesture:
                 [(CGSWaylandPointer *) object pinchEvent: opcode arguments: args];
                 break;
+            case CGSWaylandObjectCursorScale:
+                if (opcode == WP_FRACTIONAL_EV_PREFERRED)
+                    [(CGSWaylandCursor *) object preferredScaleChanged: args[0].u];
+                break;
             case CGSWaylandObjectTouch:
                 [(CGSWaylandTouch *) object touchEvent: opcode arguments: args];
                 break;
@@ -236,6 +241,8 @@ static const CGEventFlags kHotKeyModifierMask =
         return nil;
 
     _outputs = [NSMutableArray new];
+    // Before the first event: the seat gives the pointer, and with it work to do after the dispatch, during the setup.
+    _afterDispatch = [NSMutableArray new];
     _color = [[WaylandColorManager alloc] initWithDispatcher: CGSWaylandDispatch owner: self];
     // The keyboard layout is described from the system default until the compositor's keymap arrives.
     _keymap = [[CGSWaylandKeymap alloc] init];
@@ -316,8 +323,6 @@ static const CGEventFlags kHotKeyModifierMask =
                                                      dispatch_get_main_queue(),
                                                      ^(int ignored) { [connection activationRequested]; }) ==
                             NOTIFY_STATUS_OK;
-
-    _afterDispatch = [NSMutableArray new];
 
     // The clipboard: the general pasteboard shows the compositor's selection. This goes before the process makes its
     // first pasteboard, which is why the connection does it, not the framework with the windows.
@@ -654,6 +659,17 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         _pointerWarpName = name;
         _pointerWarp = [self bindGlobal: name interface: &wp_pointer_warp_v1_interface
                                 version: 1 kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "wp_cursor_shape_manager_v1") == 0 && _cursorShapeManager == NULL) {
+        _cursorShapeManagerName = name;
+        _cursorShapeManager = [self bindGlobal: name interface: &wp_cursor_shape_manager_v1_interface
+                                       version: MIN(version, (uint32_t) wp_cursor_shape_manager_v1_interface.version)
+                                          kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandPointer *) _pointerDecoder cursorGlobalsChanged];
+    } else if (strcmp(interface, "wp_fractional_scale_manager_v1") == 0 && _fractionalScaleManager == NULL) {
+        _fractionalScaleManagerName = name;
+        _fractionalScaleManager = [self bindGlobal: name interface: &wp_fractional_scale_manager_v1_interface
+                                           version: 1 kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandPointer *) _pointerDecoder cursorGlobalsChanged];
     } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
         // Version 2 adds the release request.
         _pointerGesturesName = name;
@@ -748,6 +764,22 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         WaylandMarshal(_pointerWarp, WP_POINTER_WARP_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _pointerWarp = NULL;
         _pointerWarpName = 0;
+        return;
+    }
+    if (_cursorShapeManager != NULL && name == _cursorShapeManagerName) {
+        struct wl_proxy *manager = _cursorShapeManager;
+        _cursorShapeManager = NULL;
+        _cursorShapeManagerName = 0;
+        [(CGSWaylandPointer *) _pointerDecoder cursorGlobalsChanged];
+        WaylandMarshal(manager, WP_CURSOR_SHAPE_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        return;
+    }
+    if (_fractionalScaleManager != NULL && name == _fractionalScaleManagerName) {
+        struct wl_proxy *manager = _fractionalScaleManager;
+        _fractionalScaleManager = NULL;
+        _fractionalScaleManagerName = 0;
+        [(CGSWaylandPointer *) _pointerDecoder cursorGlobalsChanged];
+        WaylandMarshal(manager, WP_FRACTIONAL_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         return;
     }
     if (_pointerGestures != NULL && name == _pointerGesturesName) {
@@ -1145,6 +1177,24 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
     return YES;
 }
 
+- (struct wl_proxy *) cursorShapeManager {
+    return _cursorShapeManager;
+}
+
+- (struct wl_proxy *) fractionalScaleManager {
+    return _fractionalScaleManager;
+}
+
+- (uint32_t) maximumOutputScale120 {
+    uint32_t scale = 1;
+    @synchronized (self) {
+        for (CGSWaylandOutput *output in _outputs)
+            if (output->_current.scale > 0 && (uint32_t) output->_current.scale > scale)
+                scale = (uint32_t) output->_current.scale;
+    }
+    return scale * 120;
+}
+
 - (BOOL) cancelsHiddenUntilMouseMoves {
     return YES;
 }
@@ -1155,6 +1205,14 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
         [(CGSWaylandPointer *) _pointerDecoder cursorHiddenChanged];
     else
         [_pointerDecoder performSelectorOnMainThread: @selector(cursorHiddenChanged) withObject: nil waitUntilDone: NO];
+}
+
+// The cursor the process selected changed.
+- (void) cursorChanged {
+    if ([NSThread isMainThread])
+        [(CGSWaylandPointer *) _pointerDecoder cursorChanged];
+    else
+        [_pointerDecoder performSelectorOnMainThread: @selector(cursorChanged) withObject: nil waitUntilDone: NO];
 }
 
 - (void) mouseAssociationChanged: (BOOL) associated {

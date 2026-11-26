@@ -80,6 +80,7 @@ typedef enum {
     CGSWaylandObjectDataDevice,
     CGSWaylandObjectDataOffer,
     CGSWaylandObjectDataSource,
+    CGSWaylandObjectCursorScale,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -143,6 +144,11 @@ typedef enum {
     // instead of asking for a short pointer lock.
     struct wl_proxy *_pointerWarp;
     uint32_t _pointerWarpName;
+    // The globals the pointer's cursor is made with (see CGSWaylandCursor): cursor-shape-v1 (the compositor draws
+    // a named cursor) and fractional-scale-v1 (the scale of the cursor surface); NULL when the compositor offers
+    // none.
+    struct wl_proxy *_cursorShapeManager, *_fractionalScaleManager;
+    uint32_t _cursorShapeManagerName, _fractionalScaleManagerName;
     // IOPM assertions: the queue that asks IOKit about them, the notify(3) token of their change
     // notification, and whether this process holds one that keeps the display awake.
     dispatch_queue_t _assertionsQueue;
@@ -186,6 +192,11 @@ typedef enum {
 - (struct wl_proxy *) relativePointerManager;
 // The pointer warp global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerWarp;
+// The cursor shape and fractional scale globals, NULL when the compositor offers none.
+- (struct wl_proxy *) cursorShapeManager;
+- (struct wl_proxy *) fractionalScaleManager;
+// The largest scale (in 1/120) of the outputs, 120 at least.
+- (uint32_t) maximumOutputScale120;
 // YES while this process holds a power assertion that keeps the display awake. It is learned from
 // IOKit (IOPMCopyAssertionsByProcess), as the compositor cannot be asked for it.
 - (BOOL) displaySleepPrevented;

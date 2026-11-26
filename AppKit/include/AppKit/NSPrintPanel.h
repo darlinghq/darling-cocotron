@@ -2,7 +2,7 @@
 #import <Foundation/NSObject.h>
 #import <AppKit/AppKitIvarLayout.h>
 
-@class NSArray, NSMutableArray, NSMutableDictionary, NSViewController;
+@class NSArray, NSMutableArray, NSMutableDictionary, NSViewController, NSPrintInfo, NSWindow;
 
 typedef NS_OPTIONS(NSInteger, NSPrintPanelOptions) {
 
@@ -34,6 +34,12 @@ typedef NS_ENUM(NSInteger, NSPrintPanelResult) {
 - (NSPrintPanelOptions) options;
 
 - (int) runModal;
+- (int) runModalWithPrintInfo: (NSPrintInfo *) printInfo;
+- (void) beginSheetWithPrintInfo: (NSPrintInfo *) printInfo
+                  modalForWindow: (NSWindow *) docWindow
+                        delegate: (id) delegate
+                  didEndSelector: (SEL) didEndSelector
+                     contextInfo: (void *) contextInfo;
 
 - (void) updateFromPrintInfo;
 - (void) finalWritePrintInfo;

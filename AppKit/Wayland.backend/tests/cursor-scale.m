@@ -9,18 +9,30 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+// CoreGraphics' private connection calls (CoreGraphicsPrivate.h, not in the public headers).
+extern int CGSMainConnectionID(void);
+extern id _CGSConnectionForID(int connectionID);
+
 @interface NSObject (CursorScaleFixture)
 + (id) currentDisplay;
 - (id) cursorWithImage: (NSImage *) image hotSpot: (NSPoint) point;
 - (id) cursorWithName: (NSString *) name;
 - (void) setCursor: (id) cursor;
-- (uint32_t) cursorRenderScale120;
+- (uint32_t) renderScale120;
 @end
 
 static id display;
-static uint32_t field(const char *name) {
-    Ivar ivar = class_getInstanceVariable(object_getClass(display), name);
-    return ivar ? *(uint32_t *) ((char *) display + ivar_getOffset(ivar)) : 0;
+static uint32_t field(id object, const char *name) {
+    Ivar ivar = class_getInstanceVariable(object_getClass(object), name);
+    return ivar ? *(uint32_t *) ((char *) object + ivar_getOffset(ivar)) : 0;
+}
+// The cursor of the pointer is CoreGraphics' (its Wayland connection's pointer decoder has it).
+static id cursorObject(void) {
+    id connection = _CGSConnectionForID(CGSMainConnectionID());
+    Ivar decoder = class_getInstanceVariable(object_getClass(connection), "_pointerDecoder");
+    id pointer = decoder ? object_getIvar(connection, decoder) : nil;
+    Ivar cursor = pointer ? class_getInstanceVariable(object_getClass(pointer), "_cursorObject") : NULL;
+    return cursor ? object_getIvar(pointer, cursor) : nil;
 }
 
 @interface FlatCursorImage : NSImage
@@ -43,15 +55,15 @@ static uint32_t field(const char *name) {
     static int stage;
     static NSTimeInterval until, since;
     NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
-    if (now < until || !field("_pointerEnterSerial")) return;
+    if (now < until || !field(display, "_pointerEnterSerial")) return;
     switch (stage++) {
     case 0:
         [display setCursor: imageCursor];
-        printf("STAGE image render=%u\n", [display cursorRenderScale120]);
+        printf("STAGE image render=%u\n", [cursorObject() renderScale120]);
         break;
     case 1:
         [display setCursor: arrow];
-        printf("STAGE arrow render=%u theme=%u\n", [display cursorRenderScale120], field("_cursorThemeScale120"));
+        printf("STAGE arrow render=%u theme=%u\n", [cursorObject() renderScale120], field(cursorObject(), "_themeScale120"));
         break;
     case 2:
         CGDisplayHideCursor(CGMainDisplayID());
@@ -60,19 +72,20 @@ static uint32_t field(const char *name) {
     case 3:
         CGDisplayShowCursor(CGMainDisplayID());
         [display setCursor: arrow];
-        printf("STAGE shown-again render=%u\n", [display cursorRenderScale120]);
+        printf("STAGE shown-again render=%u\n", [cursorObject() renderScale120]);
         // The runner now changes the output scale (2 to 1) while the arrow is shown; the backend
         // has to rasterise and tag the cursor again by itself, with no new setCursor:.
         puts("WAIT-RESCALE");
         since = now;
         break;
     case 4:
-        if ([display cursorRenderScale120] != 120 || field("_cursorThemeScale120") != 120) {
+        // The theme is only loaded when the compositor does not draw the named cursors itself.
+        if ([cursorObject() renderScale120] != 120) {
             if (now - since > 60) { puts("STAGE rescale-timeout"); stage = 5; break; }
             stage = 4;  // poll
             return;
         }
-        printf("STAGE rescaled render=%u theme=%u\n", [display cursorRenderScale120], field("_cursorThemeScale120"));
+        printf("STAGE rescaled render=%u theme=%u\n", [cursorObject() renderScale120], field(cursorObject(), "_themeScale120"));
         until = now + 2;  // let the re-applied cursor settle
         break;
     default:

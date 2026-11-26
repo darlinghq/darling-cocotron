@@ -44,6 +44,7 @@
 #import "X11Monitors.h"
 #import "X11RandR.h"
 #import "X11WindowOwner.h"
+#import "X11CursorTheme.h"
 #import "X11HotKey.h"
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGWindowLevel.h>
@@ -232,7 +233,11 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 	}
 
 	if (_display)
+	{
+		if (_defaultArrow != None)
+			XFreeCursor(_display, _defaultArrow);
 		XCloseDisplay(_display);
+	}
 
 	CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
 
@@ -1336,6 +1341,8 @@ static NSDictionary* modeInfoToDictionary(const XRRModeInfo* mi, int depth, CGFl
 	cgScreen.displayID = 1;
 	cgScreen.bounds = CGRectMake(0, 0, width / scale, height / scale);
 	cgScreen.backingScale = scale;
+	cgScreen.nativeFrame = CGRectMake(0, 0, width, height);
+	cgScreen.hasNativeFrame = YES;
 	cgScreen.modes = @[ @{
 		@"Width": @((unsigned) lround(width / scale)),
 		@"Height": @((unsigned) lround(height / scale)),
@@ -1391,6 +1398,8 @@ static NSDictionary* modeInfoToDictionary(const XRRModeInfo* mi, int depth, CGFl
 		cgScreen.bounds = CGRectMake((monitors[i].x - monitors[primary].x) / scale,
 			(monitors[i].y - monitors[primary].y) / scale, monitors[i].width / scale, monitors[i].height / scale);
 		cgScreen.backingScale = scale;
+		cgScreen.nativeFrame = CGRectMake(monitors[i].x, monitors[i].y, monitors[i].width, monitors[i].height);
+		cgScreen.hasNativeFrame = YES;
 
 		NSMutableArray<NSDictionary*>* modes = [NSMutableArray array];
 		CFIndex currentMode = -1;
@@ -1656,10 +1665,73 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	return _blankCursor;
 }
 
-// The windows go back to their parent's cursor when the blank one is not wanted.
--(void) _setBlankCursorOnWindows:(BOOL)blank
+// The cursor the process shows now: the blank one while it is hidden, else the selected cursor at the display's
+// scale (the arrow when none is selected). None when the window system could not make it.
+-(Cursor) _cursorToShow
 {
-	Cursor cursor = blank ? [self _blankCursorMade] : None;
+	if (![self cursorIsVisible])
+		return [self _blankCursorMade];
+	CGFloat scale = backingScaleFactor();
+	CGSCursor* cursor = [self cursor];
+	if (cursor != nil)
+		return (Cursor) (uintptr_t) [cursor nativeCursorFor: self scale: scale];
+	if (_defaultArrow == None || _defaultArrowScale != scale)
+	{
+		if (_defaultArrow != None)
+			XFreeCursor(_display, _defaultArrow);
+		_defaultArrow = X11LoadThemedCursor(_display, "left_ptr", scale);
+		_defaultArrowScale = scale;
+	}
+	return _defaultArrow;
+}
+
+-(void*) createNativeCursor:(CGSCursor*)cursor scale:(double)scale
+{
+	Cursor native = [cursor isImage] ? X11CreateImageCursor(_display, cursor, scale)
+		: X11CreateShapeCursor(_display, cursor, scale);
+	if (native == None)
+		native = XcursorLibraryLoadCursor(_display, "left_ptr");
+	return (void*) (uintptr_t) native;
+}
+
+-(void) destroyNativeCursor:(void*)native
+{
+	if (native != NULL)
+		XFreeCursor(_display, (Cursor) (uintptr_t) native);
+}
+
+// Whether the window, or a window inside it (the client of a window manager's frame), is one of this process'.
+static BOOL windowBelongsToProcess(Display* display, Window window, int depth)
+{
+	if (window == None)
+		return NO;
+	if (X11WindowOwnerPID(display, window) == getpid())
+		return YES;
+	if (depth <= 0)
+		return NO;
+
+	Window root, parent, *children = NULL;
+	unsigned int count = 0;
+	BOOL found = NO;
+	if (XQueryTree(display, window, &root, &parent, &children, &count))
+	{
+		for (unsigned int i = 0; i < count && !found; i++)
+			found = windowBelongsToProcess(display, children[i], depth - 1);
+		if (children != NULL)
+			XFree(children);
+	}
+	return found;
+}
+
+// The windows the connection made show the cursor; so does the process' window under the pointer that is not one of
+// them (a framework above that made its own X windows; it asks again as the pointer enters one), and the cursor
+// stays the process' while the pointer is over it. A window of another process is left alone.
+-(void) _applyCursor
+{
+	Cursor cursor = [self _cursorToShow];
+	if (cursor == None)
+		return;
+	BOOL undefine = [self cursorIsVisible] && [self cursor] == nil;
 
 	@synchronized (_windows)
 	{
@@ -1668,15 +1740,44 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 			CGSWindow* window = [_windows objectForKey: key];
 
 			// A window of the UI layer shows the cursor the UI layer gives it.
-			if (![window isKindOfClass: [CGSWindowX11 class]] || [(CGSWindowX11*) window isToplevel])
+			if (![window isKindOfClass: [CGSWindowX11 class]])
 				continue;
-			if (blank)
-				XDefineCursor(_display, ((CGSWindowX11*) window)->_window, cursor);
-			else
+			if (undefine)
 				XUndefineCursor(_display, ((CGSWindowX11*) window)->_window);
+			else
+				XDefineCursor(_display, ((CGSWindowX11*) window)->_window, cursor);
 		}
 	}
+
+	Window root = DefaultRootWindow(_display), returnedRoot = None, child = None;
+	int rootX, rootY, windowX, windowY;
+	unsigned int mask;
+	if (XQueryPointer(_display, root, &returnedRoot, &child, &rootX, &rootY, &windowX, &windowY, &mask) &&
+		child != None && windowBelongsToProcess(_display, child, 2))
+		XDefineCursor(_display, child, cursor);
 	XFlush(_display);
+}
+
+// A window made while the cursor is hidden shows the blank cursor like the others, and one made after a cursor
+// was selected shows it.
+-(void) _applyCursorToNewWindow:(CGSWindowX11*)window
+{
+	if ([self cursorIsVisible] && [self cursor] == nil)
+		return;
+	Cursor cursor = [self _cursorToShow];
+	if (cursor != None)
+	{
+		XDefineCursor(_display, window->_window, cursor);
+		XFlush(_display);
+	}
+}
+
+-(void) cursorChanged
+{
+	if ([NSThread isMainThread])
+		[self _applyCursor];
+	else
+		[self performSelectorOnMainThread: @selector(_applyCursor) withObject: nil waitUntilDone: NO];
 }
 
 -(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes
@@ -1692,6 +1793,7 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	{
 		[_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
 	}
+	[self _applyCursorToNewWindow: window];
 	[window release];
 	return window;
 }
@@ -1716,12 +1818,7 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	{
 		[_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
 	}
-	// A window made while the cursor is hidden shows the blank cursor like the others
-	if (![self cursorIsVisible])
-	{
-		XDefineCursor(_display, window->_window, [self _blankCursorMade]);
-		XFlush(_display);
-	}
+	[self _applyCursorToNewWindow: window];
 	[window release];
 	return window;
 }

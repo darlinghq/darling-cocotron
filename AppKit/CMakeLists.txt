@@ -232,6 +232,7 @@ set(AppKit_sources
 	NSColorPicker.subproj/NSColorPicker.m
 
 	NSEPSImageRep.m
+	NSPrintDialogSupport.m
 	NSPrintInfo.m
 
 	NSMenu.subproj/NSMainMenuView.m
@@ -677,7 +678,6 @@ add_backend(X11
 		X11.backend/X11Window.m
 		X11.backend/X11SubWindow.m
 		X11.backend/X11Event.m
-		X11.backend/X11Cursor.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES

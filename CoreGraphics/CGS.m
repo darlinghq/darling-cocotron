@@ -871,13 +871,6 @@ bool _CGSSetCursorHiddenUntilMouseMoves(bool flag)
 	return true;
 }
 
-bool _CGSNativeConnectionCursorHidden(void)
-{
-	CGSConnection* connection = nativeConnection();
-
-	return [connection managesPointer] && ![connection cursorIsVisible];
-}
-
 bool _CGSNativeConnectionPointerLocked(void)
 {
 	return [nativeConnection() pointerLocked];

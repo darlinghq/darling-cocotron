@@ -8,8 +8,7 @@
 #include <stdio.h>
 
 // CGSForceShowCursor() keeps the cursor visible while counted hides are pending.
-// The window system's own calls are counted by replacing -hideCursor and -unhideCursor on the
-// display class (a Darling detail), so on macOS only the call itself is exercised.
+// On macOS only the call itself is exercised.
 
 @interface NSDisplay : NSObject
 + (NSDisplay *) currentDisplay;
@@ -46,9 +45,9 @@ int main(void) {
         }
 
         Class cls = [[displayClass currentDisplay] class];
-        // The Wayland connection keeps the hide count itself (the display is not asked to hide anything): the
-        // visibility CGCursorIsVisible() reports is what is checked.
-        if ([NSStringFromClass(cls) isEqualToString: @"WaylandDisplay"]) {
+        // The X11 and Wayland connections of CoreGraphics keep the hide count themselves (the display is not asked
+        // to hide anything): the visibility CGCursorIsVisible() reports is what is checked.
+        if ([NSStringFromClass(cls) isEqualToString: @"WaylandDisplay"] || [NSStringFromClass(cls) hasPrefix: @"X11"]) {
             CGDisplayHideCursor(CGMainDisplayID());
             CGDisplayHideCursor(CGMainDisplayID());
             CHECK(!CGCursorIsVisible(), "two hides hide the cursor");

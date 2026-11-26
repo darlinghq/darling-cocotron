@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import "CGSWaylandPointer.h"
+#import "CGSWaylandCursor.h"
 #import "CGSConnectionWayland.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
@@ -80,11 +81,14 @@ static unsigned maskForCode(uint32_t code) {
     _downClickState = [NSMutableDictionary new];
     // The pointer is hardware: the events it posts change the state the hardware state functions report.
     _source = (void *) CGEventSourceCreate(kCGEventSourceStateHIDSystemState);
+    _cursorObject = [[CGSWaylandCursor alloc] initWithConnection: connection pointer: self];
     return self;
 }
 
 - (void) dealloc {
     [self stop];
+    [_cursorObject invalidate];
+    [_cursorObject release];
     [_downClickState release];
     if (_source != NULL)
         CFRelease((CFTypeRef) _source);
@@ -107,6 +111,7 @@ static unsigned maskForCode(uint32_t code) {
                                         kind: CGSWaylandObjectPointer
                                       object: self];
         [self pointerGesturesChanged];
+        [_cursorObject objectsChanged];
         id<CGSNativeConnectionObserver> observer = [self observer];
         if ([observer respondsToSelector: @selector(nativeConnectionPointerAvailabilityChanged:)])
             [observer nativeConnectionPointerAvailabilityChanged: YES];
@@ -160,6 +165,7 @@ static unsigned maskForCode(uint32_t code) {
             WL.wl_proxy_destroy(_pointer);
         }
         _pointer = NULL;
+        [_cursorObject objectsChanged];
     }
     _focus = NULL;
     _enterSerial = 0;
@@ -342,10 +348,9 @@ static unsigned maskForCode(uint32_t code) {
         _lastPoint = _point;
         _remainderX = _remainderY = 0;
         [self noteGlobalLocation];
-        // The cursor of a process that hid it stays hidden over its surfaces (the compositor starts a new
-        // surface with no cursor image of ours).
-        if (![_connection cursorIsVisible])
-            [self sendHiddenCursor];
+        // The compositor starts the pointer in a new surface with no cursor image of ours: the process' cursor
+        // (a blank one while it is hidden) is given again for the serial of this enter.
+        [_cursorObject setNeedsApply];
         if ([observer respondsToSelector: @selector(nativeConnectionPointerEntered:serial:x:y:)])
             [observer nativeConnectionPointerEntered: _focus serial: _enterSerial x: _point.x y: _point.y];
         [self updatePointerLock];
@@ -750,29 +755,20 @@ static const double kNothing = 0;
     return kCGErrorSuccess;
 }
 
-// The cursor is hidden by a request that gives the pointer no image; showing it again is the framework that
-// has the cursor images' to do (the observer), as only it has the image.
-- (void) sendHiddenCursor {
-    if (_pointer == NULL || _enterSerial == 0)
-        return;
-    union wl_argument args[4] = {{.u = _enterSerial}, {.o = NULL}, {.i = 0}, {.i = 0}};
-    WaylandMarshal(_pointer, WP_POINTER_SET_CURSOR, NULL, 0, args);
-    [_connection flush];
+- (void) cursorHiddenChanged {
+    [_cursorObject setNeedsApply];
 }
 
-- (void) cursorHiddenChanged {
-    BOOL hidden = ![_connection cursorIsVisible];
-    id<CGSNativeConnectionObserver> observer = [self observer];
+- (void) cursorChanged {
+    [_cursorObject setNeedsApply];
+}
 
-    // Each hide calls the hook; only a change between hidden and visible is a change here.
-    if (hidden == _cursorHiddenApplied)
-        return;
-    _cursorHiddenApplied = hidden;
+- (void) cursorGlobalsChanged {
+    [_cursorObject objectsChanged];
+}
 
-    if (hidden)
-        [self sendHiddenCursor];
-    if ([observer respondsToSelector: @selector(nativeConnectionCursorHiddenChanged:)])
-        [observer nativeConnectionCursorHiddenChanged: hidden];
+- (uint32_t) enterSerial {
+    return _enterSerial;
 }
 
 #pragma mark - Scroll
