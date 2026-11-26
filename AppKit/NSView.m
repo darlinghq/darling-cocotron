@@ -1502,24 +1502,33 @@ static void sendHiddenStateChange(NSView *view, BOOL hidden) {
             CGPointApplyAffineTransform(point, toWindow), fromWindow);
 }
 
+static NSSize convertSizeAcrossViews(NSView *source, NSView *target, NSSize size) {
+    // AppKit treats NSSize as a magnitude across flipped/unflipped coordinate systems;
+    // cancel source's isFlipped before rotating/scaling to window and target's after.
+    if (source != nil && [source isFlipped])
+        size.height = -size.height;
+    CGAffineTransform toWindow =
+            (source != nil) ? [source transformToWindow] : CGAffineTransformIdentity;
+    CGAffineTransform fromWindow =
+            (target != nil) ? [target transformFromWindow] : CGAffineTransformIdentity;
+    NSSize result = CGSizeApplyAffineTransform(
+            CGSizeApplyAffineTransform(size, toWindow), fromWindow);
+
+    if (target != nil && [target isFlipped])
+        result.height = -result.height;
+    return result;
+}
+
 - (NSSize) convertSize: (NSSize) size fromView: (NSView *) viewOrNil {
     NSView *fromView =
             (viewOrNil != nil) ? viewOrNil : [[self window] _backgroundView];
-    CGAffineTransform toWindow = [fromView transformToWindow];
-    CGAffineTransform fromWindow = [self transformFromWindow];
-
-    return CGSizeApplyAffineTransform(
-            CGSizeApplyAffineTransform(size, toWindow), fromWindow);
+    return convertSizeAcrossViews(fromView, self, size);
 }
 
 - (NSSize) convertSize: (NSSize) size toView: (NSView *) viewOrNil {
     NSView *toView =
             (viewOrNil != nil) ? viewOrNil : [[self window] _backgroundView];
-    CGAffineTransform toWindow = [self transformToWindow];
-    CGAffineTransform fromWindow = [toView transformFromWindow];
-
-    return CGSizeApplyAffineTransform(
-            CGSizeApplyAffineTransform(size, toWindow), fromWindow);
+    return convertSizeAcrossViews(self, toView, size);
 }
 
 - (NSRect) convertRect: (NSRect) rect fromView: (NSView *) viewOrNil {
