@@ -2384,8 +2384,6 @@ static NSString *menuBarStylePreference(void) {
 }
 
 - (BOOL) canBecomeKeyWindow {
-    if (NS_EXTRA(NSWindow, self)->_styleMask & NSDocModalWindowMask)
-        return YES;
     // The NSWindow implementation returns YES if the window has a title bar
     // (see the QUIRK above), or NO otherwise.
     return [self _hasTitlebarForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
@@ -3784,10 +3782,7 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
         break;
 
     case NSKeyDown:
-        if ([self attachedSheet] != nil)
-            [[self attachedSheet] sendEvent: event];
-        else
-            [_firstResponder keyDown: event];
+        [_firstResponder keyDown: event];
         break;
 
     case NSKeyUp:
