@@ -1,8 +1,8 @@
-// Host test for AppKit/X11.backend/X11InputShape.h: a window with an empty input region is transparent to the
+// Host test for CoreGraphics/X11.backend/X11InputShape.h: a window with an empty input region is transparent to the
 // pointer, and the default region makes it clickable again. The server decides which window is under the pointer,
 // so the test asks it. Use tests/x11-input-shape.sh, which runs it on its own Xvfb.
 // Build: cc x11-input-shape.c -lX11 -lXext
-#include "../AppKit/X11.backend/X11InputShape.h"
+#include "../CoreGraphics/X11.backend/X11InputShape.h"
 #include <stdio.h>
 
 static int failures, checks;

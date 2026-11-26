@@ -81,8 +81,12 @@
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
 -(void) dealloc;
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
+-(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes;
+-(BOOL) supportsTranslucentToplevels;
 
 -(void) processPendingEvents;
+// The main monitor's rectangle in root coordinates (device pixels).
+-(X11Frame) _primaryRoot;
 // A point in root coordinates (device pixels) in CoreGraphics' global space (points).
 -(CGPoint) _cgPointFromRoot:(CGPoint)root;
 // The CGS window that has this X window, 0 when none.

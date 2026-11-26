@@ -504,6 +504,16 @@ static CGDisplayChangeSummaryFlags changeFlags(CGSScreen* before, CGSScreen* aft
 	NSInvalidAbstractInvocation();
 }
 
+-(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes
+{
+	return nil;
+}
+
+-(BOOL) supportsTranslucentToplevels
+{
+	return NO;
+}
+
 -(void*) nativeDisplay
 {
 	NSInvalidAbstractInvocation();

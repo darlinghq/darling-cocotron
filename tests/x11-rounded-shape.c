@@ -1,10 +1,10 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
-// Host test for AppKit/X11.backend/X11RoundedShape.h: a window whose corners are cut has a bounding region
+// Host test for CoreGraphics/X11.backend/X11RoundedShape.h: a window whose corners are cut has a bounding region
 // without the corner pixels and with all others, and a radius of 0 restores the whole rectangle. Use
 // tests/x11-rounded-shape.sh, which runs it on its own Xvfb.
 // Build: cc x11-rounded-shape.c -lX11 -lXext -lm
-#include "../AppKit/X11.backend/X11RoundedShape.h"
+#include "../CoreGraphics/X11.backend/X11RoundedShape.h"
 #include <stdio.h>
 
 static int failures, checks;

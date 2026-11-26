@@ -19,6 +19,7 @@
  SOFTWARE. */
 
 #import <CoreGraphics/CGWindowPrivate.h>
+#import <CoreGraphics/CGSWindow.h>
 #import <GL/glx.h>
 #import <Onyx2D/O2Geometry.h>
 #import <Onyx2D/O2Image.h>
@@ -27,7 +28,7 @@
 #import <X11/Xresource.h>
 #import <X11/Xlocale.h>
 
-@class X11Display, CAWindowOpenGLContext, NSWindow, O2Context;
+@class X11Display, CAWindowOpenGLContext, NSWindow, O2Context, CGSWindow;
 
 // Posted, with the window as the object, after its backing pixels were flushed.
 extern NSString *const X11WindowBackingDidFlushNotification;
@@ -37,6 +38,9 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     Display *_display;
     XVisualInfo *_visualInfo;
     Window _window;
+    // The CoreGraphics window that is the window system's window: made, shown, hidden, placed, sized,
+    // titled, made translucent and destroyed through it; _window is its native handle.
+    CGSWindow *_cgsWindow;
     CGLContextObj _cglContext;
     CGLWindowRef _cglWindow;
     CAWindowOpenGLContext *_caContext;
@@ -62,26 +66,20 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _fullscreenRequested;
     BOOL _fullscreenReported; // what the window manager last said, told to the delegate
     BOOL _isOpaque;
-    NSSize _opaqueRegionSize; // device size of the _NET_WM_OPAQUE_REGION currently set, zero for none (see -updateOpaqueRegion)
     BOOL _hasAlpha;   // created with the 32-bit visual and an alpha surface
     BOOL _wasMapped;  // the visual is settled when the window is first mapped
     BOOL _hasShadow;
     BOOL _wantsInputFocus;
     BOOL _keyRequested; // the application asked for this window to become key and the focus has not answered yet
-    BOOL _ignoresMouseEvents; // the input region currently set
     CGFloat _appliedAlpha; // the window's alpha value as last applied to the X window
     BOOL _alphaIsZero; // _appliedAlpha is 0
     BOOL _chromeless; // no window manager frame and no title bar: rounded corners and an outline (see -updateWindowShape)
-    BOOL _roundedShapeSet; // the bounding shape currently has rounded corners
     BOOL _invisibleWithoutCompositor; // alpha 0 made the window invisible by shape (see -updateInvisibility)
     // The subwindow whose layer tree draws into _cglWindow instead of its
     // own drawable (see -[X11SubWindow sharedCGLWindow]), and whether its
     // frames wait for the display refresh.
     id _layerDrawableOwner;
     BOOL _layerDrawableSyncs;
-    // The union of a series of Expose events received so far (see -addExposedRect:isLast:exposedUnion:).
-    O2Rect _pendingExpose;
-    BOOL _hasPendingExpose;
     // The presentation hints as last written to the window.
     BOOL _bypassCompositorHint;
     BOOL _variableRefreshHint;
@@ -109,7 +107,6 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     int _configureX, _configureY, _configureWidth, _configureHeight;
 }
 
-+ (void) removeDecorationForWindow: (Window) w onDisplay: (Display *) dpy;
 - (instancetype) initWithDelegate: (NSWindow *) delegate;
 - (void) createXInputContext;
 // The input method's composition, as its preedit callbacks report it, passed on to the
@@ -125,20 +122,14 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 - (Visual *) visual;
 - (Drawable) drawable;
 - (NSPoint) transformPoint: (NSPoint) pos;
-- (O2Rect) transformFrame: (O2Rect) frame;
 // Device pixels from the window's top-left corner (as X delivers them) to
 // window coordinates in points, y up (as AppKit reports them).
 - (NSPoint) logicalPoint: (NSPoint) devicePoint;
 
-// Device pixels per point, read from the display so that this window and its
-// NSScreen always report the same value (-[NSWindow backingScaleFactor] prefers
-// the platform window's answer, so a window that disagreed with its screen
-// would win).
+// Device pixels per point, as the window system's window has it (it keeps the window's size in points when the
+// scale changes, and tells the delegate).
 - (CGFloat) backingScaleFactor;
 
-// Called by the display after it re-read a changed scale (see
-// -[X11Display reevaluateBackingScale]).
-- (void) displayBackingScaleChangedFrom: (CGFloat) oldScale;
 - (void) setWindowIcon;
 
 // Points to the device pixels libX11 takes. AppKit-level geometry is in points;
@@ -175,7 +166,6 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 - (void) setLayerDrawable: (id) owner syncsToDisplay: (BOOL) syncs;
 - (void) releaseLayerDrawable: (id) owner;
 
-- (void) frameChanged;
 - (void) setLastKnownCursorPosition: (CGPoint) point;
 
 - (void) setStyleMaskInternal: (NSUInteger) styleMask force: (BOOL) force;
@@ -186,9 +176,8 @@ extern NSString *const X11WindowBackingDidFlushNotification;
 - (BOOL) isMenuOrPopup;
 - (void) mapNotified;
 
-// X reports an exposed area as a series of rectangles. Collects them and, for the last one of
-// the series, returns YES with their union in *exposedUnion.
-- (BOOL) addExposedRect: (O2Rect) rect isLast: (BOOL) last exposedUnion: (O2Rect *) exposedUnion;
+// What the window system said about the window (see CGSToplevelEvent), passed on to the delegate.
+- (void) toplevelEvent: (const CGSToplevelEvent *) event;
 @end
 
 // Whether an EWMH window manager is running on the display.

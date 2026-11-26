@@ -87,6 +87,9 @@ typedef enum {
 + (NSInteger) windowNumberForPlatformWindowID: (unsigned long) platformWindowID;
 
 - (NSInteger) windowNumber;
+// For the platform windows that are made on a CGS window (see CGSWindow.h): the window number is the
+// id of that window, which this returns. The default, 0, leaves the number to be assigned on first use.
+- (NSInteger) _assignedWindowNumber;
 // The window system's identifier of the window (an X11 Window, for example),
 // or 0 if it has none.
 - (unsigned long) platformWindowID;
