@@ -117,6 +117,10 @@ typedef enum {
 // Wayland: CGWarpMouseCursorPosition() moved the application's cursor within its surface to x, y (the
 // compositor is asked to move the pointer there; the next events start from it).
 - (void) nativeConnectionPointerWarpedToX: (double) x y: (double) y;
+// Wayland: a finger went down on a surface of the process (the touch screen of the seat, which CoreGraphics decodes into
+// touch CGEvents), with the compositor's serial of the touch down, which the requests that start a move or a grab need.
+// Before the touch event is posted.
+- (void) nativeConnectionTouchDownWithSerial: (uint32_t) serial;
 // The seat gained or lost its pointer. The compositor objects that need it (cursor, locked pointer)
 // are reached through _CGSNativeConnectionPointer().
 - (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available;

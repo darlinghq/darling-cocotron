@@ -4,6 +4,7 @@
  Licensed under the MIT license, the same as the rest of this project.
 */
 #import <AppKit/AppKit.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <objc/runtime.h>
 #include <dlfcn.h>
 #include <math.h>
@@ -74,7 +75,7 @@ static void fingerDown(int finger, double x, double y) {
 #else
     union Argument a[6] = {{.u = 1}, {.u = 0}, {.o = [[window platformWindow] surface]}, {.i = finger},
                            {.f = (int32_t)(x * 256)}, {.f = (int32_t)(y * 256)}};
-    [display touchEvent:WL_DOWN arguments:a];
+    [decoder touchEvent:WL_DOWN arguments:a];
 #endif
     pump();
 }
@@ -84,7 +85,7 @@ static void fingerMove(int finger, double x, double y) {
                           x:x y:y rootX:x rootY:y];
 #else
     union Argument a[4] = {{.u = 0}, {.i = finger}, {.f = (int32_t)(x * 256)}, {.f = (int32_t)(y * 256)}};
-    [display touchEvent:WL_MOTION arguments:a];
+    [decoder touchEvent:WL_MOTION arguments:a];
 #endif
     pump();
 }
@@ -94,7 +95,7 @@ static void fingerUp(int finger, double x, double y) {
                           x:x y:y rootX:x rootY:y];
 #else
     union Argument a[3] = {{.u = 1}, {.u = 0}, {.i = finger}};
-    [display touchEvent:WL_UP arguments:a];
+    [decoder touchEvent:WL_UP arguments:a];
 #endif
     pump();
 }
@@ -136,6 +137,8 @@ static void deliver(void) {
                       ? [connection _processPointer] : nil;
     SEL feed = @selector(touchEventType:device:detail:window:x:y:rootX:rootY:);
 #else
+    Ivar decoderIvar = class_getInstanceVariable(object_getClass(_CGSConnectionForID(CGSMainConnectionID())), "_touchDecoder");
+    decoder = decoderIvar ? object_getIvar(_CGSConnectionForID(CGSMainConnectionID()), decoderIvar) : nil;
     SEL feed = @selector(touchEvent:arguments:);
 #endif
     if (![decoder respondsToSelector:feed] || cancelAll == NULL) {
@@ -216,7 +219,7 @@ static void deliver(void) {
     if (cancelAll) cancelAll(window);
 #else
     union Argument none[1] = {{.u = 0}};
-    [display touchEvent:WL_CANCEL arguments:none];
+    [decoder touchEvent:WL_CANCEL arguments:none];
 #endif
     pump();
     e = [events count] == 1 ? [events objectAtIndex:0] : nil;
