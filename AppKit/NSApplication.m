@@ -1944,9 +1944,7 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     do {
         NSAutoreleasePool *pool = [NSAutoreleasePool new];
 
-        NS_DURING [NSClassFromString(@"Win32RunningCopyPipe")
-                performSelector: @selector(createRunningCopyPipe)];
-
+        NS_DURING
         // This should happen before _makeSureIsOnAScreen so we don't reposition
         // done windows
         [self _checkForReleasedWindows];
@@ -2623,9 +2621,6 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
                 postNotificationName: NSApplicationWillTerminateNotification
                               object: self];
 
-        [NSClassFromString(@"Win32RunningCopyPipe")
-                performSelector: @selector(invalidateRunningCopyPipe)];
-
         exit(0);
     }
 }
@@ -3059,11 +3054,6 @@ int NSApplicationMain(int argc, const char *argv[]) {
     NSBundle *bundle = [NSBundle mainBundle];
     Class class = [bundle principalClass];
     NSString *nibFile = [bundle infoDictionary][@"NSMainNibFile"];
-
-#ifndef DARLING
-    [NSClassFromString(@"Win32RunningCopyPipe")
-            performSelector: @selector(startRunningCopyPipe)];
-#endif
 
     if (class == Nil)
         class = [NSApplication class];
