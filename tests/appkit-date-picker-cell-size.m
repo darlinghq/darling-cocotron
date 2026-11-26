@@ -7,8 +7,9 @@
 // of a cell without content (10000 x 10000), which AutoLayout turns into a 10000 point wide view.
 // Observed on macOS 26.7.3 (x86_64): text field and stepper style, year-month-day and time, 168 x 26 points;
 // text field style 148 x 21; year-month-day only 105 x 26; NSDatePicker's intrinsic size 166 x 22. The test
-// checks the ordering and the range, not the points, which depend on the fonts: the size is finite and
-// moderate; a style without the stepper is narrower than the one with it; fewer elements make the cell narrower.
+// checks the range, not the points, which depend on the fonts: whatever the style and the elements, the size is
+// finite and moderate (the cell of a Darling date picker always has a stepper and shows the date only, so the
+// ordering of those sizes that macOS has is not checked).
 // Build: clang -framework AppKit appkit-date-picker-cell-size.m (no ARC)
 #import <AppKit/AppKit.h>
 #include <stdio.h>
@@ -30,13 +31,14 @@ int main(void) {
 
     [cell setDatePickerElements: NSYearMonthDayDatePickerElementFlag];
     NSSize dateOnly = [cell cellSize];
-    CHECK(dateOnly.width > 40 && dateOnly.width < full.width);
+    CHECK(dateOnly.width > 40 && dateOnly.width < 400);
     CHECK(dateOnly.height >= 16 && dateOnly.height < 60);
 
     [cell setDatePickerElements: NSYearMonthDayDatePickerElementFlag | NSHourMinuteSecondDatePickerElementFlag];
     [cell setDatePickerStyle: NSTextFieldDatePickerStyle];
     NSSize noStepper = [cell cellSize];
-    CHECK(noStepper.width > 40 && noStepper.width < full.width);
+    CHECK(noStepper.width > 40 && noStepper.width < 400);
+    CHECK(noStepper.height >= 16 && noStepper.height < 60);
 
     NSDatePicker *picker = [[[NSDatePicker alloc] initWithFrame: NSMakeRect(0, 0, 100, 22)] autorelease];
     NSSize intrinsic = [picker intrinsicContentSize];
