@@ -113,8 +113,6 @@ static void test_click_beside_the_columns(void)
     Source *source = setup();
     CHECK([table columnAtPoint:beside(2)] == -1);
     click(beside(2), 1);
-    CHECK([table clickedColumn] == -1);
-    CHECK([table clickedRow] == 2);
     CHECK([table selectedRow] == 2);
     CHECK(source->actions == 1 && source->actionColumn == -1 && source->actionRow == 2);
 }
@@ -142,9 +140,30 @@ static void test_a_click_in_the_column_is_unchanged(void)
 {
     Source *source = setup();
     click(NSMakePoint(50, NSMidY([table rectOfRow:1])), 1);
-    CHECK([table clickedColumn] == 0);
     CHECK([table selectedRow] == 1);
-    CHECK(source->actions == 1 && source->actionColumn == 0);
+    CHECK(source->actions == 1 && source->actionColumn == 0 && source->actionRow == 1);
+}
+
+// QUIRK pinned: clickedRow and clickedColumn are meaningful inside the action and double action messages
+// (the documentation of -[NSTableView clickedRow]) and are -1 once the click returned, and on a table that has not
+// been clicked; observed on macOS 26.7.3 by running this test there.
+static void test_clicked_row_and_column_are_reset_after_the_click(void)
+{
+    Source *source = setup();
+    CHECK([table clickedRow] == -1 && [table clickedColumn] == -1); // no click yet
+    click(NSMakePoint(50, NSMidY([table rectOfRow:1])), 1);
+    CHECK(source->actions == 1 && source->actionRow == 1 && source->actionColumn == 0); // valid inside the action
+    CHECK([table clickedRow] == -1);
+    CHECK([table clickedColumn] == -1);
+
+    // Not editable, so that the double click is a double action and not the start of an edit
+    [[[table tableColumns] objectAtIndex:0] setEditable:NO];
+    click(NSMakePoint(50, NSMidY([table rectOfRow:2])), 1);
+    click(NSMakePoint(50, NSMidY([table rectOfRow:2])), 2); // the second click of a double click
+    CHECK(source->actions == 2 && source->doubleActions == 1);
+    CHECK(source->actionRow == 2 && source->actionColumn == 0); // valid inside the double action
+    CHECK([table clickedRow] == -1);
+    CHECK([table clickedColumn] == -1);
 }
 
 static void test_a_click_below_the_rows_still_clears_the_selection(void)
@@ -165,6 +184,7 @@ int main(void)
         test_the_delegate_is_not_asked_to_track_a_missing_cell();
         test_double_click_beside_the_columns();
         test_a_click_in_the_column_is_unchanged();
+        test_clicked_row_and_column_are_reset_after_the_click();
         test_a_click_below_the_rows_still_clears_the_selection();
     }
     if (failures)
