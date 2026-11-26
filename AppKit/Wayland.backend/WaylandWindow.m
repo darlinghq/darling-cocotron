@@ -562,6 +562,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
                                           WP_WM_BASE_GET_XDG_SURFACE,
                                           &xdg_surface_interface, args,
                                           WaylandObjectXdgSurface, self);
+        // _wmBase lives on the dedicated ping queue; return child surfaces to the default queue.
+        WL.wl_proxy_set_queue(_xdgSurface, NULL);
 
         if (parent != nil) {
             _popupParent = [parent retain];
@@ -692,6 +694,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     union wl_argument args[4] = {{.o = NULL}};
     struct wl_proxy *positioner = WaylandCreateObject(_display->_wmBase,
             WP_WM_BASE_CREATE_POSITIONER, &xdg_positioner_interface, args, 0, nil);
+    WL.wl_proxy_set_queue(positioner, NULL);
     args[0].i = MAX(1, (int32_t) ceil(_frame.size.width));
     args[1].i = MAX(1, (int32_t) ceil(_frame.size.height));
     WaylandMarshal(positioner, WP_POSITIONER_SET_SIZE, NULL, 0, args);

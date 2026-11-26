@@ -32,11 +32,13 @@
 
 #import "../private-include/AppKit/DarlingDisplay.h"
 #import <CoreGraphics/CGSNativeConnection.h>
+#include <pthread.h>
 #include <stdint.h>
 #include <wayland-util.h>
 #include "WaylandFullscreen.h"
 
 struct wl_display;
+struct wl_event_queue;
 struct wl_proxy;
 struct wl_cursor_theme;
 struct xkb_context;
@@ -155,6 +157,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // power assertion that prevents display sleep.
     struct wl_proxy *_idleInhibitManager;
     uint32_t _idleInhibitManagerName;
+
+    struct wl_event_queue *_pingQueue;
+    pthread_t _pingThread;
+    BOOL _pingThreadRunning;
+    int _pingWakePipe[2];
+    CFRunLoopSourceRef _pingMainWakeSource;
 
 @protected
     struct wl_proxy *_seat;

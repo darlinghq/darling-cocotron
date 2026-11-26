@@ -157,6 +157,84 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
     return 0;
 }
 
+static int WaylandWmBaseDispatch(const void *data, void *proxy, uint32_t opcode,
+                                 const struct wl_message *message, union wl_argument *args)
+{
+    (void) data;
+    (void) message;
+    if (opcode == WP_WM_BASE_EV_PING) {
+        union wl_argument pong[1] = {{.u = args[0].u}};
+        WaylandMarshal((struct wl_proxy *) proxy, WP_WM_BASE_PONG, NULL, 0, pong);
+    }
+    return 0;
+}
+
+static void WaylandPingWakeMainRunLoop(void *info) {
+    [(WaylandDisplay *) info processPendingEvents];
+}
+
+static void *WaylandPingThreadMain(void *arg) {
+    WaylandDisplay *display = (WaylandDisplay *) arg;
+    struct wl_display *wlDisplay = display->_wlDisplay;
+    struct wl_event_queue *queue = display->_pingQueue;
+    int wlFd = WL.wl_display_get_fd(wlDisplay);
+    int wakeFd = display->_pingWakePipe[0];
+
+    for (;;) {
+        struct pollfd fds[2] = {
+            {.fd = wlFd, .events = POLLIN},
+            {.fd = wakeFd, .events = POLLIN},
+        };
+        int ready = poll(fds, 2, -1);
+        if (ready < 0) {
+            if (errno == EINTR)
+                continue;
+            break;
+        }
+        if (fds[1].revents & (POLLIN | POLLERR | POLLHUP | POLLNVAL))
+            break;
+        if (!(fds[0].revents & POLLIN)) {
+            if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL))
+                break;
+            continue;
+        }
+
+        while (WL.wl_display_prepare_read_queue(wlDisplay, queue) != 0) {
+            if (WL.wl_display_dispatch_queue_pending(wlDisplay, queue) < 0)
+                goto done;
+            WL.wl_display_flush(wlDisplay);
+        }
+
+        struct pollfd check = {.fd = wlFd, .events = POLLIN};
+        BOOL didRead = NO;
+        if (poll(&check, 1, 0) > 0 && (check.revents & POLLIN)) {
+            if (WL.wl_display_read_events(wlDisplay) < 0)
+                goto done;
+            didRead = YES;
+        } else {
+            WL.wl_display_cancel_read(wlDisplay);
+        }
+
+        if (WL.wl_display_dispatch_queue_pending(wlDisplay, queue) < 0)
+            goto done;
+        WL.wl_display_flush(wlDisplay);
+
+        // If this thread drained wl_fd into the default queue while the main run loop is
+        // sleeping, wake the main run loop so CGSConnectionWayland processes those events.
+        if (didRead && display->_pingMainWakeSource != NULL) {
+            CFRunLoopSourceSignal(display->_pingMainWakeSource);
+            CFRunLoopWakeUp(CFRunLoopGetMain());
+        }
+    }
+
+done:
+    if (display->_pingMainWakeSource != NULL) {
+        CFRunLoopSourceSignal(display->_pingMainWakeSource);
+        CFRunLoopWakeUp(CFRunLoopGetMain());
+    }
+    return NULL;
+}
+
 struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                      const struct wl_interface *interface,
                                      union wl_argument *args,
@@ -197,6 +275,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     _outputs = [NSMutableArray new];
     _afterDispatch = [NSMutableArray new];
     _windows = CFArrayCreateMutable(NULL, 0, NULL);
+    _pingWakePipe[0] = -1;
+    _pingWakePipe[1] = -1;
 
     // The process has one connection to the compositor and CoreGraphics owns it: it reads its socket and
     // dispatches the events of every object on it, this display's included, then tells the observer
@@ -208,6 +288,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     _wlDisplay = (struct wl_display *) _CGSNativeConnectionDisplay();
     if (_wlDisplay == NULL) {
         NSLog(@"Wayland backend: no connection to the compositor, trying the next backend");
+        [self release];
+        return nil;
+    }
+
+    _pingQueue = WL.wl_display_create_queue(_wlDisplay);
+    if (_pingQueue == NULL) {
+        NSLog(@"Wayland backend: cannot create ping event queue");
         [self release];
         return nil;
     }
@@ -281,10 +368,64 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     _setupDone = YES;
     _CGSSetNativeConnectionObserver(self);
+    [self startPingResponder];
     return self;
 }
 
+- (void) startPingResponder {
+    if (_wlDisplay == NULL || _pingQueue == NULL || _pingThreadRunning)
+        return;
+
+    CFRunLoopSourceContext wakeCtx = {
+        .version = 0,
+        .info = self,
+        .perform = WaylandPingWakeMainRunLoop,
+    };
+    _pingMainWakeSource = CFRunLoopSourceCreate(NULL, 0, &wakeCtx);
+    if (_pingMainWakeSource != NULL)
+        CFRunLoopAddSource(CFRunLoopGetMain(), _pingMainWakeSource, kCFRunLoopCommonModes);
+
+    if (pipe(_pingWakePipe) != 0) {
+        _pingWakePipe[0] = -1;
+        _pingWakePipe[1] = -1;
+        return;
+    }
+    if (pthread_create(&_pingThread, NULL, WaylandPingThreadMain, self) == 0) {
+        _pingThreadRunning = YES;
+    } else {
+        close(_pingWakePipe[0]);
+        close(_pingWakePipe[1]);
+        _pingWakePipe[0] = -1;
+        _pingWakePipe[1] = -1;
+    }
+}
+
+- (void) stopPingResponder {
+    if (_pingThreadRunning) {
+        if (_pingWakePipe[1] >= 0) {
+            char byte = 0;
+            (void) write(_pingWakePipe[1], &byte, 1);
+        }
+        pthread_join(_pingThread, NULL);
+        _pingThreadRunning = NO;
+    }
+    if (_pingWakePipe[0] >= 0) {
+        close(_pingWakePipe[0]);
+        _pingWakePipe[0] = -1;
+    }
+    if (_pingWakePipe[1] >= 0) {
+        close(_pingWakePipe[1]);
+        _pingWakePipe[1] = -1;
+    }
+    if (_pingMainWakeSource != NULL) {
+        CFRunLoopSourceInvalidate(_pingMainWakeSource);
+        CFRelease(_pingMainWakeSource);
+        _pingMainWakeSource = NULL;
+    }
+}
+
 - (void) dealloc {
+    [self stopPingResponder];
     [_appMenu release];
     [_draggingManager invalidate];
     [_draggingManager release];
@@ -321,6 +462,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                 WL.wl_proxy_destroy(proxies[i]);
         for (WaylandOutput *output in _outputs)
             WL.wl_proxy_destroy(output->_proxy);
+        if (_pingQueue != NULL) {
+            WL.wl_event_queue_destroy(_pingQueue);
+            _pingQueue = NULL;
+        }
         // The connection is CoreGraphics'; it stays open.
     }
 
@@ -526,6 +671,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
 // Every listener on the connection has run: this display's queued work follows.
 - (void) nativeConnectionDidProcessEvents {
+    if (_wlDisplay != NULL && _pingQueue != NULL)
+        WL.wl_display_dispatch_queue_pending(_wlDisplay, _pingQueue);
     [self runAfterDispatchBlocks];
     [self flush];
 }
@@ -707,8 +854,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _wmBase = [self bindGlobal: name
                          interface: &xdg_wm_base_interface
                            version: MIN(version, 6)
-                              kind: WaylandObjectWmBase
-                            object: self];
+                              kind: 0
+                            object: nil];
+        WL.wl_proxy_add_dispatcher(_wmBase, WaylandWmBaseDispatch, NULL, NULL);
+        if (_pingQueue != NULL)
+            WL.wl_proxy_set_queue(_wmBase, _pingQueue);
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 &&
                _decorationManager == NULL)
     {

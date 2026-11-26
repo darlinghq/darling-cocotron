@@ -47,13 +47,18 @@
     X(wl_display_get_fd)                                                       \
     X(wl_display_get_error)                                                    \
     X(wl_display_dispatch_pending)                                             \
+    X(wl_display_dispatch_queue_pending)                                       \
     X(wl_display_prepare_read)                                                 \
+    X(wl_display_prepare_read_queue)                                           \
     X(wl_display_read_events)                                                  \
     X(wl_display_cancel_read)                                                  \
     X(wl_display_flush)                                                        \
     X(wl_display_roundtrip)                                                    \
+    X(wl_display_create_queue)                                                 \
+    X(wl_event_queue_destroy)                                                  \
     X(wl_proxy_marshal_array_flags)                                            \
     X(wl_proxy_add_dispatcher)                                                 \
+    X(wl_proxy_set_queue)                                                      \
     X(wl_proxy_get_user_data)                                                  \
     X(wl_proxy_get_version)                                                    \
     X(wl_proxy_destroy)
