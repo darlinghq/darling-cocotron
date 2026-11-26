@@ -895,7 +895,42 @@ static void scrollerKnobGeometry(CGFloat length, CGFloat proportion, CGFloat val
     [self highlight: NO];
 }
 
+// The "Click in the scroll bar to" setting: AppleScrollerPagingBehavior is 0 (or not set) to scroll
+// by a page toward the click, 1 to jump to the clicked spot.
+static BOOL scrollerJumpsToClickedSpot(void) {
+    return [[NSUserDefaults standardUserDefaults] integerForKey: @"AppleScrollerPagingBehavior"] == 1;
+}
+
+// A click in the page area scrolls a page toward the click, repeating while the button is held and
+// until the knob reaches the pointer. The scroller's action sees the page part in -hitPart.
+- (void) trackPaging: (NSEvent *) event {
+    NSScrollerPart page = [self hitPart];
+    BOOL paging = YES;
+
+    [self sendAction: NS_EXTRA(NSScroller, self)->_action to: NS_EXTRA(NSScroller, self)->_target];
+    [NSEvent startPeriodicEventsAfterDelay: 0.4 withPeriod: 0.1];
+    do {
+        event = [[self window] nextEventMatchingMask: NSPeriodicMask |
+                                                      NSLeftMouseUpMask |
+                                                      NSLeftMouseDraggedMask];
+        if ([event type] != NSLeftMouseUp) {
+            NSPoint point = [self convertPoint: [[self window] mouseLocationOutsideOfEventStream] fromView: nil];
+
+            paging = ([self testPart: point] == page);
+            if (paging) {
+                NS_EXTRA(NSScroller, self)->_hitPart = page;
+                [self sendAction: NS_EXTRA(NSScroller, self)->_action to: NS_EXTRA(NSScroller, self)->_target];
+            }
+        }
+    } while ([event type] != NSLeftMouseUp);
+    [NSEvent stopPeriodicEvents];
+}
+
 - (void) trackPageSlots: (NSEvent *) event {
+    if (!scrollerJumpsToClickedSpot()) {
+        [self trackPaging: event];
+        return;
+    }
     do {
         NSPoint point = [self convertPoint: [event locationInWindow]
                                   fromView: nil];
