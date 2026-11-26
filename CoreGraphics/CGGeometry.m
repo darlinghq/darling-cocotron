@@ -257,8 +257,12 @@ CGFloat CGRectGetHeight(CGRect rect) {
 }
 
 bool CGRectContainsPoint(CGRect rect, CGPoint point) {
-    return (point.x >= CGRectGetMinX(rect) && point.x <= CGRectGetMaxX(rect)) &&
-           (point.y >= CGRectGetMinY(rect) && point.y <= CGRectGetMaxY(rect));
+    // The rectangle contains the points of its minimum edges and not those of its maximum edges
+    if (CGRectIsNull(rect))
+        return false;
+    rect = CGRectStandardize(rect);
+    return (point.x >= CGRectGetMinX(rect) && point.x < CGRectGetMaxX(rect)) &&
+           (point.y >= CGRectGetMinY(rect) && point.y < CGRectGetMaxY(rect));
 }
 
 bool CGPointEqualToPoint(CGPoint a, CGPoint b) {
