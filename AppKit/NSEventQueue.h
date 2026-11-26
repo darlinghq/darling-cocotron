@@ -23,18 +23,11 @@
 #import <AppKit/NSEvent.h>
 #import <CoreGraphics/CGEvent.h>
 
-// Posts an event an application (or AppKit itself) made, as -[NSApplication postEvent:atStart:]
-// does: in front of everything with atStart, otherwise after the events already queued. The event
+// Posts an event an application (or AppKit itself, for the events it synthesises) made, as
+// -[NSApplication postEvent:atStart:] does: in front of everything with atStart, otherwise after the events already queued. The event
 // does not go through the event taps and is not coalesced. Any thread.
 __attribute__((visibility("hidden")))
 void _NSEventQueuePost(NSEvent *event, BOOL atStart);
-
-// Posts an event of the window system: it becomes a CGEvent that goes through the event taps of
-// the process into the CoreGraphics event stream, from which HIToolbox moves it into the main queue
-// (coalescing mouse motion). The NSEvent goes along with it (see NSEventQueue.m). mainScreenMaxY
-// is the top of the main screen, for the global coordinates of the CGEvent. Any thread.
-__attribute__((visibility("hidden")))
-void _NSEventQueuePostWindowSystemEvent(NSEvent *event, CGFloat mainScreenMaxY);
 
 // One wait of -[NSApplication nextEventMatchingMask:untilDate:inMode:dequeue:]: runs the run loop
 // of the main thread once in the mode (without blocking when a wanted event is queued), then

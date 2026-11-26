@@ -29,12 +29,13 @@
 //   given) and turns the Carbon event it takes into an NSEvent that keeps the CGEvent and the
 //   Carbon event (-CGEvent, -eventRef).
 //
-// Interim (darlinghq/darling#937): until the window system backends decode input into CGEvents
-// themselves, the NSEvent a backend built travels with the CGEvent (_CGSEventSetClientData), as it
-// carries what a CGEvent cannot (input method text, gesture phases, tablet data, tracking areas).
-// It is used when no event tap changed the event; otherwise the NSEvent is made from the
-// CGEvent's fields. Events the application posts travel the same way, so that it gets back the
-// object it posted.
+// Identity of NSEvents: the window system's input reaches AppKit only as CGEvents, from which the
+// NSEvent is made (input method text and the like are added by the display's keyEventCreated: and
+// pointerEventCreated: hooks). An NSEvent that AppKit or the application itself made and queued
+// (-[NSApplication postEvent:atStart:], the events AppKit synthesises from touches) travels with
+// its CGEvent as the object attached to it (_CGSEventSetClientData), so that whoever dequeues it
+// gets back the object that was posted. The attached object is used while no event tap has changed
+// the event; otherwise the NSEvent is made from the CGEvent's fields.
 
 #import "NSEventQueue.h"
 #import <AppKit/NSApplication.h>
@@ -670,14 +671,6 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
 void _NSEventQueueBeginReading(void) {
     _HISetEventStreamFilter(streamFilter);
     _HIBeginEventStreamReading();
-}
-
-void _NSEventQueuePostWindowSystemEvent(NSEvent *event, CGFloat mainScreenMaxY) {
-    CGEventRef cgEvent = _NSEventCreateCGEvent(event, mainScreenMaxY);
-
-    _CGSEventSetClientData(cgEvent, (CFTypeRef) event);
-    _CGSEventStreamPost(cgEvent);
-    CFRelease(cgEvent);
 }
 
 void _NSEventQueuePost(NSEvent *event, BOOL atStart) {

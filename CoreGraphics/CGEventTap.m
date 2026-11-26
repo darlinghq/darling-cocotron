@@ -611,7 +611,7 @@ static void cgEventTapCallout(CFMachPortRef mp, void* msg, CFIndex size, void* i
 
 	if (!abandoned && tap->_enabled)
 	{
-		// What the poster attached describes the event as it was posted: it is only kept while
+		// The attached object describes the event as it was posted: it is only kept while
 		// the tap leaves the event as it is (see _CGSEventSetClientData).
 		CGEvent* before = _CGSEventGetClientData(event) ? (CGEvent*) CGEventCreateCopy(event) : nil;
 

@@ -27,8 +27,8 @@ int main(void) {
     @autoreleasepool {
         NSDisplay *display = [[EventQueueDisplay alloc] init];
         NSEvent *flags = key(NSFlagsChanged), *press = key(NSKeyDown);
-        [display postEvent:flags atStart:NO];
-        [display postEvent:press atStart:NO];
+        [display _postEventWithoutCoalescing:flags atStart:NO];
+        [display _postEventWithoutCoalescing:press atStart:NO];
         if (take(display, NSKeyDownMask, NO) != press ||
                 take(display, NSKeyDownMask, YES) != press) return 1;
         signal(SIGALRM, stalled); alarm(3);
