@@ -591,6 +591,11 @@ set(AppKit_resources
 	SystemSymbols/window-close-symbolic.svg SystemSymbols/window-close-symbolic.svg
 	SystemSymbols/checkbox-checked-symbolic.svg SystemSymbols/checkbox-checked-symbolic.svg
 	SystemSymbols/focus-windows-symbolic.svg SystemSymbols/focus-windows-symbolic.svg
+	SystemSymbols/chat-message-new-symbolic.svg SystemSymbols/chat-message-new-symbolic.svg
+	SystemSymbols/view-reveal-symbolic.svg SystemSymbols/view-reveal-symbolic.svg
+	SystemSymbols/image-x-generic-symbolic.svg SystemSymbols/image-x-generic-symbolic.svg
+	SystemSymbols/network-workgroup-symbolic.svg SystemSymbols/network-workgroup-symbolic.svg
+	SystemSymbols/window-new-symbolic.svg SystemSymbols/window-new-symbolic.svg
 
 	NSMenuArrow.tiff NSMenu.subproj/NSMenuArrow.tiff
 	NSMenuViewDoubleRightArrowGray.tiff NSMenu.subproj/NSMenuViewDoubleRightArrowGray.tiff
