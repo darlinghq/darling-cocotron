@@ -455,6 +455,23 @@ static void getRectsInFrameForAttributesStrings(NSRect *rects, NSRect frame,
     return frame;
 }
 
+- (NSSize) cellSize {
+    NSArray *array = [self _attributedStrings];
+    CGFloat totalWidth = 0;
+    CGFloat maxHeight = 0;
+
+    for (NSAttributedString *check in array) {
+        NSSize size = [check size];
+        NSDictionary *attributes = [check attributesAtIndex: 0 effectiveRange: NULL];
+        NSNumber *width = [attributes objectForKey: @"_width"];
+        totalWidth += (width != nil) ? [width floatValue] : size.width;
+        maxHeight = MAX(maxHeight, size.height);
+    }
+
+    // Account for bezel + interior insets (6pt total) and 15pt stepper on the right.
+    return NSMakeSize(ceil(totalWidth) + 21.0, MAX(ceil(maxHeight) + 6.0, 22.0));
+}
+
 - (void) drawWithFrame: (NSRect) frame inView: (NSView *) view {
     NSRect stepper = [self _stepperFrameForFrame: frame];
     NSRect bezel = [self _bezelFrameForFrame: frame];
