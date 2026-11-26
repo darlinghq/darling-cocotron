@@ -21,7 +21,6 @@
 #import "X11Display.h"
 #include <string.h>
 #import "NSEvent_mouse.h"
-#import "X11Cursor.h"
 #import "X11DraggingManager.h"
 #import "X11Pasteboard.h"
 #import "X11LevelStacking.h"
@@ -151,8 +150,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     _CGSSetNativeConnectionObserver(nil);
-    [_blankCursor release];
-    [_defaultCursor release];
 
     // -init releases self when it cannot use the connection, so none of these may exist yet.
     // The connection itself is CoreGraphics'; it stays open.
@@ -232,20 +229,17 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 
 // The main monitor's rectangle in root coordinates, device pixels: the origin
 // of the global coordinate space, as on macOS. With one monitor, or without
-// RandR, it is the root window. It is the monitor CoreGraphics lists first (the
-// choice is X11Monitors.h's).
+// RandR, it is the root window. It is the display CoreGraphics lists first,
+// which describes it in the window system's pixels.
 - (NSRect) primaryRootFrame {
     if (!_primaryRootFrameValid) {
-        int count = 0, primary = -1;
-        X11Monitor *monitors = X11MonitorsCopy(_display, &count, &primary);
+        CGRect frame;
 
-        _primaryRootFrame =
-                monitors != NULL && primary >= 0
-                        ? NSMakeRect(monitors[primary].x, monitors[primary].y,
-                                     monitors[primary].width, monitors[primary].height)
-                        : NSMakeRect(0, 0, DisplayWidth(_display, DefaultScreen(_display)),
-                                     DisplayHeight(_display, DefaultScreen(_display)));
-        free(monitors);
+        if (_CGSDisplayNativeFrame(CGMainDisplayID(), &frame))
+            _primaryRootFrame = NSMakeRect(frame.origin.x, frame.origin.y, frame.size.width, frame.size.height);
+        else
+            _primaryRootFrame = NSMakeRect(0, 0, DisplayWidth(_display, DefaultScreen(_display)),
+                                           DisplayHeight(_display, DefaultScreen(_display)));
         _primaryRootFrameValid = YES;
     }
     return _primaryRootFrame;
@@ -369,15 +363,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
            kCGErrorSuccess;
 }
 
-// The process' cursor is hidden or shown by CoreGraphics (CGDisplayHideCursor() and the calls that undo it, which
-// the counted hide of NSCursor uses): the windows show a blank cursor while it is hidden.
-- (void) nativeConnectionCursorHiddenChanged: (BOOL) hidden {
-    if (hidden)
-        [self hideCursor];
-    else
-        [self unhideCursor];
-}
-
 - (BOOL) usesPointerController {
     return NO;
 }
@@ -430,24 +415,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         [xwin setLastKnownCursorPosition: [xwin logicalPoint: NSMakePoint(windowX, windowY)]];
 }
 
-- (void) hideCursor {
-    if (!_blankCursor)
-        _blankCursor = [[X11Cursor alloc] initBlank];
-    [self setCursor: _blankCursor];
-}
-
-- (void) unhideCursor {
-    NSCursor *current = [NSCursor currentCursor];
-    if (current != nil) {
-        [current push];
-        [current pop];
-    } else {
-        if (!_defaultCursor)
-            _defaultCursor = [[X11Cursor alloc] init];
-        [self setCursor: _defaultCursor];
-    }
-}
-
 - (BOOL) cursorAwaitsPointerMotion {
     return _cursorHiddenUntilMouseMoves;
 }
@@ -474,91 +441,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     [super pointerMoved];
     if (awaited)
         [self selectPointerMotionOnWindows];
-}
-
-// Arrow, IBeam, HorizontalResize, VerticalResize
-- (id) cursorWithName: (NSString *) name {
-    unsigned int shape = XC_left_ptr;
-    const char *xname = "left_ptr";
-
-    if ([name isEqualToString: @"arrowCursor"])
-        xname = "left_ptr";
-    else if ([name isEqualToString: @"closedHandCursor"])
-        xname = "hand3";
-    else if ([name isEqualToString: @"crosshairCursor"])
-        xname = "crosshair";
-    // else if([name isEqualToString:@"disappearingItemCursor"])
-    // shape = XC_left_ptr;
-    else if ([name isEqualToString: @"IBeamCursor"])
-        xname = "xterm";
-    else if ([name isEqualToString: @"IBeamCursorForVerticalLayout"])
-        xname = "vertical-text";
-    else if ([name isEqualToString: @"zoomInCursor"])
-        xname = "zoom-in";
-    else if ([name isEqualToString: @"zoomOutCursor"])
-        xname = "zoom-out";
-    else if ([name isEqualToString: @"openHandCursor"])
-        xname = "fleur";
-    else if ([name isEqualToString: @"pointingHandCursor"])
-        xname = "hand";
-    else if ([name isEqualToString: @"resizeDownCursor"])
-        xname = "bottom_side";
-    else if ([name isEqualToString: @"resizeLeftCursor"])
-        xname = "left_side";
-    else if ([name isEqualToString: @"resizeLeftRightCursor"])
-        xname = "h_double_arrow";
-    else if ([name isEqualToString: @"resizeRightCursor"])
-        xname = "right_side";
-    else if ([name isEqualToString: @"resizeUpCursor"])
-        xname = "top_side";
-    else if ([name isEqualToString: @"resizeUpDownCursor"])
-        xname = "v_double_arrow";
-    else if ([name isEqualToString: @"frameResizeNorthWestCursor"])
-        xname = "top_left_corner";
-    else if ([name isEqualToString: @"frameResizeNorthEastCursor"])
-        xname = "top_right_corner";
-    else if ([name isEqualToString: @"frameResizeSouthEastCursor"])
-        xname = "bottom_right_corner";
-    else if ([name isEqualToString: @"frameResizeSouthWestCursor"])
-        xname = "bottom_left_corner";
-    else if ([name isEqualToString: @"frameResizeNorthWestSouthEastCursor"])
-        xname = "fd_double_arrow";
-    else if ([name isEqualToString: @"frameResizeNorthEastSouthWestCursor"])
-        xname = "bd_double_arrow";
-
-    return [[[X11Cursor alloc] initWithName: xname] autorelease];
-}
-
-- (id) cursorWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot {
-    return [[[X11Cursor alloc] initWithImage: image
-                                    hotPoint: hotSpot] autorelease];
-}
-
-- (void) setCursor: (id) cursor {
-    Cursor c = ((X11Cursor *) cursor).cursor;
-    Window root = DefaultRootWindow(_display);
-
-    // Define the cursor on the window the pointer is actually over. Defining it only on the
-    // key window left every other window with its own cursor, so moving between windows
-    // showed two pointers at once - the stale cursor of the window under the mouse plus the
-    // key window's cursor. XQueryPointer reports the child window under the pointer; fall
-    // back to the root (and the key window) when there is none, so the cursor always has a
-    // defined target.
-    Window child = None, returnedRoot = None, target = None;
-    int rx, ry, wx, wy;
-    unsigned int mask;
-    XQueryPointer(_display, root, &returnedRoot, &child, &rx, &ry, &wx, &wy, &mask);
-    target = child;
-
-    if (target == None) {
-        CGWindow *key = [[NSApp keyWindow] platformWindow];
-        if (key != nil)
-            target = [(X11Window *) key windowHandle];
-    }
-
-    XDefineCursor(_display, target != None ? target : root, c);
-    XSync(_display, False);
-    _cursorHidden = cursor != nil && cursor == _blankCursor;
 }
 
 - (void) beep {
@@ -1367,36 +1249,6 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     *left = 0.0;
     *bottom = 0.0;
     *right = 0.0;
-}
-
-- (CGRect) insetRect: (CGRect) frame
-        forNativeWindowBorderWithStyle: (NSUInteger) styleMask
-{
-    CGFloat top, left, bottom, right;
-
-    CGNativeBorderFrameWidthsForStyle(styleMask, &top, &left, &bottom, &right);
-
-    frame.origin.x += left;
-    frame.origin.y += bottom;
-    frame.size.width -= left + right;
-    frame.size.height -= top + bottom;
-
-    return frame;
-}
-
-- (CGRect) outsetRect: (CGRect) frame
-        forNativeWindowBorderWithStyle: (NSUInteger) styleMask
-{
-    CGFloat top, left, bottom, right;
-
-    CGNativeBorderFrameWidthsForStyle(styleMask, &top, &left, &bottom, &right);
-
-    frame.origin.x -= left;
-    frame.origin.y -= bottom;
-    frame.size.width += left + right;
-    frame.size.height += top + bottom;
-
-    return frame;
 }
 
 // With ConfinePointerToFullscreenWindows set, the pointer cannot leave the

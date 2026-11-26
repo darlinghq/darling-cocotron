@@ -137,6 +137,7 @@ set(CoreGraphics_sources
 	CGSServerSPI.m
 	CGSSymbolicHotKeys.m
 	CGSSelection.m
+	CGSCursor.m
 	DarlingFileURIList.m
 	CGEvent.m
 	CGEventKeyboardCharacters.m

@@ -3,7 +3,7 @@
 
  Licensed under the MIT license, the same as the rest of this project.
 */
-#include "../WaylandScale.h"
+#include "../../../CoreGraphics/WaylandSupport/WaylandScale.h"
 #include <stdio.h>
 #include <stdlib.h>
 static unsigned checks, failures;

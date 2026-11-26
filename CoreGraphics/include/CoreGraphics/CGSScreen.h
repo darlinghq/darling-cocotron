@@ -33,6 +33,8 @@
 	CGDirectDisplayID _displayID;
 	CGRect _bounds;
 	CGFloat _backingScale;
+	CGRect _nativeFrame;
+	BOOL _hasNativeFrame;
 	NSString* _name;
 	NSDictionary* _colorInfo;
 }
@@ -45,6 +47,11 @@
 @property(readwrite, assign) CGRect bounds;
 // Device pixels per point. At least 1.
 @property(readwrite, assign) CGFloat backingScale;
+// The display's rectangle in the window system's own coordinates and device pixels (X11: root window
+// coordinates), for the framework that talks to the window system itself. Only where the window system has
+// such a space: hasNativeFrame says whether nativeFrame is set.
+@property(readwrite, assign) CGRect nativeFrame;
+@property(readwrite, assign) BOOL hasNativeFrame;
 // The name the window system gives the output (a description or connector name), or nil. It is
 // only used when the display has no EDID that names the monitor.
 @property(readwrite, copy) NSString* name;

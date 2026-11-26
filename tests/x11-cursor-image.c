@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * Moves the pointer to the root coordinates with XTest and prints what cursor the server shows there: "blank" when
- * the image has no visible pixel (the blank cursor of a hidden cursor, a 1x1 transparent image), else "visible WxH".
+ * the image has no visible pixel (the blank cursor of a hidden cursor, a 1x1 transparent image), else "visible WxH
+ * hot=X,Y pixel=AARRGGBB" (the hot spot and the first pixel of the image).
  * Usage: x11-cursor-image <x> <y>
  * Build: cc -o x11-cursor-image x11-cursor-image.c -lX11 -lXtst -lXfixes
  */
@@ -38,7 +39,8 @@ int main(int argc, char **argv) {
             visible = 1;
     }
     if (visible)
-        printf("visible %ux%u\n", image->width, image->height);
+        printf("visible %ux%u hot=%u,%u pixel=%08lx\n", image->width, image->height, image->xhot, image->yhot,
+               (unsigned long) image->pixels[0] & 0xffffffffUL);
     else
         printf("blank\n");
     XFree(image);

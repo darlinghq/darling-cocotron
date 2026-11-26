@@ -66,6 +66,7 @@
 -(void) dealloc
 {
 	[_screens release];
+	[_cursor release];
 	[_reportedScreens release];
 	[_windows release];
 	[super dealloc];
@@ -233,6 +234,32 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 	}
 	if (shown)
 		[self cursorHiddenStateChanged: NO];
+}
+
+-(void) setCursor:(CGSCursor*)cursor
+{
+	@synchronized (self)
+	{
+		if (cursor != _cursor)
+		{
+			[cursor retain];
+			[_cursor release];
+			_cursor = cursor;
+		}
+	}
+	[self cursorChanged];
+}
+
+-(CGSCursor*) cursor
+{
+	@synchronized (self)
+	{
+		return [[_cursor retain] autorelease];
+	}
+}
+
+-(void) cursorChanged
+{
 }
 
 -(BOOL) cursorIsVisible

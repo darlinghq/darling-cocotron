@@ -676,7 +676,6 @@ add_backend(X11
 		X11.backend/X11SubWindow.m
 		X11.backend/X11Event.m
 		X11.backend/X11Pasteboard.m
-		X11.backend/X11Cursor.m
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
 	INFO_PLIST

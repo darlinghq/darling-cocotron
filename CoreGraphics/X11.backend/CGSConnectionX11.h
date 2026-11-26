@@ -26,12 +26,13 @@
 #import <Foundation/NSSet.h>
 #import <CoreFoundation/CFSocket.h>
 #import "X11Monitors.h"
+#import <CoreGraphics/CGSCursorPrivate.h>
 
 @class CGSWindowX11;
 @class CGSX11Keyboard;
 @class CGSX11Pointer;
 
-@interface CGSConnectionX11 : CGSConnection {
+@interface CGSConnectionX11 : CGSConnection <CGSCursorNativeOwner> {
 @public
 	// The X11 display, which the CGS windows and surfaces of this connection draw on.
 	Display *_display;
@@ -76,6 +77,9 @@
 	BOOL _primaryRootValid;
 	// The cursor the connection's windows show while the process' cursor is hidden (None before the first hide).
 	Cursor _blankCursor;
+	// The arrow shown over the windows of the framework above while no cursor is selected.
+	Cursor _defaultArrow;
+	CGFloat _defaultArrowScale;
 }
 
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
@@ -98,10 +102,11 @@
 -(BOOL) _isDisplayOverlayNativeWindow:(Window)native;
 // The device pixel position of a point of CoreGraphics' global space (rounded).
 -(void) _getRootX:(int*)x y:(int*)y forPoint:(CGPoint)point;
-// Shows a blank cursor on the windows of this connection, or the cursor they had (the process' cursor is hidden).
--(void) _setBlankCursorOnWindows:(BOOL)blank;
 // The blank cursor, made on first use.
 -(Cursor) _blankCursorMade;
+// Gives the window system what the process shows over its windows: the blank cursor while it is hidden, else the
+// selected cursor. Main thread.
+-(void) _applyCursor;
 -(NSArray<NSDictionary*>*) copyWindowDescriptions;
 
 +(BOOL) isAvailable;

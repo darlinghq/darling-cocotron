@@ -2,7 +2,7 @@
 // cursor surface. A compositor shows a cursor at buffer size / buffer scale and
 // ignores any wp_viewport destination, so the raster must be made at the whole
 // scale the surface is tagged with, whatever the output scale is.
-//   cc -I.. -o /tmp/cursor-buffer-scale cursor-buffer-scale.c && /tmp/cursor-buffer-scale
+//   cc -I../../../CoreGraphics/WaylandSupport -o /tmp/cursor-buffer-scale cursor-buffer-scale.c && /tmp/cursor-buffer-scale
 #include "WaylandScale.h"
 #include <stdio.h>
 

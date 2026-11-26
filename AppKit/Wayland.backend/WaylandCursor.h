@@ -21,12 +21,9 @@
 
 @class NSData, NSImage;
 
-// A cursor of the Wayland backend: the names to look up in the cursor theme, most
-// preferred first, an immutable ARGB image, or a blank cursor. Native resources
-// belong to the display, so cached cursors can outlive its Wayland connection.
+// An NSImage rasterised for a Wayland surface: an immutable ARGB image at a scale, with a hot spot (the drag icon
+// uses it; the pointer's cursors are CoreGraphics', see CGSCursor.h).
 @interface WaylandCursor : NSObject {
-    const char *_names[3];
-    BOOL _blank;
     NSData *_pixels;
     NSImage *_image;
     uint32_t _pixelScale120;
@@ -34,8 +31,6 @@
     NSPoint _hotSpot;
 }
 
-- (instancetype) initWithName: (const char *) name fallback: (const char *) fallback;
-- (instancetype) initBlank;
 - (instancetype) initWithImage: (NSImage *) image hotSpot: (NSPoint) hotSpot;
 - (NSData *) pixels;
 - (NSData *) pixelsForScale: (int32_t) scale;
@@ -43,9 +38,5 @@
 - (NSSize) pixelSizeForScale120: (uint32_t) scale120;
 - (NSSize) size;
 - (NSPoint) hotSpot;
-
-// NULL-terminated.
-- (const char *const *) names;
-- (BOOL) isBlank;
 
 @end

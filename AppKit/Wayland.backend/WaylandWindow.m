@@ -1587,7 +1587,6 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
         // Expose only posts a notification in Cocotron. A new backing surface
         // needs a full redraw, even when no view has invalidated its contents.
         [self->_delegate display];
-        [self->_display windowScaleChanged: self];
     }];
 }
 
