@@ -7,12 +7,16 @@
 // it; the data is an LZFSE stream behind a header) instead of plain LZFSE or run-length encoding, packs the
 // small images into a shared image, and keeps the vector image as an SVG rendition (a PDF only for older
 // targets). Expected values are from black-box runs of this test on macOS 26.7.3 (x86_64).
-//  - twelve small opaque images Pack0..Pack11 (sizes (12 + i) x (10 + i % 3) points), each a unique colour
-//    (20 i + 30, 255 - 20 i, 40 + 10 i) with a white top row: the pixels have to come from the right frame of the
-//    packed image, so a reader that takes the frame from the wrong corner shows another image's colour;
-//  - PackGA, 14 x 14 grey (100) in two halves, opaque on the left and at alpha 64 on the right (the grey and
-//    alpha planes of the compressed data are stored separately);
+//  - twelve small opaque images Pack0..Pack11 (sizes (12 + i) x (10 + i % 3) points) whose pixels all differ
+//    from their neighbours (colour = bytes of hash(i, x, y), see hash_rgb in
+//    fixtures/assetcatalog/make-xcassets-deepmap2.py), packed into one shared image: every pixel has to come from the
+//    right place of the packed image, so a reader that takes a frame from the wrong corner shows another
+//    image's pixels;
+//  - PackGA, 64 x 64 grey (the first byte of hash(100, x, y)), opaque on the left half and at alpha 64 on the right
+//    half (the grey and alpha planes of the compressed data are stored separately);
 //  - Vec, an SVG 20 x 20 points: a red square from 2 to 18 and a blue square from 6 to 14 on a clear background.
+//    (The deepmap2 compression has more than one form: an image of a single colour or a regular one is stored
+//    in a shorter form than the LZFSE stream these pixels need, and this test does not cover it.)
 // Usage: appkit-asset-catalog-deepmap2 <path of Assets-deepmap2.car>
 // Build: clang -framework AppKit appkit-asset-catalog-deepmap2.m (no ARC)
 #import <AppKit/AppKit.h>
@@ -60,6 +64,11 @@ static BOOL pixelIs(NSBitmapImageRep *rep, int x, int y, int r, int g, int b, in
     return ok;
 }
 
+// The colour bytes of pixel (x, y) of image k, as in make-xcassets-deepmap2.py.
+static uint32_t hashOf(int k, int x, int y) {
+    return ((uint32_t) x * 73856093u) ^ ((uint32_t) y * 19349663u) ^ ((uint32_t) k * 83492791u);
+}
+
 int main(int argc, char **argv) {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
     [NSApplication sharedApplication];
@@ -78,20 +87,36 @@ int main(int argc, char **argv) {
         int w = 12 + i, h = 10 + (i % 3);
         CHECK(fabs([image size].width - w) < 0.01 && fabs([image size].height - h) < 0.01);
         NSBitmapImageRep *pixels = render(image);
-        int r = 20 * i + 30, g = 255 - 20 * i, b = 40 + 10 * i;
-        CHECK(pixelIs(pixels, w / 2, 0, 255, 255, 255, 255));
-        CHECK(pixelIs(pixels, 1, 1, r, g, b, 255));
-        CHECK(pixelIs(pixels, w / 2, h / 2, r, g, b, 255));
-        CHECK(pixelIs(pixels, w - 1, h - 1, r, g, b, 255));
+        int bad = 0;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++) {
+                uint32_t hash = hashOf(i, x, y);
+                const unsigned char *p = [pixels bitmapData] + y * [pixels bytesPerRow] + x * 4;
+                if (abs(p[0] - (int) (hash & 255)) > 3 || abs(p[1] - (int) ((hash >> 8) & 255)) > 3 ||
+                    abs(p[2] - (int) ((hash >> 16) & 255)) > 3 || p[3] != 255)
+                    bad++;
+            }
+        if (bad != 0)
+            fprintf(stderr, "  Pack%d: %d of %d pixels are wrong\n", i, bad, w * h);
+        CHECK(bad == 0);
     }
 
     NSImage *grey = [bundle imageForResource: @"PackGA"];
-    CHECK(grey != nil && fabs([grey size].width - 14) < 0.01 && fabs([grey size].height - 14) < 0.01);
+    CHECK(grey != nil && fabs([grey size].width - 64) < 0.01 && fabs([grey size].height - 64) < 0.01);
     if (grey != nil) {
         NSBitmapImageRep *pixels = render(grey);
-        CHECK(pixelIs(pixels, 3, 7, 100, 100, 100, 255));
-        const unsigned char *right = [pixels bitmapData] + 7 * [pixels bytesPerRow] + 10 * 4;
-        CHECK(abs(right[3] - 64) <= 3);
+        int bad = 0;
+        for (int y = 0; y < 64; y++)
+            for (int x = 0; x < 64; x++) {
+                const unsigned char *p = [pixels bitmapData] + y * [pixels bytesPerRow] + x * 4;
+                int grey = (int) (hashOf(100, x, y) & 255);
+                if (x < 32 ? (abs(p[0] - grey) > 3 || abs(p[1] - grey) > 3 || abs(p[2] - grey) > 3 || p[3] != 255)
+                           : abs(p[3] - 64) > 3)
+                    bad++;
+            }
+        if (bad != 0)
+            fprintf(stderr, "  PackGA: %d of 4096 pixels are wrong\n", bad);
+        CHECK(bad == 0);
     }
 
     NSImage *vector = [bundle imageForResource: @"Vec"];
