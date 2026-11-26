@@ -56,6 +56,9 @@ typedef enum {
 // Another process asked for the windows of this one to be activated and the window system offers
 // no request for that, so only the process can do it (Wayland). Called on the main thread.
 - (void) nativeConnectionActivationRequested;
+// The window system's input focus moved to a window of another client (not to a window of this process, and
+// not to none). Called on the main thread by a backend whose window system tells (X11: the active window).
+- (void) nativeConnectionFocusMovedToAnotherClient;
 // The compositor's color management or color representation global arrived after the windows were made.
 - (void) nativeConnectionColorManagerAvailable;
 // The process took or dropped its last power assertion that keeps the display awake.

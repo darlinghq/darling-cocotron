@@ -44,7 +44,7 @@
 #import "../../CoreGraphics/X11.backend/X11WindowOwner.h"
 #import "../../CoreGraphics/X11.backend/CGSWindowX11.h"
 #import <CoreGraphics/CGSServerSPI.h>
-#import "X11Fullscreen.h"
+#import "X11FullscreenPolicy.h"
 #import "X11PointerMotion.h"
 #import "X11SubWindow.h"
 #import "X11Window.h"
@@ -509,6 +509,12 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
 
     [self syncDelegateProperties];
 
+    // A menu, pop-up and the menu bar are not stacked by level: they are above the windows they belong to by
+    // their own means.
+    [_cgsWindow setToplevelStacksByLevel: !_dock && !_menuWindow];
+    // The level may have been set before the window system window was made.
+    [_cgsWindow setToplevelLevel: _level];
+
     [self updateWindowManagerHints];
 
     [self createXInputContext];
@@ -604,7 +610,7 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     // Whether the window takes the input focus when the window manager maps it (ICCCM 4.1.7). A
     // window that is not an application window, or one of an application that is not active, is
     // not given the focus by being shown either. Making it the key window
-    // asks for the focus explicitly (-requestInputFocus).
+    // asks for the focus explicitly (-[CGSWindow requestToplevelKeyboardFocus]).
     CGSToplevelHints hints = {
         .kind = kind,
         .acceptsKeyboardInput = canBecomeKey,
@@ -674,77 +680,23 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     BOOL coversMonitor = NO;
     // The monitor test is a server round trip; skip it when it cannot change the answer.
     if (!_overrideRedirect && !styleFullScreen && !titled) {
-        O2Rect device = NSRectFromCGRect([_cgsWindow toplevelDeviceRectForFrame: NSRectToCGRect(frame)]);
-        X11FullscreenRect rect = {(int) device.origin.x, (int) device.origin.y,
-                                  (unsigned int) device.size.width,
-                                  (unsigned int) device.size.height};
-        coversMonitor = X11FullscreenRectIsMonitor(_display, rect);
+        coversMonitor = [_cgsWindow toplevelFrameCoversDisplay: NSRectToCGRect(frame)];
     }
     return X11FullscreenWanted(_overrideRedirect, styleFullScreen, titled,
                                coversMonitor);
 }
 
+// The window system holds the window fullscreen on request (see -[CGSWindow setToplevelFullscreen:force:]). It
+// changes the state on its own too (it leaves fullscreen on a keybinding), and says so with
+// kCGSToplevelEventFullscreenChanged.
 - (void) requestFullscreen: (BOOL) fullscreen force: (BOOL) force {
-    if (!_mapped) {
-        long states[4];
-        int states_cnt = 0;
-        if (_skipTaskbar) {
-            states[states_cnt++] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_TASKBAR", False);
-            states[states_cnt++] = (long) XInternAtom(_display, "_NET_WM_STATE_SKIP_PAGER", False);
-        }
-        if (_isModal) {
-            states[states_cnt++] =
-                    (long) XInternAtom(_display, "_NET_WM_STATE_MODAL", False);
-        }
-        if (fullscreen) {
-            states[states_cnt++] = (long) XInternAtom(
-                    _display, "_NET_WM_STATE_FULLSCREEN", False);
-        }
-        XChangeProperty(_display, _window,
-                        XInternAtom(_display, "_NET_WM_STATE", False), XA_ATOM,
-                        32, PropModeReplace, (const unsigned char *) states,
-                        states_cnt);
-    } else if (force || fullscreen != _fullscreenRequested) {
-        X11FullscreenRequest(_display, _window, fullscreen);
-    }
-    _fullscreenRequested = fullscreen;
+    [_cgsWindow setToplevelFullscreen: fullscreen force: force];
     [self updateLayerPresentationHints];
-}
-
-// The window manager changes _NET_WM_STATE on its own too (it leaves fullscreen
-// on a keybinding), so follow it: a later setFrame: onto the same monitor then
-// asks again instead of trusting the last request. While the window is unmapped
-// the property is ours.
-- (void) propertyNotify: (XPropertyEvent *) event {
-    if (event->atom != XInternAtom(_display, "_NET_WM_STATE", False))
-        return;
-    _miniaturizedKnown = NO;
-    // The window manager may have hidden or restored the window (_NET_WM_STATE_HIDDEN),
-    // whoever asked: tell the delegate when the state differs from the last one told.
-    BOOL miniaturized = [self isMiniaturized];
-    if (miniaturized != _miniaturizedReported) {
-        _miniaturizedReported = miniaturized;
-        SEL changed = miniaturized ? @selector(platformWindowMiniaturized:)
-                                   : @selector(platformWindowDeminiaturized:);
-        if ([_delegate respondsToSelector: changed])
-            [_delegate performSelector: changed withObject: self];
-    }
-    if ([_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
-        [_delegate platformWindowOcclusionChanged: self];
-    if (_mapped) {
-        _fullscreenRequested = X11FullscreenIsSet(_display, _window);
-        [self updateLayerPresentationHints];
-        if (_fullscreenRequested != _fullscreenReported) {
-            _fullscreenReported = _fullscreenRequested;
-            if ([_delegate respondsToSelector: @selector(platformWindow:didChangeFullScreen:)])
-                [_delegate platformWindow: self didChangeFullScreen: _fullscreenReported];
-        }
-    }
 }
 
 // Whether the window manager currently holds the window fullscreen.
 - (BOOL) isFullScreen {
-    return _mapped && _fullscreenReported;
+    return [_cgsWindow toplevelIsFullscreen];
 }
 
 // Hints for a compositor about a window that presents a full-size layer tree
@@ -758,7 +710,7 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
 - (void) updateLayerPresentationHints {
     BOOL presenting = _layerDrawableOwner != nil;
     [self setCardinalHint: "_NET_WM_BYPASS_COMPOSITOR"
-                       on: presenting && _fullscreenRequested
+                       on: presenting && [_cgsWindow toplevelFullscreenRequested]
                   current: &_bypassCompositorHint];
     [self setCardinalHint: "_VARIABLE_REFRESH"
                        on: presenting && !_layerDrawableSyncs
@@ -1042,7 +994,6 @@ static const int X11ChromelessCornerRadius = 5;
         [_cgsWindow orderWindow: kCGSOrderIn relativeTo: nil];
         _mapped = YES;
         _wasMapped = YES;
-        _miniaturizedKnown = NO;
         if (_menuWindow)
             [(X11Display *) [NSDisplay currentDisplay] menuWindowMapped: self];
     }
@@ -1067,7 +1018,7 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 - (BOOL) isFullscreen {
-    return _fullscreenRequested;
+    return [_cgsWindow toplevelFullscreenRequested];
 }
 
 - (void) showWindowWithoutActivation {
@@ -1275,7 +1226,7 @@ static const int X11ChromelessCornerRadius = 5;
     BOOL fullscreen = [self wantsFullscreenWithStyleMask: _styleMask
                                                    frame: frame];
     BOOL moved = _frame.origin.x != frame.origin.x || _frame.origin.y != frame.origin.y;
-    if (X11FullscreenLeaveBeforeMove(fullscreen, _fullscreenRequested, moved))
+    if (X11FullscreenLeaveBeforeMove(fullscreen, [_cgsWindow toplevelFullscreenRequested], moved))
         [self requestFullscreen: NO force: NO];
     // The frame stays in points; only the window system's window and the surface are in device
     // pixels. The window system's window follows its size with its shape and opaque region.
@@ -1288,7 +1239,7 @@ static const int X11ChromelessCornerRadius = 5;
     // the size. Only on a real change so a drag does not re-issue them per pixel.
     if (!NSEqualSizes(previousSize, frame.size))
         [self updateSizeHints: _styleMask];
-    if (fullscreen && !_fullscreenRequested)
+    if (fullscreen && ![_cgsWindow toplevelFullscreenRequested])
         [self requestFullscreen: YES force: NO];
 }
 
@@ -1298,27 +1249,8 @@ static const int X11ChromelessCornerRadius = 5;
 }
 
 - (void) setLevel: (int) value {
-    if (value == _level)
-        return;
     _level = value;
-    [self restackForLevels];
-}
-
-- (int) stackingLevel {
-    return _level;
-}
-
-- (BOOL) isUnmanaged {
-    return _overrideRedirect;
-}
-
-- (BOOL) takesPartInLevelStacking {
-    return _mapped && !_dock && !_menuWindow && _window != 0;
-}
-
-- (void) restackForLevels {
-    if ([self takesPartInLevelStacking])
-        [(X11Display *) [NSDisplay currentDisplay] restackWindowsForLevelsAround: self];
+    [_cgsWindow setToplevelLevel: value];
 }
 
 - (void) setOpaque: (BOOL) value {
@@ -1360,7 +1292,7 @@ static const int X11ChromelessCornerRadius = 5;
     _unmapPending = YES;
     // A focus request still waiting for MapNotify is void once the window is ordered out; otherwise a
     // later non-key orderFront would take focus.
-    _wantsInputFocus = NO;
+    [_cgsWindow cancelToplevelKeyboardFocusRequest];
     _keyRequested = NO;
     CFRunLoopPerformBlock(CFRunLoopGetMain(), kCFRunLoopCommonModes, ^{
         if (self->_unmapPending)
@@ -1375,136 +1307,26 @@ static const int X11ChromelessCornerRadius = 5;
         return;
     [_cgsWindow orderWindow: kCGSOrderOut relativeTo: nil];
     _mapped = NO;
-    _occluded = NO;
-    _miniaturizedKnown = NO;
     if (_menuWindow)
         [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
-    // The window manager drops the fullscreen state of a withdrawn window.
-    _fullscreenRequested = NO;
-    _fullscreenReported = NO;
-    // A focus request still waiting for MapNotify is void once the window is
-    // ordered out; otherwise a later non-key orderFront would take focus.
-    _wantsInputFocus = NO;
+    // A key request still waiting for the focus is void once the window is ordered out; otherwise a later
+    // non-key orderFront would take focus. (The window system's window forgets what it was waiting for, and the
+    // fullscreen state, which the window manager drops for a withdrawn window.)
     _keyRequested = NO;
 }
 
-// Stacks this window directly above or below another top-level window. With a window manager the two client
-// windows live in frames of their own and are not siblings, so a plain stacking request naming the other window
-// as sibling is a BadMatch; XReconfigureWMWindow makes the ICCCM request for that case (a ConfigureRequest sent
-// to the root window, which the window manager carries out for the frames).
-- (void) stackRelativeToWindow: (Window) sibling mode: (int) mode {
-    XWindowChanges changes;
-    changes.sibling = sibling;
-    changes.stack_mode = mode;
-    XReconfigureWMWindow(_display, _window, DefaultScreen(_display), CWSibling | CWStackMode, &changes);
-}
-
+// Stacks this window directly above or below another top-level window, or in front of or behind all of them.
+// Ordering in front also applies the order by level (see -[CGSWindow orderToplevelAbove:]).
 - (void) placeAboveWindow: (NSInteger) otherNumber {
     X11Window *other = [X11Window windowWithWindowNumber: otherNumber];
     [self ensureMappedIfVisible];
-
-    if (!other) {
-        XRaiseWindow(_display, _window);
-    } else {
-        [self stackRelativeToWindow: other->_window mode: Above];
-    }
-    [self restackForLevels];
+    [_cgsWindow orderToplevelAbove: other != nil ? other->_cgsWindow : nil];
 }
 
 - (void) placeBelowWindow: (NSInteger) otherNumber {
     X11Window *other = [X11Window windowWithWindowNumber: otherNumber];
     [self ensureMappedIfVisible];
-
-    if (!other) {
-        XLowerWindow(_display, _window);
-    } else {
-        [self stackRelativeToWindow: other->_window mode: Below];
-    }
-}
-
-// Without a window manager nothing moves X input focus: it stays PointerRoot, so
-// key events went to whichever window was under the pointer and no window ever
-// received FocusIn, which left -[NSApplication keyWindow] nil. Ask for focus
-// explicitly: through the EWMH _NET_ACTIVE_WINDOW request when a window manager
-// is running, otherwise with XSetInputFocus once the window is viewable.
-static Window supportingWMCheckWindow(Display *display, Window window,
-                                      Atom check)
-{
-    Atom type;
-    int format;
-    unsigned long count, remaining;
-    unsigned char *data = NULL;
-    Window result = None;
-
-    if (XGetWindowProperty(display, window, check, 0, 1, False, XA_WINDOW,
-                           &type, &format, &count, &remaining, &data) ==
-                Success &&
-        data != NULL && type == XA_WINDOW && format == 32 && count == 1)
-        result = (Window) * (long *) data;
-    if (data != NULL)
-        XFree(data);
-    return result;
-}
-
-BOOL X11WindowManagerIsRunning(Display *display) {
-    Atom check = XInternAtom(display, "_NET_SUPPORTING_WM_CHECK", True);
-    if (check == None)
-        return NO;
-
-    // A window manager that exited can leave the root property behind. Per
-    // EWMH the child window it names must carry the same property naming
-    // itself; a stale id fails that (the BadWindow is only logged).
-    Window child =
-            supportingWMCheckWindow(display, DefaultRootWindow(display), check);
-    return child != None &&
-           supportingWMCheckWindow(display, child, check) == child;
-}
-
-- (void) requestInputFocus {
-    Window focused;
-    int revert;
-    XGetInputFocus(_display, &focused, &revert);
-    if (focused == _window) {
-        _wantsInputFocus = NO;
-        return;
-    }
-
-    if (X11WindowManagerIsRunning(_display)) {
-        XEvent event;
-        memset(&event, 0, sizeof(event));
-        event.xclient.type = ClientMessage;
-        event.xclient.window = _window;
-        event.xclient.message_type =
-                XInternAtom(_display, "_NET_ACTIVE_WINDOW", False);
-        event.xclient.format = 32;
-        event.xclient.data.l[0] = 1; // source indication: application
-        event.xclient.data.l[1] = CurrentTime;
-        XSendEvent(_display, DefaultRootWindow(_display), False,
-                   SubstructureRedirectMask | SubstructureNotifyMask, &event);
-        XFlush(_display);
-        _wantsInputFocus = NO;
-        return;
-    }
-
-    XWindowAttributes attributes;
-    if (XGetWindowAttributes(_display, _window, &attributes) &&
-        attributes.map_state == IsViewable) {
-        XSetInputFocus(_display, _window, RevertToPointerRoot, CurrentTime);
-        // Send it now: an idle run loop may not flush Xlib's output buffer until the
-        // next event, so key events typed meanwhile would still go to the old window.
-        XFlush(_display);
-        _wantsInputFocus = NO;
-    } else {
-        // Not viewable yet (the map request is still pending): retry on MapNotify.
-        _wantsInputFocus = YES;
-    }
-}
-
-- (void) mapNotified {
-    // The window manager has stacked the frame by now.
-    [self restackForLevels];
-    if (_wantsInputFocus)
-        [self requestInputFocus];
+    [_cgsWindow orderToplevelBelow: other != nil ? other->_cgsWindow : nil];
 }
 
 // A window with alphaValue 0 is ordered in (mapped, and invisible by opacity or shape) and can be the
@@ -1543,15 +1365,10 @@ BOOL X11WindowManagerIsRunning(Display *display) {
     // an application asks for both.
     if (!_mapped)
         return;
-    XRaiseWindow(_display, _window);
-    [self restackForLevels];
-    [self requestInputFocus];
+    [_cgsWindow requestToplevelKeyboardFocus];
     // The window already holds the focus (the window manager gave it when the window was ordered in
     // and that did not make it key), so no FocusIn follows to report the request.
-    Window focused;
-    int revert;
-    XGetInputFocus(_display, &focused, &revert);
-    if (focused == _window && ![_delegate isKeyWindow])
+    if ([_cgsWindow toplevelHoldsKeyboardFocus] && ![_delegate isKeyWindow])
         [(X11Display *) [NSDisplay currentDisplay] windowHoldsFocus: self];
 }
 
@@ -1642,70 +1459,21 @@ static BOOL X11WindowManagerSupports(Display *display, const char *name) {
 }
 
 - (void) miniaturize {
-    XIconifyWindow(_display, _window, DefaultScreen(_display));
+    [_cgsWindow miniaturizeToplevel];
 }
 
-// ICCCM: a client asks to leave the iconic state by mapping its window again (raising an iconified
-// window does not restore it).
 - (void) deminiaturize {
-    XMapRaised(_display, _window);
+    [_cgsWindow deminiaturizeToplevel];
 }
 
-// NSWindow asks this of every window on each pass of the event loop, and
-// reading the property is a round trip. The window selects PropertyChangeMask,
-// so a change of _NET_WM_STATE, whoever makes it, arrives as PropertyNotify.
+// NSWindow asks this of every window on each pass of the event loop; the window system's window keeps the answer
+// until its state changes.
 - (BOOL) isMiniaturized {
-    if (!_miniaturizedKnown) {
-        _miniaturized = [self readMiniaturized];
-        _miniaturizedKnown = YES;
-    }
-    return _miniaturized;
+    return [_cgsWindow toplevelIsMiniaturized];
 }
 
 - (BOOL) isOccluded {
-    return _occluded;
-}
-
-- (BOOL) noteConfigureGeometryChanged: (XConfigureEvent *) event {
-    if (_configureKnown && event->x == _configureX && event->y == _configureY &&
-        event->width == _configureWidth && event->height == _configureHeight)
-        return NO;
-    _configureKnown = YES;
-    _configureX = event->x;
-    _configureY = event->y;
-    _configureWidth = event->width;
-    _configureHeight = event->height;
-    return YES;
-}
-
-- (void) setOccluded: (BOOL) occluded {
-    _occluded = occluded;
-}
-
-- (BOOL) readMiniaturized {
-    Atom wmState = XInternAtom(_display, "_NET_WM_STATE", FALSE);
-    Atom hiddenState = XInternAtom(_display, "_NET_WM_STATE_HIDDEN", FALSE);
-
-    Atom type;
-    int format;
-    unsigned long nItem, bytesAfter;
-    unsigned char *properties = NULL;
-    BOOL rv = NO;
-
-    if (XGetWindowProperty(_display, _window, wmState, 0, (~0L), FALSE, XA_ATOM,
-                           &type, &format, &nItem, &bytesAfter,
-                           &properties) == Success) {
-        Atom *atoms = (Atom *) properties;
-        for (int i = 0; i < nItem; i++) {
-            if (atoms[i] == hiddenState) {
-                rv = YES;
-                break;
-            }
-        }
-        XFree(properties);
-    }
-
-    return rv;
+    return [_cgsWindow toplevelIsOccluded];
 }
 
 - (CGLContextObj) cglContext {
@@ -1874,6 +1642,39 @@ static void X11WindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent *ev
             [_delegate platformWindow: self didChangeBackingScaleFrom: event->oldScale];
         [_delegate platformWindowExposed: self
                                   inRect: NSMakeRect(0, 0, _frame.size.width, _frame.size.height)];
+        break;
+
+    case kCGSToplevelEventFocusGained:
+        [(X11Display *) [NSDisplay currentDisplay] window: self focusChanged: YES];
+        break;
+
+    case kCGSToplevelEventFocusLost:
+        [(X11Display *) [NSDisplay currentDisplay] window: self focusChanged: NO];
+        break;
+
+    case kCGSToplevelEventMiniaturized:
+        if ([_delegate respondsToSelector: @selector(platformWindowMiniaturized:)])
+            [_delegate performSelector: @selector(platformWindowMiniaturized:) withObject: self];
+        break;
+
+    case kCGSToplevelEventDeminiaturized:
+        if ([_delegate respondsToSelector: @selector(platformWindowDeminiaturized:)])
+            [_delegate performSelector: @selector(platformWindowDeminiaturized:) withObject: self];
+        break;
+
+    case kCGSToplevelEventOcclusionChanged:
+        if ([_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
+            [_delegate platformWindowOcclusionChanged: self];
+        break;
+
+    case kCGSToplevelEventStateChanged:
+        // The window manager may have changed the fullscreen state: the compositor hints follow it.
+        [self updateLayerPresentationHints];
+        break;
+
+    case kCGSToplevelEventFullscreenChanged:
+        if ([_delegate respondsToSelector: @selector(platformWindow:didChangeFullScreen:)])
+            [_delegate platformWindow: self didChangeFullScreen: event->state];
         break;
 
     default:

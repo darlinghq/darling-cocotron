@@ -77,6 +77,26 @@
 	BOOL _primaryRootValid;
 	// The cursor the connection's windows show while the process' cursor is hidden (None before the first hide).
 	Cursor _blankCursor;
+
+	// Whether another client's window covers a toplevel window (see X11Occlusion.h). The window manager
+	// publishes the focused window and the stacking order on the root window, and the focused foreign window is
+	// watched for changes of its size, its fullscreen state and its unmapping; the windows are judged once per
+	// batch of events, when _occlusionDirty is set.
+	BOOL _occlusionDirty;
+	Window _occlusionWatchWindow;
+	// What the judgement needs, read again only after an event that can change it: the focused foreign window
+	// (_occlusionActive, from _NET_ACTIVE_WINDOW), its geometry and whether it is fullscreen and opaque.
+	BOOL _occlusionActiveKnown;
+	Window _occlusionActive;
+	BOOL _occlusionCoverValid;
+	BOOL _occlusionCoverOK;
+	BOOL _occlusionCoverFullscreen;
+	BOOL _occlusionCoverOpaque;
+	int _occlusionCoverX, _occlusionCoverY;
+	unsigned int _occlusionCoverWidth, _occlusionCoverHeight;
+	BOOL _occlusionWatchGeometryKnown;
+	int _occlusionWatchX, _occlusionWatchY, _occlusionWatchWidth, _occlusionWatchHeight;
+
 	// The arrow shown over the windows of the framework above while no cursor is selected.
 	Cursor _defaultArrow;
 	CGFloat _defaultArrowScale;
@@ -108,6 +128,16 @@
 // selected cursor. Main thread.
 -(void) _applyCursor;
 -(NSArray<NSDictionary*>*) copyWindowDescriptions;
+// The toplevel windows of the UI layer.
+-(NSArray<CGSWindowX11*>*) _toplevelWindows;
+// The toplevel window that has this X window, nil when none.
+-(CGSWindowX11*) _toplevelForNativeWindow:(Window)native;
+// A toplevel window was made or made again: the windows are judged again for being covered.
+-(void) _toplevelWindowCreated;
+// Puts the windows of this connection in the order of their levels around a window that was ordered to the front,
+// mapped or given another level (see X11LevelStacking.h): an unmanaged window is above the frames the window
+// manager restacks around it, so the unmanaged windows are moved, never the managed ones.
+-(void) _restackToplevelWindowsForLevelsAround:(CGSWindowX11*)anchor;
 
 +(BOOL) isAvailable;
 // The pointer of the process' connection, nil without one. Not retained for the caller (a test of the pointer's

@@ -66,6 +66,8 @@
 // one, which is the default. The window's id is the number CGWindow gives the UI layer's platform window.
 -(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes;
 -(BOOL) supportsTranslucentToplevels;
+// The ids of the shown toplevel windows, front to back (see _CGSOrderedToplevelWindowIDs()). The default knows of none.
+-(NSArray<NSNumber*>*) orderedToplevelWindowIDs;
 
 // Activates the windows of another process directly through the display server (see
 // _CGSActivateProcess() for the options). Returns kCGErrorSuccess when a request was sent and

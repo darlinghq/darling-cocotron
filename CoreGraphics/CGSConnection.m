@@ -541,6 +541,11 @@ static CGDisplayChangeSummaryFlags changeFlags(CGSScreen* before, CGSScreen* aft
 	return NO;
 }
 
+-(NSArray<NSNumber*>*) orderedToplevelWindowIDs
+{
+	return @[];
+}
+
 -(void*) nativeDisplay
 {
 	NSInvalidAbstractInvocation();
