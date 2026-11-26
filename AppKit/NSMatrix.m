@@ -138,6 +138,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     _cellClass = [NSCell class];
     NS_EXTRA(NSMatrix, self)->_mode = NSListModeMatrix;
     NS_EXTRA(NSMatrix, self)->_tabKeyTraversesCells = YES;
+    // A matrix selects by rectangle unless told otherwise (isSelectionByRect is documented as YES by default).
+    NS_EXTRA(NSMatrix, self)->_selectionByRect = YES;
 
     return self;
 }

@@ -787,7 +787,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
             [matrix setPrototype: _cellPrototype];
         else
             [matrix setCellClass: [self cellClass]];
-        [matrix setCellSize: NSMakeSize(frame.size.width, 16)];
+        CGFloat rowHeight = NS_EXTRA(NSBrowser, self)->_rowHeight;
+        [matrix setCellSize: NSMakeSize(frame.size.width, rowHeight > 0 ? rowHeight : 16)];
         [matrix setAutoresizingMask: NSViewWidthSizable];
         [matrix setAutosizesCells: YES];
         [matrix setAllowsEmptySelection: [self allowsEmptySelection]];
