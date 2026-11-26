@@ -210,6 +210,34 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self updateSurfaceColorIfNeeded];
 }
 
+// alpha-modifier-v1 multiplies the surface's per-pixel alpha. The protocol's factor is 0 for fully
+// transparent and UINT32_MAX for fully opaque, which is NSWindow.alphaValue mapped to that range.
+- (void) updateAlphaModifier {
+    if (_surface == NULL || _display->_alphaModifierManager == NULL)
+        return;
+    if (_alphaModifier == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+        _alphaModifier = WaylandCreateObject(_display->_alphaModifierManager,
+                                             WP_ALPHA_MODIFIER_GET_SURFACE,
+                                             &wp_alpha_modifier_surface_v1_interface, args, 0, nil);
+        if (_alphaModifier == NULL)
+            return;
+    }
+    double alpha = _delegate != nil ? (double) [_delegate alphaValue] : 1.0;
+    if (!(alpha > 0)) alpha = 0;
+    if (alpha > 1) alpha = 1;
+    union wl_argument value[1] = {{.u = (uint32_t) (alpha * (double) UINT32_MAX)}};
+    WaylandMarshal(_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_SET_MULTIPLIER, NULL, 0, value);
+    if (_mapped && _configured) {
+        [self commitSurface];
+        [_display flush];
+    }
+}
+
+- (void) alphaModifierAvailable {
+    [self updateAlphaModifier];
+}
+
 - (void) sessionManagerAvailable {
     if (_mapped && _toplevel != NULL && _toplevelSession == NULL)
         [self joinSessionBeforeCommit];
@@ -268,6 +296,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [color destroyColorSurface: _colorSurface];
     [color destroyRepresentationSurface: _representationSurface];
     _colorSurface = _representationSurface = NULL;
+    if (_alphaModifier != NULL)
+        sendRequest(_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    _alphaModifier = NULL;
     if (_toplevelSession != NULL)
         sendRequest(_toplevelSession, WP_TOPLEVEL_SESSION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _toplevelSession = NULL;
@@ -564,6 +595,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     }
 
+    // The multiplier is double-buffered, so it has to be set before the surface's first commit.
+    [self updateAlphaModifier];
     _pendingWidth = _pendingHeight = 0;
     _pendingActivated = NO;
     _pendingSuspended = NO;
@@ -1302,18 +1335,20 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
 }
 
 - (void) setAlphaValue: (CGFloat) value {
-    // No client-side opacity on Wayland without an extra protocol, except that a fully
-    // transparent window is not shown at all (see -isFullyTransparent).
     BOOL transparent = value <= 0;
-    if (transparent == _fullyTransparent)
-        return;
-    _fullyTransparent = transparent;
-    if (transparent) {
-        BOOL ordered = _shouldBeMapped;
-        [self unmap];
-        _shouldBeMapped = ordered;
-    } else if (_shouldBeMapped)
-        [self ensureMapped];
+    if (transparent != _fullyTransparent) {
+        // Without alpha-modifier a fully transparent window is simply not shown (see
+        // -isFullyTransparent); with it any value can be sent to the compositor.
+        _fullyTransparent = transparent;
+        if (transparent) {
+            BOOL ordered = _shouldBeMapped;
+            [self unmap];
+            _shouldBeMapped = ordered;
+        } else if (_shouldBeMapped)
+            [self ensureMapped];
+    }
+    if (_mapped)
+        [self updateAlphaModifier];
 }
 
 - (void) setHasShadow: (BOOL) value {

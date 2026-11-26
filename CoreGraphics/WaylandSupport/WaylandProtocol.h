@@ -106,6 +106,8 @@ extern const struct wl_interface wp_cursor_shape_device_v1_interface;
 extern const struct wl_interface xdg_wm_dialog_v1_interface;
 extern const struct wl_interface xdg_dialog_v1_interface;
 extern const struct wl_interface xdg_system_bell_v1_interface;
+extern const struct wl_interface wp_alpha_modifier_v1_interface;
+extern const struct wl_interface wp_alpha_modifier_surface_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -259,6 +261,11 @@ enum {
 
     XDG_SYSTEM_BELL_DESTROY = 0,
     XDG_SYSTEM_BELL_RING = 1,
+
+    WP_ALPHA_MODIFIER_DESTROY = 0,
+    WP_ALPHA_MODIFIER_GET_SURFACE = 1,
+    WP_ALPHA_MODIFIER_SURFACE_DESTROY = 0,
+    WP_ALPHA_MODIFIER_SURFACE_SET_MULTIPLIER = 1,
 
     WP_TOUCH_RELEASE = 0,
     WP_TOUCH_EV_DOWN = 0,

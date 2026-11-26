@@ -328,7 +328,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
                                       _cursorShapeDevice, _cursorShapeManager, _dialogManager, _bell,
-                                      _textInput, _textInputManager,
+                                      _alphaModifierManager, _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
@@ -459,6 +459,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) dialogManagerAvailable {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) dialogManagerAvailable];
+}
+
+- (void) alphaModifierManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) alphaModifierAvailable];
 }
 
 - (void) applicationIconImageChanged {
@@ -616,6 +621,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                          version: 1
                             kind: 0
                           object: nil];
+    } else if (strcmp(interface, "wp_alpha_modifier_v1") == 0 && _alphaModifierManager == NULL) {
+        _alphaModifierManagerName = name;
+        _alphaModifierManager = [self bindGlobal: name
+                                       interface: &wp_alpha_modifier_v1_interface
+                                         version: 1
+                                            kind: 0
+                                          object: nil];
+        [self alphaModifierManagerAvailable];
     } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
         ((WaylandColorManager *) _color)->_colorManager == NULL) {
         uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
@@ -779,6 +792,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        WL_MARSHAL_FLAG_DESTROY, NULL);
         _bell = NULL;
         _bellName = 0;
+        return;
+    }
+    if (_alphaModifierManager != NULL && name == _alphaModifierManagerName) {
+        // The protocol says objects created with the manager survive its destruction.
+        WaylandMarshal(_alphaModifierManager, WP_ALPHA_MODIFIER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _alphaModifierManager = NULL;
+        _alphaModifierManagerName = 0;
         return;
     }
     if (_cursorShapeManager != NULL && name == _cursorShapeManagerName) {

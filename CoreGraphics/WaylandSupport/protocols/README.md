@@ -149,3 +149,14 @@ where X11 has `XBell()` and the core protocol has no bell request.
 - Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
 - Copyright: 2016, 2023 Red Hat
 - Licence: the MIT permission notice at the top of the file.
+
+## alpha-modifier
+
+`alpha-modifier-v1.xml` is the staging `wp_alpha_modifier_v1` protocol. It lets the compositor apply
+`NSWindow.alphaValue` to a Wayland surface, which the core protocol cannot do.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/alpha-modifier/alpha-modifier-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2024 Xaver Hugl
+- Licence: the MIT permission notice at the top of the file.
