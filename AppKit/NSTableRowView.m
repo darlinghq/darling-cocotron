@@ -23,10 +23,8 @@
 
 @implementation NSTableRowView
 
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSTableRowView, selectionHighlightStyle, _selectionHighlightStyle, NSTableViewSelectionHighlightStyle, selectionHighlightStyle, setSelectionHighlightStyle:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSTableRowView, draggingDestinationFeedbackStyle, _draggingDestinationFeedbackStyle, NSTableViewDraggingDestinationFeedbackStyle, draggingDestinationFeedbackStyle, setDraggingDestinationFeedbackStyle:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSTableRowView, indentationForDropOperation, _indentationForDropOperation, CGFloat, indentationForDropOperation, setIndentationForDropOperation:)
-NS_EXTRA_SYNTHESIZE_ASSIGN(NSTableRowView, emphasized, _emphasized, BOOL, isEmphasized, setEmphasized:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSTableRowView, groupRowStyle, _groupRowStyle, BOOL, isGroupRowStyle, setGroupRowStyle:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSTableRowView, floating, _floating, BOOL, isFloating, setFloating:)
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSTableRowView, targetForDropOperation, _targetForDropOperation, BOOL, isTargetForDropOperation, setTargetForDropOperation:)
@@ -58,9 +56,51 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTableRowView, backgroundColor, _backgroundColor, NSCo
     return NS_EXTRA(NSTableRowView, self)->_selected;
 }
 
+// The cell views in the row take the interior background style of the row: a dark one while the row is
+// selected and emphasized, a normal one otherwise.
+- (void) _syncInteriorBackgroundStyle {
+    NSBackgroundStyle style = [self interiorBackgroundStyle];
+
+    for (NSView *subview in [self subviews]) {
+        if ([subview respondsToSelector: @selector(setBackgroundStyle:)])
+            [(id) subview setBackgroundStyle: style];
+    }
+}
+
+- (void) didAddSubview: (NSView *) subview {
+    [super didAddSubview: subview];
+    if ([subview respondsToSelector: @selector(setBackgroundStyle:)])
+        [(id) subview setBackgroundStyle: [self interiorBackgroundStyle]];
+}
+
+- (NSTableViewSelectionHighlightStyle) selectionHighlightStyle {
+    return NS_EXTRA(NSTableRowView, self)->_selectionHighlightStyle;
+}
+
+- (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value {
+    if (NS_EXTRA(NSTableRowView, self)->_selectionHighlightStyle != value) {
+        NS_EXTRA(NSTableRowView, self)->_selectionHighlightStyle = value;
+        [self _syncInteriorBackgroundStyle];
+        [self setNeedsDisplay: YES];
+    }
+}
+
+- (BOOL) isEmphasized {
+    return NS_EXTRA(NSTableRowView, self)->_emphasized;
+}
+
+- (void) setEmphasized: (BOOL) value {
+    if (NS_EXTRA(NSTableRowView, self)->_emphasized != value) {
+        NS_EXTRA(NSTableRowView, self)->_emphasized = value;
+        [self _syncInteriorBackgroundStyle];
+        [self setNeedsDisplay: YES];
+    }
+}
+
 - (void) setSelected: (BOOL) selected {
     if (NS_EXTRA(NSTableRowView, self)->_selected != selected) {
         NS_EXTRA(NSTableRowView, self)->_selected = selected;
+        [self _syncInteriorBackgroundStyle];
         [self setNeedsDisplay: YES];
     }
 }
