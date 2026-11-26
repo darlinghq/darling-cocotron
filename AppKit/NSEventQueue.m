@@ -44,6 +44,9 @@
 #import <AppKit/NSEvent_keyboard.h>
 #import <AppKit/NSEvent_other.h>
 #import <AppKit/NSScreen.h>
+#import <AppKit/NSTouch.h>
+#import <AppKit/NSEvent_touch.h>
+#import <AppKit/NSTouchBackend.h>
 #import <AppKit/NSWindow.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <HIToolbox/CarbonEvents.h>
@@ -57,6 +60,9 @@ extern OSStatus _HIReceiveNextEventMatchingWithOptions(HIEventMatchProc match, v
                                                        EventTimeout timeout, OptionBits options, EventRef *outEvent);
 extern OSStatus _HIFlushEventsMatching(EventQueueRef queue, HIEventMatchProc match, void *info, EventRef beforeEvent);
 extern void _HIBeginEventStreamReading(void);
+typedef void (*HIEventStreamEmitProc)(CGEventRef event, void *info);
+typedef void (*HIEventStreamFilterProc)(CGEventRef event, HIEventStreamEmitProc emit, void *info);
+extern void _HISetEventStreamFilter(HIEventStreamFilterProc filter);
 enum {
     kHIReceiveNextEventPull = 1 << 0,
     kHIReceiveNextEventFilterIsPure = 1 << 1,
@@ -199,6 +205,121 @@ static CGPoint globalLocation(NSEvent *event, CGFloat mainScreenMaxY) {
 static NSPoint screenLocation(CGEventRef cgEvent) {
     CGPoint point = CGEventGetLocation(cgEvent);
     return NSMakePoint(point.x, _NSEventMainScreenMaxY() - point.y);
+}
+
+// Touch events
+
+// The NSTouchPhase of a touch event's phase field, 0 for an event that is not a change of a finger
+static NSTouchPhase touchPhaseOfCGEvent(CGEventRef cgEvent) {
+    if (CGEventGetType(cgEvent) != (CGEventType) kCGSEventTypeGesture)
+        return (NSTouchPhase) 0;
+    switch (CGEventGetIntegerValueField(cgEvent, kCGSTouchPhase)) {
+    case kCGSTouchPhaseBegan:
+        return NSTouchPhaseBegan;
+    case kCGSTouchPhaseMoved:
+        return NSTouchPhaseMoved;
+    case kCGSTouchPhaseEnded:
+        return NSTouchPhaseEnded;
+    case kCGSTouchPhaseCancelled:
+        return NSTouchPhaseCancelled;
+    default:
+        return (NSTouchPhase) 0;
+    }
+}
+
+// The window a touch event is for and the finger's location in its base coordinates (NAN for a finger
+// without a position). The window is named by the window system's handle or, for an event of the
+// application, by its number (kCGSTouchWindowNumber).
+static NSWindow *touchEventWindow(CGEventRef cgEvent, NSPoint *outLocation) {
+    NSInteger windowNumber = 0;
+    NSPoint location = NSZeroPoint;
+    BOOL hasLocation = NO;
+
+    if (CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0)
+        [[NSDisplay currentDisplay] windowNumber: &windowNumber
+                                        location: &location
+                                     hasLocation: &hasLocation
+                                 forPointerEvent: cgEvent];
+    else
+        windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGSTouchWindowNumber);
+    NSWindow *window = windowNumber != 0 ? [NSApp windowWithWindowNumber: windowNumber] : nil;
+
+    if (CGEventGetIntegerValueField(cgEvent, kCGSTouchLocationUnknown) != 0)
+        location = NSMakePoint(NAN, NAN);
+    else if (window != nil && !hasLocation)
+        location = [window convertScreenToBase: screenLocation(cgEvent)];
+    else if (window == nil)
+        location = screenLocation(cgEvent);
+    *outLocation = location;
+    return window;
+}
+
+static NSPoint touchNormalizedPosition(CGEventRef cgEvent) {
+    return NSMakePoint(CGEventGetIntegerValueField(cgEvent, kCGSTouchNormalizedX) / 1000000.0,
+                       CGEventGetIntegerValueField(cgEvent, kCGSTouchNormalizedY) / 1000000.0);
+}
+
+static NSSize touchDeviceSize(CGEventRef cgEvent) {
+    return NSMakeSize(CGEventGetIntegerValueField(cgEvent, kCGSTouchDeviceWidth) / 1024.0,
+                      CGEventGetIntegerValueField(cgEvent, kCGSTouchDeviceHeight) / 1024.0);
+}
+
+void NSTouchPostNativeReport(NSWindow *window, uintptr_t nativeWindow, long long identifier, NSTouchPhase phase,
+                             NSPoint location, int64_t nativeX, int64_t nativeY)
+{
+    CGEventRef cgEvent = CGEventCreate(NULL);
+    BOOL known = !isnan(location.x) && !isnan(location.y);
+
+    if (cgEvent == NULL)
+        return;
+    CGEventSetType(cgEvent, (CGEventType) kCGSEventTypeGesture);
+    CGEventSetIntegerValueField(cgEvent, kCGSTouchIdentifier, identifier);
+    CGEventSetIntegerValueField(cgEvent, kCGSTouchPhase, (int64_t) phase);
+    CGEventSetIntegerValueField(cgEvent, kCGSEventNativeWindow, (int64_t) nativeWindow);
+    if (known) {
+        NSPoint screen = [window convertBaseToScreen: location];
+        CGPoint global = CGPointMake(screen.x, _NSEventMainScreenMaxY() - screen.y);
+
+        CGEventSetLocation(cgEvent, global);
+        CGEventSetIntegerValueField(cgEvent, kCGSEventNativeLocationX, nativeX);
+        CGEventSetIntegerValueField(cgEvent, kCGSEventNativeLocationY, nativeY);
+        CGEventSetIntegerValueField(cgEvent, kCGSEventPostedLocationX, llround(global.x * 1024));
+        CGEventSetIntegerValueField(cgEvent, kCGSEventPostedLocationY, llround(global.y * 1024));
+    } else {
+        CGEventSetIntegerValueField(cgEvent, kCGSTouchLocationUnknown, 1);
+    }
+    _CGSEventStreamPost(cgEvent);
+    CFRelease(cgEvent);
+}
+
+// The reader of the event stream: a touch event (a change of a finger) becomes the events AppKit's touch handling
+// makes of it (touch events, or the mouse events of a finger on a view that takes no touches), in the
+// order of the stream; every other event is passed on.
+static void streamFilter(CGEventRef cgEvent, HIEventStreamEmitProc emit, void *info) {
+    NSTouchPhase phase = touchPhaseOfCGEvent(cgEvent);
+    if (phase == 0) {
+        emit(cgEvent, info);
+        return;
+    }
+
+    NSAutoreleasePool *pool = [[NSAutoreleasePool alloc] init];
+    NSPoint location;
+    NSWindow *window = touchEventWindow(cgEvent, &location);
+    NSTimeInterval timestamp = CGEventGetTimestamp(cgEvent) / 1e9;
+    NSArray *events = NSTouchEventsForReport(window, CGEventGetIntegerValueField(cgEvent, kCGSTouchIdentifier), phase,
+                                             location, timestamp, touchNormalizedPosition(cgEvent),
+                                             touchDeviceSize(cgEvent));
+
+    for (NSEvent *event in events) {
+        CGEventRef made = _NSEventCreateCGEvent(event, _NSEventMainScreenMaxY());
+
+        if (made == NULL)
+            continue;
+        _CGSEventSetClientData(made, (CFTypeRef) event);
+        emit(made, info);
+        CFRelease(made);
+    }
+    [pool release];
 }
 
 static uint32_t scrollPhaseFromEventPhase(NSEventPhase phase) {
@@ -455,6 +576,34 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
                     rotation: (float) (CGEventGetIntegerValueField(cgEvent, kCGSGestureRotation) / 1000000.0)];
         break;
     }
+    case kCGSEventTypeGesture: {
+        // A touch event that was not read from the stream (+eventWithCGEvent:): the one finger it reports, with
+        // no memory of the other fingers or of the view the finger began in. Any other gesture event is an
+        // ordinary event.
+        NSTouchPhase phase = touchPhaseOfCGEvent(cgEvent);
+        if (phase == 0) {
+            result = [[NSEvent alloc] initWithType: (NSEventType) type
+                                          location: screenLocation(cgEvent)
+                                     modifierFlags: flags
+                                            window: nil];
+            break;
+        }
+        NSPoint location;
+        NSWindow *window = touchEventWindow(cgEvent, &location);
+        if (isnan(location.x) || isnan(location.y))
+            location = NSZeroPoint;
+        NSTouch *touch = [[NSTouch alloc] _initWithIdentity: [NSNumber numberWithLongLong: CGEventGetIntegerValueField(cgEvent, kCGSTouchIdentifier)]
+                                                     window: window
+                                                   location: location];
+        [touch _moveTo: location phase: phase];
+        [touch _setNormalizedPosition: touchNormalizedPosition(cgEvent) deviceSize: touchDeviceSize(cgEvent)];
+        result = [[NSEvent_touch alloc] initWithWindow: window
+                                              location: location
+                                             timestamp: timestamp
+                                               touches: [NSSet setWithObject: touch]];
+        [touch release];
+        break;
+    }
     case kCGEventKeyDown:
     case kCGEventKeyUp:
     case kCGEventFlagsChanged: {
@@ -547,6 +696,7 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
 // Queue
 
 void _NSEventQueueBeginReading(void) {
+    _HISetEventStreamFilter(streamFilter);
     _HIBeginEventStreamReading();
 }
 
