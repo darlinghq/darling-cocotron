@@ -73,6 +73,8 @@ typedef enum {
     CGSWaylandObjectRelativePointer,
     CGSWaylandObjectWarpLock,
     CGSWaylandObjectBuffer,
+    CGSWaylandObjectLayerSurface,
+    CGSWaylandObjectPopup,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -86,6 +88,11 @@ typedef enum {
     struct wl_proxy *_compositor;
     struct wl_proxy *_shm; // wl_shm, for the pixels of the windows that are drawn into
     struct wl_proxy *_wmBase;
+    // What places and frames the windows beyond xdg-shell, NULL when the compositor offers none:
+    // wlr-layer-shell (a surface along an edge of the output: the menu bar), the KDE plasma shell
+    // (a position for a toplevel), xdg-decoration (the frame is the compositor's).
+    struct wl_proxy *_layerShell, *_plasmaShell, *_decorationManager;
+    uint32_t _plasmaShellVersion;
 
 @protected
     struct wl_proxy *_registry;

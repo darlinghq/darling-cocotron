@@ -64,42 +64,8 @@
         return nil;
     }
 
-    args[0].o = NULL;
-    args[1].o = (struct wl_object *) _surface;
-    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
-                                            opcode: WP_WM_BASE_GET_XDG_SURFACE
-                                         interface: &xdg_surface_interface
-                                         arguments: args
-                                              kind: CGSWaylandObjectXdgSurface
-                                            object: self];
-    if (_xdgSurface == NULL) {
-        [self release];
-        return nil;
-    }
-
-    args[0].o = NULL;
-    _toplevel = [_waylandConnection createObject: _xdgSurface
-                                          opcode: WP_XDG_SURFACE_GET_TOPLEVEL
-                                       interface: &xdg_toplevel_interface
-                                       arguments: args
-                                            kind: CGSWaylandObjectToplevel
-                                          object: self];
-    if (_toplevel == NULL) {
-        [self release];
-        return nil;
-    }
-
-    // The initial commit carries no buffer: the compositor answers with a
-    // configure, and the first buffer maps the window.
-    union wl_argument none[1] = {{.o = NULL}};
-    WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
-    if (WL.wl_display_roundtrip(_waylandConnection->_wlDisplay) < 0) {
-        NSLog(@"CoreGraphics Wayland backend: the connection failed while "
-              @"creating a window (error %d)",
-              WL.wl_display_get_error(_waylandConnection->_wlDisplay));
-        [self release];
-        return nil;
-    }
+    // The role (and with it the initial commit) is made by -ensureRole once the level and style
+    // are known.
     return self;
 }
 
@@ -112,17 +78,322 @@
     _surfaceObject = nil;
 
     [_title release];
-    if (_toplevel != NULL)
-        WaylandMarshal(_toplevel, WP_TOPLEVEL_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
-                       (union wl_argument[1]) {{.o = NULL}});
-    if (_xdgSurface != NULL)
-        WaylandMarshal(_xdgSurface, WP_XDG_SURFACE_DESTROY, NULL,
-                       WL_MARSHAL_FLAG_DESTROY, (union wl_argument[1]) {{.o = NULL}});
+    [self destroyRole];
     if (_surface != NULL)
         WaylandMarshal(_surface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
                        (union wl_argument[1]) {{.o = NULL}});
     [_waylandConnection flush];
     [super dealloc];
+}
+
+#pragma mark - Role
+
+static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
+    if (*proxy == NULL)
+        return;
+    WaylandMarshal(*proxy, opcode, NULL, WL_MARSHAL_FLAG_DESTROY, (union wl_argument[1]) {{.o = NULL}});
+    *proxy = NULL;
+}
+
+- (CGSWaylandRole) role { return _role; }
+- (BOOL) isShown { return _shown; }
+- (BOOL) isActivated { return _activated; }
+
+// Whether the window floats: above the normal level (and below the main menu) or with the floating
+// style. See the comment in CGSWindowWayland.h.
+- (BOOL) isFloating {
+    return (_styleFlags & kCGSWindowStyleFloating) != 0 ||
+           (_level > kCGNormalWindowLevel && _level < kCGMainMenuWindowLevel);
+}
+
+- (BOOL) isDocumentLike {
+    return _role == CGSWaylandRoleToplevel && ![self isFloating];
+}
+
+// The window a floating window or a popup belongs to: for a popup the menu bar when it is shown,
+// else the window the user works in; for a floating window that window only. nil for none.
+- (CGSWindowWayland *) windowToAttachTo: (BOOL) allowBar {
+    CGSWindowWayland *bar = nil, *active = nil, *any = nil;
+    NSArray *windows = [_waylandConnection copyAllWindows];
+    for (CGSWindow *candidate in windows) {
+        CGSWindowWayland *window = (CGSWindowWayland *) candidate;
+        if (window == self || !window->_shown || window->_role == CGSWaylandRoleNone ||
+            window->_role == CGSWaylandRolePopup)
+            continue;
+        if (window->_role == CGSWaylandRoleLayer) {
+            bar = window;
+        } else if (![window isFloating]) {
+            if (window->_activated)
+                active = window;
+            any = window;
+        }
+    }
+    CGSWindowWayland *result = (allowBar && bar != nil) ? bar : active != nil ? active : any;
+    [result retain];
+    [windows release];
+    return [result autorelease];
+}
+
+- (CGSWaylandRole) wantedRole {
+    if (_level == kCGMainMenuWindowLevel && _waylandConnection->_layerShell != NULL)
+        return CGSWaylandRoleLayer;
+    if (_level > kCGMainMenuWindowLevel && [self windowToAttachTo: YES] != nil)
+        return CGSWaylandRolePopup;
+    return CGSWaylandRoleToplevel;
+}
+
+- (void) createToplevelRole {
+    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
+                                            opcode: WP_WM_BASE_GET_XDG_SURFACE
+                                         interface: &xdg_surface_interface
+                                         arguments: args
+                                              kind: CGSWaylandObjectXdgSurface
+                                            object: self];
+    if (_xdgSurface == NULL)
+        return;
+    args[0].o = NULL;
+    _toplevel = [_waylandConnection createObject: _xdgSurface
+                                          opcode: WP_XDG_SURFACE_GET_TOPLEVEL
+                                       interface: &xdg_toplevel_interface
+                                       arguments: args
+                                            kind: CGSWaylandObjectToplevel
+                                          object: self];
+    if (_toplevel == NULL)
+        return;
+    _role = CGSWaylandRoleToplevel;
+    if (_title != nil) {
+        union wl_argument title[1] = {{.s = [_title UTF8String]}};
+        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_TITLE, NULL, 0, title);
+    }
+    [self applyToplevelStyle: ~0u];
+    [self updatePlasmaSurface];
+}
+
+// The menu bar: a strip along the top of the output as wide as the output and as high as the window,
+// which other windows keep clear of.
+- (void) createLayerRole {
+    int32_t height = MAX(1, (int32_t) ceil(_frame.size.height));
+    union wl_argument args[5] = {{.o = NULL}, {.o = (struct wl_object *) _surface}, {.o = NULL},
+                                 {.u = WP_LAYER_TOP}, {.s = "menubar"}};
+    _layerSurface = [_waylandConnection createObject: _waylandConnection->_layerShell
+                                              opcode: WP_LAYER_SHELL_GET_LAYER_SURFACE
+                                           interface: &zwlr_layer_surface_v1_interface
+                                           arguments: args
+                                                kind: CGSWaylandObjectLayerSurface
+                                              object: self];
+    if (_layerSurface == NULL)
+        return;
+    _role = CGSWaylandRoleLayer;
+    union wl_argument anchor[1] = {{.u = WP_LAYER_ANCHOR_TOP | WP_LAYER_ANCHOR_LEFT | WP_LAYER_ANCHOR_RIGHT}};
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_ANCHOR, NULL, 0, anchor);
+    union wl_argument size[2] = {{.u = 0}, {.u = (uint32_t) height}};
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_SIZE, NULL, 0, size);
+    union wl_argument zone[1] = {{.i = height}};
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_EXCLUSIVE_ZONE, NULL, 0, zone);
+    // The bar takes no keyboard focus (the protocol default): the menus it opens are tracked with the
+    // application's own input.
+}
+
+// A pop-up window: placed where it asked to be, relative to the window it belongs to, which is the
+// layer surface of the menu bar or an xdg surface. Not grabbed: the application orders it out itself.
+- (void) createPopupRole: (CGSWindowWayland *) parent {
+    union wl_argument args[4] = {{.o = NULL}};
+    struct wl_proxy *positioner = [_waylandConnection createObject: _waylandConnection->_wmBase
+                                                            opcode: WP_WM_BASE_CREATE_POSITIONER
+                                                         interface: &xdg_positioner_interface
+                                                         arguments: args
+                                                              kind: CGSWaylandObjectNone
+                                                            object: nil];
+    if (positioner == NULL)
+        return;
+    args[0].i = MAX(1, (int32_t) ceil(_frame.size.width));
+    args[1].i = MAX(1, (int32_t) ceil(_frame.size.height));
+    WaylandMarshal(positioner, WP_POSITIONER_SET_SIZE, NULL, 0, args);
+    CGRect parentFrame = parent->_frame;
+    int32_t x = (int32_t) floor(_frame.origin.x - parentFrame.origin.x);
+    int32_t y = (int32_t) floor(_frame.origin.y - parentFrame.origin.y);
+    // The anchor has to be inside the parent's geometry; what lies beyond it is an offset.
+    int32_t anchorX = MAX(0, MIN(x, (int32_t) ceil(parentFrame.size.width) - 1));
+    int32_t anchorY = MAX(0, MIN(y, (int32_t) ceil(parentFrame.size.height) - 1));
+    args[0].i = anchorX;
+    args[1].i = anchorY;
+    args[2].i = args[3].i = 1;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_ANCHOR_RECT, NULL, 0, args);
+    args[0].i = x - anchorX;
+    args[1].i = y - anchorY;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_OFFSET, NULL, 0, args);
+    args[0].u = WP_POSITIONER_ANCHOR_TOP_LEFT;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_ANCHOR, NULL, 0, args);
+    args[0].u = WP_POSITIONER_GRAVITY_BOTTOM_RIGHT;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_GRAVITY, NULL, 0, args);
+    args[0].u = WP_POSITIONER_SLIDE_X | WP_POSITIONER_SLIDE_Y | WP_POSITIONER_FLIP_X | WP_POSITIONER_FLIP_Y;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_CONSTRAINT_ADJUSTMENT, NULL, 0, args);
+
+    args[0].o = NULL;
+    args[1].o = (struct wl_object *) _surface;
+    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
+                                            opcode: WP_WM_BASE_GET_XDG_SURFACE
+                                         interface: &xdg_surface_interface
+                                         arguments: args
+                                              kind: CGSWaylandObjectXdgSurface
+                                            object: self];
+    if (_xdgSurface != NULL) {
+        BOOL layerParent = parent->_layerSurface != NULL;
+        args[0].o = NULL;
+        args[1].o = layerParent ? NULL : (struct wl_object *) parent->_xdgSurface;
+        args[2].o = (struct wl_object *) positioner;
+        _popup = [_waylandConnection createObject: _xdgSurface
+                                           opcode: WP_XDG_SURFACE_GET_POPUP
+                                        interface: &xdg_popup_interface
+                                        arguments: args
+                                             kind: CGSWaylandObjectPopup
+                                           object: self];
+        if (_popup != NULL && layerParent) {
+            // A popup of a layer surface has no xdg parent; the layer surface adopts it.
+            args[0].o = (struct wl_object *) _popup;
+            WaylandMarshal(parent->_layerSurface, WP_LAYER_SURFACE_GET_POPUP, NULL, 0, args);
+        }
+        if (_popup != NULL) {
+            _popupParent = [parent retain];
+            _role = CGSWaylandRolePopup;
+        }
+    }
+    WaylandMarshal(positioner, WP_POSITIONER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                   (union wl_argument[1]) {{.o = NULL}});
+}
+
+// Makes the role of the window, once. The initial commit carries no buffer: the compositor answers
+// with a configure, and the first buffer maps the window.
+- (BOOL) ensureRole {
+    @synchronized (self) {
+        if (_role != CGSWaylandRoleNone)
+            return YES;
+
+        switch ([self wantedRole]) {
+        case CGSWaylandRoleLayer:
+            [self createLayerRole];
+            break;
+        case CGSWaylandRolePopup: {
+            CGSWindowWayland *parent = [self windowToAttachTo: YES];
+            if (parent != nil)
+                [self createPopupRole: parent];
+            break;
+        }
+        default:
+            break;
+        }
+        if (_role == CGSWaylandRoleNone)
+            [self createToplevelRole];
+        if (_role == CGSWaylandRoleNone) {
+            [self destroyRole];
+            return NO;
+        }
+
+        union wl_argument none[1] = {{.o = NULL}};
+        WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
+        if (WL.wl_display_roundtrip(_waylandConnection->_wlDisplay) < 0) {
+            NSLog(@"CoreGraphics Wayland backend: the connection failed while "
+                  @"creating a window (error %d)",
+                  WL.wl_display_get_error(_waylandConnection->_wlDisplay));
+            return NO;
+        }
+        if (_role == CGSWaylandRoleToplevel)
+            [self updateLevelParent];
+        return YES;
+    }
+}
+
+- (void) destroyRole {
+    destroyProxy(&_decoration, WP_TOPLEVEL_DECORATION_DESTROY);
+    destroyProxy(&_plasmaSurface, WP_PLASMA_SURFACE_DESTROY);
+    destroyProxy(&_toplevel, WP_TOPLEVEL_DESTROY);
+    destroyProxy(&_popup, WP_POPUP_DESTROY);
+    destroyProxy(&_layerSurface, WP_LAYER_SURFACE_DESTROY);
+    destroyProxy(&_xdgSurface, WP_XDG_SURFACE_DESTROY);
+    [_popupParent release];
+    _popupParent = nil;
+    _levelParent = nil;
+    _role = CGSWaylandRoleNone;
+}
+
+// A floating window is a child of the window the user works in, so that the compositor keeps it in
+// front of that window; any other window has no parent. The compositor drops the relation when the
+// parent is unmapped, so it is made again whenever a window is shown.
+- (void) updateLevelParent {
+    if (_toplevel == NULL)
+        return;
+    CGSWindowWayland *parent = [self isFloating] ? [self windowToAttachTo: NO] : nil;
+    if (parent != nil && parent->_toplevel == NULL)
+        parent = nil;
+    if (parent == _levelParent)
+        return;
+    _levelParent = parent;
+    union wl_argument args[1] = {{.o = (struct wl_object *) (parent != nil ? parent->_toplevel : NULL)}};
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_PARENT, NULL, 0, args);
+    [_waylandConnection flush];
+}
+
+// Where the window asked to be, for a compositor whose plasma shell lets a client say so; the other
+// compositors place a toplevel themselves. The window is also kept out of task lists when it is a
+// utility window.
+- (void) updatePlasmaSurface {
+    if (_toplevel == NULL || _waylandConnection->_plasmaShell == NULL)
+        return;
+    if (_plasmaSurface == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+        _plasmaSurface = [_waylandConnection createObject: _waylandConnection->_plasmaShell
+                                                   opcode: WP_PLASMA_SHELL_GET_SURFACE
+                                                interface: &org_kde_plasma_surface_interface
+                                                arguments: args
+                                                     kind: CGSWaylandObjectNone
+                                                   object: nil];
+        if (_plasmaSurface == NULL)
+            return;
+    }
+    union wl_argument position[2] = {{.i = (int32_t) lround(_frame.origin.x)}, {.i = (int32_t) lround(_frame.origin.y)}};
+    WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_POSITION, NULL, 0, position);
+    union wl_argument skip[1] = {{.u = (_styleFlags & kCGSWindowStyleUtility) ? 1 : 0}};
+    if (_waylandConnection->_plasmaShellVersion >= 2)
+        WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_SKIP_TASKBAR, NULL, 0, skip);
+    if (_waylandConnection->_plasmaShellVersion >= 5)
+        WaylandMarshal(_plasmaSurface, WP_PLASMA_SURFACE_SET_SKIP_SWITCHER, NULL, 0, skip);
+}
+
+// The toplevel's state that follows the style bits in `mask`.
+- (void) applyToplevelStyle: (uint32_t) mask {
+    if (_toplevel == NULL)
+        return;
+
+    if ((mask & kCGSWindowStyleFixedSize)) {
+        union wl_argument size[2] = {{.i = 0}, {.i = 0}};
+        if (_styleFlags & kCGSWindowStyleFixedSize) {
+            size[0].i = (int32_t) _frame.size.width;
+            size[1].i = (int32_t) _frame.size.height;
+        }
+        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, size);
+        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, size);
+    }
+
+    if ((mask & (kCGSWindowStyleBorderless | kCGSWindowStyleUnmanaged)) && _waylandConnection->_decorationManager != NULL) {
+        // A window with a frame has the compositor draw it; one without says so, as compositors differ
+        // on what a window that says nothing gets.
+        if (_decoration == NULL) {
+            union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _toplevel}};
+            _decoration = [_waylandConnection createObject: _waylandConnection->_decorationManager
+                                                    opcode: WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION
+                                                 interface: &zxdg_toplevel_decoration_v1_interface
+                                                 arguments: args
+                                                      kind: CGSWaylandObjectNone
+                                                    object: nil];
+        }
+        if (_decoration != NULL) {
+            BOOL framed = !(_styleFlags & (kCGSWindowStyleBorderless | kCGSWindowStyleUnmanaged));
+            union wl_argument mode[1] = {{.u = framed ? WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE
+                                                      : WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE}};
+            WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, mode);
+        }
+    }
 }
 
 - (void) surfaceDestroyed: (CGSSurfaceWayland *) surface {
@@ -132,16 +403,51 @@
 
 #pragma mark - Events
 
+// Acknowledges a configure of the xdg surface or the layer surface, now or, while the window is being
+// unmapped, when that is over.
+- (void) acknowledgeConfigure: (uint32_t) serial {
+    if (_unmapping) {
+        _pendingConfigureSerial = serial;
+        _hasPendingConfigure = YES;
+        return;
+    }
+    union wl_argument ack[1] = {{.u = serial}};
+    if (_layerSurface != NULL)
+        WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_ACK_CONFIGURE, NULL, 0, ack);
+    else if (_xdgSurface != NULL)
+        WaylandMarshal(_xdgSurface, WP_XDG_SURFACE_ACK_CONFIGURE, NULL, 0, ack);
+    [_waylandConnection flush];
+}
+
 - (void) handleEvent: (uint32_t) opcode
                 kind: (CGSWaylandObjectKind) kind
            arguments: (union wl_argument *) args
 {
     if (kind == CGSWaylandObjectXdgSurface) {
-        if (opcode == WP_XDG_SURFACE_EV_CONFIGURE) {
-            union wl_argument ack[1] = {{.u = args[0].u}};
-            WaylandMarshal(_xdgSurface, WP_XDG_SURFACE_ACK_CONFIGURE, NULL, 0, ack);
-            [_waylandConnection flush];
+        if (opcode == WP_XDG_SURFACE_EV_CONFIGURE)
+            [self acknowledgeConfigure: args[0].u];
+        return;
+    }
+
+    if (kind == CGSWaylandObjectLayerSurface) {
+        if (opcode == WP_LAYER_SURFACE_EV_CONFIGURE) {
+            [self acknowledgeConfigure: args[0].u];
+            // A zero extent leaves the size to the client, so the requested one stands.
+            CGSize size = CGSizeMake(args[1].u != 0 ? args[1].u : _frame.size.width,
+                                     args[2].u != 0 ? args[2].u : _frame.size.height);
+            if (!CGSizeEqualToSize(size, _frame.size)) {
+                _frame.size = size;
+                [_surfaceObject windowResizedTo: size];
+                [self resizeContentsTo: size];
+                _CGSPostWindowEvent(kCGSWindowEventBounds, self.windowId, _frame);
+            }
         }
+        return;
+    }
+
+    if (kind == CGSWaylandObjectPopup) {
+        // The compositor places the popup as it was asked to; it has no say in the size. When it
+        // dismisses the popup the application's own ordering out still follows.
         return;
     }
 
@@ -190,6 +496,8 @@
         return nil;
     }
 
+    if (![self ensureRole])
+        return nil;
     CGSSurfaceID surfaceID = _nextSurfaceId++;
     CGSSurfaceWayland *surface =
             [[CGSSurfaceWayland alloc] initWithWindow: self surfaceID: surfaceID];
@@ -217,6 +525,19 @@
 
     switch (place) {
     case kCGSOrderOut: {
+        _shown = NO;
+        if (_role == CGSWaylandRoleNone)
+            return kCGSErrorSuccess;
+        if (_role == CGSWaylandRolePopup) {
+            // A popup cannot be shown again: its role is made anew when the window is next shown.
+            [self destroyRole];
+            union wl_argument attach[3] = {{.o = NULL}, {.i = 0}, {.i = 0}};
+            union wl_argument none[1] = {{.o = NULL}};
+            WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, attach);
+            WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
+            [_waylandConnection flush];
+            return kCGSErrorSuccess;
+        }
         // Attaching a null buffer unmaps the toplevel, which also returns the
         // xdg_surface to the unconfigured state. xdg-shell then requires the
         // initial commit procedure again before the next buffer, so the empty
@@ -224,10 +545,20 @@
         // the next eglSwapBuffers to attach into an unconfigured surface.
         union wl_argument attach[3] = {{.o = NULL}, {.i = 0}, {.i = 0}};
         union wl_argument none[1] = {{.o = NULL}};
+        // What the compositor sent so far is acknowledged before the window is unmapped
+        if (WL.wl_display_roundtrip(_waylandConnection->_wlDisplay) < 0)
+            return kCGErrorFailure;
+        _unmapping = YES;
         WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, attach);
         WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
         WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
-        if (WL.wl_display_roundtrip(_waylandConnection->_wlDisplay) < 0) {
+        int result = WL.wl_display_roundtrip(_waylandConnection->_wlDisplay);
+        _unmapping = NO;
+        if (_hasPendingConfigure) {
+            _hasPendingConfigure = NO;
+            [self acknowledgeConfigure: _pendingConfigureSerial];
+        }
+        if (result < 0) {
             NSLog(@"CoreGraphics Wayland backend: the connection failed while "
                   @"hiding window %d", (int) self.windowId);
             return kCGErrorFailure;
@@ -237,6 +568,17 @@
 
     case kCGSOrderIn:
     case kCGSOrderAbove:
+        if (![self ensureRole])
+            return kCGErrorFailure;
+        _shown = YES;
+        // A floating window that was shown before the window it floats over gets that parent now.
+        if ([self isDocumentLike]) {
+            NSArray *windows = [_waylandConnection copyAllWindows];
+            for (CGSWindowWayland *window in windows)
+                if (window != self && window->_role == CGSWaylandRoleToplevel)
+                    [window updateLevelParent];
+            [windows release];
+        }
         // A toplevel is mapped by its first committed buffer. A window that a program draws into
         // shows its contents, or a blank window while it has drawn none; the others appear when
         // their surface swaps.
@@ -255,6 +597,15 @@
 - (CGError) becomeDisplayOverlay: (void **) drawable {
     if (drawable == NULL)
         return kCGErrorIllegalArgument;
+
+    // The overlay is a toplevel that covers the output, whatever level it has
+    if (_role == CGSWaylandRoleNone) {
+        _level = kCGNormalWindowLevel;
+        if (![self ensureRole])
+            return kCGErrorFailure;
+    }
+    if (_toplevel == NULL)
+        return kCGErrorFailure;
 
     // An empty input region lets pointer input reach the surfaces below.
     union wl_argument regionArgs[1] = {{.o = NULL}};
@@ -284,9 +635,19 @@
 }
 
 - (CGError) moveTo: (const CGPoint *) point {
-    // A Wayland client cannot place its own toplevels; xdg_toplevel.move only
-    // starts an interactive drag, which is not what this asks for.
-    return kCGErrorNotImplemented;
+    if (point == NULL)
+        return kCGErrorIllegalArgument;
+    // A Wayland client cannot place its own toplevels (xdg_toplevel.move only starts an interactive
+    // drag, which is not what this asks for); a compositor with KDE's plasma shell takes a position.
+    // The role of a layer surface or a popup fixes where it is.
+    if (_waylandConnection->_plasmaShell == NULL || _role == CGSWaylandRoleLayer || _role == CGSWaylandRolePopup)
+        return kCGErrorNotImplemented;
+    _frame.origin = *point;
+    if (_role == CGSWaylandRoleToplevel) {
+        [self updatePlasmaSurface];
+        [_waylandConnection flush];
+    }
+    return kCGSErrorSuccess;
 }
 
 - (CGError) setRegion: (CGSRegionRef) region {
@@ -299,9 +660,9 @@
         return kCGErrorIllegalArgument;
 
     if (!CGPointEqualToPoint(rect.origin, _frame.origin)) {
-        // Moving is refused outright (see -moveTo:); a resize that also moves
-        // would otherwise silently apply half of what was asked.
-        return kCGErrorNotImplemented;
+        // A resize that also moves would otherwise silently apply half of what was asked.
+        if ([self moveTo: &rect.origin] != kCGSErrorSuccess)
+            return kCGErrorNotImplemented;
     }
 
     if (!CGSizeEqualToSize(rect.size, _frame.size)) {
@@ -330,9 +691,11 @@
         [_title release];
         _title = [title copy];
 
-        union wl_argument args[1] = {{.s = _title ? [_title UTF8String] : ""}};
-        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_TITLE, NULL, 0, args);
-        [_waylandConnection flush];
+        if (_toplevel != NULL) {
+            union wl_argument args[1] = {{.s = _title ? [_title UTF8String] : ""}};
+            WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_TITLE, NULL, 0, args);
+            [_waylandConnection flush];
+        }
         return kCGSErrorSuccess;
     }
 
@@ -371,7 +734,7 @@
 // A buffer is made for each presentation, from a shared memory file the contents are copied to, and
 // destroyed once the compositor has released it.
 - (void) presentRect: (CGRect) rect {
-    if (_waylandConnection->_shm == NULL || _surface == NULL)
+    if (_waylandConnection->_shm == NULL || _surface == NULL || ![self ensureRole])
         return;
 
     [self withContents: ^(const void *bytes, size_t rowBytes, CGSize size) {
@@ -482,19 +845,33 @@
                            (union wl_argument[1]) {{.o = NULL}});
     }
 
-    if (changed & kCGSWindowStyleFixedSize) {
-        union wl_argument size[2] = {{.i = 0}, {.i = 0}};
-        if (styleFlags & kCGSWindowStyleFixedSize) {
-            size[0].i = (int32_t) _frame.size.width;
-            size[1].i = (int32_t) _frame.size.height;
+    if (_role == CGSWaylandRoleToplevel) {
+        [self applyToplevelStyle: changed];
+        if (changed & (kCGSWindowStyleFloating | kCGSWindowStyleUtility)) {
+            [self updateLevelParent];
+            [self updatePlasmaSurface];
         }
-        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, size);
-        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, size);
     }
-
-    // Floating (always on top), utility, borderless and unmanaged windows: a Wayland client has no
-    // say in these, the compositor decides how toplevels are stacked and framed.
+    // The other styles (borderless, no focus, unmanaged) leave the compositor nothing to ask.
     [_waylandConnection flush];
+    return kCGSErrorSuccess;
+}
+
+- (CGError) setLevel: (CGWindowLevel) level {
+    CGWindowLevel previous = _level;
+    [super setLevel: level];
+    if (_role == CGSWaylandRoleNone || level == previous)
+        return kCGSErrorSuccess;
+    // The role of a surface is permanent, so the level can only change what a toplevel is related to
+    if (_role == CGSWaylandRoleToplevel) {
+        [self updateLevelParent];
+        [_waylandConnection flush];
+    } else if (_role == CGSWaylandRoleLayer ? level != kCGMainMenuWindowLevel
+                                            : level <= kCGMainMenuWindowLevel) {
+        NSLog(@"CoreGraphics Wayland backend: window %d was shown as a %s, the level %d would make it "
+              @"something else", (int) self.windowId, _role == CGSWaylandRoleLayer ? "menu bar" : "popup",
+              (int) level);
+    }
     return kCGSErrorSuccess;
 }
 
