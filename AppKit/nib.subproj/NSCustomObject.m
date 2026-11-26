@@ -94,8 +94,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if (class == Nil)
         NSLog(@"NSCustomObject unknown class %@", _className);
 
-    if ([_className isEqualToString: @"NSApplication"]) {
-        ret = [[NSApplication sharedApplication] retain];
+    if ([_className isEqualToString: @"NSApplication"] ||
+        (class != Nil && [class isSubclassOfClass: [NSApplication class]])) {
+        ret = [[class ?: [NSApplication class] sharedApplication] retain];
 
     } else if ([_className isEqualToString: @"NSFontManager"]) {
         ret = [[NSFontManager sharedFontManager] retain];
