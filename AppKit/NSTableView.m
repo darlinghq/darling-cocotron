@@ -988,9 +988,22 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
+- (void) _syncRowViewsEmphasisWithState: (BOOL) emphasized {
+    NSTableViewSelectionHighlightStyle style = [self selectionHighlightStyle];
+    for (NSTableRowView *rowView in [NS_EXTRA(NSTableView, self)->_rowViews allValues]) {
+        [rowView setEmphasized: emphasized];
+        [rowView setSelectionHighlightStyle: style];
+    }
+}
+
+- (void) _syncRowViewsEmphasis {
+    [self _syncRowViewsEmphasisWithState: [self _selectionIsEmphasized]];
+}
+
 - (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value
 {
     NS_EXTRA(NSTableView, self)->_selectionHighlightStyle = value;
+    [self _syncRowViewsEmphasis];
     [self setNeedsDisplay: YES];
 }
 
@@ -1423,6 +1436,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [self willChangeValueForKey: @"selectedRowIndexes"];
         [NS_EXTRA(NSTableView, self)->_selectedRowIndexes release];
         NS_EXTRA(NSTableView, self)->_selectedRowIndexes = [[NSIndexSet alloc] init];
+        for (NSTableRowView *rowView in [NS_EXTRA(NSTableView, self)->_rowViews allValues])
+            [rowView setSelected: NO];
         [self didChangeValueForKey: @"selectedRowIndexes"];
     }
 
@@ -1726,6 +1741,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) _keyStateChanged: (NSNotification *) note {
+    [self _syncRowViewsEmphasis];
     [self setNeedsDisplay: YES];
 }
 
@@ -1736,17 +1752,25 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (BOOL) becomeFirstResponder {
-    [self setNeedsDisplay: YES];
-    return [super becomeFirstResponder];
+    BOOL ok = [super becomeFirstResponder];
+    if (ok) {
+        [self _syncRowViewsEmphasis];
+        [self setNeedsDisplay: YES];
+    }
+    return ok;
 }
 
 // A table gives way to the field editor of the cell it edits. NSControl checks its selected cell while it has an
 // editor; a table's editor belongs to the cell being edited (test: appkit-tableview-edit-column.m).
 - (BOOL) resignFirstResponder {
-    [self setNeedsDisplay: YES];
     if (NS_EXTRA(NSControl, self)->_currentEditor != nil)
         return _editingCell == nil || [_editingCell hasValidObjectValue];
-    return [super resignFirstResponder];
+    BOOL ok = [super resignFirstResponder];
+    if (ok) {
+        [self _syncRowViewsEmphasisWithState: NO];
+        [self setNeedsDisplay: YES];
+    }
+    return ok;
 }
 
 - (void) drawHighlightedSelectionForColumn: (NSInteger) column
@@ -1789,21 +1813,26 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         [dataCell setObjectValue: value];
     }
 
+    BOOL cellSelected = ([self isRowSelected: row] ||
+                         [self isColumnSelected: columnNumber]) &&
+                        [self selectionHighlightStyle] !=
+                                NSTableViewSelectionHighlightStyleNone;
+    BOOL cellEmphasized = cellSelected && [self _selectionIsEmphasized];
+    if (![dataCell isKindOfClass: [NSButtonCell class]] &&
+        ![dataCell isKindOfClass: [NSStepperCell class]])
+        [dataCell setHighlighted: cellEmphasized];
+    [dataCell setBackgroundStyle: cellEmphasized ? NSBackgroundStyleEmphasized
+                                                 : NSBackgroundStyleNormal];
     if ([dataCell respondsToSelector: @selector(setTextColor:)]) {
-        // A selected row keeps the normal text colour while its highlight is the grey, secondary one
-        // (selectedTextColor is the colour of selected text in a text view, not of a selected row).
-        if ([self isRowSelected: row] ||
-            [self isColumnSelected: columnNumber]) {
+        if (cellSelected) {
             [(NSTextFieldCell *) dataCell
                     setDrawsBackground: NO]; // so the selection shows properly,
                                              // dont just set the color so
                                              // custom background works
             [(NSTextFieldCell *) dataCell
-                    setTextColor: ([self selectionHighlightStyle] !=
-                                           NSTableViewSelectionHighlightStyleNone &&
-                                   [self _selectionIsEmphasized])
+                    setTextColor: cellEmphasized
                                           ? [NSColor alternateSelectedControlTextColor]
-                                          : [NSColor textColor]];
+                                          : [NSColor controlTextColor]];
         } else
             [(NSTextFieldCell *) dataCell setTextColor: [NSColor textColor]];
     }
@@ -1836,6 +1865,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             NSView *groupView = [self _cellViewAtColumn: 0 row: row make: YES];
 
             if (groupView != nil) {
+                if ([groupView respondsToSelector: @selector(setBackgroundStyle:)]) {
+                    NSBackgroundStyle style = ([self isRowSelected: row] &&
+                                               [self selectionHighlightStyle] != NSTableViewSelectionHighlightStyleNone &&
+                                               [self _selectionIsEmphasized])
+                                                      ? NSBackgroundStyleEmphasized
+                                                      : NSBackgroundStyleNormal;
+                    [(id)groupView setBackgroundStyle: style];
+                }
                 [groupView setHidden: NO];
                 [groupView displayRectIgnoringOpacity: [groupView bounds]];
             }
@@ -1849,6 +1886,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             NSView *cellView = [self _cellViewAtColumn: drawThisColumn row: row make: YES];
 
             if (cellView != nil) {
+                if ([cellView respondsToSelector: @selector(setBackgroundStyle:)]) {
+                    NSBackgroundStyle style = ([self isRowSelected: row] &&
+                                               [self selectionHighlightStyle] != NSTableViewSelectionHighlightStyleNone &&
+                                               [self _selectionIsEmphasized])
+                                                      ? NSBackgroundStyleEmphasized
+                                                      : NSBackgroundStyleNormal;
+                    [(id)cellView setBackgroundStyle: style];
+                }
                 [cellView setHidden: NO];
                 [cellView displayRectIgnoringOpacity: [cellView bounds]];
             }
@@ -1899,8 +1944,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NSInteger colorCount = [rowColors count];
 
     if (colorCount == 0 || !NS_EXTRA(NSTableView, self)->_alternatingRowBackground) {
-        [_backgroundColor setFill];
-        NSRectFill(clipRect);
+        if (_backgroundColor != nil) {
+            [_backgroundColor setFill];
+            NSRectFillUsingOperation(clipRect, NSCompositeSourceOver);
+        }
     } else if (colorCount == 1) {
         [(NSColor *) [rowColors objectAtIndex: 0] setFill];
         NSRectFill(clipRect);
@@ -2150,6 +2197,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     }
     if ([self window] != nil && [[self superview] isKindOfClass: [NSClipView class]])
         [self noteNumberOfRowsChanged];
+    [self _syncRowViewsEmphasis];
 }
 
 - (BOOL) isFlipped {
@@ -2222,6 +2270,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
     [self abortEditing];
     [_window makeFirstResponder: nil];
+    [self _syncRowViewsEmphasis];
+    [self setNeedsDisplay: YES];
 
     // NSReturnTextMovement has lousy behaviour , fix.
     // don't really need any of the text movement stuff, so we ignore it for now
@@ -3463,6 +3513,7 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     [rowView setFrame: frame];
     [rowView setGroupRowStyle: [self _isGroupRow: row]];
     [rowView setSelectionHighlightStyle: [self selectionHighlightStyle]];
+    [rowView setEmphasized: [self _selectionIsEmphasized]];
     [rowView setSelected: [self isRowSelected: row]];
     [NS_EXTRA(NSTableView, self)->_rowViews setObject: rowView forKey: key];
     [self addSubview: rowView];

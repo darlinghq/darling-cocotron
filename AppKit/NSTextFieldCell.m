@@ -269,9 +269,26 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
     return [self _valueRectForBounds: rect];
 }
 
+static BOOL _isAdaptableTextColor(NSColor *color) {
+    if (color == nil)
+        return YES;
+    return [color isEqual: [NSColor controlTextColor]] ||
+           [color isEqual: [NSColor textColor]] ||
+           [color isEqual: [NSColor labelColor]] ||
+           [color isEqual: [NSColor secondaryLabelColor]] ||
+           [color isEqual: [NSColor alternateSelectedControlTextColor]];
+}
+
 - (NSAttributedString *) attributedStringValue {
+    BOOL emphasize = [self isEnabled] &&
+                     [self backgroundStyle] == NSBackgroundStyleEmphasized &&
+                     ![self isBezeled] && ![self drawsBackground];
+    NSColor *effectiveColor = _textColor;
+    if (emphasize && _isAdaptableTextColor(effectiveColor))
+        effectiveColor = [NSColor alternateSelectedControlTextColor];
+
     if ([NS_EXTRA(NSCell, self)->_objectValue isKindOfClass: [NSAttributedString class]]) {
-        if (_textColor == nil)
+        if (effectiveColor == nil && !emphasize)
             return NS_EXTRA(NSCell, self)->_objectValue;
         else {
             NSMutableAttributedString *result =
@@ -287,8 +304,16 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
                                      atIndex: location
                        longestEffectiveRange: &range
                                      inRange: NSMakeRange(location, length - location)];
-                if (color == nil)
-                    [result addAttribute: NSForegroundColorAttributeName value: _textColor range: range];
+                if (color == nil) {
+                    if (effectiveColor != nil)
+                        [result addAttribute: NSForegroundColorAttributeName
+                                       value: effectiveColor
+                                       range: range];
+                } else if (emphasize && _isAdaptableTextColor(color)) {
+                    [result addAttribute: NSForegroundColorAttributeName
+                                   value: [NSColor alternateSelectedControlTextColor]
+                                   range: range];
+                }
                 location = NSMaxRange(range);
             }
 
@@ -305,8 +330,8 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
             [attributes setObject: font forKey: NSFontAttributeName];
 
         if ([self isEnabled]) {
-            if (_textColor != nil)
-                [attributes setObject: _textColor
+            if (effectiveColor != nil)
+                [attributes setObject: effectiveColor
                                forKey: NSForegroundColorAttributeName];
         } else {
             [attributes setObject: [NSColor disabledControlTextColor]
@@ -561,7 +586,7 @@ NS_EXTRA_SYNTHESIZE_COPY(NSTextFieldCell, allowedInputSourceLocales, _allowedInp
                                                        : _backgroundColor;
 
             [color setFill];
-            NSRectFill(backRect);
+            NSRectFillUsingOperation(backRect, NSCompositeSourceOver);
         }
     }
 
