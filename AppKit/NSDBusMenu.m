@@ -29,6 +29,7 @@
 #import <AppKit/NSMenu+Private.h>
 #import <AppKit/NSMenuItem.h>
 #import <CoreFoundation/CFSocket.h>
+#import "DarlingSessionBusAddress.h"
 #import <dbus/dbus.h>
 #import <stdlib.h>
 #import <string.h>
@@ -40,7 +41,6 @@
 #define REGISTRAR_INTERFACE "com.canonical.AppMenu.Registrar"
 #define PROPERTIES_INTERFACE "org.freedesktop.DBus.Properties"
 #define INTROSPECTABLE_INTERFACE "org.freedesktop.DBus.Introspectable"
-#define MAX_ADDRESS_LENGTH 1024
 #define CALL_TIMEOUT_MS 1000
 // Changes arriving within this time are reported together.
 #define REFRESH_DELAY 0.02
@@ -134,47 +134,11 @@ BOOL NSDBusReadArguments(DBusMessage *message, const int *types,
 
 #pragma mark - Session bus address
 
-// D-Bus separates alternative addresses with ';' and accepts "unixexec:",
-// which runs a program, and "autolaunch:", which may start a bus. Only one
-// plain socket address (a path or an abstract name) is taken from the
-// environment.
-static BOOL addressAllowed(const char *address) {
-    if (strncmp(address, "unix:path=", 10) != 0 &&
-        strncmp(address, "unix:abstract=", 14) != 0)
-        return NO;
-    if (strlen(address) >= MAX_ADDRESS_LENGTH)
-        return NO;
-    for (const unsigned char *c = (const unsigned char *) address; *c != '\0';
-         c++) {
-        if (*c <= ' ' || *c >= 0x7f || *c == ';')
-            return NO;
-    }
-    return strstr(address, "unixexec") == NULL;
-}
-
 // The address to connect to, or nil. Shared with the other users of the
-// session bus in AppKit (declared in NSDBusMenu.h).
+// session bus in AppKit (declared in NSDBusMenu.h); the rules live below
+// AppKit so CoreGraphics can use the same session bus.
 NSString *DarlingSessionBusAddress(void) {
-    const char *env = getenv("DBUS_SESSION_BUS_ADDRESS");
-
-    if (env != NULL && env[0] != '\0')
-        return addressAllowed(env) ? [NSString stringWithUTF8String: env] : nil;
-
-    const char *runtimeDirectory = getenv("XDG_RUNTIME_DIR");
-    if (runtimeDirectory == NULL || runtimeDirectory[0] != '/')
-        return nil;
-
-    char path[MAX_ADDRESS_LENGTH];
-    if (snprintf(path, sizeof(path), "%s/bus", runtimeDirectory) >=
-        (int) sizeof(path))
-        return nil;
-
-    char *escaped = dbus_address_escape_value(path);
-    NSString *address = nil;
-    if (escaped != NULL)
-        address = [NSString stringWithFormat: @"unix:path=%s", escaped];
-    dbus_free(escaped);
-    return address;
+    return DarlingPortalSessionBusAddress();
 }
 
 #pragma mark - Menu description
