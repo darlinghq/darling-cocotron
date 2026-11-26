@@ -503,6 +503,27 @@ static BOOL O2PDFReadBoxes(NSDictionary *info, O2Rect *boxes, BOOL *present) {
         }
     }
 
+    // The opacity of the fill and the stroke is not part of the colour
+    // operators, it is the /ca and /CA entries of a graphics state parameter
+    // dictionary, which the page resources hold.
+    {
+        O2Float globalAlpha = O2GStateAlpha(gState);
+        O2Float fillAlpha = O2ColorGetAlpha(gState->_fillColor) * globalAlpha;
+        O2Float strokeAlpha =
+                O2ColorGetAlpha(gState->_strokeColor) * globalAlpha;
+
+        if (fillAlpha < 1. || strokeAlpha < 1.) {
+            O2PDFDictionary *opacity = [O2PDFDictionary pdfDictionary];
+
+            [opacity setNameForKey: "Type" value: "ExtGState"];
+            [opacity setNumberForKey: "ca" value: fillAlpha];
+            [opacity setNumberForKey: "CA" value: strokeAlpha];
+            [self contentWithFormat: @"%@ gs ",
+                                     [self nameForResource: opacity
+                                                inCategory: "ExtGState"]];
+        }
+    }
+
     [self contentWithFormat: @"%g Tc ", gState->_characterSpacing];
     [self contentWithFormat: @"%g w ", gState->_lineWidth];
     [self contentWithFormat: @"%d J ", gState->_lineCap];
