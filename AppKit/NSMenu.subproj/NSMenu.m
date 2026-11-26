@@ -49,6 +49,17 @@ NSString *const _NSRecentDocumentsMenuName = @"Recents";
 NSString *const _NSServicesMenuName = @"Services";
 NSString *const _NSWindowsMenuName = @"Window";
 
+// Private: keys of the options of a pop-up menu shown for a pop-up button
+// that a client draws itself: the button's bounds on the screen (an NSValue
+// of an NSRect), the offset of the label in it (an NSValue of an NSSize), its
+// control size (an NSNumber) and the kind of button drawn (WebKit gives an
+// empty string for a button styled by the page). The strings were read from
+// the exported constants on macOS 26.7.3 and 10.14.4 (black-box observation).
+NSString *const NSPopUpMenuPopupButtonBounds = @"NSPopUpMenuPopupButtonBounds";
+NSString *const NSPopUpMenuPopupButtonLabelOffset = @"NSPopUpMenuPopupButtonLabelOffset";
+NSString *const NSPopUpMenuPopupButtonSize = @"NSPopUpMenuPopupButtonSize";
+NSString *const NSPopUpMenuPopupButtonWidget = @"NSPopUpMenuPopupButtonWidget";
+
 // Defined in NSMenuView.m
 extern void _NSMenuCancelTracking(NSMenu *menu);
 extern id _NSMenuTrackingBegin(NSMenu *menu);
@@ -58,6 +69,17 @@ extern BOOL _NSMenuTrackingCancelRequested(id session);
 @implementation NSMenu
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, showsStateColumn, _showsStateColumn, BOOL, showsStateColumn, setShowsStateColumn:)
+
+- (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
+    return NS_EXTRA(NSMenu, self)->_hasExplicitUserInterfaceLayoutDirection
+                   ? NS_EXTRA(NSMenu, self)->_userInterfaceLayoutDirection
+                   : [NSApp userInterfaceLayoutDirection];
+}
+
+- (void) setUserInterfaceLayoutDirection: (NSUserInterfaceLayoutDirection) direction {
+    NS_EXTRA(NSMenu, self)->_hasExplicitUserInterfaceLayoutDirection = YES;
+    NS_EXTRA(NSMenu, self)->_userInterfaceLayoutDirection = direction;
+}
 NS_EXTRA_SYNTHESIZE_COPY(NSMenu, identifier, _identifier, NSUserInterfaceItemIdentifier, identifier, setIdentifier:)
 NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appearance, setAppearance:)
 
@@ -416,6 +438,17 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
     return [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray];
 }
 
+- (void) setItemArray: (NSArray *) itemArray {
+    for (NSMenuItem *item in itemArray)
+        if ([item menu] != nil && [item menu] != self)
+            [NSException raise: NSInternalInconsistencyException
+                        format: @"Item to be inserted into menu already is in another menu: %@", item];
+    NSArray *items = [[itemArray copy] autorelease];
+    [self removeAllItems];
+    for (NSMenuItem *item in items)
+        [self addItem: item];
+}
+
 - (void) _setItemArray: itemArray {
     if (NS_EXTRA(NSMenu, self)->_itemArray != itemArray) {
         [NS_EXTRA(NSMenu, self)->_itemArray release];
@@ -638,8 +671,16 @@ BOOL itemIsEnabled(NSMenuItem *item) {
     return enabled;
 }
 
+// QUIRK: -update validates the items of the menu and its submenus but does not send -menuNeedsUpdate: to the
+// delegates; that message comes only when the menu is about to be shown (tracking, pop up). A delegate
+// that calls -update on its menu from -menuNeedsUpdate: therefore does not recurse. Not documented.
+// Evidence: black-box observation on macOS 26.7.3 and 10.14.4 (tier 2, x86_64 and i386, mac-probes p799): a
+// menu and its submenu whose delegates count -menuNeedsUpdate: receive none through -update, also not
+// as the main menu, nor through performKeyEquivalent: or a Command key event, while validateMenuItem: is
+// sent by -update, and a delegate calling -update in -menuNeedsUpdate: is never re-entered.
+// Test: appkit-menu-update-reentrancy
 - (void) update {
-    [self _updateWithoutSubmenus];
+    [self _validateItems];
 
     for (NSMenuItem *item in [NSArray arrayWithArray: NS_EXTRA(NSMenu, self)->_itemArray])
         [[item submenu] update];
@@ -674,7 +715,11 @@ static BOOL validateItem(NSMenu *menu, NSMenuItem *item) {
 // items; a submenu is brought up to date when it is shown.
 - (void) _updateWithoutSubmenus {
     askDelegateToUpdate(self);
+    [self _validateItems];
+}
 
+// The validation of this menus own items, without asking the delegate.
+- (void) _validateItems {
     NSInteger i, count = [NS_EXTRA(NSMenu, self)->_itemArray count];
 
     for (i = 0; i < count; i++)

@@ -12,6 +12,7 @@ enum {
 	kVerticalPositionType = 10,
 	kFractionsType = 11,
 	kNumberCaseType = 21,
+	kTextSpacingType = 22,
 	kLowerCaseType = 37,
 	kUpperCaseType = 38,
 };
@@ -44,6 +45,17 @@ enum {
 enum {
 	kLowerCaseNumbersSelector = 0,
 	kUpperCaseNumbersSelector = 1,
+};
+
+/* kTextSpacingType */
+enum {
+	kProportionalTextSelector = 0,
+	kMonospacedTextSelector = 1,
+	kHalfWidthTextSelector = 2,
+	kThirdWidthTextSelector = 3,
+	kQuarterWidthTextSelector = 4,
+	kAltProportionalTextSelector = 5,
+	kAltHalfWidthTextSelector = 6,
 };
 
 /* kLowerCaseType */

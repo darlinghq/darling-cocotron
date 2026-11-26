@@ -40,4 +40,21 @@
     NS_EXTRA(CAPropertyAnimation, self)->_cumulative = value;
 }
 
+- (CAValueFunction *) valueFunction {
+    return NS_EXTRA(CAPropertyAnimation, self)->_valueFunction;
+}
+
+- (void) setValueFunction: (CAValueFunction *) value {
+    [value retain];
+    [NS_EXTRA(CAPropertyAnimation, self)->_valueFunction release];
+    NS_EXTRA(CAPropertyAnimation, self)->_valueFunction = value;
+}
+
+- (void) dealloc {
+    [NS_EXTRA(CAPropertyAnimation, self)->_keyPath release];
+    [NS_EXTRA(CAPropertyAnimation, self)->_valueFunction release];
+    NS_EXTRA_FREE(CAPropertyAnimation, self);
+    [super dealloc];
+}
+
 @end

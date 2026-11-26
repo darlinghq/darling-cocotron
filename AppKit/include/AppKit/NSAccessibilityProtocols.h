@@ -79,3 +79,7 @@
 @property(copy) NSArray<NSAccessibilityCustomAction *> *accessibilityCustomActions;
 
 @end
+
+// An element that groups others (the group role); it asks for nothing more.
+@protocol NSAccessibilityGroup <NSAccessibilityElement>
+@end

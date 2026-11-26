@@ -993,7 +993,64 @@ static inline void buildTransformsIfNeeded(NSView *self) {
 }
 
 - (NSArray *) subviews {
+    // The storage can be taken away with -_setSubviewsIvar:.
+    return _subviews ? _subviews : [NSArray array];
+}
+
+// SPI. The array that holds the subviews, not a copy. The setter only assigns:
+// the caller owns the array it passes in and the one it replaces, and sets
+// the original back, which lets a view hide its subviews for a while (WebKit
+// does this while it draws or archives a view).
+- (NSMutableArray *) _subviewsIvar {
     return _subviews;
+}
+
+- (void) _setSubviewsIvar: (NSMutableArray *) subviews {
+    _subviews = subviews;
+}
+
+// SPI. A view that draws its descendants itself; they report that they are
+// drawn by an ancestor. Darling's display still draws such descendants.
+- (void) _setDrawsOwnDescendants: (BOOL) flag {
+    NS_EXTRA(NSView, self)->_drawsOwnDescendants = flag;
+}
+
+- (BOOL) _drawsOwnDescendants {
+    return NS_EXTRA(NSView, self)->_drawsOwnDescendants;
+}
+
+// SPI. What kind of interface the view is part of (WebKit's
+// NSViewSemanticContext; 8 is a form). It is the view's own value, 0 unless
+// set: subviews don't inherit it and it isn't archived.
+- (NSInteger) _semanticContext {
+    return NS_EXTRA(NSView, self)->_semanticContext;
+}
+
+- (void) _setSemanticContext: (NSInteger) context {
+    NS_EXTRA(NSView, self)->_semanticContext = context;
+}
+
+- (BOOL) _drawnByAncestor {
+    for (NSView *view = _superview; view != nil; view = view->_superview)
+        if (NS_EXTRA(NSView, view)->_drawsOwnDescendants)
+            return YES;
+    return NO;
+}
+
+// SPI. The last view of the part of the key view loop that starts at this view
+// and stays inside it: the next key views are followed while they are
+// descendants of this view, and the view itself is the answer when its next
+// key view is outside it.
+- (NSView *) _findLastViewInKeyViewLoop {
+    NSView *last = self;
+    NSMutableSet *visited = [NSMutableSet set];
+    for (NSView *next = [self nextKeyView];
+         next != nil && next != self && [next isDescendantOf: self] && ![visited containsObject: next];
+         next = [next nextKeyView]) {
+        [visited addObject: next];
+        last = next;
+    }
+    return last;
 }
 
 - (BOOL) autoresizesSubviews {
@@ -3062,8 +3119,15 @@ static void clearNeedsDisplay(NSView *self) {
     // reasons
     clearInvalidRects(self);
 
-    if (NS_EXTRA(NSView, self)->_needsDisplay)
+    if (NS_EXTRA(NSView, self)->_needsDisplay) {
+        // What is behind a view that does not fill its bounds is part of what has to be redrawn, as for
+        // -setNeedsDisplayInRect:. Without it an opaque ancestor that already has a smaller area
+        // invalid clips the redraw to that area, and the new content is drawn over the old.
+        NSView *opaqueAncestor = [self opaqueAncestor];
+        if (opaqueAncestor != nil && opaqueAncestor != self)
+            [opaqueAncestor setNeedsDisplayInRect: [self convertRect: [self visibleRect] toView: opaqueAncestor]];
         [[self window] setViewsNeedDisplay: YES];
+    }
 }
 
 - (void) setNeedsDisplayInRect: (NSRect) rect {
@@ -3527,7 +3591,7 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
         [self getRectsBeingDrawn: &rects count: &rectsCount];
         // If there is only one rect, it's the visible rect - it's already
         // clipped
-        if (rectsCount > 1)
+        if (rectsCount > 1 && !getenv("TOD_NOCLIP"))
             CGContextClipToRects(graphicsPort, rects, rectsCount);
 
         // A layer keeps its earlier contents (see -_lockFocusInContext:), so
@@ -3818,6 +3882,15 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
             [NSException raise: NSRangeException
                         format: @"NSDraggingItem.draggingFrame cannot be set to a zero size %@",
                                 NSStringFromRect([item draggingFrame])];
+
+    // QUIRK: while a session is waiting to start or running, another one is
+    // not started and nil is returned. Not documented. Evidence: black-box
+    // observation on macOS 26.7.3 (tier 2): a second call made before the run
+    // loop ran the first drag returns nil (an item with a zero-size frame
+    // still raises first).
+    // Test: tests/appkit-dragging-session.m, "a second session waits for none".
+    if ([NSDraggingSession _isSessionPendingOrRunning])
+        return nil;
 
     NSPasteboard *pasteboard = [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
     NSMutableArray *writers = [NSMutableArray arrayWithCapacity: [items count]];

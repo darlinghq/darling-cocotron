@@ -1195,6 +1195,18 @@ static void NSTableHeaderFill(NSRect rect, CGFloat white) {
     [self drawTextFieldBorderInRect: rect bezeledNotLine: bezeledNotLine enabled: YES];
 }
 
+// The one point outline of a text field bezel, blended over what is under it (NSRectFill would replace the pixels,
+// so that a window, which has no transparency, showed the outline as solid black).
+static void textFieldBezelOutline(NSRect rect, BOOL enabled) {
+    [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.2 : 0.1] setFill];
+    NSRect outline[4] = {NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1),
+                         NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, NSWidth(rect), 1),
+                         NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, 1, NSHeight(rect) - 2),
+                         NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect) + 1, 1, NSHeight(rect) - 2)};
+
+    NSRectFillListUsingOperation(outline, 4, NSCompositeSourceOver);
+}
+
 - (void) drawTextFieldBorderInRect: (NSRect) rect bezeledNotLine: (BOOL) bezeledNotLine enabled: (BOOL) enabled {
     if (bezeledNotLine) {
         // QUIRK: the bezel of a text field on macOS 10.14 (light appearance) is a white rectangle with a
@@ -1203,15 +1215,7 @@ static void NSTableHeaderFill(NSRect rect, CGFloat white) {
         // research notes. Tests: appkit-textfield-aqua.m, appkit-toolbar-controls-aqua.m (test_quirk_field_bezels)
         [[NSColor whiteColor] setFill];
         NSRectFill(NSInsetRect(rect, 1, 1));
-        // the outline is blended over what is under it (NSRectFill would replace the pixels, so that a window,
-        // which has no transparency, showed the outline as solid black)
-        [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.2 : 0.1] setFill];
-        NSRect outline[4] = {NSMakeRect(NSMinX(rect), NSMinY(rect), NSWidth(rect), 1),
-                             NSMakeRect(NSMinX(rect), NSMaxY(rect) - 1, NSWidth(rect), 1),
-                             NSMakeRect(NSMinX(rect), NSMinY(rect) + 1, 1, NSHeight(rect) - 2),
-                             NSMakeRect(NSMaxX(rect) - 1, NSMinY(rect) + 1, 1, NSHeight(rect) - 2)};
-
-        NSRectFillListUsingOperation(outline, 4, NSCompositeSourceOver);
+        textFieldBezelOutline(rect, enabled);
     } else {
         [[NSColor blackColor] setStroke];
         NSFrameRect(rect);

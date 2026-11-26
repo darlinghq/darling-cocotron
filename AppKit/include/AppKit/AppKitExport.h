@@ -43,3 +43,8 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 #endif
 
 #endif // __cplusplus
+
+// AppKit's public name for the same declaration specifier (AppKitDefines.h)
+#ifndef APPKIT_EXTERN
+#define APPKIT_EXTERN APPKIT_EXPORT
+#endif

@@ -43,8 +43,18 @@ NSString *const kCAAnimationRotateAutoReverse = @"autoReverse";
 
 @implementation CAAnimation
 
-+ animation {
++ (instancetype) animation {
     return [[[self alloc] init] autorelease];
+}
+
+// As +[CALayer defaultValueForKey:]. Values observed on macOS 26.7.3: speed 1 and
+// removedOnCompletion YES, nil for the rest (duration included).
++ (id) defaultValueForKey: (NSString *) key {
+    if ([key isEqualToString: @"speed"])
+        return @1.0f;
+    if ([key isEqualToString: @"removedOnCompletion"])
+        return @YES;
+    return nil;
 }
 
 // An animation used as a layer action animates the property it was found for.
@@ -64,8 +74,26 @@ NSString *const kCAAnimationRotateAutoReverse = @"autoReverse";
 
 - (void) dealloc {
     [NS_EXTRA(CAAnimation, self)->_timingFunction release];
+    [NS_EXTRA(CAAnimation, self)->_undefinedKeyValues release];
     NS_EXTRA_FREE(CAAnimation, self);
     [super dealloc];
+}
+
+// An animation is a key-value coding container, as a layer is: a key it has no property for holds
+// whatever value is set for it, and reads as nil until then (Core Animation Programming Guide,
+// "Key-Value Coding Extensions"). Test: tests/quartzcore-kvc-arbitrary-keys.m.
+- (id) valueForUndefinedKey: (NSString *) key {
+    return [[[NS_EXTRA(CAAnimation, self)->_undefinedKeyValues objectForKey: key] retain] autorelease];
+}
+
+- (void) setValue: (id) value forUndefinedKey: (NSString *) key {
+    if (value == nil) {
+        [NS_EXTRA(CAAnimation, self)->_undefinedKeyValues removeObjectForKey: key];
+        return;
+    }
+    if (NS_EXTRA(CAAnimation, self)->_undefinedKeyValues == nil)
+        NS_EXTRA(CAAnimation, self)->_undefinedKeyValues = [[NSMutableDictionary alloc] init];
+    [NS_EXTRA(CAAnimation, self)->_undefinedKeyValues setObject: value forKey: key];
 }
 
 - copyWithZone: (NSZone *) zone {

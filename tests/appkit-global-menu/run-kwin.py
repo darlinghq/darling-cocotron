@@ -33,7 +33,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from common import Bus, build_registrar, check, finish, flatten, parse_variant, read, wait_for  # noqa: E402
+from common import Bus, build_registrar, check, finish, flatten, parse_variant, read, require_no_lockscreen, wait_for  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOCKET = "darling-menu-test"
@@ -157,7 +157,7 @@ def main():
     with open(session, "w") as f:
         f.write('#!/bin/sh\necho "$DISPLAY" > %s\nexec sleep 600\n' % display_file)
     os.chmod(session, 0o755)
-    kwin = subprocess.Popen(["kwin_wayland", "--virtual", "--xwayland", "--socket", SOCKET, "--width", "1280",
+    kwin = subprocess.Popen(["kwin_wayland", "--virtual", "--no-lockscreen", "--xwayland", "--socket", SOCKET, "--width", "1280",
                              "--height", "800", session],
                             env=env, stdout=open(os.path.join(work, "kwin.out"), "w"), stderr=subprocess.STDOUT)
     watch = os.path.join(work, "watch.txt")
@@ -165,6 +165,7 @@ def main():
     menu = None
     try:
         wait_for(display_file, ":", 30)
+        require_no_lockscreen(kwin)
         x_display = read(display_file).strip()
         watcher = subprocess.Popen([sys.executable, os.path.join(HERE, "appmenu-watcher.py"), "500"], env=env,
                                    stdout=open(watch, "w"), stderr=subprocess.STDOUT)
@@ -194,13 +195,10 @@ def main():
             log, process = run_guest(args, work, benv, backend + "-none", backend)
             time.sleep(2)
             menus = watcher_menus(read(watch)[seen:])
-            if backend == "wayland":
-                # KWin offers wlr-layer-shell: the menu bar is a layer surface (run-kwin-bar.py), not a
-                # strip in the window. The menu stays exported, for a global menu that appears later.
-                check("strip window=0" in log, "wayland without a global menu: no strip in the window")
-            else:
-                check("strip window=0" in log and "bar frame x=0 y=0 width=1280" in log,
-                      "x11 without a global menu: the application's menu bar along the top of the screen")
+            # The window carries the strip; the menu bar surface or window appears only while no window
+            # does (run-kwin-menu-style.py).
+            check("strip window=1" in log and "bar none" in log,
+                  backend + " without a global menu: the window draws the strip")
             process.wait()
     finally:
         if menu is not None:

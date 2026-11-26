@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <CoreGraphics/CGImage.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Foundation/NSString.h>
 #import <Onyx2D/O2Image.h>
 
@@ -229,4 +230,12 @@ bool CGImageIsMask(CGImageRef self) {
 
 CGImageAlphaInfo CGImageGetAlphaInfo(CGImageRef self) {
     return O2ImageGetAlphaInfo((O2ImageRef)self);
+}
+
+void CGImageSetCachingFlags(CGImageRef image, CGImageCachingFlags flags) {
+    O2ImageSetCachingFlags((O2ImageRef)image, flags);
+}
+
+CGImageCachingFlags CGImageGetCachingFlags(CGImageRef image) {
+    return O2ImageGetCachingFlags((O2ImageRef)image);
 }

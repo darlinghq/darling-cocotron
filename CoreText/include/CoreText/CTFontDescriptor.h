@@ -26,11 +26,22 @@ CORETEXT_EXPORT const CFStringRef kCTFontEnabledAttribute;
 CORETEXT_EXPORT const CFStringRef kCTFontFormatAttribute;
 CORETEXT_EXPORT const CFStringRef kCTFontRegistrationScopeAttribute;
 CORETEXT_EXPORT const CFStringRef kCTFontPriorityAttribute;
+// Whether the font can be downloaded, and whether it has been
+CORETEXT_EXPORT const CFStringRef kCTFontDownloadableAttribute;
+CORETEXT_EXPORT const CFStringRef kCTFontDownloadedAttribute;
 CORETEXT_EXPORT const CFStringRef kCTFontDescriptorLanguageAttribute;
+// CFNumber (the optical size in points) or the CFString "auto" or "none"
+CORETEXT_EXPORT const CFStringRef kCTFontOpticalSizeAttribute;
 
 CF_IMPLICIT_BRIDGING_ENABLED
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct __CTFontDescriptor* CTFontDescriptorRef;
+#else
+typedef const struct CF_BRIDGED_TYPE(id) __CTFontDescriptor *CTFontDescriptorRef;
+#endif
 
 typedef enum CTFontOrientation : uint32_t {
   kCTFontOrientationDefault = 0,

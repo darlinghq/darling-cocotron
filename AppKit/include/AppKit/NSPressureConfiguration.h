@@ -19,10 +19,20 @@
 
 #import <AppKit/AppKitExport.h>
 #import <AppKit/AppKitIvarLayout.h>
+#import <AppKit/NSEvent.h>
 #import <Foundation/Foundation.h>
 
+// Darling has no Force Touch input, so a configuration only records its
+// behavior.
 @interface NSPressureConfiguration : NSObject {
-    NS_LEGACY_IVAR_PAD(_NSPressureConfigurationReserved, 8)
+    NSPressureBehavior _pressureBehavior;
+    NS_LEGACY_IVAR_PAD(_NSPressureConfigurationReserved, 4)
 }
+
+@property(readonly) NSPressureBehavior pressureBehavior;
+
+- (instancetype) initWithPressureBehavior: (NSPressureBehavior) pressureBehavior NS_DESIGNATED_INITIALIZER;
+
+- (void) set;
 
 @end

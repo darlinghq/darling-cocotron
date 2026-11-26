@@ -23,13 +23,38 @@
 #import "NSGestureRecognizer-Private.h"
 
 // Private. Darling has no force touch input, so the recognizer never fires.
-@interface NSImmediateActionGestureRecognizer : NSGestureRecognizer
+@interface NSImmediateActionGestureRecognizer : NSGestureRecognizer {
+    id _animationController;
+}
 @end
 
 @implementation NSImmediateActionGestureRecognizer
 
-- (instancetype) initWithTarget: (id) target action: (SEL) action {
-    return [super init];
++ (unsigned int) _defaultDelayedEvents {
+    return _NSGestureRecognizerDelaysPrimaryMouseButtonEvents;
+}
+
+- (void) dealloc {
+    [_animationController release];
+    [super dealloc];
+}
+
+// SPI. The object that animates the immediate action (a preview, for one);
+// retained, nil unless set, and not archived.
+- (id) animationController {
+    return _animationController;
+}
+
+- (void) setAnimationController: (id) controller {
+    [controller retain];
+    [_animationController release];
+    _animationController = controller;
+}
+
+// SPI. How far the immediate action's animation has gone. Darling doesn't
+// recognize the force click that drives it, so it stays at its start.
+- (CGFloat) animationProgress {
+    return 0;
 }
 
 @end
@@ -51,11 +76,29 @@
 }
 #endif
 
+// Archive keys of the delays properties; each is written only when set.
+static const struct {
+    unsigned int flag;
+    NSString *key;
+} delayKeys[] = {
+    { _NSGestureRecognizerDelaysPrimaryMouseButtonEvents, @"NSGestureRecognizer.delaysPrimaryMouseButtonEvents" },
+    { _NSGestureRecognizerDelaysSecondaryMouseButtonEvents, @"NSGestureRecognizer.delaysSecondaryMouseButtonEvents" },
+    { _NSGestureRecognizerDelaysOtherMouseButtonEvents, @"NSGestureRecognizer.delaysOtherMouseButtonEvents" },
+    { _NSGestureRecognizerDelaysKeyEvents, @"NSGestureRecognizer.delaysKeyEvents" },
+    { _NSGestureRecognizerDelaysMagnificationEvents, @"NSGestureRecognizer.delaysMagnificationEvents" },
+    { _NSGestureRecognizerDelaysRotationEvents, @"NSGestureRecognizer.delaysRotationEvents" },
+};
+
++ (unsigned int) _defaultDelayedEvents {
+    return 0;
+}
+
 - (instancetype) initWithTarget: (id) target action: (SEL) action {
     if ((self = [super init])) {
         _target = target;
         _action = action;
         _enabled = YES;
+        _delayedEvents = [[self class] _defaultDelayedEvents];
     }
     return self;
 }
@@ -68,11 +111,19 @@
     if (![coder allowsKeyedCoding])
         [NSException raise: NSInvalidArgumentException
                     format: @"-[%@ %s]: only keyed archiving is supported", [self class], sel_getName(_cmd)];
-    NSString *action = [coder decodeObjectOfClass: [NSString class] forKey: @"Action"];
-    self = [self initWithTarget: [coder decodeObjectForKey: @"Target"]
+    NSString *action = [coder decodeObjectOfClass: [NSString class] forKey: @"NSGestureRecognizer.action"];
+    self = [self initWithTarget: [coder decodeObjectForKey: @"NSGestureRecognizer.target"]
                          action: action ? NSSelectorFromString(action) : NULL];
-    if (self && [coder containsValueForKey: @"Enabled"])
-        _enabled = [coder decodeBoolForKey: @"Enabled"];
+    if (self) {
+        _enabled = ![coder decodeBoolForKey: @"NSGestureRecognizer.disabled"];
+        // An archive lists every kind of event it delays, whatever the class's
+        // defaults are.
+        _delayedEvents = 0;
+        for (size_t i = 0; i < sizeof(delayKeys) / sizeof(delayKeys[0]); i++)
+            if ([coder decodeBoolForKey: delayKeys[i].key])
+                _delayedEvents |= delayKeys[i].flag;
+        _allowedTouchTypes = [coder decodeIntegerForKey: @"NSGestureRecognizer.allowedTouchTypes"];
+    }
     return self;
 }
 
@@ -80,14 +131,24 @@
     if (![coder allowsKeyedCoding])
         [NSException raise: NSInvalidArgumentException
                     format: @"-[%@ %s]: only keyed archiving is supported", [self class], sel_getName(_cmd)];
-    [coder encodeConditionalObject: _target forKey: @"Target"];
+    // The name and the pressure configuration aren't archived.
+    if (_target != nil)
+        [coder encodeConditionalObject: _target forKey: @"NSGestureRecognizer.target"];
     if (_action != NULL)
-        [coder encodeObject: NSStringFromSelector(_action) forKey: @"Action"];
-    [coder encodeBool: _enabled forKey: @"Enabled"];
+        [coder encodeObject: NSStringFromSelector(_action) forKey: @"NSGestureRecognizer.action"];
+    if (!_enabled)
+        [coder encodeBool: YES forKey: @"NSGestureRecognizer.disabled"];
+    for (size_t i = 0; i < sizeof(delayKeys) / sizeof(delayKeys[0]); i++)
+        if (_delayedEvents & delayKeys[i].flag)
+            [coder encodeBool: YES forKey: delayKeys[i].key];
+    if (_allowedTouchTypes != 0)
+        [coder encodeInteger: _allowedTouchTypes forKey: @"NSGestureRecognizer.allowedTouchTypes"];
 }
 
 - (void) dealloc {
     [_lastEvent release];
+    [_pressureConfiguration release];
+    [_name release];
     [super dealloc];
 }
 
@@ -161,6 +222,115 @@
     }
 }
 
+- (NSPressureConfiguration *) pressureConfiguration {
+    return _pressureConfiguration;
+}
+
+- (void) setPressureConfiguration: (NSPressureConfiguration *) configuration {
+    [configuration retain];
+    [_pressureConfiguration release];
+    _pressureConfiguration = configuration;
+}
+
+- (BOOL) _delays: (unsigned int) flag {
+    return (_delayedEvents & flag) != 0;
+}
+
+- (void) _setDelays: (unsigned int) flag to: (BOOL) delays {
+    if (delays)
+        _delayedEvents |= flag;
+    else
+        _delayedEvents &= ~flag;
+}
+
+- (BOOL) delaysPrimaryMouseButtonEvents {
+    return [self _delays: _NSGestureRecognizerDelaysPrimaryMouseButtonEvents];
+}
+
+- (void) setDelaysPrimaryMouseButtonEvents: (BOOL) delays {
+    [self _setDelays: _NSGestureRecognizerDelaysPrimaryMouseButtonEvents to: delays];
+}
+
+- (BOOL) delaysSecondaryMouseButtonEvents {
+    return [self _delays: _NSGestureRecognizerDelaysSecondaryMouseButtonEvents];
+}
+
+- (void) setDelaysSecondaryMouseButtonEvents: (BOOL) delays {
+    [self _setDelays: _NSGestureRecognizerDelaysSecondaryMouseButtonEvents to: delays];
+}
+
+- (BOOL) delaysOtherMouseButtonEvents {
+    return [self _delays: _NSGestureRecognizerDelaysOtherMouseButtonEvents];
+}
+
+- (void) setDelaysOtherMouseButtonEvents: (BOOL) delays {
+    [self _setDelays: _NSGestureRecognizerDelaysOtherMouseButtonEvents to: delays];
+}
+
+- (BOOL) delaysKeyEvents {
+    return [self _delays: _NSGestureRecognizerDelaysKeyEvents];
+}
+
+- (void) setDelaysKeyEvents: (BOOL) delays {
+    [self _setDelays: _NSGestureRecognizerDelaysKeyEvents to: delays];
+}
+
+- (BOOL) delaysMagnificationEvents {
+    return [self _delays: _NSGestureRecognizerDelaysMagnificationEvents];
+}
+
+- (void) setDelaysMagnificationEvents: (BOOL) delays {
+    [self _setDelays: _NSGestureRecognizerDelaysMagnificationEvents to: delays];
+}
+
+- (BOOL) delaysRotationEvents {
+    return [self _delays: _NSGestureRecognizerDelaysRotationEvents];
+}
+
+- (void) setDelaysRotationEvents: (BOOL) delays {
+    [self _setDelays: _NSGestureRecognizerDelaysRotationEvents to: delays];
+}
+
+- (NSString *) name {
+    return _name;
+}
+
+- (void) setName: (NSString *) name {
+    name = [name copy];
+    [_name release];
+    _name = name;
+}
+
+- (NSEventModifierFlags) modifierFlags {
+    return [_lastEvent modifierFlags];
+}
+
+- (NSTouchTypeMask) allowedTouchTypes {
+    return _allowedTouchTypes;
+}
+
+- (void) setAllowedTouchTypes: (NSTouchTypeMask) types {
+    _allowedTouchTypes = types;
+}
+
+// Without failure requirements, any two recognizers may prevent each other
+// and none waits for another to fail.
+- (BOOL) canPreventGestureRecognizer: (NSGestureRecognizer *) preventedGestureRecognizer {
+    return YES;
+}
+
+- (BOOL) canBePreventedByGestureRecognizer: (NSGestureRecognizer *) preventingGestureRecognizer {
+    return YES;
+}
+
+- (BOOL) shouldRequireFailureOfGestureRecognizer: (NSGestureRecognizer *) otherGestureRecognizer {
+    return NO;
+}
+
+- (BOOL) shouldBeRequiredToFailByGestureRecognizer: (NSGestureRecognizer *) otherGestureRecognizer {
+    return NO;
+}
+
 - (NSPoint) locationInView: (NSView *) view {
     NSPoint location = [_lastEvent locationInWindow];
     return view ? [view convertPoint: location fromView: nil] : location;
@@ -206,10 +376,24 @@
 - (void) otherMouseDragged: (NSEvent *) event {}
 - (void) magnifyWithEvent: (NSEvent *) event {}
 - (void) rotateWithEvent: (NSEvent *) event {}
+- (void) mouseCancelled: (NSEvent *) event {}
+- (void) keyDown: (NSEvent *) event {}
+- (void) keyUp: (NSEvent *) event {}
+- (void) flagsChanged: (NSEvent *) event {}
+- (void) tabletPoint: (NSEvent *) event {}
+- (void) pressureChangeWithEvent: (NSEvent *) event {}
+- (void) touchesBeganWithEvent: (NSEvent *) event {}
+- (void) touchesMovedWithEvent: (NSEvent *) event {}
+- (void) touchesEndedWithEvent: (NSEvent *) event {}
+- (void) touchesCancelledWithEvent: (NSEvent *) event {}
 
 @end
 
 @implementation NSRotationGestureRecognizer
+
++ (unsigned int) _defaultDelayedEvents {
+    return _NSGestureRecognizerDelaysRotationEvents;
+}
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {
@@ -224,6 +408,10 @@
 @end
 
 @implementation NSMagnificationGestureRecognizer
+
++ (unsigned int) _defaultDelayedEvents {
+    return _NSGestureRecognizerDelaysMagnificationEvents;
+}
 
 - (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector
 {

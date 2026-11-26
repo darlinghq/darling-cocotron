@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Onyx2D/O2Font.h>
 #import <Onyx2D/O2Font_freetype.h>
 #import <objc/runtime.h>
+#include <strings.h>
 #import "KTFontDescriptor.h"
 
 // CTFontRef and NSFont are toll-free bridged. AppKit's NSFont wraps a
@@ -145,6 +146,40 @@ static CTFontRef createFont(CGFontRef graphicsFont, CGFloat size) {
     return (CTFontRef) [[KTFont alloc] initWithFont: graphicsFont size: size];
 }
 
+// Set on the fonts made for the system UI font types; see CTFontDescriptorIsSystemUIFont().
+static char systemUIFontKey;
+// The UI font type (an NSNumber) a font was made for; see CTFontGetUIFontType().
+static char uiFontTypeKey;
+
+// Marks a font as made for a UI font type, and as a system UI font when it is one.
+static CTFontRef fontWithUIFontType(CTFontRef font, id uiFontType, bool systemUIFont)
+{
+    if (font == NULL)
+        return font;
+    if (systemUIFont)
+        objc_setAssociatedObject(ktFont(font), &systemUIFontKey, (id) kCFBooleanTrue,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    if ([uiFontType isKindOfClass: [NSNumber class]])
+        objc_setAssociatedObject(ktFont(font), &uiFontTypeKey, uiFontType,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    return font;
+}
+
+// A font made from a descriptor of a UI font is that UI font.
+static CTFontRef fontWithUIFontTypeOfDescriptor(CTFontRef font, CTFontDescriptorRef descriptor)
+{
+    id type = [(id) CTFontDescriptorCopyAttribute(descriptor, KTFontUIFontTypeAttribute) autorelease];
+    return fontWithUIFontType(font, type, CTFontDescriptorIsSystemUIFont(descriptor));
+}
+
+// A copy of a font in the same face keeps what it was made for.
+static CTFontRef fontWithUIFontTypeOfFont(CTFontRef font, CTFontRef original)
+{
+    KTFont *object = ktFont(original);
+    return fontWithUIFontType(font, objc_getAssociatedObject(object, &uiFontTypeKey),
+                              objc_getAssociatedObject(object, &systemUIFontKey) != nil);
+}
+
 uint32_t CTGetCoreTextVersion(void)
 {
     return 0x000B0000;
@@ -235,6 +270,7 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
             CTFontRef result = fontWithMatrix(createFont(graphicsFont, size), matrix);
             CGFontRelease(graphicsFont);
             result = fontWithVariationOfAttributes(result, descriptor);
+            result = fontWithUIFontTypeOfDescriptor(result, descriptor);
             return fontWithCascade(result, cascadeOfAttributes(descriptor));
         }
     }
@@ -247,6 +283,7 @@ CTFontRef CTFontCreateWithFontDescriptor(CTFontDescriptorRef descriptor, CGFloat
     CTFontRef result = CTFontCreateWithName(name, size, matrix);
     CFRelease(name);
     result = fontWithVariationOfAttributes(result, descriptor);
+    result = fontWithUIFontTypeOfDescriptor(result, descriptor);
     return fontWithCascade(result, cascadeOfAttributes(descriptor));
 }
 
@@ -257,9 +294,6 @@ CTFontRef CTFontCreateWithFontDescriptorAndOptions(CTFontDescriptorRef descripto
     return CTFontCreateWithFontDescriptor(descriptor, size, matrix);
 }
 
-// Set on the fonts made for the system UI font types; see CTFontDescriptorIsSystemUIFont().
-static char systemUIFontKey;
-
 CTFontRef CTFontCreateUIFontForLanguage(CTFontUIFontType uiFontType,
                                         CGFloat size, CFStringRef language)
 {
@@ -267,10 +301,9 @@ CTFontRef CTFontCreateUIFontForLanguage(CTFontUIFontType uiFontType,
                                          size: size
                                      language: (NSString*)language];
     // The user and the user fixed-pitch fonts are not system UI fonts.
-    if (font != nil && uiFontType != kCTFontUIFontUser && uiFontType != kCTFontUIFontUserFixedPitch)
-        objc_setAssociatedObject(font, &systemUIFontKey, (id) kCFBooleanTrue,
-                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    return (CTFontRef) font;
+    bool systemUIFont = uiFontType != kCTFontUIFontUser && uiFontType != kCTFontUIFontUserFixedPitch;
+    return fontWithUIFontType((CTFontRef) font, [NSNumber numberWithUnsignedInt: uiFontType],
+                              systemUIFont);
 }
 
 static CTFontRef copyWithAttributes(CTFontRef font, CGFloat size, const CGAffineTransform *matrix,
@@ -305,6 +338,7 @@ static CTFontRef copyWithAttributes(CTFontRef font, CGFloat size, const CGAffine
     CTFontRef result = fontWithMatrix(createFont(graphicsFont, size), matrix);
     CGFontRelease(graphicsFont);
     result = fontWithVariationOfAttributes(result, attributes);
+    result = fontWithUIFontTypeOfFont(result, font);
     return fontWithCascade(result, cascade);
 }
 
@@ -333,6 +367,10 @@ static const CTFontSymbolicTraits sameFamilyStyleTraits =
 // monospace trait is its own). Monospace, condensed and expanded describe a whole family, so requiring them to
 // equal the original's would find nothing across families.
 static const CTFontSymbolicTraits crossFamilyStyleTraits = kCTFontTraitItalic | kCTFontTraitBold;
+
+// The NSFontWeight values of the nine OS/2 weight classes, 100 to 900.
+static const CGFloat weightClassWeights[] = { -0.8, -0.6, -0.4, 0, 0.23, 0.3, 0.4, 0.56, 0.62 };
+static const unsigned int boldWeightClassIndex = 6;
 
 static CGFloat weightOfFont(CTFontRef font) {
     CGFloat weight = 0;
@@ -441,11 +479,23 @@ CTFontRef CTFontCreateCopyWithSymbolicTraits(CTFontRef font, CGFloat size,
     // replace the original's traits; the original's other bits stay.
     CTFontSymbolicTraits original = CTFontGetSymbolicTraits(font);
     CTFontSymbolicTraits wanted = (original & ~symTraitMask) | (symTraitValue & symTraitMask);
-    // GUESS: a request that clears the bold trait aims at the regular weight (0.0 on the scale
-    // of kCTFontWeightTrait). Aiming at the original's weight would turn a Black face into the
-    // heaviest face that is not bold, a Semibold one. Otherwise the original's weight is kept.
-    CGFloat targetWeight = ((original & kCTFontTraitBold) && !(wanted & kCTFontTraitBold))
-            ? 0 : weightOfFont(font);
+    // The documentation does not say which of several faces with the wanted traits is returned.
+    // QUIRK: a request that sets the bold trait on a face without it aims at the weight of the Bold
+    // weight class (700, 0.4 in the table above), not at the original's weight, so a regular face
+    // goes to Bold even when a Semibold or Demibold face is nearer to 0.0. A request that clears
+    // the bold trait aims at the regular weight (0.0), so a Black or Heavy face does not become the
+    // heaviest face that is not bold. Otherwise the original's weight is kept. Evidence: black-box
+    // observation of CTFontCreateCopyWithSymbolicTraits on macOS 26.1 (arm64): AvenirNext-Regular and
+    // GillSans give AvenirNext-Bold and GillSans-Bold (weight 0.4) though a face of weight 0.3 exists
+    // (probe 639.E.bold-on), and AvenirNext-Heavy gives AvenirNext-Regular when bold is cleared. The
+    // probe does not pin 0.4 itself: any target from about 0.35 to 0.48 gives the same faces there.
+    // It needs the faces of weight 0.3 to have the bold trait (see fontTraits). Test:
+    // coretext-font-copy-with-traits-and-family.
+    CGFloat targetWeight = weightOfFont(font);
+    if ((wanted & kCTFontTraitBold) && !(original & kCTFontTraitBold))
+        targetWeight = weightClassWeights[boldWeightClassIndex];
+    else if ((original & kCTFontTraitBold) && !(wanted & kCTFontTraitBold))
+        targetWeight = 0;
     CFStringRef family = CTFontCopyFamilyName(font);
     CTFontRef result = copyFontInFamily(font, size, matrix, YES, family, wanted,
                                         sameFamilyStyleTraits, targetWeight, symTraitMask == 0);
@@ -505,6 +555,58 @@ static bool fontCoversText(CTFontRef font, const UniChar *characters, CFIndex co
     bool covers = CTFontGetGlyphsForCharacters(font, characters, glyphs, count);
     free(glyphs);
     return covers;
+}
+
+static bool isKana(uint32_t c) {
+    return (c >= 0x3040 && c <= 0x30FF) || (c >= 0x31F0 && c <= 0x31FF) ||
+           (c >= 0xFF66 && c <= 0xFF9F) || (c >= 0x1B000 && c <= 0x1B16F);
+}
+
+static bool isHangul(uint32_t c) {
+    return (c >= 0x1100 && c <= 0x11FF) || (c >= 0x3130 && c <= 0x318F) ||
+           (c >= 0xA960 && c <= 0xA97F) || (c >= 0xAC00 && c <= 0xD7FF) ||
+           (c >= 0xFFA0 && c <= 0xFFDC);
+}
+
+static bool isHan(uint32_t c) {
+    return (c >= 0x2E80 && c <= 0x2FDF) || (c >= 0x3005 && c <= 0x3007) ||
+           (c >= 0x3400 && c <= 0x4DBF) || (c >= 0x4E00 && c <= 0x9FFF) ||
+           (c >= 0xF900 && c <= 0xFAFF) || (c >= 0x20000 && c <= 0x3134F);
+}
+
+static bool isCJKLanguage(const char *language) {
+    if (language == NULL)
+        return false;
+    for (size_t i = 0; i < 3; i++) {
+        static const char *prefixes[] = { "zh", "ja", "ko" };
+        size_t length = strlen(prefixes[i]);
+        if (strncasecmp(language, prefixes[i], length) == 0 &&
+            (language[length] == '\0' || language[length] == '-' || language[length] == '_'))
+            return true;
+    }
+    return false;
+}
+
+// The language whose faces a substitute for the text is chosen from.
+// QUIRK: text with kana is set as Japanese and text with Hangul as Korean, whatever the
+// language; Han text is set in the given language if it is Chinese, Japanese or Korean, and as
+// Simplified Chinese otherwise (and without one). Not documented. Evidence: black-box
+// observation of CTFontCreateForStringWithLanguage on macOS 26.7.3 (tier 2): Han text gets
+// PingFang SC with no language and with "en" or "fr", PingFang TC with "zh-Hant", Hiragino Sans
+// with "ja" and Apple SD Gothic Neo with "ko"; kana gets Hiragino Sans with "zh-Hans"; Hangul
+// gets Apple SD Gothic Neo with "ja". Test: tests/coretext-cjk-fallback-language.c.
+static const char *substituteLanguage(const uint32_t *codePoints, size_t count, const char *language) {
+    bool han = false;
+    for (size_t i = 0; i < count; i++) {
+        if (isKana(codePoints[i]))
+            return "ja";
+        if (isHangul(codePoints[i]))
+            return "ko";
+        han = han || isHan(codePoints[i]);
+    }
+    if (han && !isCJKLanguage(language))
+        return "zh-Hans";
+    return language;
 }
 
 CTFontRef CTFontCreateForStringWithLanguage(CTFontRef currentFont, CFStringRef string,
@@ -574,7 +676,7 @@ CTFontRef CTFontCreateForStringWithLanguage(CTFontRef currentFont, CFStringRef s
     if (language != NULL && CFGetTypeID(language) == CFStringGetTypeID())
         languageName = [(NSString *) language UTF8String];
     O2FontRef substitute = O2FontCreateWithCodePointCoverage(codePoints, count, baseFace,
-                                                              languageName);
+                                                              substituteLanguage(codePoints, count, languageName));
     CGFontRelease(graphicsFont);
     if (substitute != nil) {
         result = createFont((CGFontRef) substitute, CTFontGetSize(currentFont));
@@ -610,6 +712,17 @@ CTFontDescriptorRef CTFontCopyFontDescriptor(CTFontRef font)
         [attributes setObject: cascade forKey: (NSString *) kCTFontCascadeListAttribute];
     if (objc_getAssociatedObject(object, &systemUIFontKey) != nil)
         [attributes setObject: (id) kCFBooleanTrue forKey: (NSString *) KTFontSystemUIAttribute];
+    id uiFontType = objc_getAssociatedObject(object, &uiFontTypeKey);
+    if (uiFontType != nil)
+        [attributes setObject: uiFontType forKey: (NSString *) KTFontUIFontTypeAttribute];
+    NSNumber *weight = [traits objectForKey: (NSString *) kCTFontWeightTrait];
+    NSNumber *width = [traits objectForKey: (NSString *) kCTFontWidthTrait];
+    if (weight != nil)
+        [attributes setObject: [NSNumber numberWithDouble: KTFontCSSWeightForWeightTrait([weight doubleValue])]
+                       forKey: (NSString *) kCTFontCSSWeightAttribute];
+    if (width != nil)
+        [attributes setObject: [NSNumber numberWithDouble: KTFontCSSWidthForWidthTrait([width doubleValue])]
+                       forKey: (NSString *) kCTFontCSSWidthAttribute];
     NSDictionary *variation = (NSDictionary *) CTFontCopyVariation(font);
     if (variation != nil)
         [attributes setObject: variation forKey: (NSString *) kCTFontVariationAttribute];
@@ -645,15 +758,43 @@ static uint16_t readUInt16(const UInt8 *bytes) {
     return (uint16_t) ((bytes[0] << 8) | bytes[1]);
 }
 
+// The NSFontWeight values of the nine OS/2 weight classes.
+static const CGFloat weights[] = { -0.8, -0.6, -0.4, 0, 0.23, 0.3, 0.4,
+                                   0.56, 0.62 };
+
+CGFloat KTFontCSSWeightForWeightTrait(CGFloat weight)
+{
+    // The inverse of the mapping fontTraits() makes from usWeightClass.
+    if (!(weight > weights[0]))
+        return 100;
+    for (unsigned i = 0; i < 8; i++) {
+        if (weight <= weights[i + 1])
+            return 100 * (i + 1) + 100 * (weight - weights[i]) / (weights[i + 1] - weights[i]);
+    }
+    return 900;
+}
+
+CGFloat KTFontCSSWidthForWidthTrait(CGFloat width)
+{
+    // The widths of the nine OpenType usWidthClass classes, in percent of the
+    // normal width (OpenType specification, OS/2 table); fontTraits() maps
+    // the class to (class - 5) / 4.
+    static const CGFloat percentages[] = { 50, 62.5, 75, 87.5, 100, 112.5, 125, 150, 200 };
+    CGFloat position = width * 4 + 4;
+    if (!(position > 0))
+        return percentages[0];
+    if (position >= 8)
+        return percentages[8];
+    unsigned index = (unsigned) position;
+    return percentages[index] + (percentages[index + 1] - percentages[index]) * (position - index);
+}
+
 // Traits from the OS/2 table (weight and width class, fsSelection) and the
 // post table (italic angle, fixed pitch) of the face, as in the OpenType
 // specification.
 static CTFontSymbolicTraits fontTraits(CTFontRef font, CGFloat *weight,
                                        CGFloat *width, CGFloat *slant)
 {
-    // The NSFontWeight values of the nine OS/2 weight classes.
-    static const CGFloat weights[] = { -0.8, -0.6, -0.4, 0, 0.23, 0.3, 0.4,
-                                       0.56, 0.62 };
     unsigned int weightClass = 400, widthClass = 5;
     CTFontSymbolicTraits traits = 0;
     double italicAngle = 0;
@@ -689,10 +830,21 @@ static CTFontSymbolicTraits fontTraits(CTFontRef font, CGFloat *weight,
     if (weightClass > 900)
         weightClass = 900;
     unsigned int index = weightClass / 100 - 1;
-    *weight = weights[index];
+    *weight = weightClassWeights[index];
     if (index < 8)
-        *weight += (weights[index + 1] - weights[index]) * (weightClass % 100) / 100.0;
-    if (weightClass >= 700)
+        *weight += (weightClassWeights[index + 1] - weightClassWeights[index]) * (weightClass % 100) / 100.0;
+    // QUIRK: a face of weight class 600 (Semibold, Demibold: weight trait 0.3) and above has the
+    // bold trait, not only from class 700. The documentation says only that the trait has more
+    // detail in kCTFontWeightTrait. Evidence: black-box observation of the symbolic and weight traits
+    // on macOS 26.1 (arm64), 98 faces printed by probe 639: every face reporting weight 0.3,
+    // 0.4, 0.56 or 0.62 has the bold bit (AvenirNext-DemiBold and GillSans-SemiBold, both 0.3, report
+    // 80000002) and every face at 0.23 or less lacks it. Which fonts those are is machine specific.
+    // Evidence for the boundary: the OS/2 usWeightClass and the bold bit of every installed font of macOS
+    // 26.7.3 (529 faces) and 10.14.4 (488 faces), mac-probes p796: every face of class 600 and above has the
+    // bold bit (26 and 24 faces of class 600), the faces of class 500 do not except 5 (1 on Mojave) whose
+    // own bold flag is set. A face's own bold flag in the OS/2 table still counts.
+    // Test: coretext-font-copy-with-traits-and-family.
+    if (weightClass >= 600)
         traits |= kCTFontTraitBold;
 
     if (widthClass < 1 || widthClass > 9)
@@ -1199,4 +1351,199 @@ bool CTFontHasTable(CTFontRef font, CTFontTableTag table)
 CFTypeID CTFontGetTypeID(void)
 {
     return (CFTypeID) [KTFont self];
+}
+
+bool CTFontIsSystemUIFont(CTFontRef font)
+{
+    KTFont *object = ktFont(font);
+    return object != nil && objc_getAssociatedObject(object, &systemUIFontKey) != nil;
+}
+
+CTFontUIFontType CTFontGetUIFontType(CTFontRef font)
+{
+    KTFont *object = ktFont(font);
+    NSNumber *type = object != nil ? objc_getAssociatedObject(object, &uiFontTypeKey) : nil;
+    return type != nil ? (CTFontUIFontType) [type unsignedIntValue] : kCTFontUIFontNone;
+}
+
+bool CTFontIsAppleColorEmoji(CTFontRef font)
+{
+    CFStringRef name = CTFontCopyPostScriptName(font);
+    if (name == NULL)
+        return false;
+    bool result = CFEqual(name, CFSTR("AppleColorEmoji"));
+    CFRelease(name);
+    return result;
+}
+
+CTFontSymbolicTraits CTFontGetPhysicalSymbolicTraits(CTFontRef font)
+{
+    // A Darling font is always one face (there are no cascade-only "logical"
+    // fonts), so its traits are those of the face.
+    return CTFontGetSymbolicTraits(font);
+}
+
+CTFontRef CTFontCreateForCharactersWithLanguageAndOption(CTFontRef currentFont,
+                                                         const UTF16Char *characters,
+                                                         CFIndex length, CFStringRef language,
+                                                         CTFontFallbackOption option,
+                                                         CFIndex *coveredLength)
+{
+    if (coveredLength != NULL)
+        *coveredLength = 0;
+    if (ktFont(currentFont) == nil || characters == NULL || length <= 0)
+        return NULL;
+    CFStringRef string = CFStringCreateWithCharactersNoCopy(kCFAllocatorDefault, characters, length,
+                                                            kCFAllocatorNull);
+    if (string == NULL)
+        return NULL;
+
+    // The font is the one CTFontCreateForStringWithLanguage() finds for the
+    // first composed character sequence; it covers as many of the following
+    // sequences as it has glyphs for. Darling cannot tell user-installed fonts
+    // from system fonts, so the fallback option does not narrow the search.
+    CFRange cluster = CFStringGetRangeOfComposedCharactersAtIndex(string, 0);
+    CTFontRef result = CTFontCreateForStringWithLanguage(currentFont, string, cluster, language);
+    if (result == NULL) {
+        // No installed face has the characters: the current font draws them
+        // (with its missing-glyph glyph) and covers nothing.
+        CFRelease(string);
+        return (CTFontRef) CFRetain(currentFont);
+    }
+    CFIndex covered = 0;
+    while (covered < length) {
+        cluster = CFStringGetRangeOfComposedCharactersAtIndex(string, covered);
+        if (!fontCoversText(result, characters + cluster.location, cluster.length))
+            break;
+        covered = cluster.location + cluster.length;
+    }
+    CFRelease(string);
+    if (coveredLength != NULL)
+        *coveredLength = covered;
+    return result;
+}
+
+bool CTFontGetGlyphsForCharacterRange(CTFontRef font, CGGlyph glyphs[], CFRange range)
+{
+    KTFont *object = ktFont(font);
+    if (object == nil || glyphs == NULL || range.location < 0 || range.length < 0 ||
+        range.location > 0x10000 || range.length > 0x10000 - range.location)
+        return false;
+    bool all = true;
+    for (CFIndex i = 0; i < range.length; i++) {
+        UniChar character = (UniChar) (range.location + i);
+        // A surrogate code unit on its own is no character.
+        if (character >= 0xD800 && character <= 0xDFFF)
+            glyphs[i] = 0;
+        else
+            [object getGlyphs: &glyphs[i] forCharacters: &character length: 1];
+        if (glyphs[i] == 0)
+            all = false;
+    }
+    return all;
+}
+
+bool CTFontGetVerticalGlyphsForCharacters(CTFontRef font, const UniChar characters[],
+                                          CGGlyph glyphs[], CFIndex count)
+{
+    // Darling applies no vertical substitutions (the OpenType 'vert' and
+    // 'vrt2' features), so vertical text uses the nominal glyphs.
+    return CTFontGetGlyphsForCharacters(font, characters, glyphs, count);
+}
+
+CFBitVectorRef CTFontCopyColorGlyphCoverage(CTFontRef font)
+{
+    // Darling draws no colour glyphs (sbix, COLR, SVG or bitmap colour
+    // tables) and never reports kCTFontTraitColorGlyphs, so no glyph has a
+    // colour form.
+    return NULL;
+}
+
+CFBitVectorRef CTFontCopyGlyphCoverageForFeature(CTFontRef font, CFDictionaryRef feature)
+{
+    if (ktFont(font) == nil || feature == NULL)
+        return NULL;
+    // Darling's layout applies no feature substitutions (GSUB, morx), so a
+    // feature changes no glyph: the coverage is empty. It is a bit vector
+    // over all glyphs of the font, as callers read it without a NULL check.
+    CFIndex count = CTFontGetGlyphCount(font);
+    CFMutableBitVectorRef coverage = CFBitVectorCreateMutable(kCFAllocatorDefault, count);
+    if (coverage == NULL)
+        return NULL;
+    CFBitVectorSetCount(coverage, count);
+    CFBitVectorRef result = CFBitVectorCreateCopy(kCFAllocatorDefault, coverage);
+    CFRelease(coverage);
+    return result;
+}
+
+CGFloat CTFontGetSbixImageSizeForGlyphAndContentsScale(CTFontRef font, const CGGlyph glyph,
+                                                       CGFloat contentsScale)
+{
+    // Darling does not draw sbix images, so for its layout no glyph has one.
+    return 0;
+}
+
+CGFloat CTFontGetAccessibilityBoldWeightOfWeight(CGFloat weight)
+{
+    // The weight each named weight becomes, read from this function on macOS
+    // 26.7.3 (black-box observation): one step up to Regular, two steps up
+    // from Regular to Bold, and Heavy and Black become Black.
+    // Test: tests/coretext-spi-fonts.c
+    // A weight between two named ones maps as the named weight below it
+    // (inferred; only the named weights were observed), and weights outside
+    // the named range are kept.
+    static const struct { const CGFloat *from, *to; } map[] = {
+        { &kCTFontWeightUltraLight, &kCTFontWeightThin },
+        { &kCTFontWeightThin, &kCTFontWeightLight },
+        { &kCTFontWeightLight, &kCTFontWeightRegular },
+        { &kCTFontWeightRegular, &kCTFontWeightSemibold },
+        { &kCTFontWeightMedium, &kCTFontWeightBold },
+        { &kCTFontWeightSemibold, &kCTFontWeightHeavy },
+        { &kCTFontWeightBold, &kCTFontWeightBlack },
+        { &kCTFontWeightHeavy, &kCTFontWeightBlack },
+        { &kCTFontWeightBlack, &kCTFontWeightBlack },
+    };
+    const size_t count = sizeof(map) / sizeof(map[0]);
+    if (weight != weight || weight < *map[0].from || weight > *map[count - 1].from)
+        return weight;
+    for (size_t i = count; i-- > 0;) {
+        if (weight >= *map[i].from)
+            return *map[i].to;
+    }
+    return weight;
+}
+
+CGSize CTFontShapeGlyphs(CTFontRef font, CGGlyph glyphs[], CGSize advances[],
+                         CGPoint origins[], CFIndex indexes[], const UniChar chars[],
+                         CFIndex count, CTFontShapeOptions options, CFStringRef language,
+                         void (^handler)(CFRange, CGGlyph **, CGSize **, CGPoint **, CFIndex **))
+{
+    if (ktFont(font) == nil || count <= 0 || glyphs == NULL || advances == NULL ||
+        origins == NULL || indexes == NULL)
+        return CGSizeZero;
+
+    // Darling's shaping is the one its line layout does: glyphs stay one per
+    // input glyph (no substitution, so the number of glyphs never changes and
+    // the handler is not called), each takes its advance from the font, and
+    // kerning adds the font's pair kerning. No glyph is offset from its pen
+    // position, so the origins and the initial advance are zero.
+    CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal, glyphs, advances, count);
+    for (CFIndex i = 0; i < count; i++)
+        origins[i] = CGPointZero;
+
+    bool rightToLeft = (options & kCTFontShapeRightToLeft) != 0;
+    if (rightToLeft) {
+        // Inferred from how callers use the result: right-to-left text comes
+        // back in visual order, the reverse of the logical order it came in.
+        for (CFIndex i = 0, j = count - 1; i < j; i++, j--) {
+            CGGlyph glyph = glyphs[i]; glyphs[i] = glyphs[j]; glyphs[j] = glyph;
+            CGSize advance = advances[i]; advances[i] = advances[j]; advances[j] = advance;
+            CFIndex index = indexes[i]; indexes[i] = indexes[j]; indexes[j] = index;
+        }
+    }
+    if (options & kCTFontShapeWithKerning) {
+        for (CFIndex i = 0; i + 1 < count; i++)
+            advances[i].width += KTFontGetPairKerning(font, glyphs[i], glyphs[i + 1]);
+    }
+    return CGSizeZero;
 }

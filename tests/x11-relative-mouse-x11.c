@@ -1,9 +1,9 @@
-// Host test for AppKit/X11.backend/X11RelativeMouseGrab.h, the Xlib half of relative mouse mode, on a real X server.
+// Host test for CoreGraphics/X11.backend/CGSX11RelativeMouseGrab.h, the Xlib half of relative mouse mode, on a real X server.
 // XTest supplies the physical motion; the test pumps the connection's events through the same functions the backend
 // calls, and checks that the cursor stays frozen, the deltas add up, and a warp's own echo is never taken for
 // motion (no feedback loop). Use tests/x11-relative-mouse-x11.sh, which runs it on its own Xvfb.
 // Build: cc x11-relative-mouse-x11.c -lX11 -lXtst -lXrandr -lm
-#include "../AppKit/X11.backend/X11RelativeMouseGrab.h"
+#include "../CoreGraphics/X11.backend/CGSX11RelativeMouseGrab.h"
 #include <X11/extensions/XTest.h>
 #include <X11/extensions/Xrandr.h>
 #include <stdio.h>

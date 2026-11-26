@@ -1,0 +1,187 @@
+/*
+ This file is part of Darling.
+
+ Copyright (C) 2026 Lubos Dolezel
+
+ Darling is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+
+ Darling is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ GNU General Public License for more details.
+
+ You should have received a copy of the GNU General Public License
+ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
+*/
+#ifndef CGSNATIVECONNECTION_H
+#define CGSNATIVECONNECTION_H
+#import <Foundation/NSObject.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <CoreGraphics/CGGeometry.h>
+
+// A process has one connection to the window system (X11 or Wayland), and CoreGraphics owns it:
+// it opens it, reads its socket on the main run loop and keeps the state that belongs to the
+// connection itself (displays, keyboard layout, hot keys, activation requests). The framework
+// that builds windows on top of the native objects (AppKit's backends) uses the same
+// connection instead of opening a second one, and is told what CoreGraphics does not take
+// for itself through the observer registered here.
+
+typedef enum {
+	CGSNativeConnectionKindNone = 0,
+	CGSNativeConnectionKindX11 = 1,
+	CGSNativeConnectionKindWayland = 2,
+} CGSNativeConnectionKind;
+
+// All the methods are called on the main thread, from the run loop pass that read the events (or
+// from -_CGSProcessNativeEvents()).
+@protocol CGSNativeConnectionObserver <NSObject>
+@optional
+// X11: an event read from the connection that CoreGraphics did not handle itself (an XEvent*). The
+// observer calls XFilterEvent() as Xlib requires.
+- (void) nativeConnectionEvent: (void *) event;
+// The pending events have been read and dispatched (on Wayland the listeners of every object on the
+// connection have run). The observer sends what it queued meanwhile.
+- (void) nativeConnectionDidProcessEvents;
+// The displays changed. CoreGraphics has read the new layout and reported it to the display
+// reconfiguration callbacks.
+- (void) nativeConnectionDisplayLayoutChanged;
+// Another process asked for the windows of this one to be activated and the window system offers
+// no request for that, so only the process can do it (Wayland). Called on the main thread.
+- (void) nativeConnectionActivationRequested;
+// The keyboard focus moved to a window system object of the process (the wl_surface on Wayland), or
+// left it (NULL). The pointer is compared by value only.
+- (void) nativeConnectionKeyboardFocusChanged: (void *) surface;
+// A key was pressed with the window system's serial for the input (Wayland), before the key event is posted.
+- (void) nativeConnectionKeyPressedWithSerial: (uint32_t) serial;
+// Called before CoreGraphics posts the events a keyboard event of the window system makes, so that
+// the observer can send what it holds back from earlier input first (the order of the events).
+- (void) nativeConnectionWillPostKeyboardEvent;
+// X11: the text a key press (an XKeyEvent*) makes after the input method of the window it is for has
+// composed it. The input contexts belong to the framework that owns the windows (the input method
+// stays in the application); nil when the observer has no input context for the window, which makes
+// CoreGraphics look the key up in the keymap. The keysym is set when the lookup gives one (NoSymbol,
+// 0, otherwise).
+- (NSString *) nativeConnectionComposedTextForKeyEvent: (void *) event keySym: (unsigned long *) keySym;
+// X11: whether an input method of the application (XMODIFIERS names one) composes dead keys and Compose
+// sequences, filtering the key events (XFilterEvent) and returning the text. Without one (the observer does not
+// answer, or answers NO; Xlib's built-in input method only composes) CoreGraphics composes them itself, and does
+// not pass the key events to Xlib's compose filter, which drops a sequence that no table entry continues.
+- (BOOL) nativeConnectionInputMethodComposes;
+// X11: whether the observer makes the events of a pointer event (an XEvent*: button, motion) itself, so
+// that CoreGraphics posts nothing for it. The observer holds the pointer for itself (relative mouse
+// mode) or the window the event is for is one CoreGraphics does not decode input for (a display overlay).
+// Asked for every button and motion event, before it is decoded.
+- (BOOL) nativeConnectionObserverHandlesPointerEvent: (void *) event;
+// X11: CoreGraphics has decoded a pointer event (an XEvent*) into the CGEvent and is about to post it.
+// The observer may add what only it knows (kCGSMouseEventWindowKeyState). Returns whether the process'
+// event stream gets the event: NO when the window it is for does not take it (a mouse moved event for a
+// window that did not ask for them); the event taps see it either way.
+- (BOOL) nativeConnectionWillPostPointerEvent: (struct __CGEvent *) cgEvent forXEvent: (void *) event;
+
+// The Wayland pointer (a wl_pointer of the process' one seat, which CoreGraphics binds and decodes into
+// mouse, scroll and gesture CGEvents). Surfaces are wl_surface pointers, compared by value only.
+// The pointer entered a surface of the process (serial: the compositor's, which a cursor request needs;
+// x, y: surface-local points).
+- (void) nativeConnectionPointerEntered: (void *) surface serial: (uint32_t) serial x: (double) x y: (double) y;
+// The pointer left the surface it was in.
+- (void) nativeConnectionPointerLeft;
+// The pointer moved to x, y of the surface it is in (also while no surface of the process has it). Returns
+// YES when the observer used the motion itself (the pointer is over a window decoration), so that
+// CoreGraphics posts no event for it.
+- (BOOL) nativeConnectionPointerMovedToX: (double) x y: (double) y;
+// A pointer button (a Linux input event code) was pressed or released. Returns YES when the observer used
+// the button itself (a window decoration), so that CoreGraphics posts no event for it.
+- (BOOL) nativeConnectionPointerButton: (uint32_t) button pressed: (BOOL) pressed serial: (uint32_t) serial;
+// CoreGraphics has decoded a pointer event (button, motion or scroll) and is about to post it, with the
+// native window, the pointer location in it and, for a press, the serial (CGEvent fields of
+// CoreGraphicsPrivate.h). The observer may add what only it knows (kCGSMouseEventWindowKeyState).
+// Returns whether the process' event stream gets the event: NO when the window it is for does not take
+// it (an unknown surface, a mouse moved event for a window that did not ask for them); the event
+// taps see it either way.
+- (BOOL) nativeConnectionWillPostWaylandPointerEvent: (struct __CGEvent *) cgEvent;
+// The global location (top-left origin, points) of a point of one of the observer's surfaces; NO when
+// the observer does not know the surface.
+- (BOOL) nativeConnectionGlobalLocation: (CGPoint *) location ofSurface: (void *) surface point: (CGPoint) point;
+// Wayland: the surface the pointer is locked to while the mouse is disconnected from the cursor (the surface of
+// the window to lock: the one used last); NULL when the observer has none, and CoreGraphics takes the surface
+// with the pointer or the keyboard focus.
+- (void *) nativeConnectionSurfaceForPointerLock;
+// Wayland: the point of a surface of the observer's that is at a global location (the inverse of
+// -nativeConnectionGlobalLocation:ofSurface:point:, clamped to the surface's content); NO when the observer
+// does not know the surface.
+- (BOOL) nativeConnectionPoint: (CGPoint *) point ofSurface: (void *) surface forGlobalLocation: (CGPoint) location;
+// Wayland: CGWarpMouseCursorPosition() moved the application's cursor within its surface to x, y (the
+// compositor is asked to move the pointer there; the next events start from it).
+- (void) nativeConnectionPointerWarpedToX: (double) x y: (double) y;
+// The seat gained or lost its pointer. The compositor objects that need it (cursor, locked pointer)
+// are reached through _CGSNativeConnectionPointer().
+- (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available;
+// X11 and Wayland: the process' cursor became hidden or shown (CGDisplayHideCursor() and the calls that undo
+// it). The windows the observer created show a blank cursor while it is hidden (Wayland: CoreGraphics has
+// given the pointer no image, and the observer, which has the cursor images, applies its own again when the
+// cursor is shown, and keeps the cursor hidden while _CGSNativeConnectionCursorHidden()). Main thread.
+- (void) nativeConnectionCursorHiddenChanged: (BOOL) hidden;
+// X11: the window (an X window) the pointer is to be grabbed for when the mouse is disassociated from the
+// cursor (CGAssociateMouseAndMouseCursorPosition(false)): the one the observer prefers (a display overlay, the
+// key window). 0 for none, which leaves the choice to CoreGraphics (the window of the connection with the focus).
+- (unsigned long) nativeConnectionRelativeMouseWindow;
+// X11: the pointer grab of the disassociated mouse was taken (active) on a window, with the frozen cursor in
+// root pixels, or released. The observer forgets the pointer position it knew.
+- (void) nativeConnectionRelativeMouseGrabChanged: (BOOL) active window: (unsigned long) window rootX: (int) x rootY: (int) y;
+@end
+
+// The kind of the process' connection to the window system, opening it if needed.
+extern CGSNativeConnectionKind _CGSNativeConnectionKind(void);
+// The native display of that connection (Display* on X11, wl_display* on Wayland), NULL without one.
+extern void *_CGSNativeConnectionDisplay(void);
+// Registers the observer (not retained; pass nil when it goes away). One observer per process.
+extern void _CGSSetNativeConnectionObserver(id<CGSNativeConnectionObserver> observer);
+// Reads and dispatches what the window system has sent, now, from the calling (main) thread.
+extern void _CGSProcessNativeConnectionEvents(void);
+
+// The window system's object with the keyboard focus (the wl_surface on Wayland), NULL when none of the
+// process' objects has it or the window system does not say (X11).
+extern void *_CGSNativeConnectionKeyboardFocus(void);
+// The modifier flags in effect, with the device-dependent bits of the keys held down (CGEventFlags bits).
+extern uint64_t _CGSNativeConnectionModifierFlags(void);
+// A window system object the process created has been destroyed: the keyboard focus on it ends.
+extern void _CGSNativeConnectionObjectDestroyed(void *object);
+// Posts what the keyboard decoder holds back until the compositor confirms it (a modifier key that is
+// not yet known to have changed the flags), so that a later event of another device follows it.
+extern void _CGSNativeConnectionFlushPendingKeyboardEvents(void);
+// X11: whether the mouse is disassociated from the cursor and the pointer grab that implements it is held;
+// then *frozenRoot is the frozen cursor in root pixels. *requested says whether the application wants it
+// (the grab is held only while the focus is). Either may be NULL.
+extern BOOL _CGSNativeConnectionRelativeMouseState(BOOL *requested, CGPoint *frozenRoot);
+// X11: the windows the pointer can be grabbed for changed (a display overlay appeared or went): a wanted
+// grab that is not held is retried.
+extern void _CGSNativeConnectionPointerWindowsChanged(void);
+// X11: mouse motion the framework made events for itself (a display overlay) that CGGetLastMouseDelta() reports too.
+extern void _CGSNativeConnectionAccumulateMouseDelta(double dx, double dy);
+// The index and name of the keyboard layout group in effect. -1 and NULL when there is none.
+extern int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef *name);
+
+// The seat's wl_pointer (a struct wl_proxy *) on Wayland, the process' only one: it is the argument of the
+// requests that need it (cursor image, pointer constraints). NULL while the seat has no pointer and on X11.
+extern void *_CGSNativeConnectionPointer(void);
+// Where the pointer is in the surface that has it, when the framework above moved it without the compositor
+// saying so (a warp while the pointer is locked). The next events start from there.
+extern void _CGSNativeConnectionSetPointerSurfacePoint(double x, double y);
+
+
+// The cursor of the process is hidden by the connection (Wayland): the framework that sets the cursor image
+// keeps it hidden. False without a connection or when the backend leaves the state to the framework.
+extern bool _CGSNativeConnectionCursorHidden(void);
+// +[NSCursor setHiddenUntilMouseMoves:] for a connection that keeps the flag; false when it does not, and
+// nothing was done.
+extern bool _CGSSetCursorHiddenUntilMouseMoves(bool flag);
+// The pointer is locked to a surface (Wayland: the lock of the disassociated mouse is active).
+extern bool _CGSNativeConnectionPointerLocked(void);
+// The surface the lock should be made on may be another one (a window was mapped, unmapped or activated).
+extern void _CGSNativeConnectionPointerLockTargetChanged(void);
+
+#endif

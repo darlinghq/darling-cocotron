@@ -19,3 +19,9 @@
 // Private: the fill and stroke functions paint a focus ring around a shape when NSSetFocusRingStyle asked for one.
 BOOL _NSFocusRingBeforePaintingPath(CGContextRef context, CGPathRef path);
 void _NSFocusRingAfterPaintingPath(CGContextRef context, CGPathRef path);
+
+// Private: the sunken frames that Carbon-based themed controls get. The rect is the outer bounds; only the frame is
+// drawn, the inside is left as it is. `flipped` says whether the y axis of the context points down (the "top" edge,
+// the darker one, is then the one at the smallest y).
+APPKIT_EXPORT void _NSDrawCarbonThemeBezel(NSRect rect, BOOL enabled, BOOL flipped);
+APPKIT_EXPORT void _NSDrawCarbonThemeListBox(NSRect rect, BOOL enabled, BOOL flipped, BOOL active);

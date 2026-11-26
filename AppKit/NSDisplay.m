@@ -63,6 +63,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - (void) takeMouseDeltaX: (int32_t *) dx y: (int32_t *) dy {
     [_display takeMouseDeltaX: dx y: dy];
 }
+- (BOOL) cursorIsVisible {
+    return [_display cursorIsVisible];
+}
 @end
 
 static NSDisplay *processDisplay = nil;
@@ -105,9 +108,17 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
 // The instance is published only after the backend has initialized, so a
 // backend that fails to start (or raises) leaves nothing behind and a later
 // call tries again.
+//
+// A process that has denied itself connections to the window system
+// (CGSSetDenyWindowServerConnections()) has no display: this returns nil
+// instead of raising, so that NSApplication still initializes and the
+// process sees no screens, as on macOS.
 + (NSDisplay *) currentDisplay {
     @synchronized([NSDisplay class]) {
         if (processDisplay == nil) {
+            if (_CGSWindowServerConnectionsDenied()) {
+                return nil;
+            }
             processDisplay = [[NSDisplay alloc] init];
         }
         return processDisplay;
@@ -130,9 +141,12 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
 
         static dispatch_once_t once;
         dispatch_once(&once, ^{
-            static _NSDisplayPointerController *controller;
-            controller = [[_NSDisplayPointerController alloc] initWithDisplay: self];
-            _CGSSetPointerController(controller);
+            // A backend whose connection decodes the pointer itself (X11) keeps that state in CoreGraphics.
+            if ([self usesPointerController]) {
+                static _NSDisplayPointerController *controller;
+                controller = [[_NSDisplayPointerController alloc] initWithDisplay: self];
+                _CGSSetPointerController(controller);
+            }
             CGDisplayRegisterReconfigurationCallback(displaysReconfigured, NULL);
         });
         return self;
@@ -228,16 +242,15 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     _mainScreenMaxY = NAN;
 }
 
-- (void) _refreshDisplays {
-    _CGSRefreshDisplayLayout();
-    [self _invalidateScreens];
-}
-
 - (void) _mainMenuDidChange: (NSMenu *) menu {
 }
 
 - (BOOL) _showsMainMenuOutsideWindows {
     return YES;
+}
+
+- (BOOL) _desktopShowsMainMenu {
+    return NO;
 }
 
 // The screens are the displays of CoreGraphics (this framework sits above it): the frame is the
@@ -336,6 +349,16 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     return NO;
 }
 
+// Whether the pointer functions of CoreGraphics reach this display (see CGSPointerController.h).
+- (BOOL) usesPointerController {
+    return YES;
+}
+
+// Whether no hide is pending.
+- (BOOL) cursorIsVisible {
+    return _cursorHideCount == 0;
+}
+
 - (void) hideCursor {
     NSInvalidAbstractInvocation();
 }
@@ -430,6 +453,32 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
                        beforeEvent: (NSEvent *) event
 {
     _NSEventQueueDiscard(mask, event);
+}
+
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          forKeyEvent: (struct __CGEvent *) event
+{
+    NSWindow *keyWindow = [NSApp keyWindow];
+
+    *windowNumber = [keyWindow windowNumber];
+    *location = [keyWindow mouseLocationOutsideOfEventStream];
+    return YES;
+}
+
+- (NSEvent *) keyEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent {
+    return event;
+}
+
+- (void) pointerEventCreated: (NSEvent *) event fromCGEvent: (struct __CGEvent *) cgEvent {
+}
+
+- (BOOL) windowNumber: (NSInteger *) windowNumber
+             location: (NSPoint *) location
+          hasLocation: (BOOL *) hasLocation
+      forPointerEvent: (struct __CGEvent *) event
+{
+    return NO;
 }
 
 - (void) willWaitForEvents {

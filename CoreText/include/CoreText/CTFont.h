@@ -33,7 +33,13 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 @end
 #endif
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) KTFont *CTFontRef;
+#else
+typedef const struct CF_BRIDGED_TYPE(id) __CTFont *CTFontRef;
+#endif
 
 // The version of CoreText: 0x000B0000 is the one of macOS 10.14.
 CORETEXT_EXPORT uint32_t CTGetCoreTextVersion(void);
@@ -72,6 +78,8 @@ CORETEXT_EXPORT const CFStringRef kCTFontFeatureSelectorIdentifierKey;
 CORETEXT_EXPORT const CFStringRef kCTFontFeatureSelectorNameKey;
 CORETEXT_EXPORT const CFStringRef kCTFontFeatureSelectorDefaultKey;
 CORETEXT_EXPORT const CFStringRef kCTFontFeatureSelectorSettingKey;
+CORETEXT_EXPORT const CFStringRef kCTFontOpenTypeFeatureTag;
+CORETEXT_EXPORT const CFStringRef kCTFontOpenTypeFeatureValue;
 CORETEXT_EXPORT const CFStringRef kCTFontFeatureSampleTextKey;
 CORETEXT_EXPORT const CFStringRef kCTFontFeatureTooltipTextKey;
 
@@ -150,9 +158,11 @@ enum : unsigned int {
     kCTFontTableGSUB = 'GSUB',
     kCTFontTableJSTF = 'JSTF',
     kCTFontTableLTSH = 'LTSH',
+    kCTFontTableMATH = 'MATH',
     kCTFontTableOS2  = 'OS/2',
     kCTFontTablePCLT = 'PCLT',
     kCTFontTableVDMX = 'VDMX',
+    kCTFontTableSTAT = 'STAT',
     kCTFontTableVORG = 'VORG',
     kCTFontTableZapf = 'Zapf',
     kCTFontTableAcnt = 'acnt',
@@ -192,18 +202,19 @@ enum : unsigned int {
     kCTFontTableProp = 'prop',
     kCTFontTableSbit = 'sbit',
     kCTFontTableSbix = 'sbix',
+    kCTFontTableSVG = 'SVG ',
     kCTFontTableTrak = 'trak',
     kCTFontTableVhea = 'vhea',
     kCTFontTableVmtx = 'vmtx'
 };
 typedef FourCharCode CTFontTableTag;
 
-typedef enum CTFontOptions : CFOptionFlags {
+typedef CF_OPTIONS(CFOptionFlags, CTFontOptions) {
     kCTFontOptionsDefault = 0,
     kCTFontOptionsPreventAutoActivation = 1 << 0,
     kCTFontOptionsPreventAutoDownload = 1 << 1,
     kCTFontOptionsPreferSystemFont = 1 << 2,
-} CTFontOptions;
+};
 
 CF_IMPLICIT_BRIDGING_ENABLED
 

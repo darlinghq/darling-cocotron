@@ -72,6 +72,23 @@ static BOOL X11HasProperty(Display *xdpy, Window w, Atom prop, Atom type) {
     return present;
 }
 
+// The window the XdndProxy property of w names (the property's value, not its
+// type), or None if w has no such property.
+static Window X11ProxyOfWindow(Display *xdpy, Window w, Atom proxyAtom) {
+    Atom actualType;
+    int format;
+    unsigned long count, remaining;
+    unsigned char *data = NULL;
+    Window proxy = None;
+    if (XGetWindowProperty(xdpy, w, proxyAtom, 0, 1, False, XA_WINDOW, &actualType,
+                           &format, &count, &remaining, &data) == Success &&
+        actualType == XA_WINDOW && format == 32 && count >= 1)
+        proxy = (Window) ((unsigned long *) data)[0];
+    if (data)
+        XFree(data);
+    return proxy;
+}
+
 // The selection a drag publishes is served from the pasteboard the application
 // handed to -dragImage:..., read when a target asks for it. Nothing is copied up
 // front, so a payload that does not fit in memory twice still drags.
@@ -130,10 +147,10 @@ static X11DraggingManager *X11SharedManager;
     // Under a reparenting window manager the pointer sits over the frame, which
     // belongs to the window manager and carries no XdndAware, so this is the only
     // way a source can find the window that is listening. The specification also
-    // requires the proxy to point at itself.
-    XChangeProperty(_xdpy, parent, _atom.proxy, XA_ATOM, 32, PropModeReplace,
+    // requires the proxy to point at itself, and types the property as WINDOW.
+    XChangeProperty(_xdpy, parent, _atom.proxy, XA_WINDOW, 32, PropModeReplace,
                     (unsigned char *) &handle, 1);
-    XChangeProperty(_xdpy, handle, _atom.proxy, XA_ATOM, 32, PropModeReplace,
+    XChangeProperty(_xdpy, handle, _atom.proxy, XA_WINDOW, 32, PropModeReplace,
                     (unsigned char *) &handle, 1);
 }
 
@@ -509,12 +526,16 @@ static X11DraggingManager *X11SharedManager;
         target = None;
     if (target != _enteredWindow) {
         [self sendLeaveTo: _enteredWindow];
+        _enteredWindow = None;
         [self sendEnterTo: target];
     }
-    // Over a window that takes no drops there is no one to answer, and nothing to wait for
+    // Over a window that takes no drops there is no one to answer and nothing to wait for, and an earlier
+    // target's acceptance no longer applies
     if (target == None) {
         _enteredWindow = _targetWindow = None;
         _targetAccepts = NO;
+        _chosenOperations = NSDragOperationNone;
+        _suppressionRect = NSZeroRect;
         return;
     }
     // The position is the root-relative pointer location packed into two 16-bit
@@ -578,22 +599,9 @@ static X11DraggingManager *X11SharedManager;
 // The window a message is about: the one under the pointer that carries
 // XdndAware, following XdndProxy so that a reparenting window manager's frame
 // resolves to the window inside it.
-// The XdndProxy a window names, if it is one the specification allows following, or None
+// The XdndProxy a window names (the specification types the property as WINDOW), or None
 - (Window) proxyNamedBy: (Window) window {
-    Atom proxy;
-    int format;
-    unsigned long count, remaining;
-    unsigned char *data = NULL;
-    if (XGetWindowProperty(_xdpy, window, _atom.proxy, 0, 1, False, XA_ATOM, &proxy,
-                           &format, &count, &remaining, &data) != Success ||
-        data == NULL || count == 0) {
-        if (data)
-            XFree(data);
-        return None;
-    }
-    proxy = *(Atom *) data;
-    XFree(data);
-    return (Window) proxy;
+    return X11ProxyOfWindow(_xdpy, window, _atom.proxy);
 }
 
 - (Window) validProxyOf: (Window) window {

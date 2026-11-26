@@ -26,7 +26,9 @@
 // CGWarpMouseCursorPosition, CGAssociateMouseAndMouseCursorPosition, CGGetLastMouseDelta, CGSForceShowCursor)
 // need the window system's pointer state, which belongs to the connection that has the windows and
 // their input. Until CoreGraphics owns that connection, the framework that does (AppKit) registers
-// itself here, so that CoreGraphics does not have to reach up to find it. Without a controller a
+// itself here, so that CoreGraphics does not have to reach up to find it. A connection whose backend decodes
+// the pointer itself (X11) keeps this state and does not use the controller (-[CGSConnection managesPointer]).
+// Without a controller a
 // connection of CoreGraphics' own answers where the window system allows it, and the rest does nothing.
 //
 // The methods can be called from any thread.
@@ -42,6 +44,9 @@
 - (void) setMouseAssociatedWithCursor: (BOOL) associated;
 // The mouse motion since the previous call, in whole pixels.
 - (void) takeMouseDeltaX: (int32_t *) dx y: (int32_t *) dy;
+@optional
+// Whether no hide is pending (CGCursorIsVisible); without it the cursor counts as visible.
+- (BOOL) cursorIsVisible;
 @end
 
 // Registers the controller (not retained; pass nil when it goes away).

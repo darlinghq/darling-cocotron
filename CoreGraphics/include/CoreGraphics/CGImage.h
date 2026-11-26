@@ -65,7 +65,40 @@ enum {
 
 typedef unsigned CGBitmapInfo;
 
+// the byte order and pixel format parts of a CGBitmapInfo (macOS 10.12, 10.14)
+typedef CF_ENUM(uint32_t, CGImageByteOrderInfo) {
+    kCGImageByteOrderMask = 0x7000,
+    kCGImageByteOrderDefault = (0 << 12),
+    kCGImageByteOrder16Little = (1 << 12),
+    kCGImageByteOrder32Little = (2 << 12),
+    kCGImageByteOrder16Big = (3 << 12),
+    kCGImageByteOrder32Big = (4 << 12),
+};
+
+#ifdef __BIG_ENDIAN__
+#define kCGImageByteOrder16Host kCGImageByteOrder16Big
+#define kCGImageByteOrder32Host kCGImageByteOrder32Big
+#else
+#define kCGImageByteOrder16Host kCGImageByteOrder16Little
+#define kCGImageByteOrder32Host kCGImageByteOrder32Little
+#endif
+
+typedef CF_ENUM(uint32_t, CGImagePixelFormatInfo) {
+    kCGImagePixelFormatMask = 0xF0000,
+    kCGImagePixelFormatPacked = (0 << 16),
+    kCGImagePixelFormatRGB555 = (1 << 16),
+    kCGImagePixelFormatRGB565 = (2 << 16),
+    kCGImagePixelFormatRGB101010 = (3 << 16),
+    kCGImagePixelFormatRGBCIF10 = (4 << 16),
+};
+
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2Image *CGImageRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGImage *CGImageRef;
+#endif
 
 CF_IMPLICIT_BRIDGING_ENABLED
 

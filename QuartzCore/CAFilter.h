@@ -39,6 +39,24 @@ CA_EXPORT NSString *const kCAFilterMultiplyColor;
 CA_EXPORT NSString *const kCAFilterVariableBlur;
 CA_EXPORT NSString *const kCAFilterVibrantColorMatrix;
 
+// Blend modes, also valid as a CALayer compositingFilter string.
+CA_EXPORT NSString *const kCAFilterColorBlendMode;
+CA_EXPORT NSString *const kCAFilterColorBurnBlendMode;
+CA_EXPORT NSString *const kCAFilterColorDodgeBlendMode;
+CA_EXPORT NSString *const kCAFilterDarkenBlendMode;
+CA_EXPORT NSString *const kCAFilterDifferenceBlendMode;
+CA_EXPORT NSString *const kCAFilterExclusionBlendMode;
+CA_EXPORT NSString *const kCAFilterHardLightBlendMode;
+CA_EXPORT NSString *const kCAFilterHueBlendMode;
+CA_EXPORT NSString *const kCAFilterLightenBlendMode;
+CA_EXPORT NSString *const kCAFilterLuminosityBlendMode;
+CA_EXPORT NSString *const kCAFilterOverlayBlendMode;
+CA_EXPORT NSString *const kCAFilterSaturationBlendMode;
+CA_EXPORT NSString *const kCAFilterScreenBlendMode;
+CA_EXPORT NSString *const kCAFilterSoftLightBlendMode;
+CA_EXPORT NSString *const kCAFilterPlusD;
+CA_EXPORT NSString *const kCAFilterPlusL;
+
 CA_EXPORT NSString *const kCAFilterInputAlphaValues;
 CA_EXPORT NSString *const kCAFilterInputAmount;
 CA_EXPORT NSString *const kCAFilterInputAngle;

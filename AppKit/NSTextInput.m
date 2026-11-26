@@ -22,6 +22,10 @@ NSString *const NSTextInputContextKeyboardSelectionDidChangeNotification = @"NST
 
 NSString *const NSTextInputReplacementRangeAttributeName = @"NSTextInputReplacementRangeAttributeName";
 
+// Private: marks inserted text (the value is a boolean) that the client should
+// let the user undo as one insertion. The string was read from the exported constant on macOS 26.7.3 and 10.14.4 (black-box observation).
+NSString *const NSTextInsertionUndoableAttributeName = @"NSTextInsertionUndoable";
+
 @implementation NSTextInputContext
 
 + (NSTextInputContext *) currentInputContext {
@@ -41,6 +45,23 @@ NSString *const NSTextInputReplacementRangeAttributeName = @"NSTextInputReplacem
 
 - (id<NSTextInputClient>) client {
     return _client;
+}
+
+// Private: whether the system may draw its accessories (such as the input
+// source indicator) next to the insertion point. It is YES until changed.
+// Darling draws no cursor accessories, so the setting is only stored.
+// QUIRK: there is one setting for the whole process; a value set through any
+// context is what every context, also one created later, reports. Not
+// documented. Evidence: black-box observation on macOS 26.7.3 x86_64 (tier 2).
+// Test: appkit-text-input-context-private.m.
+static BOOL hidesCursorAccessories;
+
+- (BOOL) showsCursorAccessories {
+    return !hidesCursorAccessories;
+}
+
+- (void) setShowsCursorAccessories: (BOOL) shows {
+    hidesCursorAccessories = !shows;
 }
 
 - (void) activate {
@@ -101,6 +122,31 @@ static BOOL isInsertableText(NSString *text) {
         return NO;
     [_client insertText: text replacementRange: NSMakeRange(NSNotFound, 0)];
     return YES;
+}
+
+// Private variants of -handleEvent:. -handleEvent: runs the input method and
+// then the keyboard layout (key bindings and text insertion); these run one
+// stage each, or both with the result delivered to a block. On macOS 26.7.3
+// the blocks run before the methods return (test
+// appkit-text-input-context-private.m).
+- (void) handleEvent: (NSEvent *) event completionHandler: (void (^)(BOOL handled)) completionHandler {
+    BOOL handled = [self handleEvent: event];
+
+    if (completionHandler != nil)
+        completionHandler(handled);
+}
+
+// Input methods run in the window system backend, which delivers composed
+// text through -updateComposition:selection: and -commitComposition:, never
+// through key events handed to the context. So the input method stage handles
+// no event here, as on macOS when no input method is selected.
+- (void) handleEventByInputMethod: (NSEvent *) event completionHandler: (void (^)(BOOL handled)) completionHandler {
+    if (completionHandler != nil)
+        completionHandler(NO);
+}
+
+- (BOOL) handleEventByKeyboardLayout: (NSEvent *) event {
+    return [self handleEvent: event];
 }
 
 // Tells the window system backend, if it has an input method, that its

@@ -301,6 +301,22 @@ static BOOL frameRectForExtent(CGRect extent, CGRect *frame) {
 
 static void handleContextMessages(void *context);
 
+// SPI. Whether contexts may use the window server (CGS) connection; YES until set. Processes
+// without window server access (WebKit's web content process) turn it off before creating remote
+// contexts. Observed on macOS 26.7.3: the value reads back as set, and
+// +remoteContextWithOptions: still makes a context after it is set to NO. Darling's remote
+// contexts never use a CGS connection, so nothing else depends on it.
+// Test: tests/quartzcore-cacontext-allows-cgs-connections.m.
+static BOOL allowsCGSConnections = YES;
+
++ (BOOL) allowsCGSConnections {
+    return allowsCGSConnections;
+}
+
++ (void) setAllowsCGSConnections: (BOOL) allows {
+    allowsCGSConnections = allows;
+}
+
 + (instancetype) remoteContext {
     return [self remoteContextWithOptions: nil];
 }

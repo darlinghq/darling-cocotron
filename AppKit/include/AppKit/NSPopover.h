@@ -19,6 +19,7 @@
 
 #import <AppKit/AppKitExport.h>
 #import <AppKit/AppKitIvarLayout.h>
+#import <AppKit/NSAppearance.h>
 #import <AppKit/NSResponder.h>
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSNotification.h>
@@ -42,7 +43,7 @@ typedef NS_ENUM(NSInteger, NSPopoverAppearance) {
     NSPopoverAppearanceHUD = 1,
 };
 
-@interface NSPopover : NSResponder <NSCoding> {
+@interface NSPopover : NSResponder <NSAppearanceCustomization, NSCoding> {
     NSPopoverBehavior _behavior;
     BOOL _animates;
     NSSize _contentSize;
@@ -50,7 +51,8 @@ typedef NS_ENUM(NSInteger, NSPopoverAppearance) {
     id<NSPopoverDelegate> _delegate;
     NSRect _positioningRect;
     NSPanel *_panel;
-    NS_LEGACY_IVAR_PAD(_NSPopoverReserved, 44)
+    NSAppearance *_appearance;
+    NS_LEGACY_IVAR_PAD(_NSPopoverReserved, 40)
 }
 
 @property NSPopoverBehavior behavior;
@@ -60,6 +62,10 @@ typedef NS_ENUM(NSInteger, NSPopoverAppearance) {
 @property(assign) id<NSPopoverDelegate> delegate;
 @property NSRect positioningRect;
 @property(readonly, getter=isShown) BOOL shown;
+// Without an appearance of its own, the effective one is the vibrant
+// appearance that matches the application's.
+@property(strong) NSAppearance *appearance;
+@property(readonly, strong) NSAppearance *effectiveAppearance;
 
 - (void) showRelativeToRect: (NSRect) positioningRect
                      ofView: (NSView *) positioningView

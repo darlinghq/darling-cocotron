@@ -11,7 +11,13 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 #import <CoreGraphics/CoreGraphicsExport.h>
 
+// DARLING: SDK consumers get the struct tag macOS's SDK has, which code that
+// forward-declares the type relies on; Darling's own build keeps its own.
+#ifdef DARLING
 typedef struct CF_BRIDGED_TYPE(id) O2PDFDoument *CGPDFDocumentRef;
+#else
+typedef struct CF_BRIDGED_TYPE(id) CGPDFDocument *CGPDFDocumentRef;
+#endif
 
 #import <CoreFoundation/CFDictionary.h>
 #import <CoreFoundation/CFURL.h>

@@ -211,6 +211,9 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
 - (void) changed {
     _owned = YES;
     if (_publishing) return;
+    // The serial is taken while the input that caused the change is handled: by the time the
+    // selection is published the focus may have left, and a later input must not stand in for it.
+    _changeSerial = [_display clipboardSerial];
     _needsPublish = YES;
     [self inputAvailable];
 }
@@ -278,7 +281,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     return [_data objectForKey: type];
 }
 - (void) publishSelection {
-    uint32_t serial = [_display clipboardSerial];
+    uint32_t serial = _changeSerial ? _changeSerial : [_display clipboardSerial];
     if (!_needsPublish || !_device || !serial || !_owned) return;
     NSMutableDictionary *snapshot = [NSMutableDictionary dictionary];
     _publishing = YES;
@@ -307,6 +310,7 @@ void WaylandSendData(WaylandDisplay *display, NSData *data, int fd) {
     _source = source;
     [_sourceData release]; _sourceData = [snapshot copy];
     _needsPublish = NO;
+    _changeSerial = 0;
     [_display flush];
 }
 - (NSData *) dataForType: (NSString *) type {

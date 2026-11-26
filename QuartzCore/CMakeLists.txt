@@ -70,6 +70,7 @@ set(QuartzCore_sources
 	CAReplicatorLayer.m
 	CAScrollLayer.m
 	CAOpenGLLayer.m
+	CAPresentationModifier.m
 	CAMetalLayer.mm
 	CAEAGLLayer.m
 	CAMetalDrawable.mm

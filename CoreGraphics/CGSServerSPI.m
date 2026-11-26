@@ -37,7 +37,8 @@ CGSConnectionID CGSMainConnectionID(void)
         if (error == kCGErrorSuccess && created != 0 &&
             _CGSConnectionForID(created) != nil) {
             mainConnectionID = created;
-        } else if (!mainConnectionFailureLogged) {
+        } else if (!mainConnectionFailureLogged && !_CGSWindowServerConnectionsDenied()) {
+            // (a process that denied itself connections expects to have none)
             // GUESS: failure returns 0 and is not cached, so a later call retries.
             mainConnectionFailureLogged = YES;
             NSLog(@"CGSMainConnectionID: cannot create the default connection "
@@ -73,5 +74,82 @@ CGError CGSSetWindowAlpha(CGSConnectionID connection, CGSWindowID windowID,
 
     // GUESS: clamp to the NSWindow.alphaValue range (NaN becomes 0).
     [window setAlphaValue: fmin(fmax(alpha, 0.0), 1.0)];
+    return kCGErrorSuccess;
+}
+
+#pragma mark - Connection properties
+
+static pthread_mutex_t connectionPropertiesLock = PTHREAD_MUTEX_INITIALIZER;
+// connection id -> (key -> value)
+static CFMutableDictionaryRef connectionProperties;
+
+// A connection's properties may be set and read by the connection itself only.
+static BOOL isOwnConnection(CGSConnectionID cid, CGSConnectionID ownerCid)
+{
+    return cid == ownerCid && _CGSConnectionForID(cid) != nil;
+}
+
+CGError CGSSetConnectionProperty(CGSConnectionID cid, CGSConnectionID ownerCid, CFStringRef key, CFTypeRef value)
+{
+    if (!isOwnConnection(cid, ownerCid) || key == NULL)
+        return kCGErrorFailure;
+
+    pthread_mutex_lock(&connectionPropertiesLock);
+    if (connectionProperties == NULL)
+        connectionProperties = CFDictionaryCreateMutable(NULL, 0, NULL, &kCFTypeDictionaryValueCallBacks);
+    CFMutableDictionaryRef properties = (CFMutableDictionaryRef) CFDictionaryGetValue(connectionProperties, (const void *) (uintptr_t) cid);
+    if (properties == NULL && value != NULL) {
+        properties = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(connectionProperties, (const void *) (uintptr_t) cid, properties);
+        CFRelease(properties);
+    }
+    if (properties != NULL) {
+        if (value != NULL)
+            CFDictionarySetValue(properties, key, value);
+        else
+            CFDictionaryRemoveValue(properties, key);
+    }
+    pthread_mutex_unlock(&connectionPropertiesLock);
+    return kCGErrorSuccess;
+}
+
+CGError CGSCopyConnectionProperty(CGSConnectionID cid, CGSConnectionID ownerCid, CFStringRef key, CFTypeRef *value)
+{
+    if (!isOwnConnection(cid, ownerCid) || key == NULL || value == NULL)
+        return kCGErrorFailure;
+
+    pthread_mutex_lock(&connectionPropertiesLock);
+    CFDictionaryRef properties = connectionProperties != NULL
+        ? (CFDictionaryRef) CFDictionaryGetValue(connectionProperties, (const void *) (uintptr_t) cid) : NULL;
+    CFTypeRef found = properties != NULL ? CFDictionaryGetValue(properties, key) : NULL;
+    *value = found != NULL ? CFRetain(found) : NULL;
+    pthread_mutex_unlock(&connectionPropertiesLock);
+    return kCGErrorSuccess;
+}
+
+#pragma mark - Connection notifications
+
+// The display servers Darling draws through tell nothing of the occlusion or modification of
+// windows, so registered procs are accepted and never called, and enabling these notifications
+// succeeds without effect.
+CGError CGSRegisterConnectionNotifyProc(CGSConnectionID cid, CGSNotifyConnectionProcPtr proc, uint32_t type, void *arg)
+{
+    return kCGErrorSuccess;
+}
+
+// Inference (no evidence of the value for a visible process; macOS gave false to a process with
+// no visible window): the process counts as visible, since occlusion is not tracked.
+CGError CGSPackagesEnableConnectionOcclusionNotifications(CGSConnectionID cid, bool enable, bool *outCurrentVisibilityState)
+{
+    if (outCurrentVisibilityState != NULL)
+        *outCurrentVisibilityState = true;
+    return kCGErrorSuccess;
+}
+
+// The connection counts as idle, as macOS reported for a connection with no window changes.
+CGError CGSPackagesEnableConnectionWindowModificationNotifications(CGSConnectionID cid, bool enable, bool *outConnectionIsCurrentlyIdle)
+{
+    if (outConnectionIsCurrentlyIdle != NULL)
+        *outConnectionIsCurrentlyIdle = true;
     return kCGErrorSuccess;
 }

@@ -29,6 +29,7 @@
 #import <Onyx2D/O2Image.h>
 #import <Onyx2D/O2MutablePath.h>
 #import <Onyx2D/O2Paint_axialGradient.h>
+#import <Onyx2D/O2Paint_conicGradient.h>
 #import <Onyx2D/O2Paint_color.h>
 #import <Onyx2D/O2Paint_image.h>
 #import <Onyx2D/O2Paint_pattern.h>
@@ -324,8 +325,10 @@ ONYX2D_STATIC void O2ContextClipToPathShape(O2Context_builtin *self,
     memset(O2SurfaceGetPixelBytes(coverage), 0,
            O2SurfaceGetBytesPerRow(coverage) * boxHeight);
 
+    // The path is in device space, which is what the coverage surface is in as
+    // well: its context must not flip it a second time.
     O2Context_builtin *context = [[[self class] alloc] initWithSurface: coverage
-                                                               flipped: NO];
+                                                               flipped: YES];
     O2MutablePathRef moved = O2PathCreateMutableCopy(path);
 
     O2PathApplyTransform(moved, O2AffineTransformMakeTranslation(-x0, -y0));
@@ -648,7 +651,14 @@ static BOOL copyBitsPixel(O2Float value, long *pixel) {
     O2RasterizerSetShouldAntialias(self, gState->_shouldAntialias,
                                    gState->_antialiasingQuality);
 
-    if ([shading isAxial])
+    if ([shading isConic]) {
+        paint = [[O2Paint_conicGradient alloc]
+                initWithShading: shading
+                deviceTransform: gState->_deviceSpaceTransform];
+        // a colour space the ramp cannot turn into colours draws nothing
+        if (paint == nil)
+            return;
+    } else if ([shading isAxial])
         paint = [[O2Paint_axialGradient alloc]
                 initWithShading: shading
                 deviceTransform: gState->_deviceSpaceTransform];
