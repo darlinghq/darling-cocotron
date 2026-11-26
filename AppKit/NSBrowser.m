@@ -538,7 +538,8 @@ NSString *const NSBrowserColumnConfigurationDidChangeNotification = @"NSBrowserC
 }
 
 - (NSRect) frameOfInsideOfColumn: (NSInteger) column {
-    NSScrollView *scrollView = [NS_EXTRA(NSBrowser, self)->_scrollViews objectAtIndex: 0];
+    // The scroll views exist once the browser has been tiled; loading a column before that makes them.
+    NSScrollView *scrollView = [self createScrollViewAtIndex: 0];
     NSSize size = [scrollView contentSize];
 
     return NSMakeRect(0, 0, size.width, size.height);
