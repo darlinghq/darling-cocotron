@@ -43,6 +43,7 @@
 #include <wayland-util.h>
 
 @class CGSConnectionWayland;
+@class CGSWaylandCursor;
 @class NSMutableDictionary;
 struct wl_proxy;
 
@@ -104,7 +105,8 @@ struct wl_proxy;
     // and the point.
     struct wl_proxy *_warpLock, *_warpSurface;
     CGPoint _warpPoint;
-    BOOL _cursorHiddenApplied;
+    // What the pointer shows (see CGSWaylandCursor.h).
+    CGSWaylandCursor *_cursorObject;
 }
 
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection;
@@ -142,8 +144,13 @@ struct wl_proxy;
 // CGWarpMouseCursorPosition(): the global point; kCGErrorCannotComplete when there is no surface or the
 // compositor offers neither pointer-warp nor a pointer lock.
 - (CGError) warpToGlobalPoint: (CGPoint) point;
-// The hide count of the cursor changed.
+// The hide count of the cursor changed, or the cursor of the process.
 - (void) cursorHiddenChanged;
+- (void) cursorChanged;
+// The compositor's cursor shape or fractional scale global appeared or went away.
+- (void) cursorGlobalsChanged;
+// The serial of the latest wl_pointer.enter, 0 while the pointer is over no surface of the process.
+- (uint32_t) enterSerial;
 
 @property (readonly) struct wl_proxy *pointerProxy;
 

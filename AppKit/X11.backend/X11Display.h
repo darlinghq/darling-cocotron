@@ -19,7 +19,7 @@
 
 #import <CoreGraphics/CGSNativeConnection.h>
 
-@class X11Cursor, X11AppMenu, X11Window;
+@class X11AppMenu, X11Window;
 
 @interface X11Display : DarlingDisplay <CGSNativeConnectionObserver> {
     Display *_display;
@@ -30,7 +30,6 @@
     BOOL _desktopMenuProbed, _desktopMenuPresent;
 
     id lastFocusedWindow;
-    X11Cursor *_blankCursor, *_defaultCursor;
     // ConfinePointerToFullscreenWindows (org.darlinghq.AppKit): keep the
     // pointer inside the focused fullscreen window, through a pointer grab on
     // _confinedWindow while one is held.
@@ -45,7 +44,6 @@
     // Xwayland forwards a pointer warp to the compositor only while the X
     // cursor is hidden, so warps are not honoured with a visible cursor there.
     BOOL _isXwayland;
-    BOOL _cursorHidden;
     // See -primaryRootFrame. Device pixels, root coordinates.
     NSRect _primaryRootFrame;
     BOOL _primaryRootFrameValid;

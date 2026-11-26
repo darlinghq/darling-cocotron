@@ -38,12 +38,11 @@
 
 struct wl_display;
 struct wl_proxy;
-struct wl_cursor_theme;
 struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandCursor, WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
+@class WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -199,18 +198,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // The keyboard focus was in a window of the application that was unmapped; its leave event has not arrived.
     BOOL _keyboardWindowUnmapped;
 
-    // cursor-shape-v1: when the compositor offers named cursors, the shape device for CoreGraphics'
-    // wl_pointer replaces the cursor surface image.
-    struct wl_proxy *_cursorShapeManager, *_cursorShapeDevice;
-    uint32_t _cursorShapeManagerName;
-    struct wl_cursor_theme *_cursorTheme;
-    uint32_t _cursorThemeScale120;
-    struct wl_proxy *_cursorSurface, *_cursorFractionalScale;
-    uint32_t _cursorPreferredScale120;
-    struct wl_proxy *_imageCursorBuffer;
-    uint32_t _imageCursorBufferScale120;
-    WaylandCursor *_cursor;
-    BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
+    // The pointer is over a window decoration, where the arrow is shown whatever cursor the application selected.
+    BOOL _cursorOverDecoration;
     WaylandDataDevice *_dataDevice;
 }
 
@@ -244,15 +233,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) processPendingEvents;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
 - (uint32_t) refreshForOutput: (struct wl_proxy *) output; // millihertz, 0 if unknown
-- (void) preferredScaleChanged: (uint32_t) scale120;
-- (void) windowScaleChanged: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForGenericPopup: (WaylandWindow *) window;
 - (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
-// Creates or destroys the cursor shape device to follow the availability of the manager and the pointer.
-- (void) updateCursorShapeDevice;
 // Fills `result` and `proxies` with up to `max` outputs in -screens order (the order of the displays): their
 // logical sizes and whether they are in `entered` (NSValue pointers, as
 // WaylandWindow keeps its entered outputs). Returns 0 until an output has

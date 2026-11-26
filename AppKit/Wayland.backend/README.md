@@ -42,7 +42,8 @@ to, such a window is an ordinary toplevel.
 - Input: pointer with click grouping and scroll frames, keyboard through xkbcommon with the compositor's
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
   events.
-- Cursors: themed cursors and `NSImage` cursors with their hotspot.
+- Cursors: themed cursors and `NSImage` cursors with their hotspot. They are CoreGraphics' (the cursor SPI, `CGSCursor.h`):
+  the shape goes to the compositor with cursor-shape-v1, an image or a theme image is the pointer's cursor surface.
 - Clipboard and drag-and-drop, OpenGL and scale, fullscreen and pointer lock: see below.
 - Window icon: with `xdg_toplevel_icon_manager_v1` (KWin 6.1 and later, others), every toplevel gets the application
   icon, `-[NSApplication applicationIconImage]` (the bundle icon or what the program set), as wl_shm buffers at the
@@ -113,8 +114,8 @@ on another thread asks through the main run loop. The drawable size in pixels an
 
 Scale follows the output a surface is on: the integer `wl_surface.set_buffer_scale`, or, when the compositor offers
 [wp-fractional-scale-v1](https://gitlab.freedesktop.org/wayland/wayland-protocols/-/blob/main/staging/fractional-scale/fractional-scale-v1.xml)
-together with viewporter, the preferred scale in 120ths with the buffer cropped and scaled through a viewport. Cursors
-and drag icons use the same scale; a compositor without viewporter gets an integer scale only. Swaps are paced to the
+together with viewporter, the preferred scale in 120ths with the buffer cropped and scaled through a viewport. The cursor
+surface (CoreGraphics') and drag icons use the same scale; a compositor without viewporter gets an integer scale only. Swaps are paced to the
 refresh rate of the window's output (`refreshMillihertz`).
 
 ## Fullscreen and pointer lock

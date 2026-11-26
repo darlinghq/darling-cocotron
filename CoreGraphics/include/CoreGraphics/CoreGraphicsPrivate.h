@@ -244,6 +244,10 @@ extern void CGContextSetFontSmoothingStyle(CGContextRef context, uint32_t style)
 // (AppKit's NSScreen). The display is a CGDirectDisplayID.
 // Device pixels per point of the display (at least 1; 1 for a display that does not exist).
 extern double _CGSDisplayBackingScaleFactor(CGDirectDisplayID display);
+// The display's rectangle in the window system's own pixels (X11: the monitor in root window coordinates), for the
+// framework that talks to the window system itself. false (and *frame untouched) when the display does not exist
+// or the window system has no such coordinates (Wayland).
+extern bool _CGSDisplayNativeFrame(CGDirectDisplayID display, CGRect *frame);
 // The EDID the display's output carries, or NULL; the caller releases it.
 extern CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display);
 // The name the window system gives the display's output (a description or a connector name), or NULL; the

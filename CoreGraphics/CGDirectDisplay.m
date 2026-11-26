@@ -399,6 +399,15 @@ double _CGSDisplayBackingScaleFactor(CGDirectDisplayID display) {
     return scale >= 1 ? scale : 1;
 }
 
+bool _CGSDisplayNativeFrame(CGDirectDisplayID display, CGRect *frame) {
+    CGSScreen *screen = screenForDisplayID(activeScreens(NULL), display);
+
+    if (screen == nil || ![screen hasNativeFrame] || frame == NULL)
+        return false;
+    *frame = [screen nativeFrame];
+    return true;
+}
+
 CFDataRef _CGSDisplayCopyEDID(CGDirectDisplayID display) {
     CGSScreen *screen = screenForDisplayID(activeScreens(NULL), display);
 
