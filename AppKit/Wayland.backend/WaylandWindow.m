@@ -19,14 +19,11 @@
 #import "WaylandWindow.h"
 #import "WaylandSubWindow.h"
 #import "WaylandToplevelIcon.h"
-#import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandWindowLevel.h"
 #import "../DarlingWindowPresentation.h"
 #import <AppKit/NSApplication.h>
-#import <AppKit/NSColorSpace.h>
-#import <AppKit/NSScreen.h>
 #import <AppKit/NSWindow.h>
 #import "../NSWindow-Private.h"
 #import <AppKit/NSGraphicsContext.h>
@@ -108,7 +105,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [_deviceDictionary release];
     [_surfaceOutputs release];
     [_title release];
-    [_sessionName release];
     [super dealloc];
 }
 
@@ -148,10 +144,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _surface;
 }
 
-- (struct wl_proxy *) toplevel {
-    return _toplevel;
-}
-
 - (struct wl_proxy *) ensureSurface {
     if (!_surface && !_invalidated) {
         union wl_argument args[] = {{.o = NULL}};
@@ -163,158 +155,17 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _viewport = WaylandCreateObject(_display->_viewporter, WP_VIEWPORTER_GET_VIEWPORT,
                 &wp_viewport_interface, viewportArgs, 0, nil);
         }
-        [self updateSurfaceColorIfNeeded];
     }
     return _surface;
 }
 
-// The color space of the content the window draws, or sRGB when neither the window nor a screen
-// reports one (a display the compositor has not described yet).
-- (NSColorSpace *) contentColorSpace {
-    NSColorSpace *space = [_delegate respondsToSelector: @selector(colorSpace)]
-                          ? [_delegate colorSpace] : nil;
-    if (space == nil)
-        space = [[NSScreen screens] count] > 0 ? [[NSScreen mainScreen] colorSpace] : nil;
-    return space != nil ? space : [NSColorSpace sRGBColorSpace];
-}
-
-- (void) updateSurfaceColor {
-    if (_surface == NULL)
-        return;
-    WaylandColorManager *color = [_display colorManager];
-    if (color == nil)
-        return;
-    if (_colorSurface == NULL)
-        _colorSurface = [color newColorSurfaceForSurface: _surface];
-    if (_representationSurface == NULL)
-        _representationSurface = [color newRepresentationSurfaceForSurface: _surface];
-    CGColorSpaceRef space = [[self contentColorSpace] CGColorSpace];
-    if (space != NULL)
-        [color setColorSpace: space onSurface: _colorSurface];
-}
-
-- (void) updateSurfaceColorIfNeeded {
-    WaylandColorManager *color = [_display colorManager];
-    if (_surface == NULL || color == nil)
-        return;
-    if ([color hasColorGlobals])
-        [self updateSurfaceColor];
-}
-
-- (void) colorSpaceChanged {
-    [self updateSurfaceColor];
-    [_display flush];
-}
-
-- (void) colorManagerAvailable {
-    [self updateSurfaceColorIfNeeded];
-}
-
-// alpha-modifier-v1 multiplies the surface's per-pixel alpha. The protocol's factor is 0 for fully
-// transparent and UINT32_MAX for fully opaque, which is NSWindow.alphaValue mapped to that range.
-- (void) updateAlphaModifier {
-    if (_surface == NULL || _display->_alphaModifierManager == NULL)
-        return;
-    if (_alphaModifier == NULL) {
-        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
-        _alphaModifier = WaylandCreateObject(_display->_alphaModifierManager,
-                                             WP_ALPHA_MODIFIER_GET_SURFACE,
-                                             &wp_alpha_modifier_surface_v1_interface, args, 0, nil);
-        if (_alphaModifier == NULL)
-            return;
-    }
-    double alpha = _delegate != nil ? (double) [_delegate alphaValue] : 1.0;
-    if (!(alpha > 0)) alpha = 0;
-    if (alpha > 1) alpha = 1;
-    union wl_argument value[1] = {{.u = (uint32_t) (alpha * (double) UINT32_MAX)}};
-    WaylandMarshal(_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_SET_MULTIPLIER, NULL, 0, value);
-    if (_mapped && _configured) {
-        [self commitSurface];
-        [_display flush];
-    }
-}
-
-- (void) alphaModifierAvailable {
-    [self updateAlphaModifier];
-}
-
-- (void) sessionManagerAvailable {
-    if (_mapped && _toplevel != NULL && _toplevelSession == NULL)
-        [self joinSessionBeforeCommit];
-}
-
-- (NSString *) ensureSessionToplevelName {
-    if (_sessionName == nil)
-        _sessionName = [[NSString stringWithFormat: @"darling-%@",
-                         [[NSProcessInfo processInfo] globallyUniqueString]] copy];
-    return _sessionName;
-}
-
-- (void) setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring {
-    if ([name length] == 0)
-        return;
-    if (_toplevelSession != NULL && ![name isEqualToString: _sessionName]) {
-        union wl_argument args[1] = {{.s = [name UTF8String]}};
-        WaylandMarshal(_toplevelSession, WP_TOPLEVEL_SESSION_RENAME, NULL, 0, args);
-    }
-    [name retain];
-    [_sessionName release];
-    _sessionName = name;
-    _restoringSessionToplevel = restoring;
-}
-
-- (BOOL) isRestoringSessionToplevel {
-    return _restoringSessionToplevel;
-}
-
-- (BOOL) hasCommittedSurface {
-    return _surfaceCommitted;
-}
-
-- (void) commitSurface {
-    if (_surface == NULL)
-        return;
-    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
-    _surfaceCommitted = YES;
-}
-
-- (struct wl_proxy *) toplevelSession {
-    return _toplevelSession;
-}
-
-- (void) setToplevelSession: (struct wl_proxy *) proxy {
-    _toplevelSession = proxy;
-}
-
-- (void) joinSessionBeforeCommit {
-    [_display joinSessionForToplevel: self];
-}
-
 // The surface with the objects that are tied to it. The role objects must be gone first.
 - (void) destroySurface {
-    WaylandColorManager *color = [_display colorManager];
-    [color destroyColorSurface: _colorSurface];
-    [color destroyRepresentationSurface: _representationSurface];
-    _colorSurface = _representationSurface = NULL;
-    if (_alphaModifier != NULL)
-        sendRequest(_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    _alphaModifier = NULL;
-    if (_idleInhibitor != NULL)
-        sendRequest(_idleInhibitor, ZWP_IDLE_INHIBITOR_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    _idleInhibitor = NULL;
-    if (_toplevelSession != NULL)
-        sendRequest(_toplevelSession, WP_TOPLEVEL_SESSION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    _toplevelSession = NULL;
-    if (_dialog != NULL)
-        sendRequest(_dialog, XDG_DIALOG_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    _dialog = NULL;
-    _dialogModal = NO;
     if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_surface)
         sendRequest(_surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _fractionalScale = _viewport = _surface = NULL;
-    _surfaceCommitted = NO;
 }
 
 // The core protocol makes the role of a wl_surface permanent for its lifetime, and xdg_toplevel and
@@ -584,7 +435,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [self updateSizeLimits];
             _levelParent = nil;
             [self updateLevelParent];
-            [self updateDialogForToplevel];
 
             _decorationForcedClient = forceClient;
             [self updateDecorationMode];
@@ -592,22 +442,17 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [self updateTaskbarPresence];
             _toplevelIconSet = NO;
             [self updateToplevelIcon];
-            // The session request has to precede the initial commit on the surface.
-            [self joinSessionBeforeCommit];
         }
 
     }
 
-    // The multiplier is double-buffered, so it has to be set before the surface's first commit.
-    [self updateAlphaModifier];
     _pendingWidth = _pendingHeight = 0;
     _pendingActivated = NO;
     _pendingSuspended = NO;
     _pendingFullscreen = NO;
     // The initial commit has no buffer; content follows the first configure.
-    [self commitSurface];
+    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
     _mapped = YES;
-    [self updateIdleInhibitor];
     [self scheduleScaleUpdate];
     if (_subwindowRedrawNeeded) [self scheduleSubwindowRedraw];
     _configured = NO;
@@ -652,7 +497,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_toplevel == NULL || _display->_toplevelIcons == nil)
         return;
     if ([_display->_toplevelIcons applyToToplevel: _toplevel hadIcon: &_toplevelIconSet] && _mapped && _configured) {
-        [self commitSurface];
+        sendRequest(_surface, WP_SURFACE_COMMIT, 0);
         [_display flush];
     }
 }
@@ -662,7 +507,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (!_mapped || _toplevel == NULL)
         return;
     [self updateTaskbarPresence];
-    [self updateDialogForToplevel];
     [_display flush];
 }
 
@@ -821,13 +665,12 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // their native-window identity. A NULL buffer unmaps the entire subtree.
     union wl_argument detach[] = {{.o = NULL}, {.i = 0}, {.i = 0}};
     WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, detach);
-    [self commitSurface];
+    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
     _toplevel = _xdgSurface = NULL;
     [_surfaceOutputs removeAllObjects];
     [self destroyBuffers];
 
     _mapped = NO;
-    [self updateIdleInhibitor];
     // The toplevel is gone, and so is what the compositor did to it.
     [self endMinimized];
     _levelParent = nil;
@@ -1189,7 +1032,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) setLevel: (int) value {
     _level = value;
     [self updateLevelParent];
-    [self updateDialogForToplevel];
 }
 
 // xdg-shell cannot stack a window above arbitrary windows, but it can keep a
@@ -1221,93 +1063,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _levelParent;
 }
 
-// Sheets and windows in an application modal session are the dialogs AppKit has. xdg-shell can relate
-// a toplevel to its parent but cannot say that it is a dialog, so xdg-dialog-v1 tells the compositor.
-- (BOOL) isDialogToplevel {
-    NSWindow *window = _delegate;
-    if (window == nil)
-        return NO;
-    return ([window respondsToSelector: @selector(isSheet)] && [window isSheet]) ||
-           window == [NSApp modalWindow];
-}
-
-- (void) updateDialogForToplevel {
-    BOOL dialog = _toplevel != NULL && [self isDialogToplevel] &&
-                  _display->_dialogManager != NULL && _levelParent != nil &&
-                  _levelParent->_toplevel != NULL;
-    if (!dialog) {
-        if (_dialog != NULL) {
-            sendRequest(_dialog, XDG_DIALOG_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-            _dialog = NULL;
-            _dialogModal = NO;
-        }
-        return;
-    }
-    if (_dialog == NULL) {
-        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _toplevel}};
-        _dialog = WaylandCreateObject(_display->_dialogManager, XDG_WM_DIALOG_GET_XDG_DIALOG,
-                                      &xdg_dialog_v1_interface, args, 0, nil);
-        if (_dialog == NULL)
-            return;
-        _dialogModal = NO;
-    }
-    // A sheet is modal to its parent; the same is true of a window in an application modal session.
-    // The client still filters events for the parent (AppKit does that), so this is only a hint.
-    if (!_dialogModal) {
-        sendRequest(_dialog, XDG_DIALOG_SET_MODAL, 0);
-        _dialogModal = YES;
-    }
-}
-
-- (void) dialogManagerAvailable {
-    [self updateDialogForToplevel];
-}
-
 // The compositor drops the relation when the parent unmaps.
 - (void) levelParentUnmapped {
     _levelParent = nil;
-    [self updateDialogForToplevel];
-}
-
-// The tag is configuration data, so it uses the untranslated process name. The description is what a
-// user sees, so it uses the localized window title. Both are sent before the first surface commit when
-// the manager is available; a title change updates the description in place.
-- (void) updateToplevelTags {
-    if (_toplevel == NULL || _display->_toplevelTagManager == NULL)
-        return;
-    NSString *process = [[NSProcessInfo processInfo] processName];
-    const char *tag = [process UTF8String];
-    if (tag == NULL)
-        tag = "window";
-    union wl_argument args[2] = {{.o = (struct wl_object *) _toplevel}, {.s = tag}};
-    WaylandMarshal(_display->_toplevelTagManager,
-                   XDG_TOPLEVEL_TAG_MANAGER_SET_TOPLEVEL_TAG, NULL, 0, args);
-    const char *description = [_title UTF8String];
-    if (description == NULL || *description == '\0')
-        description = tag;
-    args[1].s = description;
-    WaylandMarshal(_display->_toplevelTagManager,
-                   XDG_TOPLEVEL_TAG_MANAGER_SET_TOPLEVEL_DESCRIPTION, NULL, 0, args);
-}
-
-// The display stays awake for a window only while the process holds a power assertion that prevents display
-// sleep (kIOPMAssertPreventUserIdleDisplaySleep), which is what macOS does; the compositor only takes
-// an inhibitor made for a surface. The inhibitor is only useful while the surface is mapped and visible:
-// a compositor ignores it when the surface is unmapped or occluded, so it is dropped as soon as either
-// happens.
-- (void) updateIdleInhibitor {
-    BOOL inhibit = !_invalidated && _mapped && !_suspended && !_fullyTransparent &&
-                   _surface != NULL && _display->_idleInhibitManager != NULL &&
-                   _CGSNativeConnectionDisplaySleepPrevented();
-    if (inhibit && _idleInhibitor == NULL) {
-        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
-        _idleInhibitor = WaylandCreateObject(_display->_idleInhibitManager,
-                                             ZWP_IDLE_INHIBIT_MANAGER_CREATE_INHIBITOR,
-                                             &zwp_idle_inhibitor_v1_interface, args, 0, nil);
-    } else if (!inhibit && _idleInhibitor != NULL) {
-        sendRequest(_idleInhibitor, ZWP_IDLE_INHIBITOR_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-        _idleInhibitor = NULL;
-    }
 }
 
 - (void) updateTitle {
@@ -1316,7 +1074,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     const char *title = [_title UTF8String];
     union wl_argument args[1] = {{.s = title ? title : ""}};
     WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_TITLE, NULL, 0, args);
-    [self updateToplevelTags];
 }
 
 - (void) setTitle: (NSString *) title {
@@ -1378,26 +1135,27 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
 }
 
 - (void) setOpaque: (BOOL) value {
+    if (_isOpaque == value)
+        return;
     _isOpaque = value;
+    [_context release];
+    _context = nil;
+    [_delegate platformWindowDidInvalidateCGContext: self];
 }
 
 - (void) setAlphaValue: (CGFloat) value {
+    // No client-side opacity on Wayland without an extra protocol, except that a fully
+    // transparent window is not shown at all (see -isFullyTransparent).
     BOOL transparent = value <= 0;
-    if (transparent != _fullyTransparent) {
-        // Without alpha-modifier a fully transparent window is simply not shown (see
-        // -isFullyTransparent); with it any value can be sent to the compositor.
-        _fullyTransparent = transparent;
-        if (transparent) {
-            BOOL ordered = _shouldBeMapped;
-            [self unmap];
-            _shouldBeMapped = ordered;
-        } else if (_shouldBeMapped)
-            [self ensureMapped];
-    }
-    if (_mapped) {
-        [self updateAlphaModifier];
-        [self updateIdleInhibitor];
-    }
+    if (transparent == _fullyTransparent)
+        return;
+    _fullyTransparent = transparent;
+    if (transparent) {
+        BOOL ordered = _shouldBeMapped;
+        [self unmap];
+        _shouldBeMapped = ordered;
+    } else if (_shouldBeMapped)
+        [self ensureMapped];
 }
 
 - (void) setHasShadow: (BOOL) value {
@@ -1610,7 +1368,8 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
                 bitsPerComponent: 8
                      bytesPerRow: 0
                       colorSpace: colorSpace
-                      bitmapInfo: kO2ImageAlphaPremultipliedFirst |
+                      bitmapInfo: (_isOpaque ? kO2ImageAlphaNoneSkipFirst
+                                             : kO2ImageAlphaPremultipliedFirst) |
                                   kO2BitmapByteOrder32Little];
         O2ColorSpaceRelease(colorSpace);
         _context = [[WaylandDrawingContext alloc] initWithSurface: surface logicalSize: logical
@@ -1770,9 +1529,12 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
         return;
 
     // Both start with the top row.
-    for (size_t row = 0; row < height; row++)
-        memcpy((uint8_t *) buffer->data + row * width * 4,
-               pixels + row * sourceStride, width * 4);
+    if (sourceStride == width * 4)
+        memcpy(buffer->data, pixels, width * height * 4);
+    else
+        for (size_t row = 0; row < height; row++)
+            memcpy((uint8_t *) buffer->data + row * width * 4,
+                   pixels + row * sourceStride, width * 4);
 
     union wl_argument args[4] = {{.o = (struct wl_object *) buffer->buffer},
                                  {.i = 0},
@@ -1802,7 +1564,7 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
                                          &wl_callback_interface, args,
                                          WaylandObjectFrameCallback, self);
 
-    [self commitSurface];
+    sendRequest(_surface, WP_SURFACE_COMMIT, 0);
     buffer->busy = YES;
     _needsPresent = NO;
     [_display flush];
@@ -1866,11 +1628,6 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
         } else if (opcode == WP_TOPLEVEL_EV_WM_CAPABILITIES) {
             _pendingMinimizeAdvertised = WaylandStatesContain(args[0].a, WP_TOPLEVEL_CAPABILITY_MINIMIZE);
         }
-        break;
-
-    case WaylandObjectToplevelSession:
-        // The event only says the compositor used the state saved under this name; the state itself
-        // arrives with the following configure, which is handled as an ordinary toplevel configure.
         break;
 
     case WaylandObjectDecoration:
@@ -2019,7 +1776,6 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
     BOOL suspendedChanged = _pendingSuspended != _suspended;
     _suspended = _pendingSuspended;
     if (suspendedChanged) {
-        [self updateIdleInhibitor];
         [_display performAfterDispatch: ^{
           if ([self->_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
               [self->_delegate platformWindowOcclusionChanged: self];

@@ -29,7 +29,6 @@
 #import <Onyx2D/O2Image.h>
 #import <Onyx2D/O2MutablePath.h>
 #import <Onyx2D/O2Paint_axialGradient.h>
-#import <Onyx2D/O2Paint_conicGradient.h>
 #import <Onyx2D/O2Paint_color.h>
 #import <Onyx2D/O2Paint_image.h>
 #import <Onyx2D/O2Paint_pattern.h>
@@ -154,8 +153,23 @@ void O2DContextClipAndFillEdges(O2Context_builtin *self, int fillRuleMask);
 - (O2ContextRef) createCompatibleContextWithSize: (O2Size) size
                                           unused: (NSDictionary *) unused
 {
-    O2Surface *surface = [self createSurfaceWithWidth: ceil(size.width)
-                                               height: ceil(size.height)];
+    O2BitmapInfo bitmapInfo = O2ImageGetBitmapInfo(_surface);
+    O2BitmapInfo alphaInfo = bitmapInfo & kO2BitmapAlphaInfoMask;
+    if (alphaInfo == kO2ImageAlphaNoneSkipFirst || alphaInfo == kO2ImageAlphaNone)
+        bitmapInfo = (bitmapInfo & ~kO2BitmapAlphaInfoMask) |
+                     kO2ImageAlphaPremultipliedFirst;
+    else if (alphaInfo == kO2ImageAlphaNoneSkipLast)
+        bitmapInfo = (bitmapInfo & ~kO2BitmapAlphaInfoMask) |
+                     kO2ImageAlphaPremultipliedLast;
+
+    O2Surface *surface = [[O2Surface alloc]
+            initWithBytes: NULL
+                    width: ceil(size.width)
+                   height: ceil(size.height)
+         bitsPerComponent: O2ImageGetBitsPerComponent(_surface)
+              bytesPerRow: 0
+               colorSpace: O2ImageGetColorSpace(_surface)
+               bitmapInfo: bitmapInfo];
     O2ContextRef result = [[[self class] alloc] initWithSurface: surface
                                                         flipped: NO];
     [surface release];
@@ -651,14 +665,7 @@ static BOOL copyBitsPixel(O2Float value, long *pixel) {
     O2RasterizerSetShouldAntialias(self, gState->_shouldAntialias,
                                    gState->_antialiasingQuality);
 
-    if ([shading isConic]) {
-        paint = [[O2Paint_conicGradient alloc]
-                initWithShading: shading
-                deviceTransform: gState->_deviceSpaceTransform];
-        // a colour space the ramp cannot turn into colours draws nothing
-        if (paint == nil)
-            return;
-    } else if ([shading isAxial])
+    if ([shading isAxial])
         paint = [[O2Paint_axialGradient alloc]
                 initWithShading: shading
                 deviceTransform: gState->_deviceSpaceTransform];
@@ -1977,6 +1984,15 @@ void O2ContextSetupPaintAndBlendMode(O2Context_builtin *self, O2PaintRef paint,
 
     if (O2PaintIsOpaque(self->_paint) && (blendMode == kO2BlendModeNormal))
         blendMode = kO2BlendModeCopy;
+    else if (blendMode == kO2BlendModeCopy &&
+             [self->_layerStack count] == 0 &&
+             !O2PaintIsOpaque(self->_paint)) {
+        O2BitmapInfo surfaceAlpha = O2ImageGetAlphaInfo(self->_surface);
+        if (surfaceAlpha == kO2ImageAlphaNoneSkipFirst ||
+            surfaceAlpha == kO2ImageAlphaNoneSkipLast ||
+            surfaceAlpha == kO2ImageAlphaNone)
+            blendMode = kO2BlendModeNormal;
+    }
 
     switch (blendMode) {
 
