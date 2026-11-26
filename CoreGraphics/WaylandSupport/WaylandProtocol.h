@@ -101,6 +101,8 @@ extern const struct wl_interface xdg_session_manager_v1_interface;
 extern const struct wl_interface xdg_session_v1_interface;
 extern const struct wl_interface xdg_toplevel_session_v1_interface;
 extern const struct wl_interface wp_pointer_warp_v1_interface;
+extern const struct wl_interface wp_cursor_shape_manager_v1_interface;
+extern const struct wl_interface wp_cursor_shape_device_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -239,6 +241,12 @@ enum {
 
     WP_POINTER_WARP_DESTROY = 0,
     WP_POINTER_WARP_WARP_POINTER = 1,
+
+    WP_CURSOR_SHAPE_MANAGER_DESTROY = 0,
+    WP_CURSOR_SHAPE_MANAGER_GET_POINTER = 1,
+    WP_CURSOR_SHAPE_MANAGER_GET_TABLET_TOOL_V2 = 2,
+    WP_CURSOR_SHAPE_DEVICE_DESTROY = 0,
+    WP_CURSOR_SHAPE_DEVICE_SET_SHAPE = 1,
 
     WP_TOUCH_RELEASE = 0,
     WP_TOUCH_EV_DOWN = 0,
@@ -602,6 +610,45 @@ enum {
     WP_SESSION_REASON_LAUNCH = 1,
     WP_SESSION_REASON_RECOVER = 2,
     WP_SESSION_REASON_SESSION_RESTORE = 3,
+
+    // wp_cursor_shape_device_v1.shape
+    WP_CURSOR_SHAPE_DEFAULT = 1,
+    WP_CURSOR_SHAPE_CONTEXT_MENU = 2,
+    WP_CURSOR_SHAPE_HELP = 3,
+    WP_CURSOR_SHAPE_POINTER = 4,
+    WP_CURSOR_SHAPE_PROGRESS = 5,
+    WP_CURSOR_SHAPE_WAIT = 6,
+    WP_CURSOR_SHAPE_CELL = 7,
+    WP_CURSOR_SHAPE_CROSSHAIR = 8,
+    WP_CURSOR_SHAPE_TEXT = 9,
+    WP_CURSOR_SHAPE_VERTICAL_TEXT = 10,
+    WP_CURSOR_SHAPE_ALIAS = 11,
+    WP_CURSOR_SHAPE_COPY = 12,
+    WP_CURSOR_SHAPE_MOVE = 13,
+    WP_CURSOR_SHAPE_NO_DROP = 14,
+    WP_CURSOR_SHAPE_NOT_ALLOWED = 15,
+    WP_CURSOR_SHAPE_GRAB = 16,
+    WP_CURSOR_SHAPE_GRABBING = 17,
+    WP_CURSOR_SHAPE_E_RESIZE = 18,
+    WP_CURSOR_SHAPE_N_RESIZE = 19,
+    WP_CURSOR_SHAPE_NE_RESIZE = 20,
+    WP_CURSOR_SHAPE_NW_RESIZE = 21,
+    WP_CURSOR_SHAPE_S_RESIZE = 22,
+    WP_CURSOR_SHAPE_SE_RESIZE = 23,
+    WP_CURSOR_SHAPE_SW_RESIZE = 24,
+    WP_CURSOR_SHAPE_W_RESIZE = 25,
+    WP_CURSOR_SHAPE_EW_RESIZE = 26,
+    WP_CURSOR_SHAPE_NS_RESIZE = 27,
+    WP_CURSOR_SHAPE_NESW_RESIZE = 28,
+    WP_CURSOR_SHAPE_NWSE_RESIZE = 29,
+    WP_CURSOR_SHAPE_COL_RESIZE = 30,
+    WP_CURSOR_SHAPE_ROW_RESIZE = 31,
+    WP_CURSOR_SHAPE_ALL_SCROLL = 32,
+    WP_CURSOR_SHAPE_ZOOM_IN = 33,
+    WP_CURSOR_SHAPE_ZOOM_OUT = 34,
+    // Since version 2 of wp_cursor_shape_manager_v1.
+    WP_CURSOR_SHAPE_DND_ASK = 35,
+    WP_CURSOR_SHAPE_ALL_RESIZE = 36,
 };
 
 // Linux input event codes (linux/input-event-codes.h) carried by wl_pointer.button.

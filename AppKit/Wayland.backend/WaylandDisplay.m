@@ -327,6 +327,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
             WaylandMarshal(_sessionManager, WP_SESSION_MANAGER_DESTROY,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_imageCursorBuffer, _cursorFractionalScale, _cursorSurface,
+                                      _cursorShapeDevice, _cursorShapeManager,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
@@ -686,6 +687,14 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _textInputManager = [self bindGlobal: name interface: &zwp_text_input_manager_v3_interface
                                      version: 1 kind: 0 object: nil];
         [self attachTextInput];
+    } else if (strcmp(interface, "wp_cursor_shape_manager_v1") == 0 && _cursorShapeManager == NULL) {
+        _cursorShapeManagerName = name;
+        _cursorShapeManager = [self bindGlobal: name
+                                     interface: &wp_cursor_shape_manager_v1_interface
+                                      version: MIN(version, (uint32_t) wp_cursor_shape_manager_v1_interface.version)
+                                         kind: 0
+                                       object: nil];
+        [self updateCursorShapeDevice];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame.
         _seat = [self bindGlobal: name
@@ -735,6 +744,15 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _sessionManager = NULL;
         _sessionManagerName = 0;
+        return;
+    }
+    if (_cursorShapeManager != NULL && name == _cursorShapeManagerName) {
+        // The device becomes inert with the manager; the compositor keeps the last shape that was set.
+        [self updateCursorShapeDevice];
+        WaylandMarshal(_cursorShapeManager, WP_CURSOR_SHAPE_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _cursorShapeManager = NULL;
+        _cursorShapeManagerName = 0;
         return;
     }
     if (_textInputManager && name == _textInputManagerName) {
@@ -1044,11 +1062,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) nativeConnectionPointerAvailabilityChanged: (BOOL) available {
     if (available) {
         _pointer = (struct wl_proxy *) _CGSNativeConnectionPointer();
+        [self updateCursorShapeDevice];
         return;
     }
     [_draggingManager cancel];
     [self consumeDragPress];
     _pointer = NULL;
+    [self updateCursorShapeDevice];
     _pointerWindow = nil;
     _pointerEnterSerial = 0;
     _pressedButtons = 0;
@@ -2038,6 +2058,58 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     return buffer;
 }
 
+// The freedesktop names WaylandCursor looks up, and the matching wp_cursor_shape_device_v1.shape.
+// Names that are not in this table (a custom NSImage, for example) use the default shape.
+static uint32_t CursorShapeForCursor(WaylandCursor *cursor) {
+    static const struct { const char *name; uint32_t shape; } shapes[] = {
+            {"default", WP_CURSOR_SHAPE_DEFAULT},
+            {"grabbing", WP_CURSOR_SHAPE_GRABBING},
+            {"crosshair", WP_CURSOR_SHAPE_CROSSHAIR},
+            {"text", WP_CURSOR_SHAPE_TEXT},
+            {"vertical-text", WP_CURSOR_SHAPE_VERTICAL_TEXT},
+            {"zoom-in", WP_CURSOR_SHAPE_ZOOM_IN},
+            {"zoom-out", WP_CURSOR_SHAPE_ZOOM_OUT},
+            {"grab", WP_CURSOR_SHAPE_GRAB},
+            {"pointer", WP_CURSOR_SHAPE_POINTER},
+            {"s-resize", WP_CURSOR_SHAPE_S_RESIZE},
+            {"w-resize", WP_CURSOR_SHAPE_W_RESIZE},
+            {"ew-resize", WP_CURSOR_SHAPE_EW_RESIZE},
+            {"e-resize", WP_CURSOR_SHAPE_E_RESIZE},
+            {"n-resize", WP_CURSOR_SHAPE_N_RESIZE},
+            {"ns-resize", WP_CURSOR_SHAPE_NS_RESIZE},
+            {"nw-resize", WP_CURSOR_SHAPE_NW_RESIZE},
+            {"ne-resize", WP_CURSOR_SHAPE_NE_RESIZE},
+            {"se-resize", WP_CURSOR_SHAPE_SE_RESIZE},
+            {"sw-resize", WP_CURSOR_SHAPE_SW_RESIZE},
+            {"nwse-resize", WP_CURSOR_SHAPE_NWSE_RESIZE},
+            {"nesw-resize", WP_CURSOR_SHAPE_NESW_RESIZE},
+    };
+    const char *const *names = cursor != nil ? [cursor names] : NULL;
+    for (int i = 0; names != NULL && names[i] != NULL; i++)
+        for (size_t j = 0; j < sizeof(shapes) / sizeof(shapes[0]); j++)
+            if (strcmp(names[i], shapes[j].name) == 0)
+                return shapes[j].shape;
+    return WP_CURSOR_SHAPE_DEFAULT;
+}
+
+- (void) updateCursorShapeDevice {
+    if (_cursorShapeManager != NULL && _pointer != NULL && _cursorShapeDevice == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _pointer}};
+        _cursorShapeDevice = WaylandCreateObject(_cursorShapeManager,
+                                                 WP_CURSOR_SHAPE_MANAGER_GET_POINTER,
+                                                 &wp_cursor_shape_device_v1_interface,
+                                                 args, 0, nil);
+        // The current cursor was set with wl_pointer.set_cursor before the manager existed.
+        if (_cursorShapeDevice != NULL)
+            [self performAfterDispatch: ^{ [self applyCursor]; }];
+    } else if ((_cursorShapeManager == NULL || _pointer == NULL) && _cursorShapeDevice != NULL) {
+        // A device whose pointer went away is inert; there is nothing to send it.
+        WaylandMarshal(_cursorShapeDevice, WP_CURSOR_SHAPE_DEVICE_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _cursorShapeDevice = NULL;
+    }
+}
+
 - (void) applyCursorSnapshot: (WaylandCursor *) cursor {
     if (_pointer == NULL || _pointerEnterSerial == 0)
         return;
@@ -2055,6 +2127,15 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
         args[2].i = 0;
         args[3].i = 0;
         WaylandMarshal(_pointer, WP_POINTER_SET_CURSOR, NULL, 0, args);
+        [self flush];
+        return;
+    }
+    // A named cursor needs neither a cursor surface nor a theme: the compositor draws the shape.
+    // The protocol requires the latest wl_pointer.enter serial, which is the one kept for the
+    // surface cursor too.
+    if (_cursorShapeDevice != NULL) {
+        union wl_argument shapeArgs[2] = {{.u = serial}, {.u = CursorShapeForCursor(cursor)}};
+        WaylandMarshal(_cursorShapeDevice, WP_CURSOR_SHAPE_DEVICE_SET_SHAPE, NULL, 0, shapeArgs);
         [self flush];
         return;
     }
