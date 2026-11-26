@@ -227,5 +227,10 @@
 -(void) activationRequested;
 @end
 
+// The window system's input focus moved to a window of this process (ours), or to another client; the
+// backends report it from their native focus events (-[CGSConnectionX11 _activeWindowChanged], the Wayland
+// keyboard enter and leave). The front process follows it: see CGS.m.
+extern void _CGSNativeFocusReport(BOOL ours);
+
 #endif
 

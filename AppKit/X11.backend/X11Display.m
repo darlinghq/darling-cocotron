@@ -138,8 +138,8 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         }
 
         // RandR events are CoreGraphics', which reports the new layout (see -nativeConnectionDisplayLayoutChanged).
-        // The window manager publishes the focused window and the stacking order on the root window.
-        XSelectInput(_display, DefaultRootWindow(_display), PropertyChangeMask);
+        // The window manager publishes the focused window and the stacking order on the root window,
+        // whose property changes CoreGraphics' connection selects.
         _occlusionDirty = YES;
 
         X11TouchInit(_display);
