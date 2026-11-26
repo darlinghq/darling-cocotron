@@ -194,7 +194,6 @@ set(AppKit_sources
 	NSScrollEdgeEffectStyle.m
 	NSImageHintSymbolScale.m
 	NSPasteboard.m
-	DarlingFileURIList.m
 	DarlingPortalFileChooser.m
 	NSSearchFieldCell.m
 	NSOutlineView.m
@@ -444,7 +443,6 @@ set(AppKit_sources
 	NSGroupTouchBarItem.m
 	NSKeyBindingManager.m
 	NSPasteboardItem.m
-	NSPasteboardHostBridge.m
 	NSPasteboardSupport.m
 	NSPopoverTouchBarItem.m
 	NSSpaceTouchBarItem.m
@@ -725,7 +723,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Wayland.backend/WaylandDropSession.m
 			Wayland.backend/WaylandDraggingManager.m
 			Wayland.backend/WaylandDragIcon.m
-			Wayland.backend/WaylandPasteboard.m
+			Wayland.backend/WaylandDataDevice.m
 			Wayland.backend/WaylandWindow.m
 			Wayland.backend/WaylandToplevelIcon.m
 			Wayland.backend/WaylandSubWindow.m

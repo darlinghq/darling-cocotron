@@ -20,6 +20,7 @@
 #import "CGSWindowX11.h"
 #import "CGSX11Keyboard.h"
 #import "CGSX11Pointer.h"
+#import "CGSX11Selection.h"
 #import <CoreGraphics/CGSKeyboardLayout.h>
 #import <CoreGraphics/CGSScreen.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -196,6 +197,10 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 
 	_keyboard = [[CGSX11Keyboard alloc] initWithConnection: self];
 	_pointer = [[CGSX11Pointer alloc] initWithConnection: self];
+
+	// The general pasteboard shows the CLIPBOARD selection. This goes before the process makes its first
+	// pasteboard, which is why the connection does it, not the framework with the windows.
+	[self _startHostClipboard];
 
 	return self;
 }
@@ -801,6 +806,10 @@ static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
 // on to the observer.
 -(BOOL) processXEvent:(XEvent*) event
 {
+	// The requests, replies and clears of the selections the process owns or reads, and the property changes
+	// that pace their transfers, belong to the selections.
+	if (CGSX11SelectionHandleEvent(event))
+		return YES;
 	[self _windowSystemEvent: event];
 	[_pointer willHandleEvent: event];
 	switch (event->type)

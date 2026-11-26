@@ -433,6 +433,9 @@ static unsigned maskForCode(uint32_t code) {
 - (void) button: (uint32_t) code pressed: (BOOL) pressed time: (uint32_t) time serial: (uint32_t) serial {
     id<CGSNativeConnectionObserver> observer = [self observer];
 
+    if (pressed)
+        [_connection inputPressedWithSerial: serial];
+
     // A window decoration (title bar buttons, resize edges) takes the button for itself.
     if ([observer respondsToSelector: @selector(nativeConnectionPointerButton:pressed:serial:)] &&
         [observer nativeConnectionPointerButton: code pressed: pressed serial: serial])

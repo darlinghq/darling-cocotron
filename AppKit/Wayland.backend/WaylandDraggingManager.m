@@ -20,7 +20,9 @@
 #import "WaylandDragOperations.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
-#import "WaylandPasteboard.h"
+#import "WaylandDataDevice.h"
+#import <CoreGraphics/CGSSelection.h>
+#import "NSPasteboardAliases.h"
 #import "WaylandWindow.h"
 #import "WaylandDragIcon.h"
 #include <math.h>
@@ -141,7 +143,7 @@ static BOOL monotonicSeconds(double *seconds) {
             if ([type isEqual:NSFilenamesPboardType]) { [snapshot removeAllObjects]; break; }
             continue;
         }
-        if (!localOnly) data = [WaylandPasteboard encodeData:data forType:type];
+        if (!localOnly) data = _CGSSelectionEncodeData(data, NSPasteboardCanonicalType(type));
         // A partial filename selection could make a MOVE source remove
         // files that were never delivered. Reject that drag atomically.
         if (!data) { *encodable = NO; [snapshot removeAllObjects]; break; }
@@ -154,7 +156,7 @@ static BOOL monotonicSeconds(double *seconds) {
             [snapshot setObject:copy forKey:type];
             continue;
         }
-        for (NSString *mime in [WaylandPasteboard mimeTypesForType: type])
+        for (NSString *mime in _CGSSelectionMimeTypesForType(NSPasteboardCanonicalType(type)))
             if ([type isEqual:mime] || ![snapshot objectForKey:mime])
                 [snapshot setObject:copy forKey:mime];
     }
