@@ -38,6 +38,7 @@ static const NSTimeInterval NSAnimationContextDefaultDuration = 0.25;
 
 - (void) dealloc {
     [NS_EXTRA(NSAnimationContext, self)->_completionHandler release];
+    [NS_EXTRA(NSAnimationContext, self)->_timingFunction release];
     NS_EXTRA_FREE(NSAnimationContext, self);
     [super dealloc];
 }
@@ -75,6 +76,7 @@ static NSMutableArray *NSAnimationContextStack(void) {
     NSAnimationContext *outer = [self currentContext];
     NSAnimationContext *context = [[NSAnimationContext alloc] init];
     [context setDuration: [outer duration]];
+    [context setTimingFunction: [outer timingFunction]];
     [NSAnimationContextStack() addObject: context];
     [context release];
 }
@@ -124,6 +126,16 @@ static NSMutableArray *NSAnimationContextStack(void) {
 
 - (BOOL) allowsImplicitAnimation {
     return NS_EXTRA(NSAnimationContext, self)->_allowsImplicitAnimation;
+}
+
+- (void) setTimingFunction: (CAMediaTimingFunction *) timingFunction {
+    [timingFunction retain];
+    [NS_EXTRA(NSAnimationContext, self)->_timingFunction release];
+    NS_EXTRA(NSAnimationContext, self)->_timingFunction = timingFunction;
+}
+
+- (CAMediaTimingFunction *) timingFunction {
+    return NS_EXTRA(NSAnimationContext, self)->_timingFunction;
 }
 
 - (void) setDuration: (NSTimeInterval) duration {
