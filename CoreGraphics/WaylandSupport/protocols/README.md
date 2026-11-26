@@ -69,3 +69,119 @@ here so that systems with an older release still build the backend.
 
 The AppKit Wayland backend uses it to show the application icon (`-[NSApplication applicationIconImage]`) on every
 toplevel, so compositors do not have to guess an icon from the `app_id`. See `WaylandToplevelIcon.m`.
+
+## color-management
+
+`color-management-v1.xml` is the staging `wp_color_manager_v1` family. The backends use it to describe the
+colorimetry of window contents, including extended dynamic range and HDR metadata, and to observe the preferred
+description of a surface and the descriptions of outputs.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/color-management/color-management-v1.xml`
+  (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2019 Sebastian Wick, 2019 Erwin Burema, 2020 AMD, 2020-2024 Collabora, Ltd., 2024 Xaver Hugl,
+  2022-2025 Red Hat, Inc.
+- Licence: the MIT permission notice at the top of the file.
+
+## color-representation
+
+`color-representation-v1.xml` is the staging `wp_color_representation_manager_v1` family. The backends use it to
+declare alpha mode and YUV coefficients/range/chroma for surfaces.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/color-representation/color-representation-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2022 Simon Ser, 2022 Red Hat, Inc., 2022 Collabora, Ltd., 2022-2025 Red Hat, Inc.
+- Licence: the MIT permission notice at the top of the file.
+
+## xdg-session-management
+
+`xdg-session-management-v1.xml` is the staging `xdg_session_manager_v1` protocol. The AppKit Wayland backend uses it
+to connect its saved window state to a compositor-managed session, so a relaunched application can ask the compositor
+to restore its toplevels.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/xdg-session-management/xdg-session-management-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2018 Mike Blumenkrantz, 2018 Samsung Electronics Co., Ltd, 2018 Red Hat Inc.
+- Licence: the MIT permission notice at the top of the file.
+
+## pointer-warp
+
+`pointer-warp-v1.xml` is the staging `wp_pointer_warp_v1` protocol. The CoreGraphics Wayland backend uses it to
+honour `CGWarpMouseCursorPosition()` when the compositor offers it, instead of asking for a short pointer lock.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/pointer-warp/pointer-warp-v1.xml`
+  (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2024 Neal Gompa, 2024 Xaver Hugl, 2024 Matthias Klumpp, 2024 Vlad Zahorodnii
+- Licence: the MIT permission notice at the top of the file.
+
+## cursor-shape
+
+`cursor-shape-v1.xml` is the staging `wp_cursor_shape_manager_v1` protocol. The AppKit Wayland backend uses it
+to set a themed cursor by name instead of a surface image when the compositor offers it.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/cursor-shape/cursor-shape-v1.xml`
+  (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2018 The Chromium Authors, 2023 Simon Ser
+- Licence: the MIT permission notice at the top of the file.
+
+## xdg-dialog
+
+`xdg-dialog-v1.xml` is the staging `xdg_wm_dialog_v1` protocol. The AppKit Wayland backend uses it to tell the
+compositor which toplevels are sheets or modal panels, so they can be presented as dialogs of their parent.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols, `staging/xdg-dialog/xdg-dialog-v1.xml`
+  (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2023 Carlos Garnacho
+- Licence: the MIT permission notice at the top of the file.
+
+## xdg-system-bell
+
+`xdg-system-bell-v1.xml` is the staging `xdg_system_bell_v1` protocol. It implements `NSBeep()` on Wayland,
+where X11 has `XBell()` and the core protocol has no bell request.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/xdg-system-bell/xdg-system-bell-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2016, 2023 Red Hat
+- Licence: the MIT permission notice at the top of the file.
+
+## alpha-modifier
+
+`alpha-modifier-v1.xml` is the staging `wp_alpha_modifier_v1` protocol. It lets the compositor apply
+`NSWindow.alphaValue` to a Wayland surface, which the core protocol cannot do.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/alpha-modifier/alpha-modifier-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2024 Xaver Hugl
+- Licence: the MIT permission notice at the top of the file.
+
+## idle-inhibit
+
+`idle-inhibit-unstable-v1.xml` is the `zwp_idle_inhibit_manager_v1` protocol. While the process holds a power
+assertion that prevents display sleep on idle (kIOPMAssertPreventUserIdleDisplaySleep), the AppKit Wayland
+backend creates an inhibitor for each visible, unoccluded toplevel, so that the compositor keeps the display
+awake for it, as the assertion does on macOS.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `unstable/idle-inhibit/idle-inhibit-unstable-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2015 Samsung Electronics Co., Ltd
+- Licence: the MIT permission notice at the top of the file.
+
+## xdg-toplevel-tag
+
+`xdg-toplevel-tag-v1.xml` is the staging `xdg_toplevel_tag_manager_v1` protocol. AppKit sends a stable,
+untranslated tag and the localized window title as a description for each of its toplevels, so a compositor
+can remember window rules across launches.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/xdg-toplevel-tag/xdg-toplevel-tag-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2024 Xaver Hugl
+- Licence: the MIT permission notice at the top of the file.

@@ -25,6 +25,9 @@
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
+#import "WaylandColor.h"
+#import <IOKit/pwr_mgt/IOPMLib.h>
+#import <IOKit/pwr_mgt/IOPMLibPrivate.h>
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -92,6 +95,14 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
     // An exception can't unwind through libwayland's native frames.
     @autoreleasepool {
         @try {
+            if (objectKind >= WaylandColorObjectManager &&
+                objectKind <= WaylandColorObjectLast) {
+                [(WaylandColorManager *) object handleEvent: opcode
+                                                       kind: (WaylandColorObjectKind) objectKind
+                                                      proxy: (struct wl_proxy *) proxy
+                                                  arguments: args];
+                return 0;
+            }
             switch (objectKind) {
             case CGSWaylandObjectXdgSurface:
             case CGSWaylandObjectToplevel:
@@ -214,6 +225,7 @@ static const CGEventFlags kHotKeyModifierMask =
         return nil;
 
     _outputs = [NSMutableArray new];
+    _color = [[WaylandColorManager alloc] initWithDispatcher: CGSWaylandDispatch owner: self];
     // The keyboard layout is described from the system default until the compositor's keymap arrives.
     _keymap = [[CGSWaylandKeymap alloc] init];
     if (_keymap != nil)
@@ -294,6 +306,8 @@ static const CGEventFlags kHotKeyModifierMask =
                                                      ^(int ignored) { [connection activationRequested]; }) ==
                             NOTIFY_STATUS_OK;
 
+    [self observeDisplaySleepAssertions];
+
     _setupDone = YES;
     [self flush];
     return self;
@@ -309,6 +323,8 @@ static const CGEventFlags kHotKeyModifierMask =
 
     if (_activationRegistered)
         notify_cancel(_activationNotifyToken);
+    if (_assertionsNotifyRegistered)
+        notify_cancel(_assertionsNotifyToken);
     if (_source != NULL) {
         CFRunLoopRemoveSource(CFRunLoopGetMain(), _source, kCFRunLoopCommonModes);
         CFRelease(_source);
@@ -319,6 +335,8 @@ static const CGEventFlags kHotKeyModifierMask =
     }
 
     [_outputManager release];
+    [(WaylandColorManager *) _color shutdown];
+    [_color release];
     [self releaseKeyboard];
     [_keyboardDecoder release];
     [(CGSWaylandPointer *) _pointerDecoder stop];
@@ -404,6 +422,28 @@ static const CGEventFlags kHotKeyModifierMask =
         WL.wl_display_flush(_wlDisplay);
 }
 
+- (WaylandColorManager *) colorManager {
+    return _color;
+}
+
+- (id) waylandColorManager {
+    return _color;
+}
+
+- (void) notifyWindowsColorManagerAvailable {
+    // The windows of the framework above share this manager (see -waylandColorManager).
+    id observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionColorManagerAvailable)])
+        [observer nativeConnectionColorManagerAvailable];
+    @synchronized (_windows) {
+        for (NSNumber *key in _windows) {
+            CGSWindow *window = [_windows objectForKey: key];
+            if ([window isKindOfClass: [CGSWindowWayland class]])
+                [(CGSWindowWayland *) window colorManagerAvailable];
+        }
+    }
+}
+
 - (void) connectionFailed {
     // Matches AppKit's backend: a lost compositor connection leaves every proxy
     // unusable, and there is nothing to fall back to at this point.
@@ -485,6 +525,25 @@ static const CGEventFlags kHotKeyModifierMask =
         _decorationManager = [self bindGlobal: name interface: &zxdg_decoration_manager_v1_interface
                                       version: 1
                                          kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
+               ((WaylandColorManager *) _color)->_colorManager == NULL) {
+        uint32_t managerVersion = MIN(version, (uint32_t) wp_color_manager_v1_interface.version);
+        struct wl_proxy *proxy = [self bindGlobal: name interface: &wp_color_manager_v1_interface
+                                          version: managerVersion
+                                             kind: (CGSWaylandObjectKind) WaylandColorObjectManager
+                                           object: _color];
+        [(WaylandColorManager *) _color bindColorManager: proxy
+                                                 version: managerVersion name: name];
+        [self notifyWindowsColorManagerAvailable];
+    } else if (strcmp(interface, "wp_color_representation_manager_v1") == 0 &&
+               ((WaylandColorManager *) _color)->_representationManager == NULL) {
+        struct wl_proxy *proxy = [self bindGlobal: name
+                                         interface: &wp_color_representation_manager_v1_interface
+                                          version: 1
+                                             kind: (CGSWaylandObjectKind) WaylandColorObjectRepresentationManager
+                                           object: _color];
+        [(WaylandColorManager *) _color bindRepresentationManager: proxy version: 1 name: name];
+        [self notifyWindowsColorManagerAvailable];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame and 8 wl_pointer.axis_value120. A
         // protocol table older than that offers less.
@@ -501,6 +560,10 @@ static const CGEventFlags kHotKeyModifierMask =
         _relativePointerManager = [self bindGlobal: name interface: &zwp_relative_pointer_manager_v1_interface
                                            version: 1 kind: CGSWaylandObjectNone object: nil];
         [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+    } else if (strcmp(interface, "wp_pointer_warp_v1") == 0 && _pointerWarp == NULL) {
+        _pointerWarpName = name;
+        _pointerWarp = [self bindGlobal: name interface: &wp_pointer_warp_v1_interface
+                                version: 1 kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
         // Version 2 adds the release request.
         _pointerGesturesName = name;
@@ -542,6 +605,7 @@ static const CGEventFlags kHotKeyModifierMask =
         @synchronized (self) {
             [_outputs addObject: output];
             [self attachLogicalOutput: output];
+            [(WaylandColorManager *) _color observeOutput: output->_proxy];
         }
         [output release];
     }
@@ -575,6 +639,7 @@ static const CGEventFlags kHotKeyModifierMask =
 }
 
 - (void) registryGlobalRemove: (uint32_t) name {
+    [(WaylandColorManager *) _color globalRemoved: name];
     if ((_pointerConstraints != NULL && name == _pointerConstraintsName) ||
         (_relativePointerManager != NULL && name == _relativePointerManagerName)) {
         // The lock objects go before the global that made them.
@@ -587,6 +652,12 @@ static const CGEventFlags kHotKeyModifierMask =
         else
             _relativePointerManagerName = 0;
         [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+        return;
+    }
+    if (_pointerWarp != NULL && name == _pointerWarpName) {
+        WaylandMarshal(_pointerWarp, WP_POINTER_WARP_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _pointerWarp = NULL;
+        _pointerWarpName = 0;
         return;
     }
     if (_pointerGestures != NULL && name == _pointerGesturesName) {
@@ -636,6 +707,24 @@ static const CGEventFlags kHotKeyModifierMask =
     }
     if (removed)
         [self outputsChanged];
+}
+
+// An output's image description (primaries, transfer function, luminances) changed. The screens are
+// rebuilt with the new values; the observer is told separately so it can post
+// NSScreenColorSpaceDidChangeNotification.
+- (void) waylandColorManagerOutputInfoChanged: (WaylandColorManager *) manager {
+    (void) manager;
+    [self invalidateScreens];
+    [self displayLayoutChanged];
+    id observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionDisplayColorSpaceChanged)])
+        [observer nativeConnectionDisplayColorSpaceChanged];
+}
+
+// A color manager global went away: the cached descriptions are gone, so rebuild the screens
+// the same way as when an output's description changes.
+- (void) waylandColorManagerDidLoseGlobal: (WaylandColorManager *) manager {
+    [self waylandColorManagerOutputInfoChanged: manager];
 }
 
 // What changed in the outputs is a change of the displays, for the callbacks once the setup is over.
@@ -873,6 +962,91 @@ static const CGEventFlags kHotKeyModifierMask =
 
 - (struct wl_proxy *) relativePointerManager {
     return _relativePointerManager;
+}
+
+- (struct wl_proxy *) pointerWarp {
+    return _pointerWarp;
+}
+
+#pragma mark - Power assertions
+
+// Whether this process holds an assertion that keeps the display from sleeping on idle: the current
+// kIOPMAssertPreventUserIdleDisplaySleep, or the older kIOPMAssertionTypeNoDisplaySleep which names the
+// same thing. The assertions are listed by power management (iokitd), which keeps them for every process.
+static BOOL ProcessHoldsDisplaySleepAssertion(void) {
+    CFDictionaryRef byProcess = NULL;
+    BOOL held = NO;
+
+    if (IOPMCopyAssertionsByProcess(&byProcess) != kIOReturnSuccess || byProcess == NULL)
+        return NO;
+
+    int pid = (int) getpid();
+    CFNumberRef key = CFNumberCreate(NULL, kCFNumberIntType, &pid);
+    CFArrayRef assertions = key != NULL ? CFDictionaryGetValue(byProcess, key) : NULL;
+    if (key != NULL)
+        CFRelease(key);
+
+    if (assertions != NULL && CFGetTypeID(assertions) == CFArrayGetTypeID()) {
+        for (CFIndex i = 0; i < CFArrayGetCount(assertions) && !held; i++) {
+            CFDictionaryRef assertion = CFArrayGetValueAtIndex(assertions, i);
+            if (CFGetTypeID(assertion) != CFDictionaryGetTypeID())
+                continue;
+            CFTypeRef type = CFDictionaryGetValue(assertion, kIOPMAssertionTypeKey);
+            CFTypeRef level = CFDictionaryGetValue(assertion, kIOPMAssertionLevelKey);
+            int levelValue = 0;
+            if (type == NULL || CFGetTypeID(type) != CFStringGetTypeID() || level == NULL ||
+                CFGetTypeID(level) != CFNumberGetTypeID() ||
+                !CFNumberGetValue(level, kCFNumberIntType, &levelValue) || levelValue == kIOPMAssertionLevelOff)
+                continue;
+            held = CFEqual(type, kIOPMAssertPreventUserIdleDisplaySleep) ||
+                   CFEqual(type, kIOPMAssertionTypeNoDisplaySleep);
+        }
+    }
+    CFRelease(byProcess);
+    return held;
+}
+
+// The window system has to be told that the display should stay awake, and power management does not
+// reach the compositor, so the connection watches this process' assertions. Power management is asked
+// on a queue of its own (it may be slow to answer), and the answer is applied on the main queue,
+// where the observer that owns the windows runs.
+- (void) observeDisplaySleepAssertions {
+    _assertionsQueue = dispatch_queue_create("CoreGraphics.Wayland.assertions", DISPATCH_QUEUE_SERIAL);
+    // The blocks do not keep the connection alive; the token is cancelled before it goes.
+    __block CGSConnectionWayland *connection = self;
+    dispatch_async(_assertionsQueue, ^{
+        // Power management posts the change notification to clients that registered for it, so register
+        // before the first listing: a change in between is then seen by the notification.
+        if (IOPMAssertionNotify((char *) kIOPMAssertionsAnyChangedNotifyString, kIOPMNotifyRegister) ==
+                    kIOReturnSuccess &&
+            notify_register_dispatch(kIOPMAssertionsAnyChangedNotifyString, &connection->_assertionsNotifyToken,
+                                     connection->_assertionsQueue,
+                                     ^(int ignored) { [connection refreshDisplaySleepPrevented]; }) ==
+                    NOTIFY_STATUS_OK)
+            connection->_assertionsNotifyRegistered = YES;
+        [connection refreshDisplaySleepPrevented];
+    });
+}
+
+- (void) refreshDisplaySleepPrevented {
+    BOOL held = ProcessHoldsDisplaySleepAssertion();
+    __block CGSConnectionWayland *connection = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [connection setDisplaySleepPrevented: held];
+    });
+}
+
+- (void) setDisplaySleepPrevented: (BOOL) prevented {
+    if (_displaySleepPrevented == prevented)
+        return;
+    _displaySleepPrevented = prevented;
+    id observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionDisplaySleepPreventionChanged)])
+        [observer nativeConnectionDisplaySleepPreventionChanged];
+}
+
+- (BOOL) displaySleepPrevented {
+    return _displaySleepPrevented;
 }
 
 #pragma mark - Pointer state
@@ -1153,6 +1327,7 @@ static NSDictionary *modeDictionary(int32_t width, int32_t height, double refres
         screen.backingScale = scale;
         NSString *outputName = [output->_outputDescription length] > 0 ? output->_outputDescription : output->_outputName;
         screen.name = [outputName length] > 0 ? outputName : nil;
+        screen.colorInfo = [(WaylandColorManager *) _color infoForOutput: output->_proxy];
 
         // The output-management heads list every mode the output can be set to; wl_output lists only what the
         // compositor chooses to announce.

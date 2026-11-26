@@ -2617,6 +2617,8 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
     // A cancelled termination ends here, and the application runs on.
     NS_EXTRA(NSApplication, self)->_terminateInProgress = NO;
     if (terminate == YES) {
+        // The process is really exiting now, so the next launch must not treat it as a crash.
+        [self _removeWindowSessionMarker];
         [[NSNotificationCenter defaultCenter]
                 postNotificationName: NSApplicationWillTerminateNotification
                               object: self];
@@ -2861,13 +2863,11 @@ static BOOL resignForced;
 
 - (void) _windowDidBecomeActive: (NSWindow *) window {
     resignPending = NO;
-    // A window of this process has the input focus, which is what makes it the front process.
-    // CoreGraphics keeps it for the display servers that cannot be asked who has the focus and
-    // tells the other processes (NSWorkspace's frontmostApplication follows it).
-    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited) {
-        _CGSSetFrontProcess(getpid());
+    // A window of this process has the input focus, which makes the process the front process:
+    // CoreGraphics reports that itself from the window system's focus (and tells the other processes;
+    // NSWorkspace's frontmostApplication follows it).
+    if ([self activationPolicy] != NSApplicationActivationPolicyProhibited)
         [self _publishActivation];
-    }
     if (!NS_EXTRA(NSApplication, self)->_isActive) {
         NS_EXTRA(NSApplication, self)->_isActive = YES;
         [[NSNotificationCenter defaultCenter]

@@ -27,6 +27,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			# Shared with AppKit's Wayland backend: a dlopen() shim over
 			# Foundation and elfcalls with no AppKit dependency of its own.
 			../WaylandSupport/WaylandLibrary.m
+			../WaylandSupport/WaylandColor.m
 			${CG_WAYLAND_PROTOCOL_SOURCES}
 		INFO_PLIST
 			Info.plist
@@ -36,6 +37,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CoreFoundation
 			Foundation
 			CoreGraphics
+			IOKit
 	)
 	target_include_directories(Wayland_cgbackend PRIVATE
 		../WaylandSupport

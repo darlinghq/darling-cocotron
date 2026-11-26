@@ -43,7 +43,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons;
+@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -72,6 +72,11 @@ typedef enum {
     WaylandObjectActivationToken,
     WaylandObjectLayerSurface,
     WaylandObjectIconManager,
+    // The session protocol's objects. These are above the color manager's range so the two sets
+    // can each be recognized with one comparison in the dispatcher.
+    WaylandObjectSessionManager = 1100,
+    WaylandObjectSession,
+    WaylandObjectToplevelSession,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -127,6 +132,29 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _layerShellName;
     struct wl_proxy *_dataDeviceManager;
     uint32_t _compositorVersion;
+    // xdg-session-management: one session for the application, started when AppKit reports why the
+    // application launched. Toplevels join it before their first commit.
+    struct wl_proxy *_sessionManager, *_session;
+    uint32_t _sessionManagerName;
+    NSString *_sessionIdentifier;
+    NSUInteger _sessionReason;
+    BOOL _sessionRequested;
+    // xdg-dialog-v1: tells the compositor which toplevels are sheets or modal panels.
+    struct wl_proxy *_dialogManager;
+    uint32_t _dialogManagerName;
+    // xdg-system-bell-v1: the compositor's bell, used by NSBeep().
+    struct wl_proxy *_bell;
+    uint32_t _bellName;
+    // alpha-modifier-v1: the manager that creates per-surface opacity modifiers.
+    struct wl_proxy *_alphaModifierManager;
+    uint32_t _alphaModifierManagerName;
+    // xdg-toplevel-tag-v1: stable window tags for compositor-side window rules.
+    struct wl_proxy *_toplevelTagManager;
+    uint32_t _toplevelTagManagerName;
+    // idle-inhibit-unstable-v1: visible, unoccluded toplevels keep the display awake while the process holds a
+    // power assertion that prevents display sleep.
+    struct wl_proxy *_idleInhibitManager;
+    uint32_t _idleInhibitManagerName;
 
 @protected
     struct wl_proxy *_seat;
@@ -172,6 +200,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // The keyboard focus was in a window of the application that was unmapped; its leave event has not arrived.
     BOOL _keyboardWindowUnmapped;
 
+    // cursor-shape-v1: when the compositor offers named cursors, the shape device for CoreGraphics'
+    // wl_pointer replaces the cursor surface image.
+    struct wl_proxy *_cursorShapeManager, *_cursorShapeDevice;
+    uint32_t _cursorShapeManagerName;
     struct wl_cursor_theme *_cursorTheme;
     uint32_t _cursorThemeScale120;
     struct wl_proxy *_cursorSurface, *_cursorFractionalScale;
@@ -191,8 +223,25 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (uint32_t) dragSerialForEvent: (NSEvent *) event;
 - (void) consumeDragPress;
 - (void) flush;
+// The shared color manager, or nil when the compositor offers neither protocol.
+- (WaylandColorManager *) colorManager;
+// Start a window-system session before any restored window is mapped. These implement the
+// NSDisplay (NSSessionRestoration) hooks declared in NSWindow-Private.h.
+- (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier;
+- (NSString *) windowSessionIdentifier;
+- (BOOL) supportsWindowSessions;
+// Called by a WaylandWindow before the first commit of a toplevel surface.
+- (void) joinSessionForToplevel: (WaylandWindow *) window;
 // Gives every window the current application icon (see WaylandToplevelIcon.h).
 - (void) updateWindowIcons;
+// Tells a window that the dialog manager arrived after it was mapped.
+- (void) dialogManagerAvailable;
+// Tells windows that the alpha modifier manager arrived after their surfaces were created.
+- (void) alphaModifierManagerAvailable;
+// Tells windows that the toplevel tag manager arrived after their toplevels were created.
+- (void) toplevelTagManagerAvailable;
+// Tells mapped windows to create an inhibitor when the idle inhibit manager arrives.
+- (void) idleInhibitManagerAvailable;
 - (void) processPendingEvents;
 - (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
@@ -204,6 +253,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
+// Creates or destroys the cursor shape device to follow the availability of the manager and the pointer.
+- (void) updateCursorShapeDevice;
 // Fills `result` and `proxies` with up to `max` outputs in -screens order (the order of the displays): their
 // logical sizes and whether they are in `entered` (NSValue pointers, as
 // WaylandWindow keeps its entered outputs). Returns 0 until an output has

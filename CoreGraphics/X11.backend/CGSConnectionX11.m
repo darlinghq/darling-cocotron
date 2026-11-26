@@ -176,6 +176,11 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 		XRRSelectInput(_display, DefaultRootWindow(_display), RRScreenChangeNotifyMask | RROutputChangeNotifyMask | RRCrtcChangeNotifyMask);
 	}
 
+	// The window manager names the focused window in _NET_ACTIVE_WINDOW of the root window, which is how a
+	// change of the focus to another client is noticed (see -_activeWindowChanged). The framework that
+	// builds windows on this connection selects nothing else on the root window and relies on this.
+	XSelectInput(_display, DefaultRootWindow(_display), PropertyChangeMask);
+
 	int major = XkbMajorVersion, minor = XkbMinorVersion;
 
 	if (XkbLibraryVersion(&major, &minor) && XkbQueryExtension(_display, NULL, &_xkbEventBase, &major, &minor, NULL))
@@ -776,6 +781,20 @@ static double windowOpacity(Display* display, Window window)
 	return (mask & buttonMask) != 0;
 }
 
+static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
+
+// _NET_ACTIVE_WINDOW changed: the process reports whether the focused window is one of its own, or that
+// the focus went to another client (a Darling process or not). None says nothing: the focus is nowhere,
+// as after the last window of a client closed.
+-(void) _activeWindowChanged
+{
+	NSArray<NSNumber*>* active = rootWindowList(_display, "_NET_ACTIVE_WINDOW");
+
+	if ([active count] == 0 || [active[0] unsignedLongValue] == None)
+		return;
+	_CGSNativeFocusReport(X11WindowOwnerPID(_display, (Window) [active[0] unsignedLongValue]) == getpid());
+}
+
 // Handles an event of this connection. Returns YES when the event was this connection's own business
 // (a hot key, a keyboard layout or display layout change); the rest is the observer's. The keyboard also
 // decodes the key events, the modifier state of the pointer events and the focus changes, and those go
@@ -835,7 +854,12 @@ static double windowOpacity(Display* display, Window window)
 			if (event->xfocus.mode != NotifyGrab && event->xfocus.mode != NotifyUngrab &&
 				event->xfocus.detail != NotifyPointer && event->xfocus.detail != NotifyPointerRoot &&
 				event->xfocus.detail != NotifyInferior)
+			{
 				[_keyboard focusGainedInWindow: event->xfocus.window];
+				// The keyboard focus is in a window of the process (the framework that owns the windows is
+				// told of the event after this, so the front process is up to date when it reacts).
+				_CGSNativeFocusReport(YES);
+			}
 			[_pointer focusEvent: event];
 			break;
 		case FocusOut:
@@ -845,6 +869,12 @@ static double windowOpacity(Display* display, Window window)
 				event->xfocus.detail != NotifyInferior)
 				[_keyboard resetComposition];
 			[_pointer focusEvent: event];
+			break;
+		case PropertyNotify:
+			// The observer is told of the root window's properties too (occlusion).
+			if (event->xproperty.window == DefaultRootWindow(_display) &&
+				event->xproperty.atom == XInternAtom(_display, "_NET_ACTIVE_WINDOW", False))
+				[self _activeWindowChanged];
 			break;
 		case KeymapNotify:
 			break;
@@ -1689,7 +1719,10 @@ static Time currentServerTime(Display* display)
 
 +(CGError) copyFrontProcessID:(pid_t*)pid
 {
-	Display* display = XOpenDisplay(NULL);
+	// The process' connection when it has one; a process that never opened one (a command line tool)
+	// asks through a connection of its own, which it closes again.
+	CGSConnectionX11* shared = [processConnection() retain];
+	Display* display = shared != nil ? shared->_display : XOpenDisplay(NULL);
 	if (display == NULL)
 		return kCGErrorCannotComplete;
 
@@ -1699,7 +1732,9 @@ static Time currentServerTime(Display* display)
 	pid_t owner = 0;
 	if ([active count] > 0 && [active[0] unsignedLongValue] != None)
 		owner = X11WindowOwnerPID(display, (Window) [active[0] unsignedLongValue]);
-	XCloseDisplay(display);
+	if (shared == nil)
+		XCloseDisplay(display);
+	[shared release];
 
 	// The owner is 0 for a window of a process that is not a Darling process.
 	if (owner <= 0)

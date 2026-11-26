@@ -34,6 +34,7 @@
 	CGRect _bounds;
 	CGFloat _backingScale;
 	NSString* _name;
+	NSDictionary* _colorInfo;
 }
 
 // The display's CGDirectDisplayID. The backend ties it to the output it drives, so it does not
@@ -47,6 +48,9 @@
 // The name the window system gives the output (a description or connector name), or nil. It is
 // only used when the display has no EDID that names the monitor.
 @property(readwrite, copy) NSString* name;
+// The output's color description from the window system (see the kCGSDisplayColor* keys in
+// CoreGraphicsPrivate.h), or nil when it is unknown.
+@property(readwrite, copy) NSDictionary* colorInfo;
 @property(readwrite, strong) NSData* edid;
 // The modes the display can be set to. A mode has Width and Height in points, PixelWidth and
 // PixelHeight in device pixels, Depth and RefreshRate (Hz, 0 when unknown).

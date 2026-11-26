@@ -341,6 +341,8 @@ Boolean _CGSProcessIsHidden(pid_t pid)
 // front process, an accessory one does not, a prohibited one cannot be the front process.
 #define kCGSProcessPolicyNotificationPrefix "org.darlinghq.process-policy."
 
+static int g_ownActivationPolicy = -1;
+
 void _CGSSetProcessActivationPolicy(int policy)
 {
 	static dispatch_once_t once;
@@ -348,6 +350,7 @@ void _CGSSetProcessActivationPolicy(int policy)
 
 	if (policy < 0 || policy > 2)
 		return;
+	g_ownActivationPolicy = policy;
 	dispatch_once(&once, ^{
 		char name[64];
 
@@ -543,6 +546,33 @@ CGError _CGSResignFrontProcess(pid_t pid)
 	notify_post(kCGSFrontProcessNotificationName);
 	syncFrontObservers();
 	return kCGErrorSuccess;
+}
+
+// The window system's input focus moved to a window of this process, or away from the process'
+// windows to another client (a Darling process that reports for itself, or one that is not). The
+// process reports its own focus, so that the front process is right whichever client takes the focus
+// and whether or not the framework above (AppKit) is in use. A process whose policy is prohibited is
+// never the front process. Gaining the focus again, or losing what was already given up, changes nothing.
+void _CGSNativeFocusReport(BOOL ours)
+{
+	pid_t self = getpid();
+
+	if (ours)
+	{
+		pid_t front = 0;
+
+		if (g_ownActivationPolicy == 2)
+			return;
+		if (reportedFrontProcess(&front) == kCGErrorSuccess && front == self)
+			return;
+		(void) _CGSSetFrontProcess(self);
+	}
+	else
+	{
+		if (!processHasFocus(self))
+			return;
+		(void) _CGSResignFrontProcess(self);
+	}
 }
 
 // The process that owns the menu bar: a libnotify name holds its pid, and the process has marked
@@ -856,6 +886,16 @@ bool _CGSNativeConnectionCursorHidden(void)
 bool _CGSNativeConnectionPointerLocked(void)
 {
 	return [nativeConnection() pointerLocked];
+}
+
+id _CGSNativeConnectionWaylandColorManager(void)
+{
+	return [nativeConnection() waylandColorManager];
+}
+
+bool _CGSNativeConnectionDisplaySleepPrevented(void)
+{
+	return [nativeConnection() displaySleepPrevented];
 }
 
 void _CGSNativeConnectionPointerLockTargetChanged(void)
