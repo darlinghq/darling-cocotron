@@ -1,0 +1,114 @@
+// Copyright (C) 2026 Lubos Dolezel
+//
+// Images of a compiled asset catalog that was built for a recent deployment target. The fixture
+// tests/fixtures/assetcatalog/Assets-deepmap2.car was compiled with actool (Xcode 26, --platform macosx
+// --minimum-deployment-target 26.0) from the image sets that fixtures/assetcatalog/make-xcassets-deepmap2.py
+// writes. For that target actool compresses bitmaps with the "deepmap2" compression (assetutil --info reports
+// it; the data is an LZFSE stream behind a header) instead of plain LZFSE or run-length encoding, packs the
+// small images into a shared image, and keeps the vector image as an SVG rendition (a PDF only for older
+// targets). Expected values are from black-box runs of this test on macOS 26.7.3 (x86_64).
+//  - twelve small opaque images Pack0..Pack11 (sizes (12 + i) x (10 + i % 3) points), each a unique colour
+//    (20 i + 30, 255 - 20 i, 40 + 10 i) with a white top row: the pixels have to come from the right frame of the
+//    packed image, so a reader that takes the frame from the wrong corner shows another image's colour;
+//  - PackGA, 14 x 14 grey (100) in two halves, opaque on the left and at alpha 64 on the right (the grey and
+//    alpha planes of the compressed data are stored separately);
+//  - Vec, an SVG 20 x 20 points: a red square from 2 to 18 and a blue square from 6 to 14 on a clear background.
+// Usage: appkit-asset-catalog-deepmap2 <path of Assets-deepmap2.car>
+// Build: clang -framework AppKit appkit-asset-catalog-deepmap2.m (no ARC)
+#import <AppKit/AppKit.h>
+#include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+static int failures;
+#define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); failures++; } } while (0)
+
+static NSString *makeBundle(const char *car) {
+    NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:
+            [NSString stringWithFormat: @"CatalogDeepmap2-%d.bundle", getpid()]];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    [fm createDirectoryAtPath: [dir stringByAppendingPathComponent: @"Contents/Resources"] withIntermediateDirectories: YES
+                   attributes: nil error: NULL];
+    [fm copyItemAtPath: [NSString stringWithUTF8String: car]
+                toPath: [dir stringByAppendingPathComponent: @"Contents/Resources/Assets.car"] error: NULL];
+    NSDictionary *info = [NSDictionary dictionaryWithObjectsAndKeys:
+            @"org.darlinghq.test.assetcatalog.deepmap2", @"CFBundleIdentifier", @"CatalogDeepmap2", @"CFBundleName",
+            @"BNDL", @"CFBundlePackageType", nil];
+    [info writeToFile: [dir stringByAppendingPathComponent: @"Contents/Info.plist"] atomically: YES];
+    return dir;
+}
+
+// The image drawn 1:1 into an RGBA bitmap of its size; pixel (x, y) from the top left.
+static NSBitmapImageRep *render(NSImage *image) {
+    NSInteger w = (NSInteger) [image size].width, h = (NSInteger) [image size].height;
+    NSBitmapImageRep *rep = [[[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL pixelsWide: w pixelsHigh: h
+            bitsPerSample: 8 samplesPerPixel: 4 hasAlpha: YES isPlanar: NO colorSpaceName: NSDeviceRGBColorSpace
+            bytesPerRow: w * 4 bitsPerPixel: 32] autorelease];
+    [NSGraphicsContext saveGraphicsState];
+    [NSGraphicsContext setCurrentContext: [NSGraphicsContext graphicsContextWithBitmapImageRep: rep]];
+    [image drawInRect: NSMakeRect(0, 0, w, h) fromRect: NSZeroRect operation: NSCompositingOperationCopy fraction: 1];
+    [NSGraphicsContext restoreGraphicsState];
+    return rep;
+}
+
+static BOOL pixelIs(NSBitmapImageRep *rep, int x, int y, int r, int g, int b, int a) {
+    const unsigned char *p = [rep bitmapData] + y * [rep bytesPerRow] + x * 4;
+    BOOL ok = abs(p[0] - r) <= 3 && abs(p[1] - g) <= 3 && abs(p[2] - b) <= 3 && abs(p[3] - a) <= 3;
+    if (!ok)
+        fprintf(stderr, "  pixel (%d, %d) is %d,%d,%d,%d, expected %d,%d,%d,%d\n", x, y, p[0], p[1], p[2], p[3], r, g, b, a);
+    return ok;
+}
+
+int main(int argc, char **argv) {
+    NSAutoreleasePool *pool = [NSAutoreleasePool new];
+    [NSApplication sharedApplication];
+    if (argc < 2) {
+        fprintf(stderr, "usage: appkit-asset-catalog-deepmap2 <Assets-deepmap2.car>\n");
+        return 2;
+    }
+    NSString *dir = makeBundle(argv[1]);
+    NSBundle *bundle = [NSBundle bundleWithPath: dir];
+
+    for (int i = 0; i < 12; i++) {
+        NSImage *image = [bundle imageForResource: [NSString stringWithFormat: @"Pack%d", i]];
+        CHECK(image != nil);
+        if (image == nil)
+            continue;
+        int w = 12 + i, h = 10 + (i % 3);
+        CHECK(fabs([image size].width - w) < 0.01 && fabs([image size].height - h) < 0.01);
+        NSBitmapImageRep *pixels = render(image);
+        int r = 20 * i + 30, g = 255 - 20 * i, b = 40 + 10 * i;
+        CHECK(pixelIs(pixels, w / 2, 0, 255, 255, 255, 255));
+        CHECK(pixelIs(pixels, 1, 1, r, g, b, 255));
+        CHECK(pixelIs(pixels, w / 2, h / 2, r, g, b, 255));
+        CHECK(pixelIs(pixels, w - 1, h - 1, r, g, b, 255));
+    }
+
+    NSImage *grey = [bundle imageForResource: @"PackGA"];
+    CHECK(grey != nil && fabs([grey size].width - 14) < 0.01 && fabs([grey size].height - 14) < 0.01);
+    if (grey != nil) {
+        NSBitmapImageRep *pixels = render(grey);
+        CHECK(pixelIs(pixels, 3, 7, 100, 100, 100, 255));
+        const unsigned char *right = [pixels bitmapData] + 7 * [pixels bytesPerRow] + 10 * 4;
+        CHECK(abs(right[3] - 64) <= 3);
+    }
+
+    NSImage *vector = [bundle imageForResource: @"Vec"];
+    CHECK(vector != nil && fabs([vector size].width - 20) < 0.01 && fabs([vector size].height - 20) < 0.01);
+    if (vector != nil) {
+        NSBitmapImageRep *pixels = render(vector);
+        CHECK(pixelIs(pixels, 0, 0, 0, 0, 0, 0));
+        CHECK(pixelIs(pixels, 3, 3, 255, 0, 0, 255));
+        CHECK(pixelIs(pixels, 16, 3, 255, 0, 0, 255));
+        CHECK(pixelIs(pixels, 10, 10, 0, 0, 255, 255));
+        CHECK(pixelIs(pixels, 19, 19, 0, 0, 0, 0));
+    }
+
+    CHECK([bundle imageForResource: @"Missing"] == nil);
+    [[NSFileManager defaultManager] removeItemAtPath: dir error: NULL];
+    if (failures == 0)
+        printf("PASS appkit-asset-catalog-deepmap2\n");
+    [pool release];
+    return failures != 0;
+}
