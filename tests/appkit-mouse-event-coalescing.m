@@ -1,10 +1,13 @@
 // Copyright (C) 2026 Lubos Dolezel
 //
-// Mouse event numbers, mouse coalescing in the display event queue, and the
-// main menu item title. Needs no window server: it drives an NSDisplay's queue
-// directly, like tests/appkit-event-mask-queue.m.
+// Mouse event numbers, mouse coalescing of the window system's input in the
+// event queue, and the main menu item title. The input is posted as CGEvents
+// (CGEventPost), as the window system backends do, and read with an NSDisplay's
+// queue functions; needs a window system (DISPLAY, or WAYLAND_DISPLAY with
+// DARLING_APPKIT_BACKEND=wayland).
 #import <AppKit/AppKit.h>
 #import <AppKit/NSDisplay.h>
+#import <ApplicationServices/ApplicationServices.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -34,21 +37,17 @@ static void expect(BOOL condition, const char *message) {
 - (BOOL)isFlipped { return YES; }
 @end
 
-static NSEvent *motion(NSEventType type, CGFloat x) {
-    return [NSEvent mouseEventWithType:type
-                              location:NSMakePoint(x, 0)
-                         modifierFlags:0
-                             timestamp:0
-                          windowNumber:0
-                               context:nil
-                           eventNumber:0
-                            clickCount:0
-                              pressure:0];
+// Posts a mouse event of the input stream at the global point (x, 0)
+static void post(CGEventType type, CGFloat x) {
+    CGEventRef event = CGEventCreateMouseEvent(NULL, type, CGPointMake(x, 0), kCGMouseButtonLeft);
+    CGEventPost(kCGSessionEventTap, event);
+    CFRelease(event);
 }
 
+// The next event of the queue; waits briefly for what was posted to arrive
 static NSEvent *take(NSDisplay *display) {
     return [display nextEventMatchingMask:NSAnyEventMask
-                                untilDate:[NSDate distantPast]
+                                untilDate:[NSDate dateWithTimeIntervalSinceNow:0.5]
                                    inMode:NSDefaultRunLoopMode
                                   dequeue:YES];
 }
@@ -82,27 +81,28 @@ int main(void) {
         // Coalescing is on by default and replaces a trailing moved event.
         expect([NSEvent isMouseCoalescingEnabled], "coalescing is enabled by default");
         QueueDisplay *display = [[QueueDisplay alloc] init];
-        [display postEvent:motion(NSMouseMoved, 1) atStart:NO];
-        [display postEvent:motion(NSMouseMoved, 2) atStart:NO];
-        [display postEvent:motion(NSMouseMoved, 3) atStart:NO];
+        post(kCGEventMouseMoved, 1);
+        post(kCGEventMouseMoved, 2);
+        post(kCGEventMouseMoved, 3);
         NSEvent *moved = take(display);
         expect(moved != nil && [moved type] == NSMouseMoved && [moved locationInWindow].x == 3,
                "queued moved events collapse to the latest");
         expect([take(display) type] == NSAppKitSystem, "nothing else is queued");
 
         // Different types are not merged; non-motion events are never replaced.
-        [display postEvent:motion(NSLeftMouseDragged, 1) atStart:NO];
-        [display postEvent:motion(NSMouseMoved, 2) atStart:NO];
-        [display postEvent:down atStart:NO];
-        [display postEvent:down atStart:NO];
+        post(kCGEventLeftMouseDragged, 1);
+        post(kCGEventMouseMoved, 2);
+        post(kCGEventLeftMouseDown, 2);
+        post(kCGEventLeftMouseDown, 2);
         expect([take(display) type] == NSLeftMouseDragged, "drag kept before moved");
         expect([take(display) type] == NSMouseMoved, "moved kept after drag");
-        expect(take(display) == down && take(display) == down, "presses are not coalesced");
+        expect([take(display) type] == NSLeftMouseDown && [take(display) type] == NSLeftMouseDown,
+               "presses are not coalesced");
 
         // With coalescing off every event is delivered.
         [NSEvent setMouseCoalescingEnabled:NO];
-        [display postEvent:motion(NSMouseMoved, 1) atStart:NO];
-        [display postEvent:motion(NSMouseMoved, 2) atStart:NO];
+        post(kCGEventMouseMoved, 1);
+        post(kCGEventMouseMoved, 2);
         expect([take(display) locationInWindow].x == 1 && [take(display) locationInWindow].x == 2,
                "events are all delivered when coalescing is disabled");
         [NSEvent setMouseCoalescingEnabled:YES];

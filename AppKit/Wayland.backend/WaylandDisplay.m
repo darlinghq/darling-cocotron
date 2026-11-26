@@ -1817,7 +1817,7 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     NSEvent *cancel = [NSEvent otherEventWithType: NSAppKitDefined location: NSZeroPoint
                                    modifierFlags: 0 timestamp: NSEventCurrentTime() windowNumber: 0 context: nil
                                          subtype: NSApplicationDeactivated data1: 0 data2: 0];
-    [self postEvent: cancel atStart: YES];
+    [NSApp postEvent: cancel atStart: YES];
 }
 
 - (CGWindow *) newWindowWithDelegate: (NSWindow *) delegate {

@@ -18,7 +18,7 @@
 // device, so the touch decoders of CoreGraphics' backends are fed the events a
 // device would produce: XI_TouchBegin/Update/End for the X11 backend (build with
 // -DTOUCH_X11) and wl_touch down/motion/up/cancel for the Wayland backend.
-// The test captures what the display is asked to post, hands it to the window
+// The test collects the events AppKit queues for the touches, hands them to the window
 // as the event loop would, and checks the NSEvents and NSTouch objects.
 // Both backends must give the same results.
 #ifdef TOUCH_X11
@@ -46,14 +46,13 @@ enum { WL_DOWN = 0, WL_UP = 1, WL_MOTION = 2, WL_CANCEL = 4 };
 static void (*cancelAll)(NSWindow *);
 
 static NSMutableArray *events;
-static id display, decoder;
+static id decoder;
 static NSWindow *window;
 static int failures, checks;
 static const CGFloat height = 200;
 
-static void capture(id self, SEL cmd, NSEvent *event, BOOL atStart) { [events addObject:event]; }
 // The backends report fingers as touch CGEvents in the event stream: what AppKit makes of them is read from
-// the event queue (a cancel by a closing window is posted through the display, which the recorder has).
+// the event queue (so is the cancel of a closing window, which AppKit queues itself).
 static void pump(void) {
     NSEvent *e;
     while ((e = [NSApp nextEventMatchingMask:NSEventMaskAny untilDate:[NSDate dateWithTimeIntervalSinceNow:0.02]
@@ -130,7 +129,6 @@ static void deliver(void) {
 @implementation TouchApplication
 - (void)test:(id)sender {
     cancelAll = dlsym(RTLD_DEFAULT, "NSTouchCancelAll");
-    display = [NSClassFromString(@"NSDisplay") currentDisplay];
 #ifdef TOUCH_X11
     Class connection = NSClassFromString(@"CGSConnectionX11");
     decoder = connection != nil && [connection respondsToSelector:@selector(_processPointer)]
@@ -146,12 +144,7 @@ static void deliver(void) {
         printf("RESULT checks=%d failures=%d\n", checks, failures); fflush(stdout);
         exit(1);
     }
-    Class original = object_getClass(display);
-    Class recorder = objc_allocateClassPair(original, "TouchRecordingDisplay", 0);
-    Method method = class_getInstanceMethod(original, @selector(postEvent:atStart:));
-    expect(method != NULL, "backend event method exists");
-    class_addMethod(recorder, @selector(postEvent:atStart:), (IMP)capture, method_getTypeEncoding(method));
-    objc_registerClassPair(recorder); events = [NSMutableArray new]; object_setClass(display, recorder);
+    events = [NSMutableArray new];
 
     expect([plainView allowedTouchTypes] == NSTouchTypeMaskDirect, "a view allows direct touches by default");
     expect(NSEventTypeDirectTouch == 37, "direct touch is event type 37");
@@ -252,7 +245,7 @@ static void deliver(void) {
     fingerMove(9, 20, 20); fingerUp(9, 20, 20);
     expect([events count] == 0, "motion and end of an unknown finger are ignored");
 
-    object_setClass(display, original); [events release];
+    [events release];
     printf("RESULT checks=%d failures=%d\n", checks, failures); fflush(stdout);
     exit(failures ? 1 : 0);
 }
