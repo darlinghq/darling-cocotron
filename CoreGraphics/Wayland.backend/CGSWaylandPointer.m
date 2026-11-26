@@ -627,11 +627,11 @@ static const double kNothing = 0;
     [self postMouseEventType: type button: button clickState: -1 deltaX: (int64_t) wholeX deltaY: (int64_t) wholeY serial: 0];
 }
 
-// Wayland has no request to move the pointer. While it is locked the cursor is the application's own and a
-// warp moves where the application's cursor is: the events carry that position and it is the hint the
-// pointer comes back at when the lock ends. Otherwise the compositor is asked for the position through a
-// short lock of the surface (it may honour the hint when the lock ends); the cursor is where the call says
-// for the events that follow.
+// On compositors that offer pointer-warp-v1 the pointer is moved with a warp request. Without it, while the
+// pointer is locked the cursor is the application's own and a warp moves where the application's cursor is:
+// the events carry that position and it is the hint the pointer comes back at when the lock ends. Otherwise
+// the compositor is asked for the position through a short lock of the surface (it may honour the hint when
+// the lock ends); the cursor is where the call says for the events that follow.
 - (CGError) warpToGlobalPoint: (CGPoint) global {
     struct wl_proxy *surface = _lock != NULL ? _lockSurface : _focus;
     id<CGSNativeConnectionObserver> observer = [self observer];
@@ -644,7 +644,9 @@ static const double kNothing = 0;
           [_connection surfacePoint: &target forGlobalLocation: global ofSurface: surface]))
         return kCGErrorCannotComplete;
     struct wl_proxy *constraints = [_connection pointerConstraints];
-    if (_lock == NULL && constraints == NULL)
+    struct wl_proxy *warp = [_connection pointerWarp];
+    // The warp protocol needs the enter serial, which is also what wl_pointer.set_cursor uses.
+    if (_lock == NULL && constraints == NULL && (warp == NULL || _enterSerial == 0))
         return kCGErrorCannotComplete;
 
     _point = target;
@@ -655,6 +657,20 @@ static const double kNothing = 0;
     if (_lock != NULL)
         return kCGErrorSuccess;
     [_connection noteMouseWarp];
+
+    // A compositor with pointer-warp can move the real pointer to the point in the surface. The serial is
+    // the one of wl_pointer.enter, exactly as the protocol asks for; it is valid for any surface of this
+    // client, so the surface need not be the one the pointer last entered.
+    if (warp != NULL && _enterSerial != 0) {
+        union wl_argument args[5] = {{.o = (struct wl_object *) surface},
+                                     {.o = (struct wl_object *) _pointer},
+                                     {.f = wl_fixed_from_double(target.x)},
+                                     {.f = wl_fixed_from_double(target.y)},
+                                     {.u = _enterSerial}};
+        WaylandMarshal(warp, WP_POINTER_WARP_WARP_POINTER, NULL, 0, args);
+        [_connection flush];
+        return kCGErrorSuccess;
+    }
 
     _warpPoint = target;
     if (_warpLock == NULL) {

@@ -679,8 +679,6 @@ add_backend(X11
 		X11.backend/X11Cursor.m
 		X11.backend/X11DropSession.m
 		X11.backend/X11DraggingManager.m
-		X11.backend/X11Touch.m
-		X11.backend/X11Gesture.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES
@@ -719,7 +717,8 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			Wayland.backend/WaylandAppMenu.m
 			Wayland.backend/WaylandCursor.m
 			Wayland.backend/WaylandDisplay.m
-			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit.
+			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit (and
+			# has the one WaylandColorManager).
 			../CoreGraphics/WaylandSupport/WaylandLibrary.m
 			Wayland.backend/WaylandDropSession.m
 			Wayland.backend/WaylandDraggingManager.m

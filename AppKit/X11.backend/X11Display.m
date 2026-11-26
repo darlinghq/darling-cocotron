@@ -52,8 +52,6 @@
 
 #import <OpenGL/CGLInternal.h>
 
-#import "X11Touch.h"
-#import "X11Gesture.h"
 #import "X11Occlusion.h"
 #import <X11/XKBlib.h>
 #import <X11/Xutil.h>
@@ -138,11 +136,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         }
 
         // RandR events are CoreGraphics', which reports the new layout (see -nativeConnectionDisplayLayoutChanged).
-        // The window manager publishes the focused window and the stacking order on the root window.
-        XSelectInput(_display, DefaultRootWindow(_display), PropertyChangeMask);
+        // The window manager publishes the focused window and the stacking order on the root window,
+        // whose property changes CoreGraphics' connection selects.
         _occlusionDirty = YES;
-
-        X11TouchInit(_display);
 
         int xwaylandOpcode, xwaylandEvent, xwaylandError;
         _isXwayland = XQueryExtension(_display, "XWAYLAND", &xwaylandOpcode,
@@ -734,9 +730,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
                    forKey: [NSNumber
                                    numberWithUnsignedLong: (unsigned long) i]];
     else {
-        // A window replaced by another X window ends its pinch here, while it is still known and
-        // has its delegate; -[X11Window invalidate] ends it earlier.
-        [self cancelPinchOnWindow: i];
         [_windowsByID removeObjectForKey: [NSNumber numberWithUnsignedLong:
                                                             (unsigned long) i]];
 
@@ -1608,8 +1601,8 @@ enum {
         break;
 
     case GenericEvent:
-        // events of other extensions are not used
-        X11TouchHandleEvent(self, ev);
+        // The events of XInput2 (touch screens, pinch gestures, smooth scrolling) are CoreGraphics', which
+        // decodes them into CGEvents; the events of other extensions are not used.
         break;
 
     default:

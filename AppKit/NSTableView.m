@@ -138,8 +138,20 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
     NSUnimplementedMethod();
 }
 
+// QUIRK: clickedRow and clickedColumn answer the click only while the click is being handled (the action and
+// double action messages); the click's end puts both back to -1, and a table that has not been clicked reports -1
+// too. Observed on macOS 26.7.3 (black-box, tier 2): the test below was run there and passes. The documentation of
+// clickedRow and clickedColumn says they are meaningful in the action and double-action methods and does not say
+// what they return afterwards.
+// Test: test_clicked_row_and_column_are_reset_after_the_click in tests/appkit-table-click-beside-columns.m.
+static void forgetClickedCell(NSTableView *table) {
+    NS_EXTRA(NSTableView, table)->_clickedColumn = -1;
+    NS_EXTRA(NSTableView, table)->_clickedRow = -1;
+}
+
 - initWithCoder: (NSCoder *) coder {
     [super initWithCoder: coder];
+    forgetClickedCell(self);
 
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
@@ -279,6 +291,7 @@ const CGFloat NSTableViewDefaultRowHeight = 17.0f;
 
 - initWithFrame: (NSRect) frame {
     [super initWithFrame: frame];
+    forgetClickedCell(self);
     NS_EXTRA(NSTableView, self)->_rowHeightsCount = 0;
     NS_EXTRA(NSTableView, self)->_rowHeights = NULL;
     _standardRowHeight = NSTableViewDefaultRowHeight;
@@ -2463,6 +2476,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             [self _finishEditingWithTextMovement: NSIllegalTextMovement];
         [self selectRowIndexes: [NSIndexSet indexSet] byExtendingSelection: NO];
         [NS_EXTRA(NSTableView, self)->_selectedColumns removeAllObjects];
+        forgetClickedCell(self);
         return;
     }
 
@@ -2524,6 +2538,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
         [self setNeedsDisplay: YES];
 
+        forgetClickedCell(self);
         return;
     }
 
@@ -2531,8 +2546,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     // single click behavior
     if ([event clickCount] < 2) {
         if ([self delegateSelectionShouldChange] ==
-            NO) // provide delegate opportunity
+            NO) { // provide delegate opportunity
+            forgetClickedCell(self);
             return;
+        }
 
         if ([event modifierFlags] &
             NSAlternateKeyMask) {                    // extend/change selection
@@ -2712,6 +2729,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
         if (!interpretedAsEdit)
             [self sendAction: [self doubleAction] to: [self target]];
     }
+    forgetClickedCell(self);
 }
 
 // The width a column needs for its header and the contents of its cells.

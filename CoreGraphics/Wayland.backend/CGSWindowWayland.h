@@ -45,7 +45,7 @@
 #import <CoreGraphics/CGSWindow.h>
 #import "CGSConnectionWayland.h"
 
-@class CGSSurfaceWayland;
+@class CGSSurfaceWayland, WaylandColorManager;
 
 typedef enum {
     CGSWaylandRoleNone = 0, // not made yet
@@ -78,6 +78,8 @@ typedef enum {
     BOOL _unmapping;
     BOOL _hasPendingConfigure;
     uint32_t _pendingConfigureSerial;
+    // Per-surface color objects, when the compositor offers the protocols.
+    struct wl_proxy *_colorSurface, *_representationSurface;
     // The rect the caller asked for. Wayland never reports where the compositor
     // put a toplevel, so the origin stays the requested one; the size follows
     // the compositor's configure once it sends a non-zero one.
@@ -104,6 +106,8 @@ typedef enum {
 - (void) surfaceDestroyed: (CGSSurfaceWayland *) surface;
 // A wl_buffer of the window's contents was released (or not used any more) by the compositor.
 - (void) bufferReleased: (struct wl_proxy *) buffer opcode: (uint32_t) opcode;
+// A color global arrived after the window was made: create its per-surface objects now.
+- (void) colorManagerAvailable;
 // Where the window is, as far as the connection knows (the rect that was asked for).
 - (CGPoint) frameOrigin;
 

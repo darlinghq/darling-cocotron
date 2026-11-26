@@ -13,6 +13,7 @@ add_backend(X11
 		CGSX11Keyboard.m
 		CGSX11Pointer.m
 		CGSX11Selection.m
+		CGSX11Touch.m
 		CGSWindowX11.m
 		CGSSurfaceX11.m
 		${X11_BACKEND_KEY_COMPOSE}
