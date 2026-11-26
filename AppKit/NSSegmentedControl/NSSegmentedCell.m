@@ -380,6 +380,26 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     }
 }
 
+- (NSRect) rectForSegment: (NSInteger) segment inFrame: (NSRect) frame {
+    NSInteger count = [self segmentCount];
+    if (segment < 0 || segment >= count)
+        return NSZeroRect;
+    if ([_segmentComputedWidths count] != count)
+        [self _recomputeSegmentWidths];
+
+    CGFloat x = NSMinX(frame);
+    for (NSInteger i = 0; i < segment; i++)
+        x += [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+    CGFloat w = [[_segmentComputedWidths objectAtIndex: segment] doubleValue];
+
+    if (_style == NSSegmentStyleAutomatic || _style == NSSegmentStyleRounded) {
+        static const CGFloat heights[3] = {20, 17, 14};
+        int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+        return NSMakeRect(x, floor(NSMidY(frame) - heights[index] / 2.0), w, heights[index]);
+    }
+    return NSMakeRect(x, NSMinY(frame), w, NSHeight(frame));
+}
+
 - (void) drawSegment: (NSInteger) idx
              inFrame: (NSRect) frame
             withView: (NSView *) view
