@@ -303,9 +303,7 @@ CGImageRef CGSCreateRegisteredCursorImage(CGSConnectionID cid, const char *curso
 }
 
 boolean_t CGDisplayIsInMirrorSet(CGDirectDisplayID display) {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-
-    return FALSE;
+    return CGDisplayMirrorsDisplay(display) != kCGNullDirectDisplay;
 }
 
 Boolean CGDisplayIsMain(CGDirectDisplayID display) {

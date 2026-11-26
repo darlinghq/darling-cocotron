@@ -32,6 +32,138 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // keys.
 NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
 
+static NSString *decodeHTMLEntity(NSString *entity) {
+    if ([entity isEqualToString: @"amp"]) return @"&";
+    if ([entity isEqualToString: @"lt"]) return @"<";
+    if ([entity isEqualToString: @"gt"]) return @">";
+    if ([entity isEqualToString: @"quot"]) return @"\"";
+    if ([entity isEqualToString: @"apos"]) return @"'";
+    if ([entity isEqualToString: @"nbsp"]) return @"\u00A0";
+    if ([entity hasPrefix: @"#"]) {
+        const char *s = [[entity substringFromIndex: 1] UTF8String];
+        if (s == NULL || *s == '\0') return nil;
+        int base = 10;
+        if (*s == 'x' || *s == 'X') {
+            base = 16;
+            s++;
+        }
+        unsigned char first = (unsigned char)*s;
+        if ((base == 16 && !isxdigit(first)) || (base == 10 && !isdigit(first))) {
+            return nil;
+        }
+        errno = 0;
+        char *endptr = NULL;
+        unsigned long code = strtoul(s, &endptr, base);
+        if (errno != 0 || endptr == s || *endptr != '\0') {
+            return nil;
+        }
+        if (code > 0 && code <= 0x10FFFF) {
+            UTF32Char ch = (UTF32Char)code;
+            return [[[NSString alloc] initWithBytes: &ch length: sizeof(ch) encoding: NSUTF32LittleEndianStringEncoding] autorelease];
+        }
+    }
+    return nil;
+}
+
+static BOOL htmlTagMatches(NSString *lower, NSString *name) {
+    if (![lower hasPrefix: name]) return NO;
+    NSUInteger nameLen = [name length];
+    if ([lower length] == nameLen) return YES;
+    unichar next = [lower characterAtIndex: nameLen];
+    return next == ' ' || next == '\t' || next == '\r' || next == '\n' || next == '/';
+}
+
+static NSString *plainTextFromHTML(NSString *html) {
+    NSUInteger len = [html length];
+    NSMutableString *out = [NSMutableString stringWithCapacity: len];
+    NSUInteger i = 0;
+    BOOL lastWasSpace = NO;
+
+    while (i < len) {
+        unichar c = [html characterAtIndex: i];
+        if (c == '<') {
+            if (i + 4 <= len && [[html substringWithRange: NSMakeRange(i, 4)] isEqualToString: @"<!--"]) {
+                NSRange end = [html rangeOfString: @"-->" options: 0 range: NSMakeRange(i + 4, len - (i + 4))];
+                i = (end.location != NSNotFound) ? NSMaxRange(end) : len;
+                continue;
+            }
+            NSRange gt = [html rangeOfString: @">" options: 0 range: NSMakeRange(i + 1, len - (i + 1))];
+            if (gt.location == NSNotFound) {
+                [out appendString: [html substringFromIndex: i]];
+                break;
+            }
+            NSString *tag = [[html substringWithRange: NSMakeRange(i + 1, gt.location - (i + 1))]
+                stringByTrimmingCharactersInSet: [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            NSString *lower = [tag lowercaseString];
+            i = NSMaxRange(gt);
+
+            if (htmlTagMatches(lower, @"script") || htmlTagMatches(lower, @"style")) {
+                if (![tag hasSuffix: @"/"]) {
+                    NSString *closeTag = htmlTagMatches(lower, @"script") ? @"</script" : @"</style";
+                    NSRange end = [html rangeOfString: closeTag options: NSCaseInsensitiveSearch range: NSMakeRange(i, len - i)];
+                    if (end.location != NSNotFound) {
+                        NSRange closeGt = [html rangeOfString: @">" options: 0 range: NSMakeRange(end.location, len - end.location)];
+                        i = (closeGt.location != NSNotFound) ? NSMaxRange(closeGt) : len;
+                    } else {
+                        i = len;
+                    }
+                }
+                continue;
+            }
+
+            if (htmlTagMatches(lower, @"br") || htmlTagMatches(lower, @"/p") || htmlTagMatches(lower, @"p") ||
+                htmlTagMatches(lower, @"/div") || htmlTagMatches(lower, @"li") || htmlTagMatches(lower, @"/li") ||
+                htmlTagMatches(lower, @"/h1") || htmlTagMatches(lower, @"/h2") || htmlTagMatches(lower, @"/h3") ||
+                htmlTagMatches(lower, @"/h4") || htmlTagMatches(lower, @"/h5") || htmlTagMatches(lower, @"/h6") ||
+                htmlTagMatches(lower, @"/tr")) {
+                if ([out length] > 0 && ![out hasSuffix: @"\n"]) {
+                    [out appendString: @"\n"];
+                }
+                lastWasSpace = YES;
+            }
+            continue;
+        }
+        if (c == '&') {
+            NSRange semi = [html rangeOfString: @";" options: 0 range: NSMakeRange(i + 1, MIN((NSUInteger)12, len - (i + 1)))];
+            if (semi.location != NSNotFound) {
+                NSString *entity = [html substringWithRange: NSMakeRange(i + 1, semi.location - (i + 1))];
+                NSString *decoded = decodeHTMLEntity(entity);
+                if (decoded != nil) {
+                    [out appendString: decoded];
+                    i = NSMaxRange(semi);
+                    lastWasSpace = NO;
+                    continue;
+                }
+            }
+        }
+        if (c == ' ' || c == '\t' || c == '\r' || c == '\n') {
+            if (!lastWasSpace && [out length] > 0) {
+                [out appendString: @" "];
+                lastWasSpace = YES;
+            }
+        } else {
+            [out appendFormat: @"%C", c];
+            lastWasSpace = NO;
+        }
+        i++;
+    }
+    return out;
+}
+
+static NSString *decodeDocumentData(NSData *data, NSDictionary *options, NSStringEncoding *outEncoding) {
+    NSNumber *encodingOption = [options objectForKey: NSCharacterEncodingDocumentOption];
+    NSStringEncoding encoding = encodingOption ? [encodingOption unsignedIntegerValue] : NSUTF8StringEncoding;
+    NSString *string = [[[NSString alloc] initWithData: data encoding: encoding] autorelease];
+    if (string == nil && encodingOption == nil) {
+        encoding = NSISOLatin1StringEncoding;
+        string = [[[NSString alloc] initWithData: data encoding: encoding] autorelease];
+    }
+    if (outEncoding) {
+        *outEncoding = encoding;
+    }
+    return string;
+}
+
 @implementation NSAttributedString (NSAttributedString_AppKit)
 
 #pragma mark -
@@ -101,8 +233,21 @@ NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
         return nil;
     }
     else if([docType isEqual: NSHTMLTextDocumentType]){
-        NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
-        return nil;
+        NSStringEncoding encoding = NSUTF8StringEncoding;
+        NSString *html = decodeDocumentData(data, options, &encoding);
+        if (html == nil) {
+            if (error)
+                *error = [NSError errorWithDomain: NSCocoaErrorDomain
+                                             code: NSFileReadInapplicableStringEncodingError
+                                         userInfo: nil];
+            [self release];
+            return nil;
+        }
+        if (attributes)
+            *attributes = [NSDictionary dictionaryWithObjectsAndKeys:
+                    NSHTMLTextDocumentType, NSDocumentTypeDocumentAttribute,
+                    [NSNumber numberWithUnsignedInteger: encoding], NSCharacterEncodingDocumentAttribute, nil];
+        return [self initWithString: plainTextFromHTML(html)];
     }
     else if([docType isEqual: NSMacSimpleTextDocumentType]){
         NSLog(@"NSAttributedString initFromData - dont know how to parse %@", docType);
@@ -117,14 +262,8 @@ NSAttributedStringKey NSUsesScreenFontsDocumentAttribute = @"UsesScreenFonts";
         return nil;
     }
     else if([docType isEqual: NSPlainTextDocumentType]){
-        // The given encoding, else UTF-8 falling back to Latin-1.
-        NSNumber *encodingOption = [options objectForKey: NSCharacterEncodingDocumentOption];
-        NSStringEncoding encoding = encodingOption ? [encodingOption unsignedIntegerValue] : NSUTF8StringEncoding;
-        NSString *string = [[[NSString alloc] initWithData: data encoding: encoding] autorelease];
-        if (string == nil && encodingOption == nil) {
-            encoding = NSISOLatin1StringEncoding;
-            string = [[[NSString alloc] initWithData: data encoding: encoding] autorelease];
-        }
+        NSStringEncoding encoding = NSUTF8StringEncoding;
+        NSString *string = decodeDocumentData(data, options, &encoding);
         if (string == nil) {
             if (error)
                 *error = [NSError errorWithDomain: NSCocoaErrorDomain
