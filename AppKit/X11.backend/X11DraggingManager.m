@@ -479,10 +479,6 @@ static X11DraggingManager *X11SharedManager;
     }
 }
 
-- (void) handlePropertyChange: (XPropertyEvent *) event {
-    [_dragPasteboard propertyNotify: event];
-}
-
 // ----------------------------------------------------------------- sending
 
 - (void) sendXdndMessage: (Atom) type

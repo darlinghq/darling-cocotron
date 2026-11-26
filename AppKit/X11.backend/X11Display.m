@@ -152,9 +152,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         _confinesPointer = appKitPreference(CFSTR("ConfinePointerToFullscreenWindows"));
         _controlActsAsCommand = appKitPreference(CFSTR("ControlKeyActsAsCommand"));
 
-        // The general pasteboard and the CLIPBOARD selection show the same contents.
-        NSPasteboardRegisterHostClipboard([X11Pasteboard hostClipboardOfDisplay: self]);
-
         // From here on CoreGraphics hands this display the events of the connection.
         _CGSSetNativeConnectionObserver(self);
     }
@@ -1559,39 +1556,11 @@ enum {
             [window propertyNotify: &ev->xproperty];
             // The window may have entered or left fullscreen.
             [self updatePointerConfinement];
-        } else if (window == nil) {
-            // An incremental transfer is paced by the receiver deleting the
-            // property, and that property lives on the receiver's window, which
-            // belongs to another client and so is not in the window map. The
-            // pasteboard that wrote it is the one waiting for the deletion.
-            [(X11DraggingManager *) [self draggingManager]
-                    handlePropertyChange: &ev->xproperty];
-        }
-        // An INCR transfer a pasteboard serves is paced by the requestor
-        // deleting a property on its own window, usually another client's,
-        // which therefore is not in the window map.
-        if (ev->xproperty.state == PropertyDelete &&
-            (window == nil || [window isKindOfClass: [X11Pasteboard class]]))
-            [X11Pasteboard dispatchPropertyNotify: &ev->xproperty];
-        break;
-
-    case SelectionClear:
-        if ([window respondsToSelector: @selector(selectionClear:)]) {
-            [window selectionClear: &ev->xselectionclear];
         }
         break;
 
-    case SelectionRequest:
-        if ([window respondsToSelector: @selector(selectionRequest:)]) {
-            [window selectionRequest: &ev->xselectionrequest];
-        }
-        break;
-
-    case SelectionNotify:
-        if ([window respondsToSelector: @selector(selectionNotify:)]) {
-            [window selectionNotify: &ev->xselection];
-        }
-        break;
+    // The selections (the requests, replies and clears of the clipboard and of a drag's data, and the property
+    // changes that pace their transfers) are handled by CoreGraphics, which owns the connection.
 
     case ColormapNotify:
         break;

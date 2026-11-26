@@ -25,7 +25,7 @@
 #import "NSEvent_mouse.h"
 #import "WaylandCursor.h"
 #import "WaylandScale.h"
-#import "WaylandPasteboard.h"
+#import "WaylandDataDevice.h"
 #import "WaylandDraggingManager.h"
 #import "WaylandAppMenu.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
@@ -113,7 +113,7 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case WaylandObjectDataDevice:
             case WaylandObjectDataOffer:
             case WaylandObjectDataSource:
-                [(WaylandPasteboard *) object handleEvent: opcode kind: objectKind
+                [(WaylandDataDevice *) object handleEvent: opcode kind: objectKind
                                                      proxy: proxy arguments: args];
                 break;
             case WaylandObjectIconManager:
@@ -247,8 +247,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     if (!_eglAvailable)
         NSLog(@"Wayland backend: EGL subwindows unavailable; CPU drawing remains enabled");
 
-    _generalPasteboard = [[WaylandPasteboard alloc] initWithName: NSGeneralPboard display: self
-                                                      manager: _dataDeviceManager seat: _seat];
+    _dataDevice = [[WaylandDataDevice alloc] initWithDisplay: self manager: _dataDeviceManager seat: _seat];
 
     if (WL.hasCursor) {
         const char *sizeString = getenv("XCURSOR_SIZE");
@@ -279,9 +278,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [self runAfterDispatchBlocks];
     [self flush];
 
-    // The general pasteboard and the compositor's clipboard show the same contents.
-    NSPasteboardRegisterHostClipboard(_generalPasteboard);
-
     _setupDone = YES;
     _CGSSetNativeConnectionObserver(self);
     return self;
@@ -292,8 +288,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [_draggingManager invalidate];
     [_draggingManager release];
     [self consumeDragPress];
-    [_generalPasteboard invalidate];
-    [_generalPasteboard release];
+    [_dataDevice invalidate];
+    [_dataDevice release];
 
     _CGSSetNativeConnectionObserver(nil);
     [self cancelActivationRequest];
@@ -1006,7 +1002,6 @@ static NSUInteger buttonMaskForNumber(int64_t number) {
         uint32_t serial = (uint32_t) CGEventGetIntegerValueField(event, kCGSEventInputSerial);
         _pressedButtons |= buttonMaskForNumber(number);
         _inputSerial = serial;
-        [_generalPasteboard inputAvailable];
         [_inputEvent release];
         _inputEvent = nil;
         _inputWindow = nil;
@@ -1400,7 +1395,6 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 
 - (void) nativeConnectionKeyPressedWithSerial: (uint32_t) serial {
     _inputSerial = serial;
-    [_generalPasteboard inputAvailable];
     [_inputEvent release];
     _inputEvent = nil;
     _inputWindow = nil;
@@ -2061,20 +2055,12 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 
 #pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
-- (uint32_t) clipboardSerial {
-    if (_CGSNativeConnectionKeyboardFocus() != NULL)
-        return _inputSerial;
-    // A key or click still being handled entitles its writes to the selection even when the focus
-    // left right after it, as when a virtual keyboard is removed a few milliseconds after its key.
-    return _inputEvent != nil && [NSApp currentEvent] == _inputEvent ? _inputSerial : 0;
-}
-
 - (NSDraggingManager *) draggingManager {
     if (_draggingManager == nil)
         _draggingManager = [[WaylandDraggingManager alloc] initWithDisplay: self];
     return _draggingManager;
 }
-- (struct wl_proxy *) dragDataDevice { return [_generalPasteboard dataDevice]; }
+- (struct wl_proxy *) dragDataDevice { return [_dataDevice dataDevice]; }
 - (void) consumeDragPress {
     [_dragPressEvent release]; _dragPressEvent = nil;
     _dragPressWindow = nil; _dragPressSerial = 0;

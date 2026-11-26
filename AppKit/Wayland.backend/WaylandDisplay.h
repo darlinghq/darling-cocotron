@@ -43,7 +43,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons;
+@class WaylandCursor, WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -184,7 +184,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _imageCursorBufferScale120;
     WaylandCursor *_cursor;
     BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
-    WaylandPasteboard *_generalPasteboard;
+    WaylandDataDevice *_dataDevice;
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
@@ -198,7 +198,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 // Gives every window the current application icon (see WaylandToplevelIcon.h).
 - (void) updateWindowIcons;
 - (void) processPendingEvents;
-- (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
 - (uint32_t) refreshForOutput: (struct wl_proxy *) output; // millihertz, 0 if unknown
 - (void) preferredScaleChanged: (uint32_t) scale120;
