@@ -1819,9 +1819,7 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
         if (_CGSNativeConnectionKeyboardFocus() != NULL)
             return;
         for (CFIndex i = 0; i < CFArrayGetCount(self->_windows); i++) {
-            WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(self->_windows, i);
-            if ([window isActivatedByCompositor] ||
-                ([window isPopup] && [window isMapped] && ![window isTooltip] && ![window isGenericPopup]))
+            if ([(WaylandWindow *) CFArrayGetValueAtIndex(self->_windows, i) isActivatedByCompositor])
                 return;
         }
         [self keyboardFocusLeftApplication];
