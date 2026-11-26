@@ -73,6 +73,11 @@ typedef enum {
     WaylandObjectLayerSurface,
     WaylandObjectTouch,
     WaylandObjectIconManager,
+    // The session protocol's objects. These are above the color manager's range so the two sets
+    // can each be recognized with one comparison in the dispatcher.
+    WaylandObjectSessionManager = 1100,
+    WaylandObjectSession,
+    WaylandObjectToplevelSession,
 } WaylandObjectKind;
 
 // The dispatcher installed on every proxy (see WaylandLibrary.h for why listeners
@@ -128,6 +133,13 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _layerShellName;
     struct wl_proxy *_dataDeviceManager;
     uint32_t _compositorVersion;
+    // xdg-session-management: one session for the application, started when AppKit reports why the
+    // application launched. Toplevels join it before their first commit.
+    struct wl_proxy *_sessionManager, *_session;
+    uint32_t _sessionManagerName;
+    NSString *_sessionIdentifier;
+    NSUInteger _sessionReason;
+    BOOL _sessionRequested;
 
 @protected
     struct wl_proxy *_seat;
@@ -199,6 +211,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) flush;
 // The shared color manager, or nil when the compositor offers neither protocol.
 - (WaylandColorManager *) colorManager;
+// Start a window-system session before any restored window is mapped. These implement the
+// NSDisplay (NSSessionRestoration) hooks declared in NSWindow-Private.h.
+- (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier;
+- (NSString *) windowSessionIdentifier;
+// Called by a WaylandWindow before the first commit of a toplevel surface.
+- (void) joinSessionForToplevel: (WaylandWindow *) window;
 // Gives every window the current application icon (see WaylandToplevelIcon.h).
 - (void) updateWindowIcons;
 - (void) processPendingEvents;

@@ -52,7 +52,8 @@ set(WAYLAND_PROTOCOL_FILES
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-toplevel-icon-v1.xml"
 	# The following staging protocols are vendored for the same reason. See protocols/README.md.
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/color-management-v1.xml"
-	"${CMAKE_CURRENT_LIST_DIR}/protocols/color-representation-v1.xml")
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/color-representation-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-session-management-v1.xml")
 
 set(WAYLAND_PROTOCOLS_USABLE TRUE)
 foreach (protocol ${WAYLAND_PROTOCOL_FILES})

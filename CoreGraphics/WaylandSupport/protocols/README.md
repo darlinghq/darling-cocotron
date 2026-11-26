@@ -93,3 +93,15 @@ declare alpha mode and YUV coefficients/range/chroma for surfaces.
 - Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
 - Copyright: 2022 Simon Ser, 2022 Red Hat, Inc., 2022 Collabora, Ltd., 2022-2025 Red Hat, Inc.
 - Licence: the MIT permission notice at the top of the file.
+
+## xdg-session-management
+
+`xdg-session-management-v1.xml` is the staging `xdg_session_manager_v1` protocol. The AppKit Wayland backend uses it
+to connect its saved window state to a compositor-managed session, so a relaunched application can ask the compositor
+to restore its toplevels.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/xdg-session-management/xdg-session-management-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2018 Mike Blumenkrantz, 2018 Samsung Electronics Co., Ltd, 2018 Red Hat Inc.
+- Licence: the MIT permission notice at the top of the file.

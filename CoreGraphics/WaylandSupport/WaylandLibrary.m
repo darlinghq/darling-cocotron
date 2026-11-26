@@ -479,6 +479,22 @@ bool WaylandCheckOpcodes(void) {
             {&wp_color_representation_surface_v1_interface, false, WP_COLOR_REP_SURFACE_SET_ALPHA_MODE, "set_alpha_mode"},
             {&wp_color_representation_surface_v1_interface, false, WP_COLOR_REP_SURFACE_SET_COEFFICIENTS_AND_RANGE, "set_coefficients_and_range"},
             {&wp_color_representation_surface_v1_interface, false, WP_COLOR_REP_SURFACE_SET_CHROMA_LOCATION, "set_chroma_location"},
+
+            {&xdg_session_manager_v1_interface, false, WP_SESSION_MANAGER_DESTROY, "destroy"},
+            {&xdg_session_manager_v1_interface, false, WP_SESSION_MANAGER_GET_SESSION, "get_session"},
+
+            {&xdg_session_v1_interface, false, WP_SESSION_DESTROY, "destroy"},
+            {&xdg_session_v1_interface, false, WP_SESSION_REMOVE, "remove"},
+            {&xdg_session_v1_interface, false, WP_SESSION_ADD_TOPLEVEL, "add_toplevel"},
+            {&xdg_session_v1_interface, false, WP_SESSION_RESTORE_TOPLEVEL, "restore_toplevel"},
+            {&xdg_session_v1_interface, false, WP_SESSION_REMOVE_TOPLEVEL, "remove_toplevel"},
+            {&xdg_session_v1_interface, true, WP_SESSION_EV_CREATED, "created"},
+            {&xdg_session_v1_interface, true, WP_SESSION_EV_RESTORED, "restored"},
+            {&xdg_session_v1_interface, true, WP_SESSION_EV_REPLACED, "replaced"},
+
+            {&xdg_toplevel_session_v1_interface, false, WP_TOPLEVEL_SESSION_DESTROY, "destroy"},
+            {&xdg_toplevel_session_v1_interface, false, WP_TOPLEVEL_SESSION_RENAME, "rename"},
+            {&xdg_toplevel_session_v1_interface, true, WP_TOPLEVEL_SESSION_EV_RESTORED, "restored"},
     };
 
     for (size_t i = 0; i < sizeof(checks) / sizeof(checks[0]); i++) {

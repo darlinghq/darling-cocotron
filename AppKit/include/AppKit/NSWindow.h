@@ -370,6 +370,10 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
 
         BOOL _restorable;
         Class _restorationClass;
+        // The window-system session name of this window, used when a window is recreated
+        // from saved state before its native window exists.
+        NSString *_sessionToplevelName;
+        BOOL _restoringSessionToplevel;
         NSWindowTabbingMode _tabbingMode;
         NSWindowCollectionBehavior _collectionBehavior;
         NSWindowTabbingIdentifier _tabbingIdentifier;

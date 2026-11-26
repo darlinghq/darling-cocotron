@@ -81,8 +81,12 @@ typedef enum {
     int32_t _pendingPopupX, _pendingPopupY;
     struct wl_proxy *_decoration;
     struct wl_proxy *_frameCallback;
-    // Per-surface color objects, when the compositor offers the color protocols.
-    struct wl_proxy *_colorSurface, *_representationSurface;
+    // Per-surface color objects and the compositor session this toplevel belongs to.
+    struct wl_proxy *_colorSurface, *_representationSurface, *_toplevelSession;
+    NSString *_sessionName;
+    BOOL _restoringSessionToplevel;
+    // Once a surface has committed, a saved session state can no longer be restored on it.
+    BOOL _surfaceCommitted;
     struct WaylandBuffer _buffers[2];
     int32_t _pendingWidth, _pendingHeight;
     BOOL _pendingActivated;
@@ -145,6 +149,7 @@ typedef enum {
 - (O2Rect) frame;
 - (O2Context *) cgContext;
 - (struct wl_proxy *) surface;
+- (struct wl_proxy *) toplevel;
 - (struct wl_proxy *) ensureSurface;
 - (WaylandDisplay *) waylandDisplay;
 - (void) addSubwindow: (WaylandSubWindow *) child;
@@ -210,7 +215,21 @@ typedef enum {
 - (void) updateSurfaceColor;
 // Creates the color objects once a surface exists and the manager has been bound.
 - (void) updateSurfaceColorIfNeeded;
-// Called by the display when a color manager arrives later than the window.
+// Adds the toplevel to the compositor session, or restores its saved state. Must run before the
+// surface's first commit. Does nothing without a session.
+- (void) joinSessionBeforeCommit;
+// Callbacks from the display when the color manager or session manager arrives later than the window.
 - (void) colorManagerAvailable;
+- (void) sessionManagerAvailable;
+
+// Overrides of CGWindow's window-system session hooks (see CGWindowPrivate.h).
+- (NSString *) ensureSessionToplevelName;
+- (void) setSessionToplevelName: (NSString *) name restoring: (BOOL) restoring;
+- (BOOL) isRestoringSessionToplevel;
+- (BOOL) hasCommittedSurface;
+// Commits the surface and records that a session restore request is now too late.
+- (void) commitSurface;
+- (struct wl_proxy *) toplevelSession;
+- (void) setToplevelSession: (struct wl_proxy *) proxy;
 
 @end

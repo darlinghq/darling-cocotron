@@ -5,10 +5,11 @@
 */
 // A private compositor for the color-management, color-representation and session protocols. It
 // advertises an sRGB/P3 display with HDR headroom, a parametric image-description creator,
-// premultiplied electrical alpha. It renders nothing and prints:
+// premultiplied electrical alpha and one persistent session. It renders nothing and prints:
 //   OUTPUT_INFO primaries=<n> tf=<n> max=<n> reference=<n> target=<n>
 //   SURFACE_COLOR <title> primaries=<n> tf=<n>
 //   SURFACE_ALPHA <title> mode=<n>
+//   SESSION reason=<n> id=<string> op=add|restore name=<string> before_commit=<0|1>
 // Run it through wayland-color-session.sh.
 #define _GNU_SOURCE
 #include <stdio.h>
@@ -18,8 +19,10 @@
 #include "color-management-v1-server-protocol.h"
 #include "color-representation-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
+#include "xdg-session-management-v1-server-protocol.h"
 
 static struct wl_display *display;
+static const char *session_id = "test-session-1";
 
 struct toplevel;
 struct surface {
@@ -43,6 +46,11 @@ struct description {
 
 struct creator {
     uint32_t primaries, tf;
+};
+
+struct session {
+    uint32_t reason;
+    char *id;
 };
 
 static void noop() {}
@@ -419,6 +427,80 @@ static void bind_representation_manager(struct wl_client *c, void *data, uint32_
     wp_color_representation_manager_v1_send_done(r);
 }
 
+// ---- xdg_session_manager_v1
+
+static void session_gone(struct wl_resource *r) {
+    struct session *session = wl_resource_get_user_data(r);
+    free(session->id);
+    free(session);
+}
+
+static void session_destroy(struct wl_client *c, struct wl_resource *r) {
+    wl_resource_destroy(r);
+}
+
+static void toplevel_session_destroy(struct wl_client *c, struct wl_resource *r) {
+    wl_resource_destroy(r);
+}
+
+static void toplevel_session_rename(struct wl_client *c, struct wl_resource *r, const char *name) {}
+
+static const struct xdg_toplevel_session_v1_interface toplevel_session_impl = {
+    .destroy = toplevel_session_destroy,
+    .rename = toplevel_session_rename,
+};
+
+static void session_add(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                        struct wl_resource *toplevel, const char *name, int restoring) {
+    struct session *session = wl_resource_get_user_data(r);
+    struct toplevel *client_toplevel = wl_resource_get_user_data(toplevel);
+    int before_commit = client_toplevel->surface != NULL && client_toplevel->surface->commits == 0;
+    printf("SESSION reason=%u id=%s op=%s name=%s before_commit=%d\n",
+           session->reason, session->id, restoring ? "restore" : "add", name, before_commit);
+    fflush(stdout);
+    struct wl_resource *client = wl_resource_create(c, &xdg_toplevel_session_v1_interface, 1, id);
+    wl_resource_set_implementation(client, &toplevel_session_impl, NULL, NULL);
+    if (restoring)
+        xdg_toplevel_session_v1_send_restored(client);
+}
+
+static void session_add_toplevel(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                 struct wl_resource *toplevel, const char *name) {
+    session_add(c, r, id, toplevel, name, 0);
+}
+
+static void session_restore_toplevel(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                     struct wl_resource *toplevel, const char *name) {
+    session_add(c, r, id, toplevel, name, 1);
+}
+
+static const struct xdg_session_v1_interface session_impl = {
+    .destroy = session_destroy,
+    .remove = session_destroy,
+    .add_toplevel = session_add_toplevel,
+    .restore_toplevel = session_restore_toplevel,
+};
+
+static void manager_get_session(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                uint32_t reason, const char *requested_id) {
+    struct session *session = calloc(1, sizeof(*session));
+    session->reason = reason;
+    session->id = strdup(requested_id != NULL ? requested_id : session_id);
+    struct wl_resource *client = wl_resource_create(c, &xdg_session_v1_interface, 1, id);
+    wl_resource_set_implementation(client, &session_impl, session, session_gone);
+    xdg_session_v1_send_created(client, session_id);
+}
+
+static const struct xdg_session_manager_v1_interface session_manager_impl = {
+    .destroy = manager_destroy,
+    .get_session = manager_get_session,
+};
+
+static void bind_session_manager(struct wl_client *c, void *data, uint32_t version, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(c, &xdg_session_manager_v1_interface, version, id);
+    wl_resource_set_implementation(r, &session_manager_impl, NULL, NULL);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: wayland-color-session-server <socket name>\n");
@@ -432,6 +514,7 @@ int main(int argc, char **argv) {
     wl_global_create(display, &wp_color_manager_v1_interface, 3, NULL, bind_color_manager);
     wl_global_create(display, &wp_color_representation_manager_v1_interface, 1, NULL,
                      bind_representation_manager);
+    wl_global_create(display, &xdg_session_manager_v1_interface, 1, NULL, bind_session_manager);
     if (wl_display_add_socket(display, argv[1]) < 0) {
         fprintf(stderr, "cannot create socket %s\n", argv[1]);
         return 2;

@@ -3,10 +3,17 @@
 # Copyright (C) 2026 Lubos Dolezel
 #
 # Runs tests/color-session-probe.m against tests/wayland-color-session-server.c, a private compositor
-# that offers the color-management and color-representation protocols. Usage:
-#   wayland-color-session.sh color <command that runs color-session-probe>
+# that offers the color-management, color-representation and session-management protocols. Usage:
+#   wayland-color-session.sh <scenario> <command that runs color-session-probe>
 # The script appends the scenario and the number of seconds to the command's arguments, and sets
 # DARLING_APPKIT_BACKEND=wayland and WAYLAND_DISPLAY (an absolute host path) in its environment.
+# Scenarios:
+#   color      an HDR P3 output: NSScreen reports P3 and EDR headroom, and the toplevel surface gets a
+#              P3 description and the premultiplied-electrical alpha mode
+#   launch     no saved state and no marker: the compositor session starts with reason=launch
+#   restore    saved state naming a session and a toplevel: reason=session_restore, and the saved
+#              toplevel is restored before its first surface commit
+#   recover    a leftover running marker without saved state: reason=recover, with a new toplevel
 # Compile the guest probe first, for example:
 #   scripts/guest-cc.sh -o /tmp/color-session-probe tests/color-session-probe.m -framework AppKit
 #   wayland-color-session.sh color darling shell /Volumes/SystemRoot/tmp/color-session-probe
@@ -26,13 +33,14 @@ trap cleanup EXIT INT TERM
 for tool in wayland-scanner pkg-config cc timeout; do
     command -v "$tool" >/dev/null || { echo "need $tool" >&2; exit 2; }
 done
-[ "$scenario" = color ] || { echo "unknown scenario $scenario" >&2; exit 2; }
+case "$scenario" in color|launch|restore|recover) ;; *) echo "unknown scenario $scenario" >&2; exit 2 ;; esac
 
 protocols=$(pkg-config --variable=pkgdatadir wayland-protocols)
 for pair in \
     "$protocols/stable/xdg-shell/xdg-shell.xml:xdg-shell" \
     "$protocols_dir/color-management-v1.xml:color-management-v1" \
-    "$protocols_dir/color-representation-v1.xml:color-representation-v1"; do
+    "$protocols_dir/color-representation-v1.xml:color-representation-v1" \
+    "$protocols_dir/xdg-session-management-v1.xml:xdg-session-management-v1"; do
     xml=${pair%%:*}
     name=${pair##*:}
     wayland-scanner server-header "$xml" "$work/$name-server-protocol.h" || exit 2
@@ -41,7 +49,7 @@ done
 cc -Wall -Wno-incompatible-pointer-types -I"$work" -o "$work/server" \
     "$here/wayland-color-session-server.c" "$work/xdg-shell.c" \
     "$work/color-management-v1.c" "$work/color-representation-v1.c" \
-    $(pkg-config --cflags --libs wayland-server) || exit 2
+    "$work/xdg-session-management-v1.c" $(pkg-config --cflags --libs wayland-server) || exit 2
 
 mkdir -m 700 "$work/r"
 sock="$work/r/w"
@@ -85,10 +93,24 @@ expect_guest() { # regex, description
         fail "$2: expected /$1/"; fi
 }
 
-expect_server '^OUTPUT_INFO primaries=9 tf=9 max=400 reference=203 target=1000$' "output color description"
-expect_server '^SURFACE_COLOR color-test primaries=9 tf=9$' "surface color description"
-expect_server '^SURFACE_ALPHA color-test mode=0$' "surface alpha mode"
-expect_guest '^SCREEN p3=1 edr=1\.97 potential=4\.93 reference=4\.93$' "NSScreen color space and EDR"
+case "$scenario" in
+color)
+    expect_server '^OUTPUT_INFO primaries=9 tf=9 max=400 reference=203 target=1000$' "output color description"
+    expect_server '^SURFACE_COLOR color-test primaries=9 tf=9$' "surface color description"
+    expect_server '^SURFACE_ALPHA color-test mode=0$' "surface alpha mode"
+    expect_guest '^SCREEN p3=1 edr=1\.97 potential=4\.93 reference=4\.93$' "NSScreen color space and EDR"
+    ;;
+launch)
+    expect_server '^SESSION reason=1 id=[^ ]+ op=add name=darling-[^ ]+ before_commit=1$' "launch session"
+    ;;
+restore)
+    expect_server '^SESSION reason=3 id=test-session-1 op=restore name=saved-window before_commit=1$' "restored session toplevel"
+    ;;
+recover)
+    expect_server '^SESSION reason=2 id=test-session-1 op=add name=darling-[^ ]+ before_commit=1$' "recovered session"
+    ;;
+esac
+expect_guest '^MARKER absent=1$' "running marker removed on quit"
 expect_guest '^PROBE done failures=0$' "guest checks"
 [ $guest_status = 0 ] || fail "guest exited with status $guest_status"
 kill -0 "$server_pid" 2>/dev/null || fail "the compositor exited (protocol error?)"
