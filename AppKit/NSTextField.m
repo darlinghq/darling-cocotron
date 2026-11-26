@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSKeyValueBinding/NSObject+BindingSupport.h"
 #import "NSKeyValueBinding/NSTextFieldBinder.h"
 #import <AppKit/NSApplication.h>
+#import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSParagraphStyle.h>
@@ -284,7 +285,13 @@ NS_EXTRA_DEALLOC(NSTextField)
 }
 
 - (BOOL) isOpaque {
-    return [_cell drawsBackground] || [_cell isBezeled];
+    if ([_cell isBezeled])
+        return [_cell bezelStyle] == NSTextFieldSquareBezel;
+    if ([_cell drawsBackground]) {
+        NSColor *bg = [_cell backgroundColor];
+        return bg == nil || [bg alphaComponent] >= 1.0;
+    }
+    return NO;
 }
 
 // See the QUIRK in NSControl: a text field follows the view rule, so a
@@ -731,6 +738,16 @@ NS_EXTRA_DEALLOC(NSTextField)
 }
 - (void) _setFontFamilyName: (NSString *) familyName {
     [(NSTextFieldCell *) _cell _setFontFamilyName: familyName];
+}
+
+@end
+
+@implementation NSTextField (NonVibrantAppearance)
+
+// Name observed as an unrecognized selector sent by a guest application's text field subclass from its nib's -awakeFromNib
+// (rung 4 of the escalation ladder; the application's behaviour supplies only the name). GUESS: a flag asking for text drawn
+// without vibrancy. Cocotron draws no vibrancy, so there is nothing to switch and the flag is not kept.
+- (void) _setUsesNonVibrantAppearance: (BOOL) usesNonVibrantAppearance {
 }
 
 @end
