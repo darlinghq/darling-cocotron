@@ -13,6 +13,7 @@
 #import <Foundation/NSBundle.h>
 #import <Foundation/NSData.h>
 #import <Foundation/NSDictionary.h>
+#import <Foundation/NSSet.h>
 #import <Foundation/NSString.h>
 #include <math.h>
 #include <string.h>
@@ -228,6 +229,22 @@ static NSData *svgDataForName(const char *svgName) {
     }
 }
 
+static NSBitmapImageRep *renderedRepForSymbol(const char *svgName, NSSize size) {
+    static NSMutableDictionary *repCache = nil;
+    @synchronized([NSImage class]) {
+        if (repCache == nil)
+            repCache = [[NSMutableDictionary alloc] init];
+        NSString *key = [NSString stringWithFormat: @"%s:%.0fx%.0f", svgName, size.width, size.height];
+        id cached = [repCache objectForKey: key];
+        if (cached != nil)
+            return cached == (id) [NSNull null] ? nil : cached;
+        NSData *data = svgDataForName(svgName);
+        NSBitmapImageRep *rep = data != nil ? NSRenderSVGData(data, size, 2.0) : nil;
+        [repCache setObject: rep ? (id) rep : (id) [NSNull null] forKey: key];
+        return rep;
+    }
+}
+
 BOOL NSImageSymbolHasGlyph(NSString *name) {
     return drawerForName(name) != NULL || svgNameForSymbol(name) != NULL;
 }
@@ -245,13 +262,19 @@ void NSImageSymbolDrawGlyph(NSString *name, NSRect rect) {
     }
     const char *svgName = svgNameForSymbol(name);
     if (svgName != NULL) {
-        NSData *data = svgDataForName(svgName);
-        if (data != nil) {
-            NSBitmapImageRep *rep = NSRenderSVGData(data, rect.size, 2.0);
-            if (rep != nil) {
-                [rep drawInRect: rect];
-                return;
-            }
+        NSBitmapImageRep *rep = renderedRepForSymbol(svgName, rect.size);
+        if (rep != nil) {
+            [rep drawInRect: rect];
+            return;
+        }
+    }
+    static NSMutableSet *loggedMissing = nil;
+    @synchronized([NSImage class]) {
+        if (loggedMissing == nil)
+            loggedMissing = [[NSMutableSet alloc] init];
+        if (name != nil && ![loggedMissing containsObject: name]) {
+            [loggedMissing addObject: name];
+            NSLog(@"NSImageSymbolDrawGlyph: unmapped symbol '%@'", name);
         }
     }
     CGFloat line = MAX(1.0, floor(NSWidth(rect) / 12.0));
