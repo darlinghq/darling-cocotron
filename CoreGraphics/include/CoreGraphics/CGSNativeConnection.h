@@ -79,11 +79,6 @@ typedef enum {
 // answer, or answers NO; Xlib's built-in input method only composes) CoreGraphics composes them itself, and does
 // not pass the key events to Xlib's compose filter, which drops a sequence that no table entry continues.
 - (BOOL) nativeConnectionInputMethodComposes;
-// X11: whether the observer makes the events of a pointer event (an XEvent*: button, motion) itself, so
-// that CoreGraphics posts nothing for it. The observer holds the pointer for itself (relative mouse
-// mode) or the window the event is for is one CoreGraphics does not decode input for (a display overlay).
-// Asked for every button and motion event, before it is decoded.
-- (BOOL) nativeConnectionObserverHandlesPointerEvent: (void *) event;
 // X11: CoreGraphics has decoded a pointer event (an XEvent*) into the CGEvent and is about to post it.
 // The observer may add what only it knows (kCGSMouseEventWindowKeyState). Returns whether the process'
 // event stream gets the event: NO when the window it is for does not take it (a mouse moved event for a
@@ -138,8 +133,8 @@ typedef enum {
 // cursor is shown, and keeps the cursor hidden while _CGSNativeConnectionCursorHidden()). Main thread.
 - (void) nativeConnectionCursorHiddenChanged: (BOOL) hidden;
 // X11: the window (an X window) the pointer is to be grabbed for when the mouse is disassociated from the
-// cursor (CGAssociateMouseAndMouseCursorPosition(false)): the one the observer prefers (a display overlay, the
-// key window). 0 for none, which leaves the choice to CoreGraphics (the window of the connection with the focus).
+// cursor (CGAssociateMouseAndMouseCursorPosition(false)): the one the observer prefers (the key window). A
+// display overlay comes first, whatever the observer says. 0 for none, which leaves the choice to CoreGraphics (the window of the connection with the focus).
 - (unsigned long) nativeConnectionRelativeMouseWindow;
 // X11: the pointer grab of the disassociated mouse was taken (active) on a window, with the frozen cursor in
 // root pixels, or released. The observer forgets the pointer position it knew.
@@ -177,8 +172,6 @@ extern void _CGSNativeConnectionPointerWindowsChanged(void);
 // exists and again when its other input selection changes; the window is an X window. A server without XInput 2.2 has no
 // touches. Nothing on Wayland, where CoreGraphics reads the touch screen of the seat.
 extern void _CGSNativeConnectionSelectTouchInput(unsigned long window);
-// X11: mouse motion the framework made events for itself (a display overlay) that CGGetLastMouseDelta() reports too.
-extern void _CGSNativeConnectionAccumulateMouseDelta(double dx, double dy);
 // The index and name of the keyboard layout group in effect. -1 and NULL when there is none.
 extern int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef *name);
 
@@ -204,5 +197,8 @@ extern id _CGSNativeConnectionWaylandColorManager(void);
 extern bool _CGSNativeConnectionDisplaySleepPrevented(void);
 // The surface the lock should be made on may be another one (a window was mapped, unmapped or activated).
 extern void _CGSNativeConnectionPointerLockTargetChanged(void);
+// The native window an event names (kCGSEventNativeWindow) is a display overlay (_CGSCreateDisplayOverlayWindow):
+// the cover of a display, whose events belong to no window of the application.
+extern bool _CGSNativeConnectionIsDisplayOverlayWindow(void *nativeWindow);
 
 #endif

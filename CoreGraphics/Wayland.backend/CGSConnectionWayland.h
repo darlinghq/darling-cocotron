@@ -77,6 +77,9 @@ typedef enum {
     CGSWaylandObjectBuffer,
     CGSWaylandObjectLayerSurface,
     CGSWaylandObjectPopup,
+    CGSWaylandObjectDataDevice,
+    CGSWaylandObjectDataOffer,
+    CGSWaylandObjectDataSource,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -125,6 +128,17 @@ typedef enum {
     // none.
     struct wl_proxy *_pointerConstraints, *_relativePointerManager;
     uint32_t _pointerConstraintsName, _relativePointerManagerName;
+    // The clipboard (CGSWaylandClipboard), made from the data device manager and the seat; nil when the compositor
+    // has no data device manager.
+    struct wl_proxy *_dataDeviceManager;
+    id _clipboard;
+    // The latest input event of the seat that entitles a client to set the clipboard (a key or button press), and
+    // when it was.
+    uint32_t _inputSerial;
+    CFAbsoluteTime _inputSerialTime;
+    // Blocks to run once the events read are dispatched (see -performAfterDispatch:).
+    NSMutableArray *_afterDispatch;
+    BOOL _afterDispatchRunQueued, _dispatching;
     // pointer-warp-v1, when the compositor offers it: CGWarpMouseCursorPosition() sends a warp request
     // instead of asking for a short pointer lock.
     struct wl_proxy *_pointerWarp;
@@ -153,6 +167,18 @@ typedef enum {
 // Tells the windows that a color global arrived after they were created.
 - (void) notifyWindowsColorManagerAvailable;
 
+// Runs the block after the events the connection has read are dispatched: not inside a listener of the
+// compositor's events, where a request that waits for the compositor would nest in the dispatch. Blocks queued by
+// those blocks wait for the next pass. Main thread.
+- (void) performAfterDispatch: (void (^)(void)) block;
+// A key or a button of the seat was pressed with the serial the compositor gave it: the clipboard can be set
+// with it, and what the process has to publish is published.
+- (void) inputPressedWithSerial: (uint32_t) serial;
+// The serial a request to set the clipboard needs: that of the latest press while a surface of the process has
+// the keyboard focus, and for a short time after the focus went (as when the virtual keyboard that made the key is
+// removed a few milliseconds after it), 0 otherwise.
+- (uint32_t) clipboardSerial;
+
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;
 // The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
@@ -175,6 +201,11 @@ typedef enum {
 - (void) flushPendingKeyboardEvents;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
+// Whether the surface is that of a display overlay (a window made with -becomeDisplayOverlay:), and the
+// surface of the display overlay shown last, NULL when there is none. The input of an overlay belongs to no
+// window of the application.
+- (BOOL) isDisplayOverlaySurface: (struct wl_proxy *) surface;
+- (struct wl_proxy *) displayOverlaySurface;
 // Where a point of the surface is in global coordinates, when it is a surface of this connection's windows.
 - (BOOL) globalLocation: (CGPoint *) location ofSurface: (struct wl_proxy *) surface point: (CGPoint) point;
 // The uids of the active hot keys that a press of the virtual key keyCode, with the given modifier flags

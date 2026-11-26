@@ -43,7 +43,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandCursor, WaylandWindow, WaylandPasteboard, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
+@class WaylandCursor, WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -181,7 +181,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     WaylandWindow *_pointerWindow;
     CGPoint _pointerSurfacePoint;
-    NSPoint _lastMouseLocation;
     uint32_t _pointerEnterSerial;
     NSUInteger _pressedButtons;
     // The serial of the press that was the first of a group of buttons: its NSEvent is the one a drag starts from.
@@ -212,7 +211,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     uint32_t _imageCursorBufferScale120;
     WaylandCursor *_cursor;
     BOOL _applyingCursor, _cursorApplyPending, _cursorApplyQueued;
-    WaylandPasteboard *_generalPasteboard;
+    WaylandDataDevice *_dataDevice;
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
@@ -243,7 +242,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 // Tells mapped windows to create an inhibitor when the idle inhibit manager arrives.
 - (void) idleInhibitManagerAvailable;
 - (void) processPendingEvents;
-- (uint32_t) clipboardSerial;
 - (int32_t) scaleForOutput: (struct wl_proxy *) output;
 - (uint32_t) refreshForOutput: (struct wl_proxy *) output; // millihertz, 0 if unknown
 - (void) preferredScaleChanged: (uint32_t) scale120;

@@ -109,6 +109,8 @@
         WaylandMarshal(_surface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
                        (union wl_argument[1]) {{.o = NULL}});
     [_waylandConnection flush];
+    if (_displayOverlay)
+        [_waylandConnection pointerLockTargetMayHaveChanged];
     [super dealloc];
 }
 
@@ -124,6 +126,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 - (CGSWaylandRole) role { return _role; }
 - (BOOL) isShown { return _shown; }
 - (BOOL) isActivated { return _activated; }
+- (BOOL) isDisplayOverlay { return _displayOverlay; }
 
 // Whether the window floats: above the normal level (and below the main menu) or with the floating
 // style. See the comment in CGSWindowWayland.h.
@@ -589,6 +592,9 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     switch (place) {
     case kCGSOrderOut: {
         _shown = NO;
+        // The pointer lock held for an overlay that goes away is made on a window again.
+        if (_displayOverlay)
+            [_waylandConnection pointerLockTargetMayHaveChanged];
         if (_role == CGSWaylandRoleNone)
             return kCGSErrorSuccess;
         if (_role == CGSWaylandRolePopup) {
@@ -667,6 +673,9 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
             [self mapFloatingWindowsAgain: windows];
             [windows release];
         }
+        // The pointer of the relative mouse mode is locked to an overlay while there is one.
+        if (_displayOverlay)
+            [_waylandConnection pointerLockTargetMayHaveChanged];
         return kCGSErrorSuccess;
 
     case kCGSOrderBelow:
@@ -690,20 +699,10 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     if (_toplevel == NULL)
         return kCGErrorFailure;
 
-    // An empty input region lets pointer input reach the surfaces below.
-    union wl_argument regionArgs[1] = {{.o = NULL}};
-    struct wl_proxy *region = [_waylandConnection createObject: _waylandConnection->_compositor
-                                                        opcode: WP_COMPOSITOR_CREATE_REGION
-                                                     interface: &wl_region_interface
-                                                     arguments: regionArgs
-                                                          kind: CGSWaylandObjectNone
-                                                        object: nil];
-    if (region == NULL)
-        return kCGErrorFailure;
-    union wl_argument inputArgs[1] = {{.o = (struct wl_object *) region}};
-    WaylandMarshal(_surface, WP_SURFACE_SET_INPUT_REGION, NULL, 0, inputArgs);
-    WaylandMarshal(region, WP_REGION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
-                   (union wl_argument[1]) {{.o = NULL}});
+    // The surface keeps the default input region (all of it): the overlay takes the pointer and the keys of
+    // the display it covers. The pointer decoder makes events of them like those of any window,
+    // but they name no window of the application (a captured display's do not either).
+    _displayOverlay = YES;
 
     // Let the compositor pick the output; the window covers it.
     union wl_argument fullscreenArgs[1] = {{.o = NULL}};

@@ -831,11 +831,6 @@ BOOL _CGSNativeConnectionRelativeMouseState(BOOL* requested, CGPoint* frozenRoot
 	return [nativeConnection() relativeMouseState: requested frozenRoot: frozenRoot];
 }
 
-void _CGSNativeConnectionAccumulateMouseDelta(double dx, double dy)
-{
-	[nativeConnection() accumulateMouseDeltaX: dx y: dy];
-}
-
 void _CGSNativeConnectionPointerWindowsChanged(void)
 {
 	[nativeConnection() pointerWindowsChanged];
@@ -901,6 +896,11 @@ bool _CGSNativeConnectionDisplaySleepPrevented(void)
 void _CGSNativeConnectionPointerLockTargetChanged(void)
 {
 	[nativeConnection() pointerLockTargetMayHaveChanged];
+}
+
+bool _CGSNativeConnectionIsDisplayOverlayWindow(void* nativeWindow)
+{
+	return [nativeConnection() isDisplayOverlayNativeWindow: nativeWindow];
 }
 
 int _CGSNativeConnectionKeyboardLayoutGroup(CFStringRef* name)

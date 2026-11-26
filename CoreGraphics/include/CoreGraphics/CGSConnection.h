@@ -187,6 +187,10 @@
 // lock may be another one now. The defaults say no and do nothing.
 -(BOOL) pointerLocked;
 -(void) pointerLockTargetMayHaveChanged;
+// Whether the native window (the handle the connection's events name a window by: an X window, a wl_surface)
+// is a display overlay (see -[CGSWindow becomeDisplayOverlay:]), whose input belongs to no window of the
+// application. The default is NO.
+-(BOOL) isDisplayOverlayNativeWindow:(void*)nativeWindow;
 // Whether this process holds a power assertion that keeps the display from sleeping on idle
 // (kIOPMAssertPreventUserIdleDisplaySleep, or the older kIOPMAssertionTypeNoDisplaySleep). Backends
 // whose window system has to be told learn it from IOKit (IOPMCopyAssertionsByProcess). The default is NO.
@@ -220,6 +224,10 @@
 // on a destroyed object and the keyboard layout group in effect. The defaults know nothing.
 -(void*) keyboardFocus;
 -(uint64_t) modifierFlags;
+// The modifier flags the window system says are held now: the state of the session's keyboard, which may differ
+// from what the decoder has seen of the process' own events (no window of the process had the focus). The
+// default is the decoder's.
+-(uint64_t) hardwareModifierFlags;
 -(void) nativeObjectDestroyed:(void*)object;
 -(void) flushPendingKeyboardEvents;
 // The pointer: the seat's wl_pointer (Wayland), and where the pointer is in its surface, set by the

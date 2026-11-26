@@ -71,9 +71,7 @@
                   toWindow: (X11Window *) window;
 
 // Sent by -[X11Display postXEvent:] for the replies a target addresses to a
-// drag's source window, and for the property deletions that pace a transfer too
-// large for one request, which arrive on the receiving window rather than on ours.
+// drag's source window.
 - (void) handleXdndSourceMessage: (XClientMessageEvent *) message;
-- (void) handlePropertyChange: (XPropertyEvent *) event;
 
 @end

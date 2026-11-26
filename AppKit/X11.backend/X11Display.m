@@ -118,12 +118,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 
         _windowsByID = [NSMutableDictionary new];
 
-        [[NSNotificationCenter defaultCenter]
-                addObserver: self
-                   selector: @selector(_displayOverlayWindowCreated:)
-                       name: (NSString *) _kCGSDisplayOverlayWindowCreated
-                     object: nil];
-
         const char *modifiers = XSetLocaleModifiers("");
         _xim = XOpenIM(_display, NULL, NULL, NULL);
         _inputMethodComposes = _xim != NULL && modifiersNameInputMethod(modifiers);
@@ -148,59 +142,15 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         _confinesPointer = appKitPreference(CFSTR("ConfinePointerToFullscreenWindows"));
         _controlActsAsCommand = appKitPreference(CFSTR("ControlKeyActsAsCommand"));
 
-        // The general pasteboard and the CLIPBOARD selection show the same contents.
-        NSPasteboardRegisterHostClipboard([X11Pasteboard hostClipboardOfDisplay: self]);
-
         // From here on CoreGraphics hands this display the events of the connection.
         _CGSSetNativeConnectionObserver(self);
     }
     return self;
 }
 
-// A display overlay window (CGLSetFullScreen) belongs to no NSWindow, so the
-// application's input for it is taken up here: its key and pointer events are
-// selected on this connection and the keyboard focus goes to it. Its events
-// reach the application with no window and screen coordinates, as those of a
-// captured display do on macOS. Relative mouse mode, if the application asked
-// for it, takes its grab on the overlay.
-- (void) _displayOverlayWindowCreated: (NSNotification *) notification {
-    if (![NSThread isMainThread]) {
-        [self performSelectorOnMainThread: _cmd
-                               withObject: notification
-                            waitUntilDone: YES];
-        return;
-    }
-    NSNumber *native = [[notification userInfo] objectForKey: @"NativeWindow"];
-    if (native == nil)
-        return;
-    Window overlay = (Window) [native unsignedLongValue];
-    if (_overlayWindows == nil)
-        _overlayWindows = [NSMutableSet new];
-    [_overlayWindows addObject: native];
-    _overlayWindow = overlay;
-    _overlayPointerKnown = NO;
-    XSelectInput(_display, overlay,
-                 KeyPressMask | KeyReleaseMask | ButtonPressMask |
-                 ButtonReleaseMask | PointerMotionMask | StructureNotifyMask);
-    XSetInputFocus(_display, overlay, RevertToPointerRoot, CurrentTime);
-    XFlush(_display);
-    // A grab wanted by the application that could not be taken before is taken on the overlay.
-    _CGSNativeConnectionPointerWindowsChanged();
-}
-
-// The overlay is gone: the server released any grab on it.
-- (void) _overlayWindowDestroyed: (Window) overlay {
-    if (![_overlayWindows containsObject: @((unsigned long) overlay)])
-        return;
-    [_overlayWindows removeObject: @((unsigned long) overlay)];
-    if (_overlayWindow == overlay)
-        _overlayWindow = None;
-}
-
 - (void) dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver: self];
     _CGSSetNativeConnectionObserver(nil);
-    [_overlayWindows release];
     [_blankCursor release];
     [_defaultCursor release];
 
@@ -237,7 +187,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 // callbacks, which is what posts NSApplicationDidChangeScreenParametersNotification) before it says so
 // here, so what this display derives from the layout is dropped now.
 - (void) nativeConnectionDisplayLayoutChanged {
-    _pointerKnown = NO;
     _primaryRootFrameValid = NO;
     // Whether the focused window covers a monitor depends on the layout.
     _occlusionCoverValid = NO;
@@ -403,36 +352,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     }
 }
 
-- (NSUInteger) currentModifierFlags {
-    XkbStateRec r;
-    if (XkbGetState(_display, XkbUseCoreKbd, &r) != Success)
-        return 0;
-
-    return [self modifierFlagsForState: r.mods];
-}
-
-- (NSUInteger) pressedMouseButtons {
-    Window root, child;
-    int rootX, rootY, winX, winY;
-    unsigned int mask = 0;
-
-    if (!XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
-                       &rootX, &rootY, &winX, &winY, &mask))
-        return 0;
-
-    // X numbers the buttons by position (1 left, 2 middle, 3 right); Cocoa
-    // numbers them 0 left, 1 right, 2 middle. The core protocol only reports
-    // the state of buttons 1 to 5, and 4 and 5 are the wheel.
-    NSUInteger buttons = 0;
-    if (mask & Button1Mask)
-        buttons |= 1 << 0;
-    if (mask & Button3Mask)
-        buttons |= 1 << 1;
-    if (mask & Button2Mask)
-        buttons |= 1 << 2;
-    return buttons;
-}
-
 - (NSDraggingManager *) draggingManager {
     return [X11DraggingManager sharedManager];
 }
@@ -479,17 +398,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     CGSForceShowCursor(CGSMainConnectionID());
 }
 
-// The motion a display overlay's events made, which CGGetLastMouseDelta() reports with the rest.
-- (void) accumulateMouseDeltaX: (CGFloat) dx y: (CGFloat) dy {
-    _CGSNativeConnectionAccumulateMouseDelta(dx, dy);
-}
-
-// The window CoreGraphics grabs the pointer for while the mouse is disassociated from the cursor: a display
-// overlay covers the screen above every window, so it is the one while there is one; else the key window, else
-// the main, else the first visible, else the first window.
+// The window CoreGraphics grabs the pointer for while the mouse is disassociated from the cursor, unless a display
+// overlay is up: the key window, else the main, else the first visible, else the first window.
 - (unsigned long) nativeConnectionRelativeMouseWindow {
-    if (_overlayWindow != None)
-        return (unsigned long) _overlayWindow;
     NSWindow *nswin = [NSApp keyWindow];
     if (!nswin)
         nswin = [NSApp mainWindow];
@@ -508,10 +419,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     return xwin ? (unsigned long) [xwin windowHandle] : 0;
 }
 
-// The grab was taken or released: what AppKit knew of the pointer is stale, a confinement grab was replaced, and
-// the window's cursor position is where the cursor froze (absolute motion after the release starts from there).
+// The grab was taken or released: a confinement grab was replaced, and the window's cursor position is where the
+// cursor froze (absolute motion after the release starts from there).
 - (void) nativeConnectionRelativeMouseGrabChanged: (BOOL) active window: (unsigned long) window rootX: (int) x rootY: (int) y {
-    _pointerKnown = NO;
     if (!active)
         return;
     _confinedWindow = None;
@@ -660,72 +570,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 
 
 
-- (BOOL) queryPointerRootX: (int *) x y: (int *) y state: (unsigned int *) state {
-    if (_pointerKnown) {
-        *x = _pointerRootX;
-        *y = _pointerRootY;
-        *state = _pointerState;
-        return YES;
-    }
-    // Not known from the event stream: ask the server, and again next time.
-    Window root, child;
-    int winX, winY;
-    return XQueryPointer(_display, DefaultRootWindow(_display), &root, &child,
-                         x, y, &winX, &winY, state);
-}
-
-// Tracks the pointer from the event stream, so that asking for the mouse
-// location, as applications do every frame, costs no round trip while the
-// pointer moves over our windows. Motion over other clients' windows is not
-// reported, which is why every event that can precede such motion forgets it.
-- (void) trackPointerForEvent: (XEvent *) ev {
-    switch (ev->type) {
-    case MotionNotify:
-        _pointerKnown = ev->xmotion.same_screen &&
-                ev->xmotion.root == DefaultRootWindow(_display);
-        _pointerRootX = ev->xmotion.x_root;
-        _pointerRootY = ev->xmotion.y_root;
-        _pointerState = ev->xmotion.state;
-        break;
-    case ButtonPress:
-    case ButtonRelease:
-    case KeyPress:
-    case KeyRelease:
-    case EnterNotify:
-    case LeaveNotify:
-    case FocusIn:
-    case FocusOut:
-    case KeymapNotify:
-        _pointerKnown = NO;
-        break;
-    default:
-        break;
-    }
-}
-
-- (NSPoint) mouseLocation {
-    int root_x = 0, root_y = 0;
-    unsigned int mask;
-
-    CGPoint frozen;
-    if (_CGSNativeConnectionRelativeMouseState(NULL, &frozen)) {
-        // The cursor is disassociated: report the frozen (virtual) position, as macOS does.
-        root_x = (int) frozen.x;
-        root_y = (int) frozen.y;
-    } else {
-        [self queryPointerRootX: &root_x y: &root_y state: &mask];
-    }
-    // Cocoa's global space, as +[NSEvent mouseLocation] reports on macOS: points,
-    // origin at the main monitor's bottom-left corner, y up, so the result can be
-    // compared with window and screen frames. CGEventGetLocation() reports the same
-    // point in CoreGraphics' y-down space (see CGSConnectionX11).
-    // -[X11Window mouseLocationOutsideOfEventStream] is window-local.
-    CGFloat scale = [self backingScale];
-    X11Point point = X11PointFromRoot([self primaryFrameInPoints],
-                                      (X11Point){root_x / scale, root_y / scale});
-    return NSMakePoint(point.x, point.y);
-}
-
 - (void) setWindow: (id) window forID: (XID) i {
     if (window)
         [_windowsByID
@@ -828,51 +672,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
         ret |= NSFunctionKeyMask;
 
     return ret;
-}
-
-// Cocoa groups clicks only within its double-click interval and four logical
-// points of the preceding press, and only for the same button in the same
-// window. Without the button and the window, a left click followed by a right
-// click inside the interval was reported as a double click; without the
-// distance, a click on a far side of a window was too. The X server's own
-// timestamp is used rather than the wall clock, which the client cannot
-// compare against a server that may be a different machine, and its unsigned
-// subtraction covers the 32-bit wrap.
-- (NSInteger) countClickForButton: (unsigned int) button
-                                  window: (XID) window
-                                   point: (NSPoint) point
-                                   time: (Time) time {
-    CGFloat dx = point.x - _lastClickPoint.x;
-    CGFloat dy = point.y - _lastClickPoint.y;
-    if (_lastClickWindow == window && _lastClickButton == button &&
-        (uint32_t) (time - _lastClickTime) < [self doubleClickInterval] * 1000 &&
-        dx * dx + dy * dy <= 16 && _clickCount < NSIntegerMax)
-        _clickCount++;
-    else
-        _clickCount = 1;
-    _lastClickTime = time;
-    _lastClickButton = button;
-    _lastClickWindow = window;
-    _lastClickPoint = point;
-    [_buttonClickCounts setObject: @(_clickCount) forKey: @(button)];
-    return _clickCount;
-}
-
-// Cocoa numbers the mouse buttons in press order from 0 (left), 1 (right) and
-// 2 for everything else, so an app reading +[NSEvent buttonNumber] for the
-// right button gets 3 and reads the middle button as the right one. X numbers
-// them by position instead: 1 left, 3 right, 2 middle.
-static NSInteger cocoaButtonNumber(unsigned int xButton) {
-    switch (xButton) {
-    case Button1: return 0;
-    case Button3: return 1;
-    case Button2: return 2;
-    default:
-        // X buttons 4 to 7 are the two wheels and never get here. The extra
-        // buttons start at 8 (back) and 9 (forward), which Cocoa numbers 3
-        // and 4, right after the middle button.
-        return xButton >= 8 ? (NSInteger) xButton - 5 : (NSInteger) xButton;
-    }
 }
 
 // Returns the window numbers of this app's windows, frontmost first, using the X server's stacking
@@ -995,22 +794,6 @@ static int ignoreBadWindowWhileOrdering(Display *display, XErrorEvent *errorEven
     }
 }
 
-// Xlib names only the first five buttons. 6 and 7 are conventionally the
-// horizontal wheel, to the left and to the right.
-enum {
-    HorizontalScrollLeftButton = 6,
-    HorizontalScrollRightButton = 7,
-};
-// The Cocoa screen point (points, origin at the main monitor's bottom-left,
-// y up) of a root pixel position: where an event for a display overlay window
-// is located, as the window of such an event is nil.
-- (NSPoint) screenPointFromRootX: (double) x y: (double) y {
-    CGFloat scale = [self backingScale];
-    X11Point point = X11PointFromRoot([self primaryFrameInPoints],
-                                      (X11Point){x / scale, y / scale});
-    return NSMakePoint(point.x, point.y);
-}
-
 // The window has the input focus: tell the NSWindow it is active, which makes it the key window unless
 // the rule in -[NSWindow platformWindowActivated:displayIfNeeded:] keeps the key status where it is.
 // Reached by FocusIn, and by -[X11Window makeKey] when the window already held the focus.
@@ -1034,10 +817,9 @@ enum {
     }
 }
 
-// Whether the window is one of this process's own: an application window, or an overlay of the display.
+// Whether the window is one of this process's own application windows.
 - (BOOL) isOwnWindowID: (Window) window {
-    return window != None && ([self windowForID: window] != nil ||
-                              [_overlayWindows containsObject: [NSNumber numberWithUnsignedLong: (unsigned long) window]]);
+    return window != None && [self windowForID: window] != nil;
 }
 
 // The window manager made a window of another client the active one: the application is no longer
@@ -1193,14 +975,7 @@ enum {
 
     if ([self noteOcclusionEvent: ev window: window])
         return;
-    // Pointer events of a display overlay have no window; they are located in
-    // screen coordinates.
-    BOOL overlay = window == nil &&
-            [_overlayWindows containsObject: @((unsigned long) ev->xany.window)];
-
     id delegate = [window delegate];
-
-    [self trackPointerForEvent: ev];
 
     switch (ev->type) {
     case KeyPress:
@@ -1209,182 +984,25 @@ enum {
         // pointer events carry); the NSEvents are made from those (-windowNumber:location:forKeyEvent:).
         break;
 
-    case ButtonPress:;
-        pos = overlay ? [self screenPointFromRootX: ev->xbutton.x_root
-                                                 y: ev->xbutton.y_root]
-                      : [window logicalPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
-
-        // The wheel buttons (4 to 7, and the XInput2 smooth scrolling) are decoded by CoreGraphics into scroll
-        // CGEvents; the NSEvents are made from those.
-        if (ev->xbutton.button >= Button4 &&
-            ev->xbutton.button <= HorizontalScrollRightButton)
-            break;
-
-        // CoreGraphics decodes the buttons into CGEvents (click state, button number, flags, window) and
-        // the NSEvents are made from those; the windows of a display overlay are decoded here.
-        if (![self observerHandlesPointerEvent: ev])
-            break;
-
-        switch (ev->xbutton.button) {
-        case Button1:
-            type = NSLeftMouseDown;
-            break;
-        case Button3:
-            type = NSRightMouseDown;
-            break;
-        default:
-            type = NSOtherMouseDown;
-        }
-
-        event = [NSEvent
-                mouseEventWithType: type
-                          location: pos
-                     modifierFlags: [self modifierFlagsForState: ev->xbutton
-                                                                         .state]
-                            window: delegate
-                        clickCount: [self
-                                    countClickForButton: ev->xbutton.button
-                                                   window: ev->xany.window
-                                                    point: pos
-                                                    time: ev->xbutton.time]
-                            deltaX: 0.0
-                            deltaY: 0.0];
-        [(NSEvent_mouse *) event
-                _setButtonNumber: cocoaButtonNumber(ev->xbutton.button)];
-        // The window manager may focus the window for this very click, before
-        // or after the press reaches us; the press is judged by what we knew
-        // when it arrived, not by what the queue shows when it is taken.
-        [(NSEvent_mouse *) event _setWindowWasKeyOnArrival: [delegate isKeyWindow]];
-        [self postEvent: event atStart: NO];
+    case ButtonPress:
+    case ButtonRelease:
+        // CoreGraphics decodes the buttons and the wheel into CGEvents (click state, button number, flags,
+        // window), whichever window they are for; the NSEvents are made from those.
         break;
 
-    case ButtonRelease:;
-        // The wheel's other half of the pair.
-        if (ev->xbutton.button >= Button4 &&
-            ev->xbutton.button <= HorizontalScrollRightButton)
+    case MotionNotify: {
+        // CoreGraphics decoded the motion into a CGEvent (the deltas are added to the pointer's total when it is
+        // about to be posted, see -nativeConnectionWillPostPointerEvent:forXEvent:). What stays here is what
+        // depends on the windows: where the pointer is in the window, the cursor and the tracking areas.
+        [window setLastKnownCursorPosition:
+                        [window logicalPoint: NSMakePoint(ev->xmotion.x, ev->xmotion.y)]];
+        [self pointerMoved];
+        BOOL moved = !(ev->xmotion.state & (Button1Mask | Button2Mask | Button3Mask));
+        if (moved && ![delegate acceptsMouseMovedEvents])
             break;
-
-        if (![self observerHandlesPointerEvent: ev])
-            break;
-
-        pos = overlay ? [self screenPointFromRootX: ev->xbutton.x_root
-                                                 y: ev->xbutton.y_root]
-                      : [window logicalPoint: NSMakePoint(ev->xbutton.x, ev->xbutton.y)];
-
-        // The up of a click reports the count its down was given, so that a
-        // double click's two downs are matched by their own ups. A release
-        // with no press behind it (the app attached mid-drag) is a single
-        // click: Cocoa never reports an up with a count of zero.
-        NSNumber *upCount = [_buttonClickCounts objectForKey: @(ev->xbutton.button)];
-        [_buttonClickCounts removeObjectForKey: @(ev->xbutton.button)];
-
-        switch (ev->xbutton.button) {
-        case Button1:
-            type = NSLeftMouseUp;
-            break;
-        case Button3:
-            type = NSRightMouseUp;
-            break;
-        default:
-            type = NSOtherMouseUp;
-        }
-
-        event = [NSEvent
-                mouseEventWithType: type
-                          location: pos
-                     modifierFlags: [self modifierFlagsForState: ev->xbutton
-                                                                         .state]
-                            window: delegate
-                        clickCount: upCount ? [upCount integerValue] : 1
-                            deltaX: 0.0
-                            deltaY: 0.0];
-        [(NSEvent_mouse *) event
-                _setButtonNumber: cocoaButtonNumber(ev->xbutton.button)];
-        [self postEvent: event atStart: NO];
+        [delegate platformWindowSetCursorEvent: window];
         break;
-
-    case MotionNotify:; {
-            if (![self observerHandlesPointerEvent: ev]) {
-                // CoreGraphics decoded the motion into a CGEvent (the deltas are added to the pointer's
-                // total when it is about to be posted, see -nativeConnectionWillPostPointerEvent:forXEvent:).
-                // What stays here is what depends on the windows: where the pointer is in the window,
-                // the cursor and the tracking areas.
-                [window setLastKnownCursorPosition:
-                                [window logicalPoint: NSMakePoint(ev->xmotion.x, ev->xmotion.y)]];
-                [self pointerMoved];
-                BOOL moved = !(ev->xmotion.state & (Button1Mask | Button2Mask | Button3Mask));
-                if (moved && ![delegate acceptsMouseMovedEvents])
-                    break;
-                [delegate platformWindowSetCursorEvent: window];
-                break;
-            }
-
-            CGPoint lastMotionPos = [window mouseLocationOutsideOfEventStream];
-            pos = overlay ? [self screenPointFromRootX: ev->xmotion.x_root
-                                                     y: ev->xmotion.y_root]
-                          : [window logicalPoint: NSMakePoint(ev->xmotion.x,
-                                                              ev->xmotion.y)];
-
-            CGFloat deltaX, deltaY;
-
-            if (overlay) {
-                // Root pixels moved since the previous motion; y grows downwards.
-                CGFloat scale = [self backingScale];
-                deltaX = _overlayPointerKnown
-                        ? (ev->xmotion.x_root - _overlayPointerX) / scale : 0;
-                deltaY = _overlayPointerKnown
-                        ? (ev->xmotion.y_root - _overlayPointerY) / scale : 0;
-            } else {
-                // Mouse deltas are in screen orientation, y growing downwards
-                // (as CGEvent's kCGMouseEventDeltaY), while pos is window-local
-                // with y growing upwards; relative mode reports root deltas,
-                // which already grow downwards.
-                deltaX = pos.x - lastMotionPos.x;
-                deltaY = lastMotionPos.y - pos.y;
-            }
-            [window setLastKnownCursorPosition: pos];
-            if (overlay) {
-                _overlayPointerKnown = YES;
-                _overlayPointerX = ev->xmotion.x_root;
-                _overlayPointerY = ev->xmotion.y_root;
-            }
-            _CGSNativeConnectionAccumulateMouseDelta(deltaX, deltaY);
-
-            // X11 numbers the right button 3 (Button3Mask); Button2Mask is
-            // the middle button, whose drags are other-mouse drags.
-            type = NSMouseMoved;
-
-            if (ev->xmotion.state & Button1Mask) {
-                type = NSLeftMouseDragged;
-            } else if (ev->xmotion.state & Button3Mask) {
-                type = NSRightMouseDragged;
-            } else if (ev->xmotion.state & Button2Mask) {
-                type = NSOtherMouseDragged;
-            }
-
-            // The pointer moved: a cursor hidden until then comes back, even
-            // when the application does not want the mouse-moved event.
-            [self pointerMoved];
-            if (type == NSMouseMoved && !overlay && ![delegate acceptsMouseMovedEvents])
-                break;
-
-            // Coalescing in the event queue replaces a queued moved or dragged event of
-            // the same type for the same window with this one, and adds its deltas to this
-            // one's (which is all an application gets in relative mode).
-            event = [NSEvent
-                    mouseEventWithType: type
-                              location: pos
-                         modifierFlags:
-                                 [self modifierFlagsForState: ev->xmotion.state]
-                                window: delegate
-                            clickCount: 1
-                                deltaX: deltaX
-                                deltaY: deltaY];
-            [self postEvent: event atStart: NO];
-
-            [delegate platformWindowSetCursorEvent: window];
-            break;
-        }
+    }
 
     case EnterNotify:
         if (!_CGSNativeConnectionRelativeMouseState(NULL, NULL))
@@ -1483,7 +1101,6 @@ enum {
         break;
 
     case DestroyNotify:;
-        [self _overlayWindowDestroyed: ev->xany.window];
         // we should never get this message before the WM_DELETE_WINDOW
         // ClientNotify so normally, window should be nil here.
         [window invalidate];
@@ -1552,39 +1169,11 @@ enum {
             [window propertyNotify: &ev->xproperty];
             // The window may have entered or left fullscreen.
             [self updatePointerConfinement];
-        } else if (window == nil) {
-            // An incremental transfer is paced by the receiver deleting the
-            // property, and that property lives on the receiver's window, which
-            // belongs to another client and so is not in the window map. The
-            // pasteboard that wrote it is the one waiting for the deletion.
-            [(X11DraggingManager *) [self draggingManager]
-                    handlePropertyChange: &ev->xproperty];
-        }
-        // An INCR transfer a pasteboard serves is paced by the requestor
-        // deleting a property on its own window, usually another client's,
-        // which therefore is not in the window map.
-        if (ev->xproperty.state == PropertyDelete &&
-            (window == nil || [window isKindOfClass: [X11Pasteboard class]]))
-            [X11Pasteboard dispatchPropertyNotify: &ev->xproperty];
-        break;
-
-    case SelectionClear:
-        if ([window respondsToSelector: @selector(selectionClear:)]) {
-            [window selectionClear: &ev->xselectionclear];
         }
         break;
 
-    case SelectionRequest:
-        if ([window respondsToSelector: @selector(selectionRequest:)]) {
-            [window selectionRequest: &ev->xselectionrequest];
-        }
-        break;
-
-    case SelectionNotify:
-        if ([window respondsToSelector: @selector(selectionNotify:)]) {
-            [window selectionNotify: &ev->xselection];
-        }
-        break;
+    // The selections (the requests, replies and clears of the clipboard and of a drag's data, and the property
+    // changes that pace their transfers) are handled by CoreGraphics, which owns the connection.
 
     case ColormapNotify:
         break;
@@ -1696,24 +1285,11 @@ enum {
     return result != nil ? result : @"";
 }
 
-// Whether the pointer event is made here and not by CoreGraphics: for the windows of a display overlay, which
-// belong to no NSWindow and report screen coordinates, while the mouse is associated with the cursor (CoreGraphics
-// decodes the events of the frozen cursor, whichever window holds the pointer).
-- (BOOL) observerHandlesPointerEvent: (XEvent *) ev {
-    return [self windowForID: ev->xany.window] == nil &&
-           [_overlayWindows containsObject: @((unsigned long) ev->xany.window)] &&
-           !_CGSNativeConnectionRelativeMouseState(NULL, NULL);
-}
-
-- (BOOL) nativeConnectionObserverHandlesPointerEvent: (void *) event {
-    return [self observerHandlesPointerEvent: (XEvent *) event];
-}
-
 // CoreGraphics decoded a pointer event and is about to post it. What AppKit knows when the event arrives is
 // added: whether a pressed button's window was the key window (the window manager may focus it for this very
 // click before or after the press reaches us, so the press is judged by what we knew at its arrival). A mouse
-// moved event for a window that did not ask for them goes to the event taps only (the windows of a display
-// overlay take them all).
+// moved event for a window that did not ask for them goes to the event taps only (a display overlay has no window
+// and takes them all).
 - (BOOL) nativeConnectionWillPostPointerEvent: (CGEventRef) event forXEvent: (void *) xEvent {
     XEvent *ev = (XEvent *) xEvent;
     X11Window *window = (X11Window *) [self windowForID: ev->xany.window];
@@ -1950,7 +1526,6 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
     if ([_openMenuWindows indexOfObjectIdenticalTo: window] == NSNotFound)
         return;
     [_openMenuWindows removeObjectIdenticalTo: window];
-    _pointerKnown = NO;
     if ([_openMenuWindows count] > 0) {
         [self grabPointerForMenus];
         [self grabKeyboardForMenus];

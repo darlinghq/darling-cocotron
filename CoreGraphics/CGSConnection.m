@@ -383,6 +383,11 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 {
 }
 
+-(BOOL) isDisplayOverlayNativeWindow:(void*)nativeWindow
+{
+	return NO;
+}
+
 static CGSScreen* screenWithID(NSArray<CGSScreen*>* screens, CGDirectDisplayID displayID)
 {
 	for (CGSScreen* screen in screens)
@@ -534,6 +539,11 @@ static void* g_nativeObserver;
 -(uint64_t) modifierFlags
 {
 	return 0;
+}
+
+-(uint64_t) hardwareModifierFlags
+{
+	return [self modifierFlags];
 }
 
 -(void) nativeObjectDestroyed:(void*)object

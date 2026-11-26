@@ -37,7 +37,12 @@
 	NSString* _title;
 	GC _gc;                  // for putting the contents on the window; created when first needed
 	BOOL _contentsShaped;    // the window's shape follows the alpha of its contents
+	BOOL _displayOverlay;    // -becomeDisplayOverlay: made this window the cover of a display
 }
+
+// Whether the window is a display overlay (see -becomeDisplayOverlay:). Its input is the process' own, but
+// belongs to no window of the application: its events name no window.
+-(BOOL) isDisplayOverlay;
 
 // The window system asked for the window to be painted again (an expose event): the contents are put on it.
 -(void) windowSystemDidExpose:(const XExposeEvent*) event;
