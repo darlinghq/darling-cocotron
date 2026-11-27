@@ -61,6 +61,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSRect) documentVisibleRect;
 
 - (NSPoint) constrainScrollPoint: (NSPoint) point;
+- (NSRect) constrainBoundsRect: (NSRect) proposedBounds;
 
 - (void) viewBoundsChanged: (NSNotification *) note;
 - (void) viewFrameChanged: (NSNotification *) note;
