@@ -119,6 +119,13 @@ typedef enum {
 - (void) addEntriesToDeviceDictionary: (NSDictionary *) entries;
 - (void) flashWindow;
 
+// What the window shows of a title bar (a CGSToplevelTitlebarKind, see CGSWindow.h), as the UI layer decides it from the
+// window's style. The default does nothing.
+- (void) setTitlebarKind: (int) kind;
+// Asks the window system to move the window while the left button that is down stays down (the window manager or
+// compositor does it, so that the button's release goes to it). NO when it cannot.
+- (BOOL) moveByWindowSystem;
+
 - (void) addCGLContext: (CGLContextObj) cglContext;
 - (void) removeCGLContext: (CGLContextObj) cglContext;
 

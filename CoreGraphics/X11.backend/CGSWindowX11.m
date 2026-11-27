@@ -1583,6 +1583,87 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	return kCGSErrorSuccess;
 }
 
+// The title bar the window shows (see CGSToplevelTitlebarKind): the manager's frame for a standard one, none for the
+// others, and the rounded corners of a window that has no frame because it shows no title bar of its own.
+// QUIRK: macOS draws a titled window that shows no title bar of its own with rounded corners of about 5 points; the window
+// manager draws none of that for a window it was asked not to decorate, so the corners are cut with the SHAPE extension,
+// which needs no compositor. Evidence: black-box observation of such windows on macOS 10.14.4 (tier 2).
+// Test: tests/coregraphics-x11-toplevel-decorations.sh (the corners of a hidden title bar are cut, those of the other kinds
+// are not).
+-(CGError) setToplevelTitlebarKind:(CGSToplevelTitlebarKind) kind
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	_titlebarKind = kind;
+	CGError error = [self setToplevelDecorated: kind == kCGSToplevelTitlebarStandard];
+	if (error == kCGSErrorSuccess)
+		error = [self setToplevelCornerRadius: kind == kCGSToplevelTitlebarHidden ? kCGSToplevelHiddenTitlebarCornerRadius : 0];
+	XFlush(_display);
+	return error;
+}
+
+-(CGSToplevelTitlebarKind) toplevelTitlebarKind
+{
+	return _titlebarKind;
+}
+
+// The window manager frames a window the way the UI layer asked, whatever the preference.
+-(CGError) setToplevelPrefersClientDecoration:(BOOL) prefers
+{
+	return _toplevel ? kCGSErrorSuccess : kCGErrorIllegalArgument;
+}
+
+// Whether the manager lists the atom in _NET_SUPPORTED on the root window (EWMH).
+static BOOL X11ManagerSupports(Display* display, const char* name)
+{
+	Atom wanted = XInternAtom(display, name, False);
+	Atom type;
+	int format;
+	unsigned long count, after;
+	unsigned char* data = NULL;
+	BOOL found = NO;
+	if (XGetWindowProperty(display, DefaultRootWindow(display), XInternAtom(display, "_NET_SUPPORTED", False), 0, 4096, False,
+						   XA_ATOM, &type, &format, &count, &after, &data) == Success &&
+		data != NULL && type == XA_ATOM && format == 32)
+	{
+		Atom* atoms = (Atom*) data;
+		for (unsigned long i = 0; i < count && !found; i++)
+			found = atoms[i] == wanted;
+	}
+	if (data != NULL)
+		XFree(data);
+	return found;
+}
+
+// EWMH _NET_WM_MOVERESIZE. The pointer grab the press gave this client is released first, as EWMH asks, so that the
+// button's release goes to the window manager.
+-(CGError) beginToplevelMoveByWindowSystem
+{
+	if (!_toplevel || _window == None || _toplevelUnmanaged || !X11ManagerSupports(_display, "_NET_WM_MOVERESIZE"))
+		return kCGErrorFailure;
+
+	Window root, child;
+	int rootX, rootY, winX, winY;
+	unsigned int mask = 0;
+	if (!XQueryPointer(_display, _window, &root, &child, &rootX, &rootY, &winX, &winY, &mask) || !(mask & Button1Mask))
+		return kCGErrorFailure;
+
+	XUngrabPointer(_display, CurrentTime);
+	XEvent message = {0};
+	message.xclient.type = ClientMessage;
+	message.xclient.window = _window;
+	message.xclient.message_type = XInternAtom(_display, "_NET_WM_MOVERESIZE", False);
+	message.xclient.format = 32;
+	message.xclient.data.l[0] = rootX;
+	message.xclient.data.l[1] = rootY;
+	message.xclient.data.l[2] = 8; // _NET_WM_MOVERESIZE_MOVE
+	message.xclient.data.l[3] = Button1;
+	message.xclient.data.l[4] = 1; // source indication: application
+	XSendEvent(_display, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &message);
+	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
 // _NET_WM_ICON: for each icon its width and height and then its pixels, one long each, not premultiplied.
 -(CGError) setToplevelIcons:(NSArray<NSData*>*) icons
 {

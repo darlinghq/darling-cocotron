@@ -97,6 +97,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _delegate = delegate;
     _level = [delegate level];
     _styleMask = [delegate styleMask];
+    // Until NSWindow says what the window shows of a title bar, a titled window has a standard one.
+    _titlebarKind = (_styleMask & NSWindowStyleMaskTitled) ? kCGSToplevelTitlebarStandard : kCGSToplevelTitlebarNone;
     _backingType = (CGSBackingStoreType) [delegate backingType];
     _isOpaque = [delegate isOpaque];
     _deviceDictionary = [NSMutableDictionary new];
@@ -966,8 +968,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     return _styleMask;
 }
 
-// Whether the window has a title bar for the platform to draw (see -[NSWindow
-// _hasTitlebarForStyleMask:]).
+// Whether the window has a title bar (see -setTitlebarKind:).
 - (BOOL) hasTitlebar {
     // A sheet is drawn over its window on macOS, but xdg-shell lets the compositor place every toplevel and
     // gives a client no way to put one at a position over its parent. A sheet left without a frame then
@@ -976,17 +977,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // -updateLevelParent) with the compositor's frame.
     if ([_delegate respondsToSelector: @selector(isSheet)] && [(NSWindow *) _delegate isSheet])
         return YES;
-    if ([_delegate respondsToSelector: @selector(_hasTitlebarForStyleMask:)])
-        return [(NSWindow *) _delegate _hasTitlebarForStyleMask: _styleMask];
-    return (_styleMask & NSWindowStyleMaskTitled) != 0;
+    return _titlebarKind != kCGSToplevelTitlebarNone;
 }
 
 // A window that shows nothing of a title bar of its own (see NSWindow) leaves nothing for the
 // platform to draw as a title bar: the application draws its own header. Such a window gets no
 // frame, neither from the compositor nor from the client-side fallback.
 - (BOOL) wantsChromeless {
-    return [_delegate respondsToSelector: @selector(_hasInvisibleTitlebarForStyleMask:)] &&
-           [(NSWindow *) _delegate _hasInvisibleTitlebarForStyleMask: _styleMask];
+    return _titlebarKind == kCGSToplevelTitlebarHidden;
 }
 
 // Whether this window should draw the client-side frame, given what the compositor asked for.
@@ -995,28 +993,32 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _pendingClientDecorated && !_pendingFullscreen;
 }
 
-// Tells the compositor which side draws the frame. A chromeless window declares client-side
-// decorations explicitly because compositors differ on the default for a window that says nothing.
+// What the window shows of a title bar is the window system's window's to carry out: the compositor draws the frame, unless
+// the frame is the client's own choice (a chromeless window declares client-side decorations explicitly because
+// compositors differ on the default for a window that says nothing).
 - (void) updateDecorationMode {
-    if (_toplevel == NULL || _display->_decorationManager == NULL)
+    if (_toplevel == NULL)
         return;
-    if (![self hasTitlebar]) {
-        [(CGSWindowWayland *) _cgsWindow unsetToplevelDecoration];
-        return;
-    }
-    // The compositor draws the frame, unless the frame is the client's own choice.
-    [_cgsWindow setToplevelDecorated: !(_decorationForcedClient || [self wantsChromeless])];
+    int kind = [self hasTitlebar] ? (_titlebarKind == kCGSToplevelTitlebarHidden ? kCGSToplevelTitlebarHidden
+                                                                                 : kCGSToplevelTitlebarStandard)
+                                  : kCGSToplevelTitlebarNone;
+    [_cgsWindow setToplevelPrefersClientDecoration: _decorationForcedClient];
+    [_cgsWindow setToplevelTitlebarKind: kind];
 }
 
-// Called when the style mask, the title bar transparency or the title visibility of a window
-// change, and when it is shown (its standard buttons may have been hidden). On a mapped window
-// the mode is updated and the client-side frame switched on or off right away, keeping the
-// content size.
+- (void) setTitlebarKind: (int) kind {
+    _titlebarKind = kind;
+    [self updateDecorationsForStyleMask: _styleMask];
+}
+
+// Called when the style mask or the title bar kind of a window change, and when it is shown. On a mapped window
+// the mode is updated and the client-side frame switched on or off right away, keeping the content size.
 - (void) updateDecorationsForStyleMask: (NSUInteger) mask {
     _styleMask = mask;
     if (_toplevel == NULL)
         return;
     [self updateDecorationMode];
+    [self updateClientDecorationLayout];
     if (!_configured || [self wantsClientDecoration] == _clientDecorated) {
         [_display flush];
         return;
@@ -1406,62 +1408,44 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
     return _clientDecorated ? NSMakePoint(WaylandBorder, WaylandBorder + WaylandTitleHeight) : NSZeroPoint;
 }
 
+// Whether a point of the surface is on the client-side frame: the window system's window answers (see
+// -updateClientDecorationLayout).
 - (BOOL) isDecorationPoint: (CGPoint) point {
-    if (!_clientDecorated)
-        return NO;
-    NSPoint offset = [self contentOffset];
-    return point.x < offset.x || point.y < offset.y ||
-           point.x >= offset.x + _frame.size.width || point.y >= offset.y + _frame.size.height;
+    return _clientDecorated && [_cgsWindow toplevelClientDecorationContainsPoint: point];
 }
 
-- (BOOL) decorationButton: (uint32_t) button pressed: (BOOL) pressed
-                   serial: (uint32_t) serial atPoint: (CGPoint) point
-{
-    if (![self isDecorationPoint: point])
-        return NO;
-    if (!pressed || button != WP_BTN_LEFT || _toplevel == NULL || [_display seat] == NULL)
-        return YES;
-    CGFloat width = _frame.size.width + 2 * WaylandBorder;
-    CGFloat height = _frame.size.height + 2 * WaylandBorder + WaylandTitleHeight;
-    uint32_t edge = 0;
-    if (point.y < WaylandBorder) edge |= 1;
-    if (point.y >= height - WaylandBorder) edge |= 2;
-    if (point.x < WaylandBorder) edge |= 4;
-    if (point.x >= width - WaylandBorder) edge |= 8;
-    union wl_argument args[3] = {{.o = (struct wl_object *) [_display seat]},
-                                 {.u = serial}, {.u = edge}};
-    if (edge != 0) {
-        if (_styleMask & NSWindowStyleMaskResizable)
-            WaylandMarshal(_toplevel, WP_TOPLEVEL_RESIZE, NULL, 0, args);
-    } else if (point.y < WaylandBorder + WaylandTitleHeight) {
-        CGFloat x = point.x - WaylandBorder;
-        if (x >= 4 && x < 22 && (_styleMask & NSWindowStyleMaskClosable))
-            [self closeRequested];
-        else if (x >= 24 && x < 42 && (_styleMask & NSWindowStyleMaskMiniaturizable))
-            [self miniaturize];
-        else if (x >= 44 && x < 62 && (_styleMask & NSWindowStyleMaskResizable))
-            sendRequest(_toplevel, _maximized ? WP_TOPLEVEL_UNSET_MAXIMIZED : WP_TOPLEVEL_SET_MAXIMIZED, 0);
-        else
-            WaylandMarshal(_toplevel, WP_TOPLEVEL_MOVE, NULL, 0, args);
+// The client-side frame AppKit draws (-drawDecorations) is hit-tested by the window system's window: the edges that
+// resize, the title bar that moves, and the buttons. It is told where they are.
+- (void) updateClientDecorationLayout {
+    if (!_clientDecorated || _toplevel == NULL) {
+        [_cgsWindow setToplevelClientDecorationLayout: NULL];
+        return;
     }
-    [_display flush];
-    return YES;
+    NSSize size = [self logicalSurfaceSize];
+    CGRect none = CGRectNull;
+    CGSToplevelDecorationLayout layout = {
+        .border = WaylandBorder,
+        .titleHeight = WaylandTitleHeight,
+        .size = NSSizeToCGSize(size),
+        .resizable = (_styleMask & NSWindowStyleMaskResizable) != 0,
+        .closeButton = none,
+        .miniaturizeButton = none,
+        .zoomButton = none,
+    };
+    CGRect *buttons[] = {&layout.closeButton, &layout.miniaturizeButton, &layout.zoomButton};
+    NSUInteger masks[] = {NSWindowStyleMaskClosable, NSWindowStyleMaskMiniaturizable, NSWindowStyleMaskResizable};
+    for (int i = 0; i < 3; ++i)
+        if (_styleMask & masks[i])
+            *buttons[i] = CGRectMake(WaylandBorder + 4 + i * 20, WaylandBorder, 18, WaylandTitleHeight);
+    [_cgsWindow setToplevelClientDecorationLayout: &layout];
 }
 
-// -[NSWindow performWindowDragWithEvent:]: a client cannot place a toplevel, so
-// the compositor moves it, for the press the event stands for (xdg_toplevel.move
-// with that press's serial). NO for a popup, or when the event is not the
-// press being dispatched.
-- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event {
-    if (_toplevel == NULL || [_display seat] == NULL)
+// -[NSWindow performWindowDragWithEvent:]: a client cannot place a toplevel, so the compositor moves it, for the
+// press that is held (xdg_toplevel.move with that press's serial). NO for a popup, or when no button is down.
+- (BOOL) moveByWindowSystem {
+    if (_toplevel == NULL)
         return NO;
-    uint32_t serial = [_display dragSerialForEvent: event];
-    if (serial == 0)
-        return NO;
-    union wl_argument args[2] = {{.o = (struct wl_object *) [_display seat]}, {.u = serial}};
-    WaylandMarshal(_toplevel, WP_TOPLEVEL_MOVE, NULL, 0, args);
-    [_display flush];
-    return YES;
+    return [_cgsWindow beginToplevelMoveByWindowSystem] == kCGSErrorSuccess;
 }
 
 - (void) setLastKnownCursorPosition: (CGPoint) point {
@@ -1570,6 +1554,7 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
 - (void) invalidateContextWithNewSize: (NSSize) size {
     if (!NSEqualSizes(_frame.size, size)) {
         _frame.size = size;
+        [self updateClientDecorationLayout];
         [_context release];
         _context = nil;
         [_delegate platformWindowDidInvalidateCGContext: self];
@@ -2129,6 +2114,7 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
     }
 
     [(CGSWindowWayland *) _cgsWindow setToplevelContentOffset: NSPointToCGPoint([self contentOffset])];
+    [self updateClientDecorationLayout];
 
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;

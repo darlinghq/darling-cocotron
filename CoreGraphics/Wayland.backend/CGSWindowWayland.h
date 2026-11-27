@@ -107,6 +107,12 @@ typedef enum {
     // The window's frame drawn by the UI layer inside the surface: where the content starts, in points from the top left
     // corner of the surface.
     CGPoint _uiContentOffset;
+    // What the window shows of a title bar and who draws the frame (see -setToplevelTitlebarKind:), and the frame the
+    // UI layer draws inside the surface (see -setToplevelClientDecorationLayout:).
+    CGSToplevelTitlebarKind _uiTitlebarKind;
+    BOOL _uiPrefersClientDecoration;
+    BOOL _uiHasDecorationLayout;
+    CGSToplevelDecorationLayout _uiDecorationLayout;
     uint32_t _uiPopupGrabSerial;
     uint32_t _uiRepositionToken;
     // What the events of the configure sequence in progress said.
@@ -210,6 +216,10 @@ typedef enum {
 // Tells the window system that the frame is not decided by the UI layer (the compositor's choice: used when the
 // window has no title bar).
 - (void) unsetToplevelDecoration;
+// A pointer button was pressed or released over the window's surface at a point of it (points from its top left corner):
+// whether it is the frame's (see -setToplevelClientDecorationLayout:), which then acts on a press of the left button with
+// the compositor's serial (resize, move, close, miniaturize, zoom) and takes the button.
+- (BOOL) handleToplevelDecorationButton: (uint32_t) button pressed: (BOOL) pressed serial: (uint32_t) serial atPoint: (CGPoint) point;
 // The alpha-modifier global arrived after the window was made: the window's opacity is told now.
 - (void) alphaModifierAvailable;
 // The opacity the window lists in CGWindowListCopyWindowInfo().

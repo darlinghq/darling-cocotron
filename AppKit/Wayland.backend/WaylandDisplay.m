@@ -1110,22 +1110,15 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [window setLastKnownCursorPosition: [window transformPoint: _pointerSurfacePoint]];
     [self syncDecorationCursor];
 
+    // The pointer over the window's frame is the frame's (CoreGraphics posts no event for it).
     if (_pressedButtons == 0 && [window isDecorationPoint: _pointerSurfacePoint])
-        return YES;
+        return NO;
 
     [self performAfterDispatch: ^{
       if ([window delegate] != nil)
           [[window delegate] platformWindowSetCursorEvent: window];
     }];
     return NO;
-}
-
-// A window decoration (the buttons of a title bar, the edges that resize) takes the first button for itself.
-- (BOOL) nativeConnectionPointerButton: (uint32_t) button pressed: (BOOL) pressed serial: (uint32_t) serial {
-    return _pressedButtons == 0 && [_pointerWindow decorationButton: button
-                                                            pressed: pressed
-                                                             serial: serial
-                                                            atPoint: _pointerSurfacePoint];
 }
 
 // A Linux button code of the Cocoa button number of a mouse event, and the mask of it in _pressedButtons.

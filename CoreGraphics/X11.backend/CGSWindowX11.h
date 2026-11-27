@@ -59,6 +59,7 @@
 	BOOL _shapeEmpty;
 	BOOL _ignoresMouse;
 	BOOL _skipsTaskList;
+	CGSToplevelTitlebarKind _titlebarKind;
 
 	// Ordering, focus and the window system's state of a toplevel window (see CGSWindow.h).
 	CGSToplevelKind _toplevelKind;
