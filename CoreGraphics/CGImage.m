@@ -139,23 +139,15 @@ float CGImageCalculateContentHeadroom(CGImageRef image) {
     return CGImageGetContentHeadroom(image);
 }
 
+// The same headroom CGImageGetContentHeadroom reports, 1.0 for an SDR image; false and 0 when it is not known (NULL
+// image, extended range image without a headroom). macOS 26.7.3 returns true and 1.0 for an 8-bit RGBA bitmap
+// image and false and 0 for NULL (black-box). Test: tests/coregraphics-image-headroom-dataprovider-url.m
 bool CGImageGetHeadroom(CGImageRef image, float *headroom) {
-    if (image == NULL) {
-        if (headroom != NULL)
-            *headroom = 0.0f;
-        return false;
-    }
-
-    float h = O2ImageGetContentHeadroom((O2ImageRef)image);
-    if (h > 0.0f) {
-        if (headroom != NULL)
-            *headroom = h;
-        return true;
-    }
+    float value = CGImageGetContentHeadroom(image);
 
     if (headroom != NULL)
-        *headroom = 0.0f;
-    return false;
+        *headroom = value;
+    return value > 0.0f;
 }
 
 CGImageRef
