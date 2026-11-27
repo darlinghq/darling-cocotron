@@ -21,6 +21,9 @@
 #import "CGSSurfaceWayland.h"
 #import "CGSWindowWayland.h"
 #import "WaylandLibrary.h"
+#import "CGSConnectionWayland.h"
+#import "WaylandProtocol.h"
+#import "WaylandRender.h"
 
 #import <Foundation/NSString.h>
 
@@ -46,8 +49,40 @@
     [_waylandWindow getRect: &frame];
     _size = frame.size;
 
+    struct wl_proxy *drawn = _waylandWindow->_surface;
+    CGSConnectionWayland *connection = _waylandWindow->_waylandConnection;
+    if ([_waylandWindow role] == CGSWaylandRoleToplevel && connection->_subcompositor != NULL) {
+        // The window's wl_surface keeps the window's contents; GL gets a subsurface of it.
+        union wl_argument surfaceArgs[2] = {{.o = NULL}};
+        _ownSurface = [connection createObject: connection->_compositor
+                                        opcode: WP_COMPOSITOR_CREATE_SURFACE
+                                     interface: &wl_surface_interface
+                                     arguments: surfaceArgs
+                                          kind: CGSWaylandObjectNone
+                                        object: nil];
+        if (_ownSurface != NULL) {
+            union wl_argument args[3] = {{.o = NULL}, {.o = (struct wl_object *) _ownSurface},
+                                         {.o = (struct wl_object *) _waylandWindow->_surface}};
+            _subsurface = [connection createObject: connection->_subcompositor
+                                            opcode: WP_SUBCOMPOSITOR_GET_SUBSURFACE
+                                         interface: &wl_subsurface_interface
+                                         arguments: args
+                                              kind: CGSWaylandObjectNone
+                                            object: nil];
+        }
+        if (_subsurface == NULL) {
+            [self destroySubsurface];
+            [self release];
+            return nil;
+        }
+        // Its buffers go out when GL swaps, not with the commits of the window
+        WaylandMarshal(_subsurface, WP_SUBSURFACE_SET_DESYNC, NULL, 0, (union wl_argument[1]) {{.o = NULL}});
+        [[connection renderManager] observeSurface: _ownSurface];
+        drawn = _ownSurface;
+    }
+
     _eglWindow = WL.wl_egl_window_create(
-            (struct wl_surface *) _waylandWindow->_surface,
+            (struct wl_surface *) drawn,
             (int) _size.width, (int) _size.height);
     if (_eglWindow == NULL) {
         NSLog(@"CoreGraphics Wayland backend: cannot create a %g x %g EGL window",
@@ -58,14 +93,34 @@
     return self;
 }
 
+// The subsurface and its wl_surface, which the wl_egl_window has to be gone before
+- (void) destroySubsurface {
+    CGSConnectionWayland *connection = _waylandWindow->_waylandConnection;
+    if (_subsurface != NULL)
+        WaylandMarshal(_subsurface, WP_SUBSURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                       (union wl_argument[1]) {{.o = NULL}});
+    if (_ownSurface != NULL) {
+        [[connection renderManager] destroySurface: _ownSurface];
+        WaylandMarshal(_ownSurface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                       (union wl_argument[1]) {{.o = NULL}});
+    }
+    _subsurface = NULL;
+    _ownSurface = NULL;
+    [connection flush];
+}
+
 - (void) dealloc {
     if (_eglWindow != NULL)
         WL.wl_egl_window_destroy(_eglWindow);
+    [self destroySubsurface];
     [_waylandWindow surfaceDestroyed: self];
     [super dealloc];
 }
 
 - (void) windowResizedTo: (CGSize) size {
+    // a subsurface is sized by its bounds
+    if (_ownSurface != NULL)
+        return;
     if (_eglWindow == NULL || CGSizeEqualToSize(size, _size))
         return;
     _size = size;
@@ -76,6 +131,14 @@
     if (!(rect.size.width >= 1) || !(rect.size.height >= 1))
         return kCGErrorIllegalArgument;
 
+    if (_subsurface != NULL) {
+        WaylandMarshal(_subsurface, WP_SUBSURFACE_SET_POSITION, NULL, 0,
+                       (union wl_argument[2]) {{.i = (int32_t) rect.origin.x}, {.i = (int32_t) rect.origin.y}});
+        _size = rect.size;
+        WL.wl_egl_window_resize(_eglWindow, (int) rect.size.width, (int) rect.size.height, 0, 0);
+        [self _boundsDidChange: rect];
+        return kCGSErrorSuccess;
+    }
     if (rect.origin.x != 0 || rect.origin.y != 0) {
         // Offsetting a surface inside its window needs a wl_subsurface of its
         // own, which this backend does not create (see -createSurface).
