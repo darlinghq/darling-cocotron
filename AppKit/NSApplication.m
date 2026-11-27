@@ -2178,17 +2178,13 @@ static BOOL activationInProgress;
     return !launchComplete || activationInProgress || [self isActive];
 }
 
-// Unless the display backend activates the process itself, activating means
-// making a window key again, which asks the platform for input focus: the key
-// window, else the main window, else the frontmost window that can become key.
+// Activating means making a window key again, which asks the platform for input
+// focus: the key window, else the main window, else the frontmost window that
+// can become key.
 - (void) activateIgnoringOtherApps: (BOOL) flag {
     // Without the flag the application may only become active if no other
     // application is, which cannot be determined here, so leave focus alone.
     if (!flag)
-        return;
-
-    if ([NS_EXTRA(NSApplication, self)->_display activateProcessIdentifier:
-                      [[NSProcessInfo processInfo] processIdentifier]])
         return;
 
     NSWindow *window = _keyWindow;

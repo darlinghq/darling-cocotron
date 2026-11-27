@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include "WaylandLibrary.h"
 #include "WaylandProtocol.h"
+#include "WaylandToplevelRequests.h"
 #include "../DarlingFullscreenPolicy.h"
 
 // Whether a toplevel should be fullscreen. NSWindowStyleMaskFullScreen asks for
@@ -69,20 +70,6 @@ static inline bool WaylandFullscreenDecide(const WaylandFullscreenWindow *window
     if (matches > 0 && (onOutput || matches == 1))
         *target = first;
     return DarlingFullscreenWanted(false, false, matches > 0);
-}
-
-// xdg_toplevel.set_fullscreen takes the wl_output to cover, or NULL to let the
-// compositor choose (normally the output the window is on).
-static inline void WaylandToplevelSetFullscreen(struct wl_proxy *toplevel,
-                                                struct wl_proxy *output)
-{
-    union wl_argument args[1] = {{.o = (struct wl_object *) output}};
-    WaylandMarshal(toplevel, WP_TOPLEVEL_SET_FULLSCREEN, NULL, 0, args);
-}
-
-static inline void WaylandToplevelUnsetFullscreen(struct wl_proxy *toplevel) {
-    union wl_argument args[1] = {{.o = NULL}};
-    WaylandMarshal(toplevel, WP_TOPLEVEL_UNSET_FULLSCREEN, NULL, 0, args);
 }
 
 static inline bool WaylandStatesContain(const struct wl_array *states, uint32_t state) {

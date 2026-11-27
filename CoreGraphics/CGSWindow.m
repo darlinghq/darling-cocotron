@@ -299,6 +299,22 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 - (void) cancelToplevelKeyboardFocusRequest {
 }
 
+- (CGError) setToplevelParent: (CGSWindow *) parent {
+    return kCGErrorNotImplemented;
+}
+
+- (CGSWindow *) toplevelParent {
+    return nil;
+}
+
+- (CGError) setToplevelHeldBack: (BOOL) heldBack {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelFullscreenSettling {
+    return NO;
+}
+
 - (CGSSurface *) createSurface {
     NSInvalidAbstractInvocation();
 }
