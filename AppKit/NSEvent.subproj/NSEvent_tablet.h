@@ -29,8 +29,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     float _tangentialPressure;
     NSInteger _absoluteX, _absoluteY, _absoluteZ;
     NSEventButtonMask _buttonMask;
-    NSInteger _vendorID, _tabletID, _pointerID, _deviceID, _systemTabletID;
-    NSInteger _vendorPointerType, _vendorPointerSerialNumber, _vendorUniqueID;
+    NSUInteger _vendorID, _tabletID, _pointerID, _deviceID, _systemTabletID, _vendorPointerType;
+    unsigned long long _vendorPointerSerialNumber, _vendorUniqueID;
     NSUInteger _capabilityMask;
     NSPointingDeviceType _pointerType;
     BOOL _enterProximity;

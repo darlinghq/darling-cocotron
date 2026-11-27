@@ -493,35 +493,35 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
     return 0;
 }
 
-- (NSInteger) vendorID {
+- (NSUInteger) vendorID {
     return 0;
 }
 
-- (NSInteger) tabletID {
+- (NSUInteger) tabletID {
     return 0;
 }
 
-- (NSInteger) pointerID {
+- (NSUInteger) pointingDeviceID {
     return 0;
 }
 
-- (NSInteger) deviceID {
+- (NSUInteger) deviceID {
     return 0;
 }
 
-- (NSInteger) systemTabletID {
+- (NSUInteger) systemTabletID {
     return 0;
 }
 
-- (NSInteger) vendorPointerType {
+- (NSUInteger) vendorPointingDeviceType {
     return 0;
 }
 
-- (NSInteger) vendorPointerSerialNumber {
+- (NSUInteger) pointingDeviceSerialNumber {
     return 0;
 }
 
-- (NSInteger) vendorUniqueID {
+- (unsigned long long) uniqueID {
     return 0;
 }
 
@@ -529,11 +529,11 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
     return 0;
 }
 
-- (NSPointingDeviceType) pointerType {
+- (NSPointingDeviceType) pointingDeviceType {
     return NSPointingDeviceTypeUnknown;
 }
 
-- (BOOL) enterProximity {
+- (BOOL) isEnteringProximity {
     return NO;
 }
 

@@ -109,11 +109,11 @@ int main(void) {
                "a tablet proximity CGEvent becomes NSEventTypeTabletProximity");
         expect(view->proximities == 1 && view->lastProximity == e,
                "the proximity event reaches -[NSResponder tabletProximity:]");
-        expect(e != nil && [e enterProximity] && [e vendorID] == 0x1234 && [e tabletID] == 0x5678 &&
-                       [e pointerID] == 42 && [e deviceID] == 99,
+        expect(e != nil && [e isEnteringProximity] && [e vendorID] == 0x1234 && [e tabletID] == 0x5678 &&
+                       [e pointingDeviceID] == 42 && [e deviceID] == 99,
                "the proximity event carries the device and tool fields");
-        expect(e != nil && [e pointerType] == NSPointingDeviceTypePen && [e capabilityMask] == 6 &&
-                       [e vendorPointerSerialNumber] == 0x1122334455LL,
+        expect(e != nil && [e pointingDeviceType] == NSPointingDeviceTypePen && [e capabilityMask] == 6 &&
+                       [e pointingDeviceSerialNumber] == (NSUInteger) 0x1122334455ULL,
                "the tool type, capabilities and serial survive the conversion");
 
         // A pointer event with a tip and a side button down, pressure, tilt, rotation and slider.
@@ -155,7 +155,7 @@ int main(void) {
         expect(e != nil && [e absoluteX] == 12345 && [e absoluteY] == 23456 && [e absoluteZ] == 1000,
                "the absolute tablet axes keep the tablet's coordinate space");
         expect(e != nil && [e vendorID] == 0x1234 && [e tabletID] == 0x5678 &&
-                       [e pointerID] == 42 && [e deviceID] == 99 && [e pointerType] == NSPointingDeviceTypePen,
+                       [e pointingDeviceID] == 42 && [e deviceID] == 99 && [e pointingDeviceType] == NSPointingDeviceTypePen,
                "a pointer event keeps the tool identity from the common fields");
         expect(e != nil && NSEventMaskFromType([e type]) == NSEventMaskTabletPoint,
                "the tablet point mask matches the event type");
@@ -166,7 +166,7 @@ int main(void) {
         post(leave);
         events = drain();
         e = [events count] == 1 ? [events objectAtIndex: 0] : nil;
-        expect(view->proximities == 2 && e != nil && ![e enterProximity],
+        expect(view->proximities == 2 && e != nil && ![e isEnteringProximity],
                "leaving proximity reaches the responder with enterProximity = NO");
 
         printf("%d/%d checks passed\n", checks - failures, checks);

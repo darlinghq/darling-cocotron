@@ -67,20 +67,20 @@ static int64_t fieldOr(CGEventRef event, CGEventField first, CGEventField fallba
     _buttonMask = (NSEventButtonMask) CGEventGetIntegerValueField(cgEvent, kCGTabletEventPointButtons);
 
     BOOL point = type == NSEventTypeTabletPoint;
-    _vendorID = (NSInteger) (point ? CGEventGetIntegerValueField(cgEvent, kCGTabletEventVendor1) :
+    _vendorID = (NSUInteger) (point ? CGEventGetIntegerValueField(cgEvent, kCGTabletEventVendor1) :
                                      CGEventGetIntegerValueField(cgEvent, kCGTabletProximityEventVendorID));
-    _tabletID = (NSInteger) (point ? CGEventGetIntegerValueField(cgEvent, kCGTabletEventVendor2) :
+    _tabletID = (NSUInteger) (point ? CGEventGetIntegerValueField(cgEvent, kCGTabletEventVendor2) :
                                       CGEventGetIntegerValueField(cgEvent, kCGTabletProximityEventTabletID));
-    _pointerID = (NSInteger) fieldOr(cgEvent, kCGSTabletPointerID, kCGTabletProximityEventPointerID);
-    _deviceID = (NSInteger) (point ? CGEventGetIntegerValueField(cgEvent, kCGTabletEventDeviceID) :
+    _pointerID = (NSUInteger) fieldOr(cgEvent, kCGSTabletPointerID, kCGTabletProximityEventPointerID);
+    _deviceID = (NSUInteger) (point ? CGEventGetIntegerValueField(cgEvent, kCGTabletEventDeviceID) :
                                       CGEventGetIntegerValueField(cgEvent, kCGTabletProximityEventDeviceID));
-    _systemTabletID = (NSInteger) fieldOr(cgEvent, kCGSTabletSystemTabletID,
+    _systemTabletID = (NSUInteger) fieldOr(cgEvent, kCGSTabletSystemTabletID,
                                           kCGTabletProximityEventSystemTabletID);
-    _vendorPointerType = (NSInteger) fieldOr(cgEvent, kCGSTabletVendorPointerType,
+    _vendorPointerType = (NSUInteger) fieldOr(cgEvent, kCGSTabletVendorPointerType,
                                              kCGTabletProximityEventVendorPointerType);
-    _vendorPointerSerialNumber = (NSInteger) fieldOr(cgEvent, kCGSTabletVendorPointerSerialNumber,
+    _vendorPointerSerialNumber = (unsigned long long) fieldOr(cgEvent, kCGSTabletVendorPointerSerialNumber,
                                                      kCGTabletProximityEventVendorPointerSerialNumber);
-    _vendorUniqueID = (NSInteger) (point ? _vendorPointerSerialNumber :
+    _vendorUniqueID = (unsigned long long) (point ? _vendorPointerSerialNumber :
                                            CGEventGetIntegerValueField(cgEvent, kCGTabletProximityEventVendorUniqueID));
     _capabilityMask = (NSUInteger) fieldOr(cgEvent, kCGSTabletCapabilityMask,
                                            kCGTabletProximityEventCapabilityMask);
@@ -122,35 +122,35 @@ static int64_t fieldOr(CGEventRef event, CGEventField first, CGEventField fallba
     return _rotation;
 }
 
-- (NSInteger) vendorID {
+- (NSUInteger) vendorID {
     return _vendorID;
 }
 
-- (NSInteger) tabletID {
+- (NSUInteger) tabletID {
     return _tabletID;
 }
 
-- (NSInteger) pointerID {
+- (NSUInteger) pointingDeviceID {
     return _pointerID;
 }
 
-- (NSInteger) deviceID {
+- (NSUInteger) deviceID {
     return _deviceID;
 }
 
-- (NSInteger) systemTabletID {
+- (NSUInteger) systemTabletID {
     return _systemTabletID;
 }
 
-- (NSInteger) vendorPointerType {
+- (NSUInteger) vendorPointingDeviceType {
     return _vendorPointerType;
 }
 
-- (NSInteger) vendorPointerSerialNumber {
+- (NSUInteger) pointingDeviceSerialNumber {
     return _vendorPointerSerialNumber;
 }
 
-- (NSInteger) vendorUniqueID {
+- (unsigned long long) uniqueID {
     return _vendorUniqueID;
 }
 
@@ -158,11 +158,11 @@ static int64_t fieldOr(CGEventRef event, CGEventField first, CGEventField fallba
     return _capabilityMask;
 }
 
-- (NSPointingDeviceType) pointerType {
+- (NSPointingDeviceType) pointingDeviceType {
     return _pointerType;
 }
 
-- (BOOL) enterProximity {
+- (BOOL) isEnteringProximity {
     return _enterProximity;
 }
 
