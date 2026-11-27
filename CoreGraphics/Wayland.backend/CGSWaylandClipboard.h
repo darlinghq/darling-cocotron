@@ -29,6 +29,9 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 @private
     CGSConnectionWayland *_connection; // not retained: the connection owns the clipboard
     struct wl_proxy *_manager, *_device, *_source, *_selection;
+    // The offer of the drag that is over a window of this client, kept until the drag leaves or drops.
+    struct wl_proxy *_dragOffer;
+    BOOL _dragDropped;
     // The MIME types of every offer the device introduced, by wl_data_offer.
     NSMutableDictionary *_offers;
     NSMutableArray *_types;

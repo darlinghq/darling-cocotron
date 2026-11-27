@@ -23,6 +23,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSTokenField
 
++ (Class) cellClass {
+    return [NSTokenFieldCell class];
+}
+
 + (NSTimeInterval) defaultCompletionDelay {
     return 0;
 }

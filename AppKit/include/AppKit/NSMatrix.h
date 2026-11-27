@@ -108,6 +108,7 @@ typedef NS_ENUM(NSUInteger, NSMatrixMode) {
 
 @property(nonatomic) NSMatrixMode mode;
 @property(nonatomic) BOOL allowsEmptySelection;
+@property(nonatomic, getter=isSelectionByRect) BOOL selectionByRect;
 @property(nonatomic) BOOL tabKeyTraversesCells;
 
 @property(nonatomic) BOOL autosizesCells;

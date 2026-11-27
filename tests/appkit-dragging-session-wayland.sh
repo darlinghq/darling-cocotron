@@ -28,7 +28,7 @@ grep -q '^READY' "$vpout" || { echo "FAIL: no virtual pointer"; cat "$vpout"; ex
 for _ in $(seq 300); do grep -q '^READY' "$out" && break; sleep 0.1; done
 grep -q '^READY' "$out" || { echo "FAIL: the test never became ready"; cat "$out"; exit 1; }
 sleep 2
-swaymsg -q '[title="drag-source"] move position 100 100'
+swaymsg -q '[title="drag-source"] move position 100 100, focus'
 swaymsg -q '[title="drag-target"] move position 600 100'
 sleep 0.5
 

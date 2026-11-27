@@ -182,36 +182,6 @@ static uint32_t cursorShapeForName(const char* name)
 
 #pragma mark - Buffers
 
-- (struct wl_proxy *) newARGBBufferWithPixels: (NSData *) pixels width: (int32_t) width height: (int32_t) height {
-    if (width < 1 || height < 1 || width > INT32_MAX / 4 || height > INT32_MAX / (width * 4) ||
-        [pixels length] != (NSUInteger) width * (NSUInteger) height * 4)
-        return NULL;
-    size_t size = [pixels length];
-    int fd = WaylandCreateAnonymousFile(size);
-    if (fd < 0)
-        return NULL;
-    void *data = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-    if (data == MAP_FAILED) {
-        close(fd);
-        return NULL;
-    }
-    memcpy(data, [pixels bytes], size);
-    // Immutable storage: the queued request owns a duplicate of fd and the compositor keeps its mapping. The
-    // pixels of a buffer in use are never rewritten.
-    munmap(data, size);
-    union wl_argument poolArgs[3] = {{.o = NULL}, {.h = fd}, {.i = (int32_t) size}};
-    struct wl_proxy *pool = WaylandMarshal(_connection->_shm, WP_SHM_CREATE_POOL, &wl_shm_pool_interface, 0, poolArgs);
-    close(fd);
-    if (pool == NULL)
-        return NULL;
-    union wl_argument bufferArgs[6] = {{.o = NULL}, {.i = 0}, {.i = width}, {.i = height},
-                                       {.i = width * 4}, {.u = WP_SHM_FORMAT_ARGB8888}};
-    struct wl_proxy *buffer = WaylandMarshal(pool, WP_SHM_POOL_CREATE_BUFFER, &wl_buffer_interface, 0, bufferArgs);
-    union wl_argument none[1] = {{.o = NULL}};
-    WaylandMarshal(pool, WP_SHM_POOL_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
-    return buffer;
-}
-
 - (struct wl_proxy *) imageBufferForCursor: (CGSCursor *) cursor scale120: (uint32_t) scale120 {
     if (_imageBuffer != NULL && (_imageCursor != cursor || _imageScale120 != scale120))
         [self destroyImageBuffer];
@@ -222,7 +192,8 @@ static uint32_t cursorShapeForName(const char* name)
     CGSize size = [cursor pixelSizeForScale: scale];
     if (pixels == nil)
         return NULL;
-    _imageBuffer = [self newARGBBufferWithPixels: pixels width: (int32_t) size.width height: (int32_t) size.height];
+    _imageBuffer = WaylandCreateARGBBuffer(_connection->_shm, [pixels bytes], [pixels length],
+                                         (int32_t) size.width, (int32_t) size.height);
     if (_imageBuffer != NULL) {
         _imageCursor = [cursor retain];
         _imageScale120 = scale120;

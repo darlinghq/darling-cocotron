@@ -85,8 +85,9 @@
     NSData *pixels = [_image pixelsForScale120: scale120];
     // Image drawing can cancel this drag through application callbacks.
     if (!_display || _display != display || !_surface || _scaleDirty || scale120 != [self effectiveScale120]) return NO;
-    struct wl_proxy *buffer = [_display newARGBBuffer: pixels
-            pixelSize: pixelsSize];
+    if (pixelsSize.width != floor(pixelsSize.width) || pixelsSize.height != floor(pixelsSize.height)) return NO;
+    struct wl_proxy *buffer = WaylandCreateARGBBuffer(_display->_shm, [pixels bytes], [pixels length],
+            (int32_t) pixelsSize.width, (int32_t) pixelsSize.height);
     if (!buffer) return NO;
     struct wl_proxy *old = _buffer;
     _buffer = buffer; _scale120 = scale120;
