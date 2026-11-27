@@ -85,6 +85,7 @@ include_directories(
 
 if (HAVE_PIPEWIRE)
 	include_directories(${CMAKE_SOURCE_DIR}/src/libpipewire/include)
+	add_compile_definitions(HAVE_PIPEWIRE=1)
 endif ()
 
 set(CoreGraphics_sources
