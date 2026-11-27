@@ -2,6 +2,7 @@
  * Copyright (C) 2026 Darling Developers
  */
 #import "NSAssetCatalog.h"
+#import "NSSVGRenderer.h"
 #import <AppKit/NSBitmapImageRep.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSPDFImageRep.h>
@@ -37,7 +38,7 @@
 //  - Small images are packed into shared "ZZZZPackedAsset" renditions (layout
 //    1004); an image's own rendition (layout 1003) then has a link record
 //    (TLV 1010, starting with the bytes "KLNI") with the frame within the
-//    packed image (top-left origin) and the attribute/value pairs of the
+//    packed image (bottom-left origin) and the attribute/value pairs of the
 //    packed rendition's key.
 //  - A PDF rendition (layout 9) holds the PDF in a "DWAR" record after a flags
 //    word and a length.
@@ -55,9 +56,11 @@ enum {
     CompressionNone = 0,
     CompressionRunLength = 1,
     CompressionLZFSE = 4,
+    CompressionDeepmap2 = 11,
     PixelFormatARGB = 0x41524742,
     PixelFormatGA8 = 0x47413820,
     PixelFormatPDF = 0x50444620,
+    PixelFormatSVG = 0x53564720,
     MaxImageSide = 16384,
     RenditionHeaderSize = 184,
     MaxTreeDepth = 32,
@@ -464,6 +467,37 @@ static NSData *decodeBitmapPixels(Span rendition, size_t *strideOut) {
             else if (!appendLZFSE(pixels, stream, bound))
                 return nil;
         }
+    } else if (compression == CompressionDeepmap2) {
+        if (body.length < 32 || memcmp(body.bytes + 16, "dmp2", 4) != 0)
+            return nil;
+        uint32_t payloadLen = le32(body.bytes + 28);
+        Span stream;
+        if (!spanWithin(body, 32, payloadLen, &stream))
+            return nil;
+        if (body.bytes[20] == 2 && pixelSize == 2) {
+            size_t planeBound = (size_t) width * height * 4 + height + 4096;
+            NSMutableData *raw = [NSMutableData data];
+            if (!appendLZFSE(raw, stream, planeBound) || [raw length] < (size_t) width * height)
+                return nil;
+            // Only the alpha plane, the first, is read. The planes after it hold the grey of the pixels, which
+            // are all zero for black images (the template images this form is used for); a catalog with grey
+            // that varies is not decoded rather than shown with the wrong pixels.
+            const uint8_t *rawBytes = [raw bytes];
+            for (size_t i = (size_t) width * height; i < [raw length]; i++)
+                if (rawBytes[i] != 0)
+                    return nil;
+            pixels = [NSMutableData dataWithLength: (size_t) width * height * 2];
+            const uint8_t *alpha = [raw bytes];
+            uint8_t *out = [pixels mutableBytes];
+            for (size_t i = 0; i < (size_t) width * height; i++) {
+                out[i * 2] = 0;
+                out[i * 2 + 1] = alpha[i];
+            }
+        } else {
+            pixels = [NSMutableData data];
+            if (!appendLZFSE(pixels, stream, bound))
+                return nil;
+        }
     }
     if (pixels == nil || [pixels length] % height != 0 || [pixels length] / height < (size_t) width * pixelSize)
         return nil;
@@ -574,18 +608,33 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
     if (!spanWithin(link, 30, keyLength, &pairs))
         return nil;
 
+    uint32_t expectedFormat = le32(rendition.bytes + 24);
     NSAssetCatalogRendition *packed = nil;
     for (NSAssetCatalogRendition *candidate in [_renditions objectForKey: [NSNumber numberWithInt: -1]]) {
+        if (le32(candidate->value.bytes + 24) != expectedFormat)
+            continue;
         BOOL matches = YES;
+        size_t pairCount = 0;
         for (size_t i = 0; i + 4 <= pairs.length && matches; i += 4) {
             uint16_t attribute = le16(pairs.bytes + i), value = le16(pairs.bytes + i + 2);
-            if (attribute != 0 && keyAttribute(format, candidate->key, attribute) != value)
-                matches = NO;
+            if (attribute != 0) {
+                pairCount++;
+                if (keyAttribute(format, candidate->key, attribute) != value)
+                    matches = NO;
+            }
         }
-        if (matches) {
+        if (!matches)
+            continue;
+        size_t nonZero = 0;
+        for (size_t i = 0; i + 2 <= candidate->key.length; i += 2)
+            if (le16(candidate->key.bytes + i) != 0)
+                nonZero++;
+        if (nonZero == pairCount) {
             packed = candidate;
             break;
         }
+        if (packed == nil)
+            packed = candidate;
     }
     if (packed == nil)
         return nil;
@@ -600,8 +649,12 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
         decoded = [NSArray arrayWithObjects: pixels, [NSNumber numberWithUnsignedLong: stride], nil];
         [_packedImages setObject: decoded forKey: cacheKey];
     }
+    uint32_t packedHeight = le32(packed->value.bytes + 16);
+    if (y > packedHeight || height > packedHeight - y)
+        return nil;
+    uint32_t topY = packedHeight - y - height;
     return bitmapFromPixels([decoded objectAtIndex: 0], [[decoded objectAtIndex: 1] unsignedLongValue],
-                            le32(packed->value.bytes + 24), x, y, width, height, scale);
+                            le32(packed->value.bytes + 24), x, topY, width, height, scale);
 }
 
 - (NSImageRep *) _representation: (NSAssetCatalogRendition *) rendition format: (const KeyFormat *) format {
@@ -612,14 +665,33 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
     if (scale <= 0)
         scale = 1;
 
-    if (pixelFormat == PixelFormatPDF) {
+    if (pixelFormat == PixelFormatPDF || pixelFormat == PixelFormatSVG) {
         Span data;
         if (!renditionData(value, &data) || data.length < 12 || memcmp(data.bytes, "DWAR", 4) != 0)
             return nil;
-        Span pdf;
-        if (!spanWithin(data, 12, le32(data.bytes + 8), &pdf))
+        Span payload;
+        if (!spanWithin(data, 12, le32(data.bytes + 8), &payload))
             return nil;
-        return [NSPDFImageRep imageRepWithData: [NSData dataWithBytes: pdf.bytes length: pdf.length]];
+        if (pixelFormat == PixelFormatPDF)
+            return [NSPDFImageRep imageRepWithData: [NSData dataWithBytes: payload.bytes length: payload.length]];
+
+        NSData *svgData = nil;
+        if (payload.length >= 4 && memcmp(payload.bytes, "bvx", 3) == 0) {
+            size_t expected = payload.length >= 8 ? le32(payload.bytes + 4) : 0;
+            if (expected == 0 || expected > 16 * 1024 * 1024)
+                expected = 65536;
+            NSMutableData *decoded = [NSMutableData dataWithLength: expected];
+            size_t produced = compression_decode_buffer([decoded mutableBytes], expected,
+                                                        payload.bytes, payload.length, NULL, COMPRESSION_LZFSE);
+            if (produced > 0) {
+                [decoded setLength: produced];
+                svgData = decoded;
+            }
+        } else {
+            svgData = [NSData dataWithBytes: payload.bytes length: payload.length];
+        }
+        NSSize pointSize = NSMakeSize(le32(value.bytes + 12) / scale, le32(value.bytes + 16) / scale);
+        return NSRenderSVGData(svgData, pointSize, scale);
     }
     if (layout == RenditionLayoutInternalLink)
         return [self _linkedBitmap: value format: format scale: scale];
@@ -646,7 +718,8 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
         for (NSAssetCatalogRendition *rendition in renditions) {
             uint32_t pixelFormat = le32(rendition->value.bytes + 24);
             uint16_t layout = le16(rendition->value.bytes + 36);
-            if (layout == RenditionLayoutColor || (bytesPerPixel(pixelFormat) == 0 && pixelFormat != PixelFormatPDF))
+            if (layout == RenditionLayoutColor ||
+                (bytesPerPixel(pixelFormat) == 0 && pixelFormat != PixelFormatPDF && pixelFormat != PixelFormatSVG))
                 continue;
             NSMutableData *variant = [NSMutableData dataWithBytes: rendition->key.bytes length: rendition->key.length];
             uint16_t zero = 0;
@@ -681,7 +754,9 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
             if (image == nil)
                 image = [[[NSImage alloc] initWithSize: [rep size]] autorelease];
             [image addRepresentation: rep];
-            if (bytesPerPixel(le32(rendition->value.bytes + 24)) != 0 && ((le32(rendition->value.bytes + 8) >> 3) & 3) == 1)
+            uint32_t pixelFormat = le32(rendition->value.bytes + 24);
+            if ((bytesPerPixel(pixelFormat) != 0 || pixelFormat == PixelFormatSVG) &&
+                ((le32(rendition->value.bytes + 8) >> 3) & 3) == 1)
                 template = YES;
         }
         [image setTemplate: template];
