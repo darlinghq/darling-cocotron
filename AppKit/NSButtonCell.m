@@ -1362,6 +1362,25 @@ static const CGFloat kImageMargin = 2.;
     case NSDisclosureBezelStyle:
         break;
 
+    case NSBezelStyleHelpButton:
+        if ([self isBordered] && [self image] == nil) {
+            CGFloat side = MIN(frame.size.width, frame.size.height);
+            NSRect circle = NSMakeRect(NSMidX(frame) - side * 0.5, NSMidY(frame) - side * 0.5, side, side);
+            NSBezierPath *path = [NSBezierPath bezierPathWithOvalInRect: NSInsetRect(circle, 0.5, 0.5)];
+            [[NSColor colorWithCalibratedWhite: 0.5 alpha: 0.25] setFill];
+            [path fill];
+            [[[NSColor controlTextColor] colorWithAlphaComponent: 0.5] setStroke];
+            [path setLineWidth: 1.0];
+            [path stroke];
+            NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
+                [NSFont systemFontOfSize: MAX(9.0, side * 0.6)], NSFontAttributeName,
+                [NSColor controlTextColor], NSForegroundColorAttributeName, nil];
+            NSAttributedString *q = [[[NSAttributedString alloc] initWithString: @"?" attributes: attrs] autorelease];
+            NSSize qsz = [q size];
+            [q drawAtPoint: NSMakePoint(NSMidX(circle) - qsz.width * 0.5, NSMidY(circle) - qsz.height * 0.5)];
+        }
+        break;
+
     case NSRegularSquareBezelStyle:
         if ([self isBordered]) {
             BOOL highlighted = (([self highlightsBy] & NSPushInCellMask) &&
@@ -1509,13 +1528,16 @@ static const CGFloat kImageMargin = 2.;
         return nil;
 
     BOOL enabled = [self isEnabled], pressed = [self _aquaBezelPressed], on = [self _aquaBezelOn];
+    NSAppearanceName appName = [[NSAppearance currentDrawingAppearance]
+        bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]];
+    BOOL dark = [appName isEqualToString: NSAppearanceNameDarkAqua];
 
     switch (NS_EXTRA(NSButtonCell, self)->_bezelStyle) {
     case NSTexturedRoundedBezelStyle:
     case NSTexturedSquareBezelStyle:
         if (on)
             return [NSColor colorWithCalibratedWhite: 1 alpha: enabled ? 1 : 0.6];
-        return [NSColor colorWithCalibratedWhite: 0 alpha: enabled ? (pressed ? 0.85 : 0.65) : 0.25];
+        return [NSColor colorWithCalibratedWhite: dark ? 1 : 0 alpha: enabled ? (pressed ? 0.85 : 0.65) : 0.25];
     case NSRecessedBezelStyle:
         return (enabled && (pressed || on)) ? [NSColor whiteColor] : nil;
     default:
@@ -1532,15 +1554,18 @@ static const CGFloat kImageMargin = 2.;
 - (NSColor *) _templateImageColor {
     NSBezelStyle bezel = NS_EXTRA(NSButtonCell, self)->_bezelStyle;
     BOOL textured = bezel == NSTexturedSquareBezelStyle || bezel == NSTexturedRoundedBezelStyle;
+    NSAppearanceName appName = [[NSAppearance currentDrawingAppearance]
+        bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]];
+    CGFloat white = [appName isEqualToString: NSAppearanceNameDarkAqua] ? 1.0 : 0.0;
 
     if (![self isBordered])
-        return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.5];
+        return [NSColor colorWithCalibratedWhite: white alpha: 0.5];
     if (textured) {
         if ([self state] && ([self showsStateBy] & NSChangeBackgroundCellMask))
             return [NSColor whiteColor];
-        return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.6];
+        return [NSColor colorWithCalibratedWhite: white alpha: 0.6];
     }
-    return [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8];
+    return [NSColor colorWithCalibratedWhite: white alpha: 0.8];
 }
 
 - (NSRect) drawTitle: (NSAttributedString *) title
@@ -1852,6 +1877,12 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
     NSImage *image = [self image];
 
     if (image == nil) {
+        if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSBezelStyleHelpButton) {
+            static const CGFloat helpSize[3] = {25, 22, 18};
+            size->width = helpSize[index];
+            size->height = helpSize[index];
+            return;
+        }
         static const CGFloat pushPadding[3] = {28, 16, 22};
         static const CGFloat pushHeight[3] = {21, 18, 15};
 
