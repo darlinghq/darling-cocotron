@@ -22,8 +22,7 @@
 #import "NSEvent_mouse.h"
 #import <CoreGraphics/CGSCursor.h>
 #import "WaylandScale.h"
-#import "WaylandDataDevice.h"
-#import "WaylandDraggingManager.h"
+#import "../NSCGSDraggingManager.h"
 #import "WaylandAppMenu.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <OpenGL/CGLInternal.h>
@@ -110,12 +109,6 @@ int WaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                                                  kind: objectKind
                                                 proxy: proxy
                                             arguments: args];
-                break;
-            case WaylandObjectDataDevice:
-            case WaylandObjectDataOffer:
-            case WaylandObjectDataSource:
-                [(WaylandDataDevice *) object handleEvent: opcode kind: objectKind
-                                                     proxy: proxy arguments: args];
                 break;
             case WaylandObjectIconManager:
                 [(WaylandToplevelIcons *) object handleEvent: opcode arguments: args];
@@ -248,8 +241,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     if (!_eglAvailable)
         NSLog(@"Wayland backend: EGL subwindows unavailable; CPU drawing remains enabled");
 
-    _dataDevice = [[WaylandDataDevice alloc] initWithDisplay: self manager: _dataDeviceManager seat: _seat];
-
     // Windows ordered in while the application was not active are mapped once it is.
     [[NSNotificationCenter defaultCenter] addObserver: self
                                              selector: @selector(applicationBecameActive:)
@@ -266,11 +257,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
 - (void) dealloc {
     [_appMenu release];
-    [_draggingManager invalidate];
-    [_draggingManager release];
     [self consumeDragPress];
-    [_dataDevice invalidate];
-    [_dataDevice release];
 
     _CGSSetNativeConnectionObserver(nil);
 
@@ -291,7 +278,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                       _toplevelTagManager, _idleInhibitManager,
                                       _contentTypeManager,
                                       _shortcutsInhibitManager,
-                                      _seat, _decorationManager, _dataDeviceManager, _wmBase,
+                                      _seat, _decorationManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _appMenuManager, _subcompositor, _compositor,
                                        _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
@@ -716,9 +703,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     } else if (strcmp(interface, "wl_subcompositor") == 0 && _subcompositor == NULL) {
         _subcompositor = [self bindGlobal: name interface: &wl_subcompositor_interface
                                   version: 1 kind: 0 object: nil];
-    } else if (strcmp(interface, "wl_data_device_manager") == 0 && _dataDeviceManager == NULL) {
-        _dataDeviceManager = [self bindGlobal: name interface: &wl_data_device_manager_interface
-                                    version: MIN(version, 3) kind: 0 object: nil];
     } else if (strcmp(interface, "wl_shm") == 0 && _shm == NULL) {
         _shm = [self bindGlobal: name
                       interface: &wl_shm_interface
@@ -879,7 +863,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         if (output->_globalName == name) {
             for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
                 [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) outputRemoved: output->_proxy];
-            [_draggingManager outputRemoved: output->_proxy];
             WL.wl_proxy_destroy(output->_proxy);
             [_outputs removeObject: output];
             [self scheduleOutputsDidChange];
@@ -927,7 +910,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) outputsDidChange {
     _outputsChangePending = NO;
     [self _invalidateScreens];
-    [_draggingManager outputsChanged];
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
         WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
         [window scheduleScaleUpdate];
@@ -1040,7 +1022,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _pointer = (struct wl_proxy *) _CGSNativeConnectionPointer();
         return;
     }
-    [_draggingManager cancel];
     [self consumeDragPress];
     _pointer = NULL;
     _pointerWindow = nil;
@@ -1713,7 +1694,6 @@ static NSUInteger buttonMaskForNumber(int64_t number) {
 - (void) windowUnmapped: (WaylandWindow *) window {
     // The window to lock the pointer to may be another one now (after the window is gone from the list).
     [self performAfterDispatch: ^{ _CGSNativeConnectionPointerLockTargetChanged(); }];
-    [_draggingManager windowUnmapped: window];
     if (_dragPressWindow == window) [self consumeDragPress];
     if (_pointerWindow == window) {
         _pointerWindow = nil;
@@ -1786,12 +1766,10 @@ static NSUInteger buttonMaskForNumber(int64_t number) {
 
 #pragma mark - Clipboard, drag and drop, input state and unsupported calls
 
+// Drag and drop is CoreGraphics' (the data device of its connection); this is the manager on top of it.
 - (NSDraggingManager *) draggingManager {
-    if (_draggingManager == nil)
-        _draggingManager = [[WaylandDraggingManager alloc] initWithDisplay: self];
-    return _draggingManager;
+    return [NSCGSDraggingManager sharedManager];
 }
-- (struct wl_proxy *) dragDataDevice { return [_dataDevice dataDevice]; }
 - (void) consumeDragPress {
     [_dragPressEvent release]; _dragPressEvent = nil;
     _dragPressWindow = nil; _dragPressSerial = 0;

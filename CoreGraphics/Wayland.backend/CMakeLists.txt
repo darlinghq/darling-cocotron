@@ -22,6 +22,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CGSWaylandPointer.m
 			CGSWaylandCursor.m
 			CGSWaylandClipboard.m
+			CGSWaylandDrag.m
 			CGSWaylandPortalShortcuts.m
 			CGSWaylandTouch.m
 			CGSWaylandInputMethod.m

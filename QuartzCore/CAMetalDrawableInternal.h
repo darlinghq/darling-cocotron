@@ -53,11 +53,13 @@ class CAMetalDrawableTexture: public Indium::PrivateTexture {
 	VkDeviceMemory _internalMemory = VK_NULL_HANDLE;
 	bool _framebufferOnly = false;
 	bool _exportsSemaphore = true;
+	// the values are linear light (the colorspace of the layer says so), which the 8-bit internal image encodes
+	bool _linearLight = false;
 
 	void destroyVulkanObjects();
 
 public:
-	CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool framebufferOnly, bool exportsSemaphore, std::shared_ptr<Indium::PrivateDevice> privateDevice);
+	CAMetalDrawableTexture(CGSize size, Indium::PixelFormat pixelFormat, bool linearLight, bool framebufferOnly, bool exportsSemaphore, std::shared_ptr<Indium::PrivateDevice> privateDevice);
 	virtual ~CAMetalDrawableTexture();
 
 	GLuint glTexture() const;
@@ -129,7 +131,7 @@ private:
 	void waitForRenderingOnCPU();
 
 public:
-	CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize size, NSUInteger drawableID, Indium::PixelFormat pixelFormat, std::shared_ptr<Indium::Device> device, CGLContextObj _glContext, bool glImportsSemaphores);
+	CAMetalDrawableActual(CAMetalLayerInternal* layer, CGSize size, NSUInteger drawableID, Indium::PixelFormat pixelFormat, bool linearLight, std::shared_ptr<Indium::Device> device, CGLContextObj _glContext, bool glImportsSemaphores);
 	virtual ~CAMetalDrawableActual();
 
 	virtual void present() override;
