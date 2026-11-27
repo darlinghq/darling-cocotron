@@ -11,6 +11,9 @@
 //   BackSpace     preedit "a"
 //   b, Return     preedit "ab", then no preedit, and the text "AB" committed as the characters of a key
 //   c, Escape     preedit "c", then no preedit (cancelled), nothing committed
+//   2, Escape     non-ASCII preedit U+65E5 U+672C U+8A9E with the caret after the first character, then none
+//   3, Escape     a character outside the BMP and "a": the caret is after the pair, UTF-16 offset 2
+//   4             non-ASCII text committed: the characters of a key
 //   Tab           a key the input method forwards: the characters of the keymap (a tab); the program moves
 //                 the cursor rectangle now, and the server logs the spot it is told of
 //   F2            the program disables the window's input method
@@ -164,7 +167,16 @@ int main(void) {
         int escaped = find(c + 1, kPreedit, "");
         expect(c > commit && escaped > c, "a cancelled composition ends with an empty preedit");
         expect(find(escaped, kKey, "C") < 0 && find(escaped, kKey, "c") < 0, "and commits nothing");
-        int tab = find(escaped + 1, kKey, "\t");
+        int jp = find(escaped + 1, kPreedit, "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e");
+        expect(jp > escaped && seen[jp].caret == 1, "non-ASCII preedit arrives exactly, the caret after the first character");
+        int jpEnd = find(jp + 1, kPreedit, "");
+        int emoji = find(jpEnd + 1, kPreedit, "\xf0\x9f\x98\x80" "a");
+        expect(jpEnd > jp && emoji > jpEnd && seen[emoji].caret == 2,
+               "a character outside the BMP: the caret offset counts UTF-16 units (2 after the first character)");
+        int emojiEnd = find(emoji + 1, kPreedit, "");
+        int jpCommit = find(emojiEnd + 1, kKey, "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e");
+        expect(emojiEnd > emoji && jpCommit > emojiEnd, "non-ASCII committed text arrives exactly as the characters of a key");
+        int tab = find((jpCommit > 0 ? jpCommit : escaped) + 1, kKey, "\t");
         expect(tab > escaped, "a key the input method forwards has the characters of the keymap");
         int d = find(tab + 1, kKey, "d");
         expect(d > tab, "after the window's input method is disabled, a letter is the keymap's text");

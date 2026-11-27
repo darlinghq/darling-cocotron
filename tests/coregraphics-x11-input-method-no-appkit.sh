@@ -33,13 +33,16 @@ xdotool windowactivate --sync "$win" 2>/dev/null
 xdotool windowfocus "$win" 2>/dev/null
 sleep 0.5
 
-# X key codes (evdev): a 38, b 56, c 54, d 40, 1 10, BackSpace 22, Return 36, Escape 9, Tab 23, F2 68
+# X key codes (evdev): 2 11, 3 12, 4 13, a 38, b 56, c 54, d 40, 1 10, BackSpace 22, Return 36, Escape 9, Tab 23, F2 68
 P=0.4
 t() { K 120 "$1:1" "$1:0"; sleep $P; }
 t 38; t 56            # a b
 t 22                  # BackSpace
 t 56; t 36            # b Return
 t 54; t 9             # c Escape
+t 11; t 9             # 2 Escape
+t 12; t 9             # 3 Escape
+t 13                  # 4
 t 23                  # Tab
 t 68                  # F2
 t 40                  # d

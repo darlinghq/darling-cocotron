@@ -13,6 +13,9 @@
 //   BackSpace       "a"
 //   b, Return       "ab", then the composition is replaced by the text "AB"
 //   c, Escape       "c", then the composition is removed and nothing is inserted
+//   2, Escape       the non-ASCII composition U+65E5 U+672C U+8A9E, caret after the first character, removed
+//   3, Escape       a character outside the BMP and "a", caret at UTF-16 offset 2, removed
+//   4               non-ASCII text committed
 //   1               the end (the input method forwards digits)
 // The program prints READY, then EXPECT SPOT <x> <y> (the input method's spot for the client's caret rectangle,
 // in device pixels from the top left corner of the window, as the harness checks it in the input method's
@@ -139,7 +142,8 @@ int main(void) {
                @"the client is sent the whole composition each time, with the caret at its end");
         expect([joined containsString: @"mark: sel=0,0|insert:AB|"],
                @"the committed text replaces the composition: the marked text is removed, then the text is inserted");
-        expect([joined containsString: @"|mark:c sel=1,0|mark: sel=0,0|insert:1"] && ![joined containsString: @"insert:c"] &&
+        expect([joined containsString: @"|mark:c sel=1,0|mark: sel=0,0|mark:\u65e5\u672c\u8a9e sel=1,0|mark: sel=0,0|"
+                                       @"mark:\U0001F600" @"a sel=2,0|mark: sel=0,0|insert:\u65e5\u672c\u8a9e|insert:1"] && ![joined containsString: @"insert:c"] &&
                ![joined containsString: @"insert:C"],
                @"a cancelled composition removes the marked text and inserts nothing");
     }

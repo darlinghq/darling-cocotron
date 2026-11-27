@@ -11,6 +11,9 @@
 //   Escape      removes the composition (preedit draw with nothing)
 //   Return      commits the composition in upper case (preedit cleared first); with no composition, the key is
 //               forwarded to the client like any other
+//   2           composes the fixed text U+65E5 U+672C U+8A9E (non-ASCII, caret after the first character)
+//   3           composes U+1F600 and "a" (a character outside the BMP, caret after the first character)
+//   4           commits U+65E5 U+672C U+8A9E (the composition is cleared first)
 //   other keys  are forwarded to the client unchanged (they are the client's keys)
 // The key releases of the keys it took are not forwarded.
 // The server logs to the file named by the second argument (one line each, flushed): READY once it is
@@ -76,6 +79,33 @@ static void drawPreedit(xcb_im_input_context_t *ic, Context *context, int previo
     free(compound);
 }
 
+// Replaces the composition with a fixed UTF-8 text (utf8Characters characters long), caret after caretCharacters.
+static void setFixedPreedit(xcb_im_input_context_t *ic, Context *context, const char *utf8, int utf8Characters, int caretCharacters) {
+    if (!context->preeditOpen) {
+        xcb_im_preedit_start_callback(im, ic);
+        context->preeditOpen = 1;
+    }
+    size_t compoundLength = 0;
+    char *compound = xcb_utf8_to_compound_text(utf8, strlen(utf8), &compoundLength);
+    xcb_im_preedit_draw_fr_t frame;
+    memset(&frame, 0, sizeof(frame));
+    frame.caret = caretCharacters;
+    frame.chg_first = 0;
+    frame.chg_length = context->length;
+    frame.length_of_preedit_string = compoundLength;
+    frame.preedit_string = (uint8_t *) compound;
+    uint32_t feedback[64];
+    for (int i = 0; i < utf8Characters; i++)
+        feedback[i] = XCB_XIM_UNDERLINE;
+    frame.feedback_array.size = utf8Characters;
+    frame.feedback_array.items = feedback;
+    xcb_im_preedit_draw_callback(im, ic, &frame);
+    free(compound);
+    context->length = utf8Characters;
+    memset(context->text, 'x', utf8Characters);
+    context->text[utf8Characters] = 0;
+}
+
 static void clearPreedit(xcb_im_input_context_t *ic, Context *context) {
     int previous = context->length;
     context->length = 0;
@@ -102,7 +132,21 @@ static void keyEvent(xcb_im_input_context_t *ic, xcb_key_press_event_t *event) {
         forwardKey(ic, event);
         return;
     }
-    if (keysym >= XK_a && keysym <= XK_z && (event->state & (XCB_MOD_MASK_CONTROL | XCB_MOD_MASK_1 | XCB_MOD_MASK_4)) == 0
+    if (keysym == XK_2 && context->length == 0) {
+        setFixedPreedit(ic, context, "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e", 3, 1);
+        context->taken[event->detail] = 1;
+    } else if (keysym == XK_3 && context->length == 0) {
+        setFixedPreedit(ic, context, "\xf0\x9f\x98\x80" "a", 2, 1);
+        context->taken[event->detail] = 1;
+    } else if (keysym == XK_4) {
+        clearPreedit(ic, context);
+        const char *japanese = "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e";
+        size_t compoundLength = 0;
+        char *compound = xcb_utf8_to_compound_text(japanese, strlen(japanese), &compoundLength);
+        xcb_im_commit_string(im, ic, XCB_XIM_LOOKUP_CHARS, compound, compoundLength, 0);
+        free(compound);
+        context->taken[event->detail] = 1;
+    } else if (keysym >= XK_a && keysym <= XK_z && (event->state & (XCB_MOD_MASK_CONTROL | XCB_MOD_MASK_1 | XCB_MOD_MASK_4)) == 0
         && context->length < 63) {
         int previous = context->length;
         context->text[context->length++] = (char) keysym;

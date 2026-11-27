@@ -39,6 +39,9 @@ t 38; t 56            # a b
 t 22                  # BackSpace
 t 56; t 36            # b Return
 t 54; t 9             # c Escape
+t 11; t 9             # 2 Escape
+t 12; t 9             # 3 Escape
+t 13                  # 4
 t 10                  # 1
 
 for _ in $(seq 300); do grep -q -E '^(ALL PASSED|FAILED)' "$out" && break; sleep 0.1; done
