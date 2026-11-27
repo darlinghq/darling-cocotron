@@ -294,6 +294,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     return point;
 }
 
+- (NSRect) constrainBoundsRect: (NSRect) proposedBounds {
+    proposedBounds.origin = [self constrainScrollPoint: proposedBounds.origin];
+    return proposedBounds;
+}
+
 - (NSPoint) _scrollPoint {
     return [self bounds].origin;
 }
