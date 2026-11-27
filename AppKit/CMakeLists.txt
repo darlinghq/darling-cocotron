@@ -779,10 +779,6 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit (and
 			# has the one WaylandColorManager).
 			../CoreGraphics/WaylandSupport/WaylandLibrary.m
-			Wayland.backend/WaylandDropSession.m
-			Wayland.backend/WaylandDraggingManager.m
-			Wayland.backend/WaylandDragIcon.m
-			Wayland.backend/WaylandDataDevice.m
 			Wayland.backend/WaylandWindow.m
 			Wayland.backend/WaylandToplevelIcon.m
 			Wayland.backend/WaylandSubWindow.m
