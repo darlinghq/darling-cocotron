@@ -481,6 +481,7 @@ extern void CGContextSetOwnerIdentity(CGContextRef context, task_id_token_t owne
 // Private numeric helpers.
 extern bool CGFloatIsValid(CGFloat value);
 extern size_t CGBitmapGetAlignedBytesPerRow(size_t bytesPerRow);
+COREGRAPHICS_EXPORT bool CGImageGetHeadroom(CGImageRef image, float *headroom);
 
 extern CGEventRef CGEventCreateWithEventRecord(const CGSEventRecordPtr event, uint32_t eventRecordSize);
 extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
