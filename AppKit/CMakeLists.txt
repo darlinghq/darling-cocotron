@@ -603,7 +603,20 @@ set(AppKit_resources
 	SystemSymbols/network-workgroup-symbolic.svg SystemSymbols/network-workgroup-symbolic.svg
 	SystemSymbols/window-new-symbolic.svg SystemSymbols/window-new-symbolic.svg
 	SystemSymbols/format-text-rich-symbolic.svg SystemSymbols/format-text-rich-symbolic.svg
+	SystemSymbols/avatar-default-symbolic.svg SystemSymbols/avatar-default-symbolic.svg
+	SystemSymbols/edit-clear-symbolic.svg SystemSymbols/edit-clear-symbolic.svg
+	SystemSymbols/format-text-bold-symbolic.svg SystemSymbols/format-text-bold-symbolic.svg
+	SystemSymbols/network-wireless-signal-excellent-symbolic.svg SystemSymbols/network-wireless-signal-excellent-symbolic.svg
+	SystemSymbols/preferences-other-symbolic.svg SystemSymbols/preferences-other-symbolic.svg
+	SystemSymbols/view-sort-descending-symbolic.svg SystemSymbols/view-sort-descending-symbolic.svg
 	SystemSymbols/COPYING.Adwaita SystemSymbols/COPYING.Adwaita
+
+	SystemSymbols/LICENSE.Tabler SystemSymbols/LICENSE.Tabler
+	SystemSymbols/tabler-atom.svg SystemSymbols/tabler-atom.svg
+	SystemSymbols/tabler-filter.svg SystemSymbols/tabler-filter.svg
+	SystemSymbols/tabler-ruler-2.svg SystemSymbols/tabler-ruler-2.svg
+	SystemSymbols/tabler-stack-2.svg SystemSymbols/tabler-stack-2.svg
+	SystemSymbols/tabler-text-scan-2.svg SystemSymbols/tabler-text-scan-2.svg
 
 	NSMenuArrow.tiff NSMenu.subproj/NSMenuArrow.tiff
 	NSMenuViewDoubleRightArrowGray.tiff NSMenu.subproj/NSMenuViewDoubleRightArrowGray.tiff

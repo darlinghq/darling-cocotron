@@ -2,8 +2,9 @@
  * Copyright (C) 2026 Lubos Dolezel
  *
  * Darling's own drawings of a few system symbols, glyphs for common symbol names
- * rendered from the Adwaita symbolic icons in SystemSymbols (see
- * SystemSymbols/COPYING.Adwaita), and the generic glyph drawn for every other
+ * rendered from the Adwaita symbolic icons and supplementary Tabler icons in
+ * SystemSymbols (see SystemSymbols/COPYING.Adwaita and
+ * SystemSymbols/LICENSE.Tabler), and the generic glyph drawn for every other
  * symbol name. They are not Apple's symbol artwork.
  */
 #import "NSSVGRenderer.h"
@@ -103,6 +104,7 @@ static const struct {
 } glyphs[] = {
     { "eject.fill", drawEjectFill },
     { "folder", drawFolder },
+    { "globe", drawNetwork },
     { "network", drawNetwork },
     { "plus.square", drawPlusSquare },
 };
@@ -121,11 +123,15 @@ static const struct {
     const char *symbol;
     const char *svg;
 } adwaitaSymbols[] = {
+    { "antenna.radiowaves.left.and.right", "network-wireless-signal-excellent-symbolic" },
+    { "apple.intelligence", "star-new-symbolic" },
     { "arrow.clockwise", "view-refresh-symbolic" },
     { "arrow.counterclockwise", "edit-undo-symbolic" },
+    { "arrow.up.and.down.text.horizontal", "view-sort-descending-symbolic" },
     { "arrow.up.forward.app", "focus-windows-symbolic" },
     { "arrow.up.right", "go-next-symbolic" },
     { "arrow.up.right.square", "focus-windows-symbolic" },
+    { "bold.italic.underline", "format-text-bold-symbolic" },
     { "book", "user-bookmarks-symbolic" },
     { "book.closed", "user-bookmarks-symbolic" },
     { "book.closed.fill", "user-bookmarks-symbolic" },
@@ -139,6 +145,7 @@ static const struct {
     { "chevron.right", "go-next-symbolic" },
     { "chevron.right.2", "go-next-symbolic" },
     { "chevron.up", "go-up-symbolic" },
+    { "delete.left", "edit-clear-symbolic" },
     { "doc", "document-new-symbolic" },
     { "doc.badge.gearshape", "preferences-system-symbolic" },
     { "doc.badge.gearshape.fill", "preferences-system-symbolic" },
@@ -172,6 +179,7 @@ static const struct {
     { "paperclip", "mail-attachment-symbolic" },
     { "pause", "media-playback-pause-symbolic" },
     { "pencil", "document-edit-symbolic" },
+    { "person.wave.2", "avatar-default-symbolic" },
     { "photo", "image-x-generic-symbolic" },
     { "pin", "view-pin-symbolic" },
     { "play", "media-playback-start-symbolic" },
@@ -200,12 +208,25 @@ static const struct {
     { "tag", "bookmark-new-symbolic" },
     { "text.page", "document-new-symbolic" },
     { "text.quote", "format-text-rich-symbolic" },
+    { "textformat", "format-text-rich-symbolic" },
     { "trash", "user-trash-symbolic" },
     { "trash.fill", "user-trash-symbolic" },
     { "tray.and.arrow.down", "folder-download-symbolic" },
+    { "wrench.and.screwdriver", "preferences-other-symbolic" },
     { "xmark", "window-close-symbolic" },
     { "xmark.circle", "window-close-symbolic" },
     { "xmark.octagon", "dialog-error-symbolic" },
+};
+
+static const struct {
+    const char *symbol;
+    const char *svg;
+} tablerSymbols[] = {
+    { "atom", "tabler-atom" },
+    { "line.3.horizontal.decrease", "tabler-filter" },
+    { "ruler", "tabler-ruler-2" },
+    { "square.stack.3d.up", "tabler-stack-2" },
+    { "text.viewfinder", "tabler-text-scan-2" },
 };
 
 static const char *svgNameForSymbol(NSString *name) {
@@ -215,6 +236,9 @@ static const char *svgNameForSymbol(NSString *name) {
     for (size_t i = 0; i < sizeof(adwaitaSymbols) / sizeof(adwaitaSymbols[0]); i++)
         if (strcmp(adwaitaSymbols[i].symbol, string) == 0)
             return adwaitaSymbols[i].svg;
+    for (size_t i = 0; i < sizeof(tablerSymbols) / sizeof(tablerSymbols[0]); i++)
+        if (strcmp(tablerSymbols[i].symbol, string) == 0)
+            return tablerSymbols[i].svg;
     return NULL;
 }
 

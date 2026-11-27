@@ -9,6 +9,7 @@ To view a copy of the CC-BY-SA licence, visit
 http://creativecommons.org/licenses/by-sa/3.0/
 
 Files (the icon name is the file name without ".svg"):
+  avatar-default-symbolic.svg
   bookmark-new-symbolic.svg
   chat-message-new-symbolic.svg
   checkbox-checked-symbolic.svg
@@ -19,10 +20,12 @@ Files (the icon name is the file name without ".svg"):
   document-new-symbolic.svg
   document-print-symbolic.svg
   document-send-symbolic.svg
+  edit-clear-symbolic.svg
   edit-undo-symbolic.svg
   emoji-flags-symbolic.svg
   focus-windows-symbolic.svg
   folder-download-symbolic.svg
+  format-text-bold-symbolic.svg
   format-text-rich-symbolic.svg
   go-down-symbolic.svg
   go-next-symbolic.svg
@@ -39,7 +42,9 @@ Files (the icon name is the file name without ".svg"):
   media-playback-start-symbolic.svg
   media-playback-stop-symbolic.svg
   media-record-symbolic.svg
+  network-wireless-signal-excellent-symbolic.svg
   network-workgroup-symbolic.svg
+  preferences-other-symbolic.svg
   preferences-system-symbolic.svg
   sidebar-show-right-symbolic.svg
   sidebar-show-symbolic.svg
@@ -59,6 +64,7 @@ Files (the icon name is the file name without ".svg"):
   view-pin-symbolic.svg
   view-refresh-symbolic.svg
   view-reveal-symbolic.svg
+  view-sort-descending-symbolic.svg
   window-close-symbolic.svg
   window-new-symbolic.svg
   zoom-in-symbolic.svg
