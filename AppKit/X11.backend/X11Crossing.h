@@ -12,7 +12,7 @@
  *    pointer has not moved, so the window is not left in the sense AppKit tracks.
  *  - mode NotifyNormal is a real move; NotifyUngrab is sent when a grab ends, as if the pointer moved from the
  *    grab window to the window it is really over. A pointer that left a window during a grab with owner_events False
- *    (the drag grab, X11DraggingManager.m) is reported to the window by this crossing when the grab ends. With
+ *    (the drag grab, CGSX11Drag.m in CoreGraphics) is reported to the window by this crossing when the grab ends. With
  *    owner_events True (the other grabs of this backend) the window can still receive the Ungrab crossing; a probe
  *    of such a grab without LeaveWindowMask in its mask delivered a Normal leave when the pointer was warped out,
  *    then the Ungrab leave on release. Nothing more is claimed for it. The coordinates of both are the pointer's
