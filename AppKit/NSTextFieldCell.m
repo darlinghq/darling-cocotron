@@ -586,7 +586,7 @@ static BOOL isSystemTextColor(NSColor *color) {
                                                        : _backgroundColor;
 
             [color setFill];
-            NSRectFill(backRect);
+            NSRectFillUsingOperation(backRect, NSCompositeSourceOver);
         }
     }
 

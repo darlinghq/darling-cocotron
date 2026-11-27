@@ -58,6 +58,9 @@ enum {
 
 @protocol NSTokenFieldCellDelegate <NSObject>
 
-// TODO
+@optional
+// The string a token shows for a represented object; nil for none.
+- (NSString *) tokenFieldCell: (NSTokenFieldCell *) tokenFieldCell
+        displayStringForRepresentedObject: (id) representedObject;
 
 @end

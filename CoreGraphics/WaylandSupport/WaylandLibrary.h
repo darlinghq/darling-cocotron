@@ -144,4 +144,11 @@ struct wl_proxy *WaylandMarshal(struct wl_proxy *proxy, uint32_t opcode,
 // Returns a file descriptor for `size` bytes of anonymous shared memory, or -1.
 int WaylandCreateAnonymousFile(size_t size);
 
+// Creates an immutable ARGB8888 wl_buffer of width x height pixels from `length` bytes of premultiplied pixels
+// (4 bytes each, rows packed) on `shm`, the wl_shm of the connection the buffer is attached on. The pixels are
+// copied, so the caller keeps its data. Returns NULL for a size that is not positive, overflows or does not
+// match `length`, or when shared memory is unavailable. The caller owns the buffer (wl_buffer.destroy).
+struct wl_proxy *WaylandCreateARGBBuffer(struct wl_proxy *shm, const void *pixels, size_t length,
+                                         int32_t width, int32_t height);
+
 #endif

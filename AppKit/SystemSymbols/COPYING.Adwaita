@@ -1,0 +1,65 @@
+The SVG files in this directory are unmodified copies of symbolic icons of the
+Adwaita icon theme (https://gitlab.gnome.org/GNOME/adwaita-icon-theme) by the
+GNOME Project, https://www.gnome.org. They are used to draw the system symbols
+that have no drawing of their own in NSImageSymbolGlyphs.m.
+
+This work is licenced under the terms of either the GNU LGPL v3 or
+Creative Commons Attribution-Share Alike 3.0 United States License.
+To view a copy of the CC-BY-SA licence, visit
+http://creativecommons.org/licenses/by-sa/3.0/
+
+Files (the icon name is the file name without ".svg"):
+  bookmark-new-symbolic.svg
+  chat-message-new-symbolic.svg
+  checkbox-checked-symbolic.svg
+  dialog-error-symbolic.svg
+  dialog-information-symbolic.svg
+  dialog-warning-symbolic.svg
+  document-edit-symbolic.svg
+  document-new-symbolic.svg
+  document-print-symbolic.svg
+  document-send-symbolic.svg
+  edit-undo-symbolic.svg
+  emoji-flags-symbolic.svg
+  focus-windows-symbolic.svg
+  folder-download-symbolic.svg
+  format-text-rich-symbolic.svg
+  go-down-symbolic.svg
+  go-next-symbolic.svg
+  go-previous-symbolic.svg
+  go-up-symbolic.svg
+  image-x-generic-symbolic.svg
+  insert-link-symbolic.svg
+  list-add-symbolic.svg
+  list-remove-symbolic.svg
+  mail-attachment-symbolic.svg
+  mail-read-symbolic.svg
+  mail-unread-symbolic.svg
+  media-playback-pause-symbolic.svg
+  media-playback-start-symbolic.svg
+  media-playback-stop-symbolic.svg
+  media-record-symbolic.svg
+  network-workgroup-symbolic.svg
+  preferences-system-symbolic.svg
+  sidebar-show-right-symbolic.svg
+  sidebar-show-symbolic.svg
+  star-new-symbolic.svg
+  starred-symbolic.svg
+  system-help-symbolic.svg
+  system-lock-screen-symbolic.svg
+  system-search-symbolic.svg
+  user-bookmarks-symbolic.svg
+  user-trash-symbolic.svg
+  view-conceal-symbolic.svg
+  view-dual-symbolic.svg
+  view-grid-symbolic.svg
+  view-list-bullet-symbolic.svg
+  view-list-symbolic.svg
+  view-more-horizontal-symbolic.svg
+  view-pin-symbolic.svg
+  view-refresh-symbolic.svg
+  view-reveal-symbolic.svg
+  window-close-symbolic.svg
+  window-new-symbolic.svg
+  zoom-in-symbolic.svg
+  zoom-out-symbolic.svg

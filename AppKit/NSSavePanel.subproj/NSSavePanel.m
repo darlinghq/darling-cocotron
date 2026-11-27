@@ -158,6 +158,12 @@ static NSSavePanel *_newPanel = nil;
     if ([[_NSSavePanelNavigation navigationForPanel: self]
                 handleKeyEquivalent: event])
         return YES;
+    NSString *chars = [event charactersIgnoringModifiers];
+    NSUInteger mods = [event modifierFlags] & (NSCommandKeyMask | NSControlKeyMask | NSAlternateKeyMask);
+    if ([chars isEqualToString: @"."] && mods == NSCommandKeyMask) {
+        [self cancelOperation: self];
+        return YES;
+    }
     return [super performKeyEquivalent: event];
 }
 

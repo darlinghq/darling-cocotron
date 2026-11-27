@@ -72,6 +72,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
         destroyProxy([key pointerValue], WP_DATA_OFFER_DESTROY);
     [_offers removeAllObjects];
     _selection = NULL;
+    _dragOffer = NULL;
     if (_device != NULL) {
         if (WL.wl_proxy_get_version(_device) >= 2)
             destroyProxy(_device, WP_DATA_DEVICE_RELEASE);
@@ -304,8 +305,19 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
             // A local source may receive its own offer. Cancellation tells us
             // when ownership actually changes; NULL on focus loss is not loss.
         } else if (opcode == WP_DATA_DEVICE_EV_ENTER) {
-            // A drag is the other data device's business; its offer is of no use here.
-            [self removeOffer: (struct wl_proxy *) args[4].o];
+            // A drag is the other data device's business (AppKit's), but this device is offered it too, and the
+            // offer must not go while the drag is on: a compositor that tracks one offer per drag source (wlroots
+            // does) takes the destruction of its offer before the drop is finished for the target giving up and
+            // cancels the drag. So the offer is destroyed when the drag leaves a window without dropping, and the one
+            // of a drop at the next drag's enter or when the clipboard goes away.
+            [self removeOffer: _dragOffer];
+            _dragOffer = (struct wl_proxy *) args[4].o;
+            _dragDropped = NO;
+        } else if (opcode == WP_DATA_DEVICE_EV_DROP) {
+            _dragDropped = YES;
+        } else if (opcode == WP_DATA_DEVICE_EV_LEAVE && !_dragDropped) {
+            [self removeOffer: _dragOffer];
+            _dragOffer = NULL;
         }
     } else if (kind == CGSWaylandObjectDataOffer && opcode == WP_DATA_OFFER_EV_OFFER) {
         if (args[0].s) {
