@@ -33,6 +33,9 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+#include <screen_capture_backend.h>
+#endif
 
 // not sure what type or value this has
 unsigned int kCGDisplayPixelHeight = 8200;
@@ -1303,17 +1306,100 @@ CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display) {
     return CGColorSpaceCreateDeviceRGB();
 }
 
-CGImageRef CGDisplayCreateImageForRect(CGDirectDisplayID display, CGRect rect) {
-    // Only an existing display and a non-empty part of it can be captured.
-    if (!screenForDisplayID(activeScreens(NULL), display) ||
-        CGRectIsEmpty(rect) || CGRectIsNull(rect) ||
-        !CGRectIntersectsRect(rect, CGDisplayBounds(display)))
-        return NULL;
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+// One captured frame, converted into the caller's pixels by the stream's frame callback.
+typedef struct {
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
+    uint8_t *pixels;
+    size_t width, height, bytesPerRow;
+    CGRect captureRect, bounds;
+    int done, converted;
+} CGDisplayImageGrab;
 
-    // Reading the display's contents is a screen capture. No backend can read
-    // pixels back, so the function returns NULL, as it does on a Mac where
-    // screen recording is not permitted (see CGPreflightScreenCaptureAccess).
+static void CGDisplayImageGrabFrame(const struct darling_screen_capture_frame *frame, void *userData) {
+    CGDisplayImageGrab *grab = userData;
+
+    pthread_mutex_lock(&grab->lock);
+    if (!grab->done) {
+        grab->converted = darling_screen_capture_convert_bgra_rect(frame, grab->pixels, (uint32_t) grab->bytesPerRow,
+            (uint32_t) grab->width, (uint32_t) grab->height,
+            (int32_t) (grab->captureRect.origin.x - grab->bounds.origin.x),
+            (int32_t) (grab->captureRect.origin.y - grab->bounds.origin.y),
+            (uint32_t) grab->captureRect.size.width, (uint32_t) grab->captureRect.size.height,
+            0, 0, (uint32_t) grab->width, (uint32_t) grab->height) == 0;
+        grab->done = 1;
+        pthread_cond_signal(&grab->cond);
+    }
+    pthread_mutex_unlock(&grab->lock);
+}
+#endif
+
+CGImageRef CGDisplayCreateImageForRect(CGDirectDisplayID display, CGRect rect) {
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+    CGRect bounds = CGDisplayBounds(display);
+    CGRect captureRect = CGRectIntersection(rect, bounds);
+    struct darling_screen_capture_stream *stream = NULL;
+    CGDisplayImageGrab grab;
+    CGColorSpaceRef space = NULL;
+    CGContextRef context = NULL;
+    CGImageRef image = NULL;
+    int result;
+
+    if (CGRectIsNull(captureRect) || CGRectIsEmpty(captureRect))
+        return NULL;
+    memset(&grab, 0, sizeof(grab));
+    grab.width = (size_t) captureRect.size.width;
+    grab.height = (size_t) captureRect.size.height;
+    grab.bytesPerRow = grab.width * 4;
+    grab.captureRect = captureRect;
+    grab.bounds = bounds;
+    grab.pixels = calloc(1, grab.bytesPerRow * grab.height);
+    if (grab.pixels == NULL)
+        return NULL;
+    pthread_mutex_init(&grab.lock, NULL);
+    pthread_cond_init(&grab.cond, NULL);
+
+    {
+        struct darling_screen_capture_callbacks callbacks;
+        memset(&callbacks, 0, sizeof(callbacks));
+        callbacks.frame = CGDisplayImageGrabFrame;
+        result = darling_screen_capture_open((int32_t) bounds.origin.x, (int32_t) bounds.origin.y,
+            (uint32_t) bounds.size.width, (uint32_t) bounds.size.height, 1,
+            darling_screen_capture_supports_hdr() ? 1 : 0, &callbacks, &grab, &stream);
+    }
+    if (result == 0 && stream != NULL) {
+        if (darling_screen_capture_start(stream, 1) == 0 && darling_screen_capture_wait(stream, 5000) == 0) {
+            // The stream is streaming before its first frame arrives; give the compositor a few seconds.
+            struct timespec deadline;
+            clock_gettime(CLOCK_REALTIME, &deadline);
+            deadline.tv_sec += 3;
+            pthread_mutex_lock(&grab.lock);
+            while (!grab.done && pthread_cond_timedwait(&grab.cond, &grab.lock, &deadline) == 0)
+                ;
+            pthread_mutex_unlock(&grab.lock);
+        }
+        // Stopping the stream waits for a running frame callback, so grab is not touched afterwards.
+        darling_screen_capture_start(stream, 0);
+        darling_screen_capture_close(stream);
+    }
+
+    if (grab.done && grab.converted) {
+        space = CGColorSpaceCreateDeviceRGB();
+        context = CGBitmapContextCreate(grab.pixels, grab.width, grab.height, 8, grab.bytesPerRow, space,
+            kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+        if (context != NULL)
+            image = CGBitmapContextCreateImage(context);
+    }
+    if (context != NULL) CGContextRelease(context);
+    if (space != NULL) CGColorSpaceRelease(space);
+    free(grab.pixels);
+    pthread_cond_destroy(&grab.cond);
+    pthread_mutex_destroy(&grab.lock);
+    return image;
+#else
     return NULL;
+#endif
 }
 
 CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID) {
@@ -1331,12 +1417,19 @@ bool CGDisplayUsesForceToGray(void) {
 }
 
 bool CGPreflightScreenCaptureAccess(void) {
-    // Without screen capture, access is never granted.
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+    return darling_screen_capture_permitted() != 0;
+#else
     return false;
+#endif
 }
 
 bool CGRequestScreenCaptureAccess(void) {
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+    return darling_screen_capture_request_access() == 0;
+#else
     return false;
+#endif
 }
 
 id CGDirectDisplayCopyCurrentMetalDevice(CGDirectDisplayID displayID) {
