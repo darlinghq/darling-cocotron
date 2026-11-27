@@ -56,6 +56,7 @@ COREGRAPHICS_EXPORT void CGDataProviderRelease(CGDataProviderRef provider);
 
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithCFData(CFDataRef data);
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithFilename(const char *filename);
+COREGRAPHICS_EXPORT CGDataProviderRef _Nullable CGDataProviderCreateWithURL(CFURLRef _Nullable url);
 
 COREGRAPHICS_EXPORT CGDataProviderRef CGDataProviderCreateWithData(void *info, const void *data, size_t size, CGDataProviderReleaseDataCallback releaseCallback);
 

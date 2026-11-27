@@ -43,6 +43,15 @@ CGDataProviderRef CGDataProviderCreateWithFilename(const char *filename) {
     return (CGDataProviderRef)O2DataProviderCreateWithFilename(filename);
 }
 
+CGDataProviderRef CGDataProviderCreateWithURL(CFURLRef url) {
+    if (url == NULL)
+        return NULL;
+    char path[4096];
+    if (!CFURLGetFileSystemRepresentation(url, true, (UInt8 *)path, sizeof(path)))
+        return NULL;
+    return CGDataProviderCreateWithFilename(path);
+}
+
 COREGRAPHICS_EXPORT CGDataProviderRef
 CGDataProviderCreateWithData(void *info, const void *data, size_t size,
                              CGDataProviderReleaseDataCallback releaseCallback)
