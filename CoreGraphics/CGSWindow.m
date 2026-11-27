@@ -746,6 +746,26 @@ CGImageRef __nullable CGWindowListCreateImageFromArray(CGRect screenBounds,
     return image;
 }
 
+// The window of the process' default connection that the number names: the CGS window id, or the
+// id of the native window of it, which is what the window lists give for a CGS window.
+static CGSWindow *copyCGSWindowForNumber(CGWindowID number) {
+    CGSConnection *connection = _CGSConnectionForID(CGSDefaultConnection);
+    if (connection == nil || number == kCGNullWindowID)
+        return nil;
+    CGSWindow *found = [[connection windowForId: number] retain];
+    if (found != nil)
+        return found;
+    NSArray *all = [connection copyAllWindows];
+    for (CGSWindow *window in all) {
+        if ((uintptr_t) [window nativeWindow] == number) {
+            found = [window retain];
+            break;
+        }
+    }
+    [all release];
+    return found;
+}
+
 CGImageRef __nullable CGWindowListCreateImage(CGRect screenBounds,
                                               CGWindowListOption listOption,
                                               CGWindowID windowID,
