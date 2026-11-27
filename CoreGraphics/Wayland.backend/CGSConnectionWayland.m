@@ -23,6 +23,7 @@
 #import "CGSWaylandPointer.h"
 #import "CGSWaylandCursor.h"
 #import "CGSWaylandTouch.h"
+#import "CGSWaylandTablet.h"
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandClipboard.h"
 #import "CGSWaylandPortalShortcuts.h"
@@ -161,6 +162,21 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectTouch:
                 [(CGSWaylandTouch *) object touchEvent: opcode arguments: args];
                 break;
+            case CGSWaylandObjectTabletSeat:
+                [(CGSWaylandTablet *) object tabletSeatEvent: opcode arguments: args];
+                break;
+            case CGSWaylandObjectTablet:
+                [(CGSWaylandTablet *) object tabletEvent: (struct wl_proxy *) proxy
+                                                 opcode: opcode arguments: args];
+                break;
+            case CGSWaylandObjectTabletTool:
+                [(CGSWaylandTablet *) object toolEvent: (struct wl_proxy *) proxy
+                                                opcode: opcode arguments: args];
+                break;
+            case CGSWaylandObjectTabletPad:
+                [(CGSWaylandTablet *) object padEvent: (struct wl_proxy *) proxy
+                                                opcode: opcode arguments: args];
+                break;
             case CGSWaylandObjectLockedPointer:
             case CGSWaylandObjectRelativePointer:
             case CGSWaylandObjectWarpLock:
@@ -268,6 +284,7 @@ static const CGEventFlags kHotKeyModifierMask =
         _keyboardDecoder = [[CGSWaylandKeyboard alloc] initWithConnection: self keymap: _keymap];
     _pointerDecoder = [[CGSWaylandPointer alloc] initWithConnection: self];
     _touchDecoder = [[CGSWaylandTouch alloc] initWithConnection: self];
+    _tabletDecoder = [[CGSWaylandTablet alloc] initWithConnection: self];
 
     _wlDisplay = WL.wl_display_connect(NULL);
     if (_wlDisplay == NULL) {
@@ -396,6 +413,8 @@ static const CGEventFlags kHotKeyModifierMask =
     [_pointerDecoder release];
     [(CGSWaylandTouch *) _touchDecoder stop];
     [_touchDecoder release];
+    [(CGSWaylandTablet *) _tabletDecoder stop];
+    [_tabletDecoder release];
     if (_pointerGestures != NULL)
         WL.wl_proxy_destroy(_pointerGestures);
     [_hotKeys release];
@@ -715,6 +734,17 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         _seat = [self bindGlobal: name interface: &wl_seat_interface
                          version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
                             kind: CGSWaylandObjectSeat object: self];
+        [(CGSWaylandTablet *) _tabletDecoder seatBound: _seat name: name];
+    } else if (strcmp(interface, "zwp_tablet_manager_v2") == 0 &&
+               [(CGSWaylandTablet *) _tabletDecoder manager] == NULL) {
+        // Tablet seats are made from the wl_seat, whether or not it has pointer or keyboard
+        // capability: wl_seat.capabilities says nothing about tablets.
+        uint32_t managerName = name;
+        struct wl_proxy *manager = [self bindGlobal: name
+                                          interface: &zwp_tablet_manager_v2_interface
+                                            version: 1
+                                               kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandTablet *) _tabletDecoder managerBound: manager name: managerName seat: _seat];
     } else if (strcmp(interface, "wl_data_device_manager") == 0 && _dataDeviceManager == NULL) {
         _dataDeviceManager = [self bindGlobal: name interface: &wl_data_device_manager_interface
                                       version: MIN(version, 3u)
@@ -843,6 +873,18 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         WL.wl_proxy_destroy(renderManagerProxy);
 
     [(WaylandColorManager *) _color globalRemoved: name];
+    if ([(CGSWaylandTablet *) _tabletDecoder manager] != NULL &&
+        name == [(CGSWaylandTablet *) _tabletDecoder managerName]) {
+        [(CGSWaylandTablet *) _tabletDecoder managerRemoved];
+        return;
+    }
+    if (_seat != NULL && name == [(CGSWaylandTablet *) _tabletDecoder seatName]) {
+        // The wl_seat proxy is invalid once its global is gone; a later tablet manager must not
+        // be given it. The other seat decoders keep their own state.
+        _seat = NULL;
+        [(CGSWaylandTablet *) _tabletDecoder seatRemoved];
+        return;
+    }
     if ((_pointerConstraints != NULL && name == _pointerConstraintsName) ||
         (_relativePointerManager != NULL && name == _relativePointerManagerName)) {
         // The lock objects go before the global that made them.
@@ -1174,6 +1216,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
 - (void) nativeObjectDestroyed: (void *) object {
     [(CGSWaylandPointer *) _pointerDecoder surfaceDestroyed: (struct wl_proxy *) object];
     [(CGSWaylandTouch *) _touchDecoder surfaceDestroyed: (struct wl_proxy *) object];
+    [(CGSWaylandTablet *) _tabletDecoder surfaceDestroyed: (struct wl_proxy *) object];
     [(CGSWaylandKeyboard *) _keyboardDecoder surfaceDestroyed: (struct wl_proxy *) object];
 }
 

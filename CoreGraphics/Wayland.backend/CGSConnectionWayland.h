@@ -72,6 +72,10 @@ typedef enum {
     CGSWaylandObjectPointer,
     CGSWaylandObjectPinchGesture,
     CGSWaylandObjectTouch,
+    CGSWaylandObjectTabletSeat,
+    CGSWaylandObjectTablet,
+    CGSWaylandObjectTabletTool,
+    CGSWaylandObjectTabletPad,
     CGSWaylandObjectLockedPointer,
     CGSWaylandObjectRelativePointer,
     CGSWaylandObjectWarpLock,
@@ -130,6 +134,8 @@ typedef enum {
     id _pointerDecoder;
     // The seat's touch screen, which decodes the fingers into CGEvents (CGSWaylandTouch).
     id _touchDecoder;
+    // The tablet manager's tablet seats, which decode stylus tools into tablet CGEvents (CGSWaylandTablet).
+    id _tabletDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
     // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers

@@ -24,6 +24,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CGSWaylandClipboard.m
 			CGSWaylandPortalShortcuts.m
 			CGSWaylandTouch.m
+			CGSWaylandTablet.m
 			CGSWaylandKeymap.m
 			CGSWaylandOutputManager.m
 			CGSWindowWayland.m
