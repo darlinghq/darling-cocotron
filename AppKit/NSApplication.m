@@ -2470,7 +2470,7 @@ static BOOL isModalWindowOrItsSheet(NSWindow *window, NSWindow *modalWindow) {
 }
 
 - (void) reportException: (NSException *) exception {
-    NSLog(@"NSApplication got exception: %@\n%@", exception, [exception callStackSymbols]);
+    NSLog(@"NSApplication got exception: %@", exception);
 }
 
 - (void) _attentionTimer: (NSTimer *) timer {
