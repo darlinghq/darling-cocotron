@@ -650,7 +650,7 @@ static NSInteger compareZIndex(id first, id second, void *context)
     if ([colors count] == 0)
         return;
     [[colors objectAtIndex: 0] setFill];
-    NSRectFill(dirtyRect);
+    NSRectFillUsingOperation(dirtyRect, NSCompositeSourceOver);
 }
 
 - (NSSet *) selectionIndexPaths {
