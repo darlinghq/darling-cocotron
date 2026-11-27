@@ -6,8 +6,11 @@
 // Guest side of wayland-tablet-session.sh: a borderless window that records the tablet events a Wayland
 // compositor with a tablet delivers to it (the compositor in the test sends one pen stroke), then checks
 // them against the stroke. Usage: tablet-session-probe <seconds>
-// Prints PASS or FAIL lines, and PROBE done at the end. Prints SKIP and exits 77 when the display is not
-// the Wayland backend.
+// Prints PASS or FAIL lines, and PROBE done at the end. Prints SKIP and exits 77 when the display is neither
+// the Wayland nor the X11 backend. The same stroke and the same expectations apply to both; the differences are what
+// the window system can say: the X11 backend's tablets come from XInput2, where Xwayland (which x11-tablet-session.sh
+// runs on the same private compositor) gives no vendor or product ids, and there is no proximity-out event, so the
+// tool leaves proximity when its window goes away.
 #import <AppKit/AppKit.h>
 #include <math.h>
 #include <stdio.h>
@@ -48,8 +51,9 @@ int main(int argc, char **argv) {
         double seconds = argc > 1 ? atof(argv[1]) : 6;
         [NSApplication sharedApplication];
         id display = [NSClassFromString(@"NSDisplay") performSelector: @selector(currentDisplay)];
-        if (![NSStringFromClass([display class]) hasPrefix: @"Wayland"]) {
-            printf("SKIP the display is %s, not the Wayland backend\n",
+        BOOL x11 = [NSStringFromClass([display class]) hasPrefix: @"X11"];
+        if (!x11 && ![NSStringFromClass([display class]) hasPrefix: @"Wayland"]) {
+            printf("SKIP the display is %s, not the Wayland or the X11 backend\n",
                    [NSStringFromClass([display class]) UTF8String]);
             return 77;
         }
@@ -59,6 +63,11 @@ int main(int argc, char **argv) {
                                                            defer: NO];
         TabletProbeView *view = [[TabletProbeView alloc] initWithFrame: NSMakeRect(0, 0, 300, 200)];
         [window setContentView: view];
+        if (x11) {
+            // The stroke's coordinates are the root window's: the window covers them in its top left corner.
+            NSRect screen = [[NSScreen mainScreen] frame];
+            [window setFrameTopLeftPoint: NSMakePoint(0, NSMaxY(screen))];
+        }
         [window makeKeyAndOrderFront: nil];
         printf("READY\n");
         fflush(stdout);
@@ -73,6 +82,19 @@ int main(int argc, char **argv) {
                 [NSApp sendEvent: event];
         }
 
+        if (x11) {
+            // X has no proximity-out: the tool leaves with the window it was over.
+            [window close];
+            end = [NSDate dateWithTimeIntervalSinceNow: 1];
+            while ([end timeIntervalSinceNow] > 0) {
+                NSEvent *event = [NSApp nextEventMatchingMask: NSEventMaskAny
+                                                    untilDate: [NSDate dateWithTimeIntervalSinceNow: 0.1]
+                                                       inMode: NSDefaultRunLoopMode
+                                                      dequeue: YES];
+                if (event != nil)
+                    [NSApp sendEvent: event];
+            }
+        }
         NSArray *prox = view->proximity, *points = view->points;
         expectThat([prox count] == 2, "two proximity events (in and out)");
         NSEvent *in = [prox count] > 0 ? [prox objectAtIndex: 0] : nil;
@@ -81,8 +103,11 @@ int main(int argc, char **argv) {
               "the first proximity event is entering");
         expectThat(out != nil && ![out isEnteringProximity], "the second proximity event is leaving");
         expectThat(in != nil && [in pointingDeviceType] == NSPointingDeviceTypePen, "the tool is a pen");
-        expectThat(in != nil && [in vendorID] == 0x1234 && [in tabletID] == 0x5678,
-              "the tablet's vendor and product ids");
+        if (x11)
+            printf("NOTE: the tablet's vendor and product ids are not checked on X11 (Xwayland has none to give)\n");
+        else
+            expectThat(in != nil && [in vendorID] == 0x1234 && [in tabletID] == 0x5678,
+                       "the tablet's vendor and product ids");
         expectThat([points count] >= 4, "tablet point events arrive while the tool is in proximity");
 
         BOOL located = NO, half = NO, threeQuarters = NO, tilted = NO, buttonDown = NO, buttonUp = NO, hover = NO;

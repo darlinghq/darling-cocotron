@@ -22,6 +22,7 @@
 #import "X11InputMask.h"
 #import "CGSConnectionX11.h"
 #import "CGSWindowX11.h"
+#import "CGSX11Tablet.h"
 #import <CoreGraphics/CGEvent.h>
 #import <CoreGraphics/CGEventSource.h>
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -75,6 +76,7 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     [NSObject cancelPreviousPerformRequestsWithTarget: self];
     X11RelativeMouseEnd(&_relative);
     free(_scrollAxes);
+    [_tablet release];
     if (_source != NULL)
         CFRelease((CFTypeRef) _source);
     [super dealloc];
@@ -805,6 +807,7 @@ static int64_t buttonNumberForX(unsigned int xButton) {
 }
 
 - (void) windowDestroyed: (Window) window {
+    [_tablet windowDestroyed: window];
     [self cancelPinchOnWindow: window];
     if (_relative.active && _relativeWindow == window)
         [self suspendRelativeMouse];
@@ -838,6 +841,7 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     _pinchSelectable = major > 2 || minor >= 4;
 #endif
     _xiOpcode = opcode;
+    _tablet = [[CGSX11Tablet alloc] initWithPointer: self connection: _connection source: _source];
     [self selectInputExtensionEvents];
     [self queryScrollAxes];
 }
@@ -849,8 +853,16 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     memset(masters, 0, sizeof(masters));
     XISetMask(hierarchy, XI_HierarchyChanged);
     XISetMask(masters, XI_DeviceChanged);
-    if (_rawSelected)
+    if (_rawSelected) {
         XISetMask(masters, XI_RawMotion);
+        if ([_tablet deviceCount] > 0) {
+            XISetMask(masters, XI_RawButtonPress);
+            XISetMask(masters, XI_RawButtonRelease);
+        }
+    }
+    // The tool serial numbers of tablets change with the tool in proximity.
+    if ([_tablet deviceCount] > 0)
+        XISetMask(hierarchy, XI_PropertyEvent);
     XIEventMask masks[2] = {
         {.deviceid = XIAllDevices, .mask_len = sizeof(hierarchy), .mask = hierarchy},
         {.deviceid = XIAllMasterDevices, .mask_len = sizeof(masters), .mask = masters},
@@ -893,7 +905,16 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     free(_scrollAxes);
     _scrollAxes = axes;
     _scrollAxisCount = axisCount;
+    int tablets = [_tablet deviceCount];
+    [_tablet queryDevices];
     [self updateRawSelection];
+    // The events the raw selection and the property selection ask for depend on the tablets there are.
+    if (_rawSelected || tablets != [_tablet deviceCount])
+        [self selectInputExtensionEvents];
+}
+
+- (CGSX11Tablet *) tablet {
+    return _tablet;
 }
 
 - (void) setScrollAxes: (const CGSX11ScrollAxis *) axes count: (int) count {
@@ -909,13 +930,15 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     if (_pointerInside == inside)
         return;
     _pointerInside = inside;
+    if (!inside)
+        [_tablet proximityOut];
     [self updateRawSelection];
 }
 
 - (void) updateRawSelection {
     if (_xiOpcode == 0)
         return;
-    BOOL wanted = _pointerInside && _scrollAxisCount > 0;
+    BOOL wanted = _pointerInside && (_scrollAxisCount > 0 || [_tablet deviceCount] > 0);
     if (wanted == _rawSelected)
         return;
     _rawSelected = wanted;
@@ -931,6 +954,14 @@ static int64_t buttonNumberForX(unsigned int xButton) {
     switch (event->xcookie.evtype) {
     case XI_RawMotion:
         [self rawMotionEvent: (XIRawEvent *) event->xcookie.data];
+        [_tablet rawEvent: (XIRawEvent *) event->xcookie.data];
+        break;
+    case XI_RawButtonPress:
+    case XI_RawButtonRelease:
+        [_tablet rawEvent: (XIRawEvent *) event->xcookie.data];
+        break;
+    case XI_PropertyEvent:
+        [_tablet propertyChangedOfDevice: ((XIPropertyEvent *) event->xcookie.data)->deviceid];
         break;
     case XI_HierarchyChanged:
     case XI_DeviceChanged:

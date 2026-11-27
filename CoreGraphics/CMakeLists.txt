@@ -148,6 +148,7 @@ set(CoreGraphics_sources
 	CGEventSource.m
 	CGEventTap.m
 	CGEventStream.m
+	CGSTabletEvent.m
 	CGEventObjC.m
 	# KTFont+PDF.m 'KGPDFArray.h' file not found
 )

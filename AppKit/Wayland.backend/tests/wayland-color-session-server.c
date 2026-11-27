@@ -15,6 +15,7 @@
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,9 +143,22 @@ static void compositor_create_surface(struct wl_client *c, struct wl_resource *r
     wl_resource_set_implementation(surface->resource, &surface_impl, surface, surface_gone);
 }
 
+// Regions are accepted and ignored: Xwayland, which the X11 tablet session runs on this compositor, asks for them.
+static void region_destroy(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
+static const struct wl_region_interface region_impl = {
+    .destroy = region_destroy,
+    .add = noop,
+    .subtract = noop,
+};
+
+static void compositor_create_region(struct wl_client *c, struct wl_resource *r, uint32_t id) {
+    struct wl_resource *region = wl_resource_create(c, &wl_region_interface, wl_resource_get_version(r), id);
+    wl_resource_set_implementation(region, &region_impl, NULL, NULL);
+}
+
 static const struct wl_compositor_interface compositor_impl = {
     .create_surface = compositor_create_surface,
-    .create_region = noop,
+    .create_region = compositor_create_region,
 };
 
 static void bind_compositor(struct wl_client *c, void *data, uint32_t version, uint32_t id) {
@@ -1030,14 +1044,30 @@ static int tablet_tick(void *data) {
     return 0;
 }
 
-static void tablet_maybe_start(struct surface *surface) {
-    if (strcmp(scenario, "tablet") != 0 || tablet_step >= 0 || tablet_seat_resource == NULL ||
-        surface->toplevel == NULL || surface->commits < 3)
-        return;
-    tablet_surface_resource = surface->resource;
+static void tablet_begin(struct wl_resource *surface_resource) {
+    tablet_surface_resource = surface_resource;
     tablet_step = 0;
     tablet_timer = wl_event_loop_add_timer(wl_display_get_event_loop(display), tablet_tick, NULL);
     wl_event_source_timer_update(tablet_timer, 300);
+}
+
+// The "tablet-signal" scenario plays the same stroke, but on SIGUSR1 instead of when the first toplevel is
+// ready: the first toplevel is then Xwayland's own, which exists long before the X client the stroke is for.
+static struct wl_resource *tablet_waiting_surface;
+
+static int tablet_signal(int signal_number, void *data) {
+    if (tablet_step < 0 && tablet_seat_resource != NULL && tablet_waiting_surface != NULL)
+        tablet_begin(tablet_waiting_surface);
+    return 0;
+}
+
+static void tablet_maybe_start(struct surface *surface) {
+    if (tablet_step >= 0 || tablet_seat_resource == NULL || surface->toplevel == NULL || surface->commits < 3)
+        return;
+    if (strcmp(scenario, "tablet-signal") == 0)
+        tablet_waiting_surface = surface->resource;
+    else if (strcmp(scenario, "tablet") == 0)
+        tablet_begin(surface->resource);
 }
 
 
@@ -1067,6 +1097,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "cannot create socket %s\n", argv[1]);
         return 2;
     }
+    wl_event_loop_add_signal(wl_display_get_event_loop(display), SIGUSR1, tablet_signal, NULL);
     printf("SERVER ready\n");
     fflush(stdout);
     wl_display_run(display);

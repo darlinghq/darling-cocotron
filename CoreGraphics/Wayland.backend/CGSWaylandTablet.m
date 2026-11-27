@@ -34,21 +34,14 @@
 #import <Foundation/NSValue.h>
 #include <math.h>
 
-// Cocoa's NSPointingDeviceType values; AppKit is a layer above this backend, so the numbers are
-// repeated here rather than making CoreGraphics depend on it.
-enum {
-    TabletPointerTypeUnknown = 0,
-    TabletPointerTypePen = 1,
-    TabletPointerTypeCursor = 2,
-    TabletPointerTypeEraser = 3,
-};
-
-// Cocoa's tablet button mask (NSEventButtonMask).
-enum {
-    TabletButtonTip = 1,
-    TabletButtonLowerSide = 2,
-    TabletButtonUpperSide = 4,
-};
+// Cocoa's pointing device types and tablet button mask are in CoreGraphicsPrivate.h.
+#define TabletPointerTypeUnknown kCGSTabletPointingDeviceUnknown
+#define TabletPointerTypePen kCGSTabletPointingDevicePen
+#define TabletPointerTypeCursor kCGSTabletPointingDeviceCursor
+#define TabletPointerTypeEraser kCGSTabletPointingDeviceEraser
+#define TabletButtonTip kCGSTabletButtonTip
+#define TabletButtonLowerSide kCGSTabletButtonLowerSide
+#define TabletButtonUpperSide kCGSTabletButtonUpperSide
 
 @interface CGSWaylandTabletDevice : NSObject {
 @public
@@ -124,9 +117,7 @@ static uint64_t toolSerial(CGSWaylandTabletToolState *tool) {
 // A stable small id for the pointer-tool pair, as the device id of the tablet events. The protocol
 // has no such number; the hardware serial and the tablet's USB ids identify the pair well enough.
 static uint32_t tabletDeviceID(CGSWaylandTabletToolState *tool, CGSWaylandTabletDevice *device) {
-    uint64_t serial = toolSerial(tool);
-    uint32_t id = (uint32_t) serial ^ (uint32_t) (serial >> 32) ^ device->_vid ^ device->_pid;
-    return id != 0 ? id : 1;
+    return _CGSTabletDeviceID(toolSerial(tool), device->_vid, device->_pid, 0);
 }
 
 @implementation CGSWaylandTablet
@@ -378,8 +369,8 @@ static uint32_t tabletDeviceID(CGSWaylandTabletToolState *tool, CGSWaylandTablet
         double y = wl_fixed_to_double(args[1].f);
         _frameActive = YES;
         _frameTool = tool;
-        _tiltX = fmax(-1.0, fmin(1.0, x / 90.0));
-        _tiltY = fmax(-1.0, fmin(1.0, y / 90.0));
+        _tiltX = _CGSTabletNormalizedTilt(x);
+        _tiltY = _CGSTabletNormalizedTilt(y);
         break;
     }
     case ZWP_TABLET_TOOL_EV_ROTATION:
@@ -509,7 +500,49 @@ static uint32_t tabletDeviceID(CGSWaylandTabletToolState *tool, CGSWaylandTablet
     _hasGlobal = _hasPoint || _hasGlobal;
     _hasLocal = _hasPoint || _hasLocal;
 
-    CGEventRef event = CGEventCreate((CGEventSourceRef) _source);
+    // The tablet axes are the surface-local motion coordinates. CGEvent's location is global, but
+    // the documented absolute axes must keep the tablet's own coordinate space.
+    uint32_t vid = device != nil ? device->_vid : 0;
+    uint32_t pid = device != nil ? device->_pid : 0;
+    uint64_t serial = toolSerial(tool);
+    uint32_t windowID = [_connection windowIDForSurface: _surface];
+    // Only a press grants the serial that lets a client set the clipboard. A motion frame keeps
+    // the last serial internally but must not publish it.
+    BOOL pressed = _proximityEntering || _downChanged || _buttonPressed;
+
+    CGSTabletSample sample = {
+        .source = (CGEventSourceRef) _source,
+        .proximity = _proximityChanged,
+        .entering = _proximityEntering,
+        // The compositor's frame time is a monotonic millisecond count with an unspecified epoch.
+        // Leave the timestamp to the event pipeline, which stamps events at posting time.
+        .flags = (uint64_t) [_connection modifierFlags],
+        .location = point,
+        .hasNativeLocation = _hasPoint,
+        .nativeLocation = localPoint,
+        .nativeLocationScale = 1024,
+        .hasPostedLocation = _hasGlobal,
+        .axes = _hasLocal ? localPoint : CGPointZero,
+        .windowID = windowID != 0 && ![_connection isDisplayOverlaySurface: _surface] ? windowID : 0,
+        .nativeWindow = (int64_t) (intptr_t) _surface,
+        .inputSerial = pressed ? _frameSerial : 0,
+        .pressure = _pressure,
+        .distance = _distance,
+        .tiltX = _tiltX,
+        .tiltY = _tiltY,
+        .rotation = _rotation,
+        .tangentialPressure = _tangentialPressure,
+        .buttonMask = _buttonMask,
+        .vendorID = vid,
+        .tabletID = pid,
+        .pointerID = tool->_serialLo,
+        .deviceID = tabletDeviceID(tool, device),
+        .toolSerial = serial,
+        .vendorPointerType = tool->_toolType,
+        .pointerType = cocoaPointerType(tool->_toolType),
+        .capabilities = tool->_capabilities,
+    };
+    CGEventRef event = _CGSTabletEventCreate(&sample);
     if (event == NULL) {
         [self resetFrame];
         return;
@@ -518,77 +551,6 @@ static uint32_t tabletDeviceID(CGSWaylandTabletToolState *tool, CGSWaylandTablet
     // What the other devices held back (a modifier key, a scroll frame) came before the tool moved.
     [_connection flushPendingKeyboardEvents];
     [_connection flushPendingPointerEvents];
-
-    CGEventType type = _proximityChanged ? kCGEventTabletProximity : kCGEventTabletPointer;
-    CGEventSetType(event, type);
-    // The compositor's frame time is a monotonic millisecond count with an unspecified epoch.
-    // Leave the timestamp to the event pipeline, which stamps events at posting time.
-    CGEventSetFlags(event, (CGEventFlags) [_connection modifierFlags]);
-    CGEventSetLocation(event, point);
-
-    uint32_t windowID = [_connection windowIDForSurface: _surface];
-    if (windowID != 0 && ![_connection isDisplayOverlaySurface: _surface]) {
-        CGEventSetIntegerValueField(event, kCGSTabletWindowNumber, windowID);
-        CGEventSetIntegerValueField(event, kCGSTabletWindowNumberThatCanHandleThisEvent, windowID);
-    }
-    CGEventSetIntegerValueField(event, kCGSEventNativeWindow, (int64_t) (intptr_t) _surface);
-    if (_hasPoint) {
-        CGEventSetIntegerValueField(event, kCGSEventNativeLocationX, llround(localPoint.x * 1024));
-        CGEventSetIntegerValueField(event, kCGSEventNativeLocationY, llround(localPoint.y * 1024));
-    }
-    if (_hasGlobal) {
-        CGEventSetIntegerValueField(event, kCGSEventPostedLocationX, llround(point.x * 1024));
-        CGEventSetIntegerValueField(event, kCGSEventPostedLocationY, llround(point.y * 1024));
-    }
-    // Only a press grants the serial that lets a client set the clipboard. A motion frame keeps
-    // the last serial internally but must not publish it.
-    BOOL pressed = _proximityEntering || _downChanged || _buttonPressed;
-    CGEventSetIntegerValueField(event, kCGSEventInputSerial, pressed ? _frameSerial : 0);
-
-    uint32_t vid = device != nil ? device->_vid : 0;
-    uint32_t pid = device != nil ? device->_pid : 0;
-    uint64_t serial = toolSerial(tool);
-    uint32_t deviceID = tabletDeviceID(tool, device);
-
-    // The tablet axes are the surface-local motion coordinates. CGEvent's location is global, but
-    // the documented absolute axes must keep the tablet's own coordinate space.
-    CGPoint axes = _hasLocal ? localPoint : CGPointZero;
-    CGEventSetIntegerValueField(event, kCGTabletEventPointX, llround(axes.x));
-    CGEventSetIntegerValueField(event, kCGTabletEventPointY, llround(axes.y));
-    CGEventSetIntegerValueField(event, kCGTabletEventPointZ, (int64_t) (_distance * 65535));
-    CGEventSetIntegerValueField(event, kCGTabletEventPointButtons, _buttonMask);
-    CGEventSetDoubleValueField(event, kCGTabletEventPointPressure, _pressure);
-    CGEventSetDoubleValueField(event, kCGTabletEventTiltX, _tiltX);
-    CGEventSetDoubleValueField(event, kCGTabletEventTiltY, _tiltY);
-    CGEventSetDoubleValueField(event, kCGTabletEventRotation, _rotation);
-    CGEventSetDoubleValueField(event, kCGTabletEventTangentialPressure, _tangentialPressure);
-    CGEventSetIntegerValueField(event, kCGTabletEventDeviceID, deviceID);
-    CGEventSetIntegerValueField(event, kCGTabletEventVendor1, vid);
-    CGEventSetIntegerValueField(event, kCGTabletEventVendor2, pid);
-    CGEventSetIntegerValueField(event, kCGTabletEventVendor3, tool->_toolType);
-
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventVendorID, vid);
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventTabletID, pid);
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventPointerID, (int64_t) tool->_serialLo);
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventDeviceID, deviceID);
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventSystemTabletID,
-                                (int64_t) (((uint64_t) vid << 32) | pid));
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventVendorPointerType, tool->_toolType);
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventVendorPointerSerialNumber, (int64_t) serial);
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventVendorUniqueID, (int64_t) serial);
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventCapabilityMask, (int64_t) tool->_capabilities);
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventPointerType, cocoaPointerType(tool->_toolType));
-    CGEventSetIntegerValueField(event, kCGTabletProximityEventEnterProximity, _proximityEntering ? 1 : 0);
-
-    // The common copies: CGEvent's documented proximity fields are not present on tablet pointer
-    // events, so the tool's identity would be lost on every event after it entered proximity.
-    CGEventSetIntegerValueField(event, kCGSTabletPointerID, (int64_t) tool->_serialLo);
-    CGEventSetIntegerValueField(event, kCGSTabletSystemTabletID,
-                                (int64_t) (((uint64_t) vid << 32) | pid));
-    CGEventSetIntegerValueField(event, kCGSTabletCapabilityMask, (int64_t) tool->_capabilities);
-    CGEventSetIntegerValueField(event, kCGSTabletVendorPointerType, tool->_toolType);
-    CGEventSetIntegerValueField(event, kCGSTabletPointerType, cocoaPointerType(tool->_toolType));
-    CGEventSetIntegerValueField(event, kCGSTabletVendorPointerSerialNumber, (int64_t) serial);
 
     _CGSEventStreamPost(event);
     CFRelease(event);
