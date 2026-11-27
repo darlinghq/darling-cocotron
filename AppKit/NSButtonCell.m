@@ -20,6 +20,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSImage+TemplateDrawing.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSAttributedString.h>
+#import <AppKit/NSBezierPath.h>
 #import <AppKit/NSButton.h>
 #import <AppKit/NSButtonCell.h>
 #import <objc/runtime.h>
@@ -41,6 +42,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSStringDrawing.h>
 #import <AppKit/NSWindow.h>
 #import <Foundation/NSKeyedArchiver.h>
+
+static BOOL _isDarkDrawingAppearance(void) {
+    NSAppearanceName appName = [[NSAppearance currentDrawingAppearance]
+        bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]];
+    return [appName isEqualToString: NSAppearanceNameDarkAqua];
+}
 
 @implementation NSButtonCell
 
@@ -716,6 +723,8 @@ static const CGFloat kImageMargin = 2.;
         return NO;
     if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSRecessedBezelStyle)
         return NO;
+    if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSBezelStyleHelpButton)
+        return NO;
 
     return ![self isTransparent] && [self isBordered];
 }
@@ -1363,21 +1372,30 @@ static const CGFloat kImageMargin = 2.;
         break;
 
     case NSBezelStyleHelpButton:
-        if ([self isBordered] && [self image] == nil) {
+        if ([self isBordered]) {
             CGFloat side = MIN(frame.size.width, frame.size.height);
+            if (side <= 1.0)
+                break;
             NSRect circle = NSMakeRect(NSMidX(frame) - side * 0.5, NSMidY(frame) - side * 0.5, side, side);
             NSBezierPath *path = [NSBezierPath bezierPathWithOvalInRect: NSInsetRect(circle, 0.5, 0.5)];
-            [[NSColor colorWithCalibratedWhite: 0.5 alpha: 0.25] setFill];
+            BOOL enabled = [self isEnabled];
+            BOOL pressed = enabled && [self isHighlighted];
+            BOOL dark = _isDarkDrawingAppearance();
+            CGFloat fillWhite = dark ? (pressed ? 0.35 : 0.25) : (pressed ? 0.85 : 1.0);
+            [[NSColor colorWithCalibratedWhite: fillWhite alpha: enabled ? 0.9 : 0.45] setFill];
             [path fill];
-            [[[NSColor controlTextColor] colorWithAlphaComponent: 0.5] setStroke];
+            [[[NSColor controlTextColor] colorWithAlphaComponent: enabled ? 0.3 : 0.15] setStroke];
             [path setLineWidth: 1.0];
             [path stroke];
-            NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
-                [NSFont systemFontOfSize: MAX(9.0, side * 0.6)], NSFontAttributeName,
-                [NSColor controlTextColor], NSForegroundColorAttributeName, nil];
-            NSAttributedString *q = [[[NSAttributedString alloc] initWithString: @"?" attributes: attrs] autorelease];
-            NSSize qsz = [q size];
-            [q drawAtPoint: NSMakePoint(NSMidX(circle) - qsz.width * 0.5, NSMidY(circle) - qsz.height * 0.5)];
+            if ([self imageForHighlight] == nil) {
+                NSColor *fg = enabled ? [NSColor controlTextColor] : [NSColor disabledControlTextColor];
+                NSDictionary *attrs = [NSDictionary dictionaryWithObjectsAndKeys:
+                    [NSFont systemFontOfSize: MAX(9.0, side * 0.6)], NSFontAttributeName,
+                    fg, NSForegroundColorAttributeName, nil];
+                NSAttributedString *q = [[[NSAttributedString alloc] initWithString: @"?" attributes: attrs] autorelease];
+                NSSize qsz = [q size];
+                [q drawAtPoint: NSMakePoint(floor(NSMidX(circle) - qsz.width * 0.5), floor(NSMidY(circle) - qsz.height * 0.5))];
+            }
         }
         break;
 
@@ -1528,9 +1546,7 @@ static const CGFloat kImageMargin = 2.;
         return nil;
 
     BOOL enabled = [self isEnabled], pressed = [self _aquaBezelPressed], on = [self _aquaBezelOn];
-    NSAppearanceName appName = [[NSAppearance currentDrawingAppearance]
-        bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]];
-    BOOL dark = [appName isEqualToString: NSAppearanceNameDarkAqua];
+    BOOL dark = _isDarkDrawingAppearance();
 
     switch (NS_EXTRA(NSButtonCell, self)->_bezelStyle) {
     case NSTexturedRoundedBezelStyle:
@@ -1554,9 +1570,7 @@ static const CGFloat kImageMargin = 2.;
 - (NSColor *) _templateImageColor {
     NSBezelStyle bezel = NS_EXTRA(NSButtonCell, self)->_bezelStyle;
     BOOL textured = bezel == NSTexturedSquareBezelStyle || bezel == NSTexturedRoundedBezelStyle;
-    NSAppearanceName appName = [[NSAppearance currentDrawingAppearance]
-        bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]];
-    CGFloat white = [appName isEqualToString: NSAppearanceNameDarkAqua] ? 1.0 : 0.0;
+    CGFloat white = _isDarkDrawingAppearance() ? 1.0 : 0.0;
 
     if (![self isBordered])
         return [NSColor colorWithCalibratedWhite: white alpha: 0.5];
@@ -1788,7 +1802,8 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
         [self drawImage: image withFrame: rect inView: controlView];
     }
 
-    if (drawTitle) {
+    if (drawTitle &&
+        !([self isBordered] && NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSBezelStyleHelpButton)) {
         [self drawTitle: title withFrame: titleRect inView: controlView];
     }
 }
