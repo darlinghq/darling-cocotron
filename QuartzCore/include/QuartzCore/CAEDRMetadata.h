@@ -22,8 +22,8 @@
 
 @class NSData;
 
-// Describes the HDR content of a CAMetalLayer. The values are kept as given:
-// Darling composites in standard dynamic range and does not tone map.
+// Describes the HDR content of a CAMetalLayer. The values are kept as given and, when the layer
+// presents through a Vulkan swapchain, passed to the host through VK_EXT_hdr_metadata.
 @interface CAEDRMetadata : NSObject <NSCopying, NSSecureCoding> {
     int _transfer;
     NSData *_displayInfo;
