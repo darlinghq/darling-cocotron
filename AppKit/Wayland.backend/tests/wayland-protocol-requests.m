@@ -26,9 +26,9 @@
 
 // The fullscreen transition is asynchronous: the compositor has to confirm it before the backend
 // treats the surface as fullscreen.
-@interface NSWindow (ProtocolProbe)
-- (BOOL) isFullScreen;
-@end
+static BOOL isFullScreen(NSWindow *window) {
+    return ([window styleMask] & NSWindowStyleMaskFullScreen) != 0;
+}
 
 static void step(const char *name) {
     fprintf(stderr, "STEP %s\n", name);
@@ -126,13 +126,13 @@ int main(int argc, char **argv) {
         [window setCollectionBehavior: NSWindowCollectionBehaviorFullScreenPrimary];
         [window toggleFullScreen: nil];
         runLoop(2);
-        fprintf(stderr, "FULLSCREEN entered=%d\n", [window isFullScreen]);
+        fprintf(stderr, "FULLSCREEN entered=%d\n", isFullScreen(window));
         fflush(stderr);
 
         step("fullscreen-out");
         [window toggleFullScreen: nil];
         runLoop(1);
-        fprintf(stderr, "FULLSCREEN left=%d\n", ![window isFullScreen]);
+        fprintf(stderr, "FULLSCREEN left=%d\n", !isFullScreen(window));
         fflush(stderr);
 
         step("idle");
