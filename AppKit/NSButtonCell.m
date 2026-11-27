@@ -1147,6 +1147,20 @@ static const CGFloat kImageMargin = 2.;
     }
     renderDarkenBg = highlighted;
     renderOutlineShadow = highlighted || pressed;
+    // the dark look: translucent white over the window colour (lighter while highlighted or on) instead of the grays
+    BOOL dark = _isDarkDrawingAppearance();
+    CGFloat darkTopAlpha = 0.10, darkBottomAlpha = 0.14, darkStrokeAlpha = 0.25;
+    if (dark) {
+        if (pressed) {
+            darkTopAlpha = 0.4;
+            darkBottomAlpha = 0.3;
+        } else if (highlighted) {
+            darkTopAlpha = 0.18;
+            darkBottomAlpha = 0.24;
+        }
+        renderDarkenBg = NO;
+        renderOutlineShadow = NO;
+    }
 
     CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
     CGContextSaveGState(ctx);
@@ -1168,6 +1182,12 @@ static const CGFloat kImageMargin = 2.;
                 bottomGray + (topGray - bottomGray) *
                                      ((r.origin.y - baseY) / (maxY - baseY));
         CGFloat components[4] = {g, g, g, 1.0};
+        if (dark) {
+            CGFloat t = (r.origin.y - baseY) / (maxY - baseY);
+
+            components[0] = components[1] = components[2] = 1.0;
+            components[3] = darkBottomAlpha + (darkTopAlpha - darkBottomAlpha) * t;
+        }
         CGContextSetFillColor(ctx, components);
 
         if (r.origin.y < baseY + 1.0f || r.origin.y > maxY - 1.0f) {
@@ -1200,6 +1220,10 @@ static const CGFloat kImageMargin = 2.;
     CGContextClosePath(ctx);
 
     CGFloat components[4] = {strokeGray, strokeGray, strokeGray, 1.0};
+    if (dark) {
+        components[0] = components[1] = components[2] = 1.0;
+        components[3] = darkStrokeAlpha;
+    }
     CGContextSetStrokeColor(ctx, components);
     CGContextSetLineWidth(ctx, 1.0);
 
@@ -1414,12 +1438,21 @@ static const CGFloat kImageMargin = 2.;
             else
                 top.origin.y += bottom.size.height;
 
-            [[NSColor colorWithCalibratedWhite: topGray alpha: 1] set];
-            NSRectFill(top);
-            [[NSColor colorWithCalibratedWhite: bottomGray alpha: 1] set];
-            NSRectFill(bottom);
-            [[NSColor lightGrayColor] set];
-            NSFrameRectWithWidth(frame, 1);
+            if (_isDarkDrawingAppearance()) {
+                // translucent white over the window colour, lighter while pressed, with a dark frame
+                [[NSColor colorWithCalibratedWhite: 1 alpha: highlighted ? 0.36 : 0.25] set];
+                NSRectFillUsingOperation(top, NSCompositeSourceOver);
+                NSRectFillUsingOperation(bottom, NSCompositeSourceOver);
+                [[NSColor colorWithCalibratedWhite: 0 alpha: 0.2] set];
+                NSFrameRectWithWidthUsingOperation(frame, 1, NSCompositeSourceOver);
+            } else {
+                [[NSColor colorWithCalibratedWhite: topGray alpha: 1] set];
+                NSRectFill(top);
+                [[NSColor colorWithCalibratedWhite: bottomGray alpha: 1] set];
+                NSRectFill(bottom);
+                [[NSColor lightGrayColor] set];
+                NSFrameRectWithWidth(frame, 1);
+            }
         }
         break;
 
@@ -1551,10 +1584,14 @@ static const CGFloat kImageMargin = 2.;
     switch (NS_EXTRA(NSButtonCell, self)->_bezelStyle) {
     case NSTexturedRoundedBezelStyle:
     case NSTexturedSquareBezelStyle:
+        if (on && dark)
+            return [NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.75 : 0.35]; // dark text on the light bezel
         if (on)
             return [NSColor colorWithCalibratedWhite: 1 alpha: enabled ? 1 : 0.6];
         return [NSColor colorWithCalibratedWhite: dark ? 1 : 0 alpha: enabled ? (pressed ? 0.85 : 0.65) : 0.25];
     case NSRecessedBezelStyle:
+        if (dark && enabled && on && !pressed)
+            return [NSColor colorWithCalibratedWhite: 0 alpha: 0.75];
         return (enabled && (pressed || on)) ? [NSColor whiteColor] : nil;
     default:
         return nil;
@@ -1576,7 +1613,7 @@ static const CGFloat kImageMargin = 2.;
         return [NSColor colorWithCalibratedWhite: white alpha: 0.5];
     if (textured) {
         if ([self state] && ([self showsStateBy] & NSChangeBackgroundCellMask))
-            return [NSColor whiteColor];
+            return _isDarkDrawingAppearance() ? [NSColor colorWithCalibratedWhite: 0 alpha: 0.75] : [NSColor whiteColor];
         return [NSColor colorWithCalibratedWhite: white alpha: 0.6];
     }
     return [NSColor colorWithCalibratedWhite: white alpha: 0.8];

@@ -26,7 +26,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSImage.h>
 #import <AppKit/NSInterfacePartAttributedString.h>
 #import <AppKit/NSInterfacePartDisabledAttributedString.h>
+#import <AppKit/NSAppearance.h>
 #import <AppKit/NSWindow.h>
+
+/* Whether the control being drawn takes the dark look: the drawing appearance (set from the view's effective
+   appearance while it displays) is DarkAqua or one derived from it. */
+static BOOL NSAquaDrawsDark(void) {
+    NSAppearanceName name = [[NSAppearance currentDrawingAppearance]
+        bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]];
+
+    return [name isEqualToString: NSAppearanceNameDarkAqua];
+}
 
 @implementation NSGraphicsStyle
 
@@ -1348,6 +1358,7 @@ static NSRect NSAquaToggleBoxRect(NSRect rect, BOOL radio, NSControlSize control
 static void NSAquaDrawToggleUncached(NSRect rect, BOOL radio, NSInteger state, BOOL highlighted, BOOL enabled,
                                      BOOL active, NSControlSize controlSize)
 {
+    BOOL dark = NSAquaDrawsDark();
     CGFloat size = NSAquaToggleBoxSize(radio, controlSize);
     NSRect box = NSAquaToggleBoxRect(rect, radio, controlSize);
     // a disabled button shows no pressed look
@@ -1382,9 +1393,22 @@ static void NSAquaDrawToggleUncached(NSRect rect, BOOL radio, NSInteger state, B
         CGFloat base = highlighted ? 0.94 : 1.0;
         CGFloat top = highlighted ? 0.86 : 0.95;
         CGFloat comps[8] = {top, top, top, alpha, base, base, base, alpha};
-        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, comps, NULL, 2);
+        CGGradientRef gradient;
 
-        [[NSColor colorWithCalibratedWhite: base alpha: alpha] setFill];
+        if (dark) {
+            // the dark look is a translucent white box, lighter while pressed, darker towards its top edge, so
+            // that it shows the window colour through it
+            CGFloat fill = highlighted ? 0.36 : 0.25, shade = highlighted ? 0.30 : 0.18;
+            CGFloat darkComps[8] = {1, 1, 1, shade * alpha, 1, 1, 1, fill * alpha};
+
+            memcpy(comps, darkComps, sizeof(comps));
+        }
+        gradient = CGGradientCreateWithColorComponents(space, comps, NULL, 2);
+
+        if (dark)
+            [[NSColor colorWithCalibratedWhite: 1 alpha: (highlighted ? 0.36 : 0.25) * alpha] setFill];
+        else
+            [[NSColor colorWithCalibratedWhite: base alpha: alpha] setFill];
         [shape fill];
         CGContextSaveGState(ctx);
         [shape addClip];
@@ -1394,14 +1418,14 @@ static void NSAquaDrawToggleUncached(NSRect rect, BOOL radio, NSInteger state, B
         CGContextRestoreGState(ctx);
         CGGradientRelease(gradient);
         CGColorSpaceRelease(space);
-        [[NSColor colorWithCalibratedWhite: 0.68 alpha: alpha] setStroke];
+        [(dark ? [NSColor colorWithCalibratedWhite: 1 alpha: 0.12 * alpha] : [NSColor colorWithCalibratedWhite: 0.68 alpha: alpha]) setStroke];
         [outline setLineWidth: 1];
         [outline stroke];
     }
 
     if (marked) {
-        NSColor *mark = blue ? [NSColor colorWithCalibratedWhite: 1 alpha: alpha]
-                             : [NSColor colorWithCalibratedWhite: 0.25 alpha: alpha];
+        NSColor *mark = (blue || dark) ? [NSColor colorWithCalibratedWhite: 1 alpha: alpha]
+                                       : [NSColor colorWithCalibratedWhite: 0.25 alpha: alpha];
         CGFloat scale = size / 14.0;
         NSBezierPath *path = [NSBezierPath bezierPath];
 
@@ -1452,8 +1476,8 @@ static CGImageRef NSAquaCachedToggleImage(BOOL radio, NSInteger state, BOOL high
                                           NSControlSize controlSize, int scale)
 {
     static NSMutableDictionary *cache;
-    NSString *key = [NSString stringWithFormat: @"%d.%ld.%d.%d.%d.%ld.%d", radio, (long) state, highlighted, enabled, active,
-                                                 (long) controlSize, scale];
+    NSString *key = [NSString stringWithFormat: @"%d.%ld.%d.%d.%d.%ld.%d.%d", radio, (long) state, highlighted, enabled, active,
+                                                 (long) controlSize, scale, NSAquaDrawsDark()];
 
     @synchronized([NSGraphicsStyle class]) {
         if (cache == nil)
@@ -1570,6 +1594,7 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
     CGFloat radius = MIN(4.5, NSHeight(body) / 4.5);
     CGFloat alpha = enabled ? 1 : 0.5;
     BOOL blue = pressed || (defaulted && enabled && active);
+    BOOL dark = NSAquaDrawsDark();
     NSBezierPath *outline = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 0.5, 0.5)
                                                             xRadius: radius
                                                             yRadius: radius];
@@ -1579,14 +1604,29 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
         return;
 
     // the shadow below the bezel
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07 * alpha] setFill];
-    [[NSBezierPath bezierPathWithRoundedRect: NSOffsetRect(body, 0, -1) xRadius: radius yRadius: radius] fill];
+    if (dark) {
+        // The dark bezel is translucent, so the shadow is only the part outside the bezel (under it, it would
+        // darken the fill).
+        NSBezierPath *shadow = [NSBezierPath bezierPathWithRoundedRect: NSOffsetRect(body, 0, -1) xRadius: radius yRadius: radius];
+
+        [shadow appendBezierPath: shape];
+        [shadow setWindingRule: NSEvenOddWindingRule];
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.14 * alpha] setFill];
+        [shadow fill];
+    } else {
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07 * alpha] setFill];
+        [[NSBezierPath bezierPathWithRoundedRect: NSOffsetRect(body, 0, -1) xRadius: radius yRadius: radius] fill];
+    }
 
     if (blue) {
         CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
         CGFloat normal[8] = {107 / 255.0, 161 / 255.0, 250 / 255.0, 1, 17 / 255.0, 100 / 255.0, 1, 1};
         CGFloat down[8] = {76 / 255.0, 139 / 255.0, 253 / 255.0, 1, 15 / 255.0, 88 / 255.0, 231 / 255.0, 1};
-        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, pressed ? down : normal, NULL, 2);
+        // the blue of the dark look is deeper
+        CGFloat darkNormal[8] = {26 / 255.0, 98 / 255.0, 231 / 255.0, 1, 23 / 255.0, 89 / 255.0, 206 / 255.0, 1};
+        CGFloat darkDown[8] = {39 / 255.0, 118 / 255.0, 244 / 255.0, 1, 34 / 255.0, 109 / 255.0, 231 / 255.0, 1};
+        CGGradientRef gradient = CGGradientCreateWithColorComponents(
+                space, dark ? (pressed ? darkDown : darkNormal) : (pressed ? down : normal), NULL, 2);
 
         CGContextSaveGState(ctx);
         [shape addClip];
@@ -1594,7 +1634,30 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
         CGContextRestoreGState(ctx);
         CGGradientRelease(gradient);
         CGColorSpaceRelease(space);
-        [[NSColor colorWithCalibratedRed: 0.1 green: 0.4 blue: 0.98 alpha: 0.7] setStroke];
+        if (dark) {
+            // a light line along the top edge of the blue
+            [[NSColor colorWithCalibratedWhite: 1 alpha: 0.18] setFill];
+            CGContextSaveGState(ctx);
+            [shape addClip];
+            NSRectFillUsingOperation(NSMakeRect(NSMinX(body), NSMaxY(body) - 1, NSWidth(body), 1), NSCompositeSourceOver);
+            CGContextRestoreGState(ctx);
+            [[NSColor colorWithCalibratedWhite: 0 alpha: 0.2] setStroke];
+        } else
+            [[NSColor colorWithCalibratedRed: 0.1 green: 0.4 blue: 0.98 alpha: 0.7] setStroke];
+    } else if (dark) {
+        // translucent white over the window colour, with a lighter line along the top edge
+        NSBezierPath *inner = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 1, 1)
+                                                              xRadius: MAX(radius - 1, 0)
+                                                              yRadius: MAX(radius - 1, 0)];
+
+        [[NSColor colorWithCalibratedWhite: 1 alpha: 0.25 * alpha] setFill];
+        [inner fill];
+        CGContextSaveGState(ctx);
+        [inner addClip];
+        [[NSColor colorWithCalibratedWhite: 1 alpha: 0.08 * alpha] setFill];
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(body), NSMaxY(body) - 2, NSWidth(body), 1), NSCompositeSourceOver);
+        CGContextRestoreGState(ctx);
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.08 * alpha] setStroke];
     } else {
         // the edge is a translucent line over the background, so the white stops inside it
         [[NSColor colorWithCalibratedWhite: 1 alpha: alpha] setFill];
@@ -1633,13 +1696,17 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
     CGFloat capWidth = capWidths[index];
     NSRect cap = NSMakeRect(NSMaxX(body) - capWidth, NSMinY(body), capWidth, NSHeight(body));
     BOOL blue = enabled && (active || pressed);
+    BOOL dark = NSAquaDrawsDark();
 
     [self drawPushButtonInRect: rect defaulted: NO pressed: NO enabled: enabled active: active];
     if (blue) {
         CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
         CGFloat normal[8] = {110 / 255.0, 163 / 255.0, 250 / 255.0, 1, 13 / 255.0, 97 / 255.0, 1, 1};
         CGFloat down[8] = {76 / 255.0, 139 / 255.0, 253 / 255.0, 1, 15 / 255.0, 88 / 255.0, 231 / 255.0, 1};
-        CGGradientRef gradient = CGGradientCreateWithColorComponents(space, pressed ? down : normal, NULL, 2);
+        CGFloat darkNormal[8] = {26 / 255.0, 98 / 255.0, 231 / 255.0, 1, 23 / 255.0, 89 / 255.0, 206 / 255.0, 1};
+        CGFloat darkDown[8] = {39 / 255.0, 118 / 255.0, 244 / 255.0, 1, 34 / 255.0, 109 / 255.0, 231 / 255.0, 1};
+        CGGradientRef gradient = CGGradientCreateWithColorComponents(
+                space, dark ? (pressed ? darkDown : darkNormal) : (pressed ? down : normal), NULL, 2);
 
         CGContextSaveGState(ctx);
         [[NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius] addClip];
@@ -1651,7 +1718,7 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
     }
 
     NSColor *mark = blue ? [NSColor whiteColor]
-                         : [NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.55 : 0.3];
+                         : [NSColor colorWithCalibratedWhite: dark ? 1 : 0 alpha: enabled ? (dark ? 0.85 : 0.55) : 0.3];
     CGFloat scale = capWidth / 16.5;
     CGFloat cx = NSMidX(cap), cy = NSMidY(cap) + 0.5;
     NSBezierPath *chevrons = [NSBezierPath bezierPath];
@@ -1834,6 +1901,19 @@ static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *t
     CGFloat onTop[2] = {0, 0.5}, onBottom[2] = {0, 0.52};
     CGFloat onPressedTop[2] = {0, 0.6}, onPressedBottom[2] = {0, 0.61};
     CGFloat outline = on ? (pressed ? 0.62 : 0.52) : 0.08;
+    BOOL dark = NSAquaDrawsDark();
+
+    if (dark) {
+        // translucent white over the window colour: light grey, lighter while pressed and light in the on state
+        // (the on look is a lighter bezel with dark text, not a darker one)
+        normalTop[0] = normalBottom[0] = pressedTop[0] = pressedBottom[0] = onTop[0] = onBottom[0] = 1;
+        onPressedTop[0] = onPressedBottom[0] = 1;
+        normalTop[1] = normalBottom[1] = 0.25;
+        pressedTop[1] = pressedBottom[1] = 0.356;
+        onTop[1] = onBottom[1] = 0.6;
+        onPressedTop[1] = onPressedBottom[1] = 0.67;
+        outline = 0.08;
+    }
 
     if (NSWidth(body) < 2 || NSHeight(body) < 2)
         return;
@@ -1853,11 +1933,17 @@ static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *t
     [outer addClip];
     if (!on) {
         // the light line along the top of the inner area
-        [[NSColor colorWithCalibratedWhite: pressed ? 239 / 255.0 : 1 alpha: pressed ? 0.94 : 1] setFill];
+        if (dark)
+            [[NSColor colorWithCalibratedWhite: 1 alpha: pressed ? 0.07 : 0.06] setFill];
+        else
+            [[NSColor colorWithCalibratedWhite: pressed ? 239 / 255.0 : 1 alpha: pressed ? 0.94 : 1] setFill];
+        [[NSBezierPath bezierPathWithRect: NSMakeRect(NSMinX(inner), NSMaxY(inner) - 1, NSWidth(inner), 1)] fill];
+    } else if (dark) {
+        [[NSColor colorWithCalibratedWhite: 1 alpha: 0.04] setFill];
         [[NSBezierPath bezierPathWithRect: NSMakeRect(NSMinX(inner), NSMaxY(inner) - 1, NSWidth(inner), 1)] fill];
     }
     // the bottom outline line is darker
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.1] setFill];
+    [[NSColor colorWithCalibratedWhite: 0 alpha: dark ? 0.18 : 0.1] setFill];
     [[NSBezierPath bezierPathWithRect: NSMakeRect(NSMinX(body), NSMinY(body), NSWidth(body), 1)] fill];
     [NSGraphicsContext restoreGraphicsState];
 }
@@ -1867,7 +1953,7 @@ static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *t
 // segment shows the dark on look with such a line along both of its edges inside it. Evidence and test as for
 // -drawTexturedBezelInRect:square:pressed:on:controlSize:.
 - (void) drawTexturedSegmentSeparatorInRect: (NSRect) rect {
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.1] setFill];
+    [[NSColor colorWithCalibratedWhite: NSAquaDrawsDark() ? 1 : 0 alpha: 0.1] setFill];
     NSRectFillUsingOperation(rect, NSCompositeSourceOver);
 }
 
@@ -1887,6 +1973,12 @@ static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *t
     CGFloat gray = pressed ? 2 / 255.0 : (on ? 5 / 255.0 : 12 / 255.0);
     CGFloat alpha = pressed ? 0.49 : (on ? 0.37 : 0.32);
 
+    if (NSAquaDrawsDark()) {
+        // translucent white instead of near black; the on state is the lightest
+        gray = 1;
+        alpha = pressed ? 0.36 : (on ? 0.55 : 0.25);
+    }
+
     [[NSColor colorWithCalibratedWhite: gray alpha: alpha] setFill];
     [[NSBezierPath bezierPathWithRoundedRect: body xRadius: radius yRadius: radius] fill];
 }
@@ -1900,13 +1992,15 @@ static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *t
 
     if (NSWidth(body) < 3 || NSHeight(body) < 3)
         return;
+    CGFloat ink = NSAquaDrawsDark() ? 1 : 0;
+
     if (filled) {
-        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.1] setFill];
+        [[NSColor colorWithCalibratedWhite: ink alpha: 0.1] setFill];
         [[NSBezierPath bezierPathWithRoundedRect: NSInsetRect(body, 1, 1)
                                          xRadius: MAX(radius - 1, 0)
                                          yRadius: MAX(radius - 1, 0)] fill];
     }
-    [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.3 : 0.15] setStroke];
+    [[NSColor colorWithCalibratedWhite: ink alpha: enabled ? 0.3 : 0.15] setStroke];
     [outline setLineWidth: 1];
     [outline stroke];
 }
@@ -1942,7 +2036,7 @@ static void NSAquaFillGradient(NSBezierPath *path, NSRect rect, const CGFloat *t
         [chevrons lineToPoint: NSMakePoint(cx, cy - gap[index] - height)];
         [chevrons lineToPoint: NSMakePoint(cx + half, cy - gap[index])];
     }
-    [[NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.65 : 0.3] setStroke];
+    [[NSColor colorWithCalibratedWhite: NSAquaDrawsDark() ? 1 : 0 alpha: enabled ? (NSAquaDrawsDark() ? 0.85 : 0.65) : 0.3] setStroke];
     [chevrons setLineWidth: 1.1];
     [chevrons setLineCapStyle: NSRoundLineCapStyle];
     [chevrons setLineJoinStyle: NSMiterLineJoinStyle];
