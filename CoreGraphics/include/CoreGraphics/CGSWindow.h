@@ -78,6 +78,12 @@ typedef enum {
 	// is on the screen. Posted from inside -orderWindow:relativeTo: with kCGSOrderIn, once per showing, for a UI layer that
 	// has to give the window system more about the window before its first frame (Wayland: before the first commit).
 	kCGSToplevelEventWillShow,
+	// The window the UI layer named as this window's parent (-setToplevelParent:) was hidden, and with it the relation the
+	// window system kept.
+	kCGSToplevelEventParentLost,
+	// The window system answered a request for fullscreen or for leaving it (see -toplevelFullscreenSettling): the
+	// window can present its contents at the size the window system chose.
+	kCGSToplevelEventFullscreenSettled,
 } CGSToplevelEventKind;
 
 // What kCGSToplevelEventConfigured carries.
@@ -311,6 +317,23 @@ typedef struct {
 -(BOOL) toplevelIsFullscreen;
 // Whether a window of another client covers this window (see kCGSToplevelEventOcclusionChanged).
 -(BOOL) toplevelIsOccluded;
+// Relates the window to another toplevel window of the UI layer that the UI layer chose for it (a window of a raised level
+// stays in front of the window it belongs to, a panel or a sheet belongs to its document window); nil makes the window one
+// without a parent. For a window system that can only relate windows, not stack them at will (Wayland). The window system
+// refuses a parent that is not shown, or whose own parents lead to this window, and may drop the relation when the parent
+// is hidden (kCGSToplevelEventParentLost); the window is related again whenever it is shown and when it is asked again.
+// The parent is not retained.
+-(CGError) setToplevelParent:(CGSWindow*) parent;
+// The parent the window system holds the window to, nil for none.
+-(CGSWindow*) toplevelParent;
+// The UI layer ordered the window in, but keeps it from the window system (a fully transparent window, a window of an
+// application that must not take the focus yet): it has no window system objects, but is listed by
+// _CGSOrderedToplevelWindowIDs() as a window that is ordered in.
+-(CGError) setToplevelHeldBack:(BOOL) heldBack;
+// Whether a request for fullscreen or for leaving it is not answered yet: the window system decides the size of the window
+// by itself then, and a frame presented before the answer would have the size of the old state. Ends with
+// kCGSToplevelEventFullscreenSettled, at the latest a second after the request.
+-(BOOL) toplevelFullscreenSettling;
 
 // The window's own pixels. A process that has no GL surface for the window draws into it with
 // -drawImage:atPoint: and the window shows them. The contents are kept by the window, so they

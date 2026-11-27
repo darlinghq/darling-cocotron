@@ -89,6 +89,7 @@ typedef enum {
     CGSWaylandObjectDataSource,
     CGSWaylandObjectCursorScale,
     CGSWaylandObjectDecoration,
+    CGSWaylandObjectActivationToken,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -110,8 +111,15 @@ typedef enum {
     // alpha-modifier-v1, when the compositor offers it: the opacity of a window's surface (-[CGSWindow setToplevelAlpha:]).
     struct wl_proxy *_alphaModifierManager;
     uint32_t _alphaModifierManagerName;
+    // xdg-activation-v1, when the compositor offers it: asks the compositor to focus a window of the process (see
+    // -requestActivationOfWindow:from:).
+    struct wl_proxy *_activation;
+    uint32_t _activationName;
 
 @protected
+    // The request for activation that waits for its token, and the window it is for (retained).
+    struct wl_proxy *_activationToken;
+    CGSWindowWayland *_activationWindow;
     struct wl_proxy *_registry;
     // A Unix domain socket, not a Mach port, so CFRunLoop is used directly.
     CFSocketRef _cfSocket;
@@ -242,6 +250,18 @@ typedef enum {
 - (void) flushPendingPointerEvents;
 // Posts the modifier key change the keyboard decoder holds back until the compositor confirms it.
 - (void) flushPendingKeyboardEvents;
+// Asks the compositor, through xdg-activation, to focus a window of this process. The compositor decides: it may only mark
+// the window as wanting attention. The token carries the serial of the last key or button press when there is one,
+// because compositors refuse requests that cannot be tied to user input. The requester is the window the token names as the
+// one that asks (xdg-activation set_surface), nil for none: GUESS: the protocol allows no surface, and some compositors refuse
+// that. The variant without a requester picks one: a shown window other than the one to activate. Returns whether a
+// request was made; one is not while another waits for its token, and then nothing was asked.
+- (BOOL) requestActivationOfWindow: (CGSWindowWayland *) window from: (CGSWindowWayland *) requester;
+- (BOOL) requestActivationOfWindow: (CGSWindowWayland *) window;
+- (void) cancelActivationRequest;
+- (void) activationTokenDone: (const char *) token;
+// The window an activation request from another process is for: the one activated last that is shown as a toplevel.
+- (CGSWindowWayland *) windowForActivation;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
 // Whether the surface is that of a display overlay (a window made with -becomeDisplayOverlay:), and the
