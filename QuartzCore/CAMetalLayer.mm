@@ -37,7 +37,6 @@
 #endif
 
 #include <algorithm>
-#include <string.h>
 
 #import "CALayerInternal.h"
 
@@ -422,55 +421,6 @@ static BOOL forcesOpenGLPresentation(void) {
 @synthesize displaySyncEnabled = _displaySyncEnabled;
 @synthesize allowsNextDrawableTimeout = _allowsNextDrawableTimeout;
 
-// Gives the surface provider the layer's own color state. The provider may apply it to a
-// window-system surface of its own; the values are snapshots, so the provider must not retain
-// the color space or metadata from the description.
-- (void) notifySurfaceColorChanged
-{
-	id<CAMetalLayerSurfaceProvider> provider = nil;
-	CAEDRMetadata *metadata = nil;
-	CGColorSpaceRef space = NULL;
-	BOOL wantsEDR = NO;
-
-	@synchronized(self) {
-		provider = [_surfaceProvider retain];
-		metadata = [_EDRMetadata retain];
-		space = _colorspace != NULL ? CGColorSpaceRetain(_colorspace) : NULL;
-		wantsEDR = _wantsExtendedDynamicRangeContent;
-	}
-	if (![provider respondsToSelector: @selector(updateMetalSurfaceColorForLayer:description:)]) {
-		[provider release];
-		[metadata release];
-		if (space != NULL) CGColorSpaceRelease(space);
-		return;
-	}
-
-	CAEDRSurfaceColorDescription description = {};
-	description.colorSpace = space;
-	description.wantsExtendedDynamicRange = wantsEDR;
-	if (metadata != nil) {
-		CAEDRHDRDescription hdr = {};
-		[metadata copyHDRDescription: &hdr];
-		description.hasHDRMetadata = YES;
-		description.transfer = hdr.transfer;
-		description.hasMasteringDisplayPrimaries = hdr.hasMasteringDisplayPrimaries;
-		memcpy(description.masteringDisplayPrimaries, hdr.masteringDisplayPrimaries,
-		       sizeof description.masteringDisplayPrimaries);
-		description.hasMasteringLuminance = hdr.hasMasteringLuminance;
-		description.masteringMinLuminance = hdr.masteringMinLuminance;
-		description.masteringMaxLuminance = hdr.masteringMaxLuminance;
-		description.hasMaxCLL = hdr.hasMaxCLL;
-		description.maxCLL = hdr.maxCLL;
-		description.hasMaxFALL = hdr.hasMaxFALL;
-		description.maxFALL = hdr.maxFALL;
-		description.opticalOutputScale = hdr.opticalOutputScale;
-	}
-	[provider updateMetalSurfaceColorForLayer: self description: &description];
-
-	[provider release];
-	[metadata release];
-	if (space != NULL) CGColorSpaceRelease(space);
-}
 @synthesize developerHUDProperties = _developerHUDProperties;
 
 // TODO: use CGL here instead of direct OpenGL calls
@@ -568,7 +518,6 @@ static BOOL forcesOpenGLPresentation(void) {
 		}
 	}
 	if (changed) {
-		[self notifySurfaceColorChanged];
 		[self recreateDrawables];
 	}
 }
@@ -597,7 +546,6 @@ static BOOL forcesOpenGLPresentation(void) {
 		}
 	}
 	if (changed) {
-		[self notifySurfaceColorChanged];
 		[self recreateDrawables];
 	}
 }
@@ -606,13 +554,12 @@ static BOOL forcesOpenGLPresentation(void) {
 {
 	CAEDRMetadata *old;
 	@synchronized(self) {
-		old = [_EDRMetadata retain];
+		old = _EDRMetadata;
 		_EDRMetadata = [metadata retain];
 	}
 	BOOL changed = old != metadata && ![old isEqual: metadata];
 	[old release];
 	if (changed) {
-		[self notifySurfaceColorChanged];
 		[self recreateDrawables];
 	}
 }
@@ -972,10 +919,6 @@ static BOOL forcesOpenGLPresentation(void) {
 		_surfaceFrame = frame;
 		_nativeSurface = surface;
 	}
-
-	// A newly created surface starts with the layer's current color state; later
-	// changes arrive through the property setters.
-	[self notifySurfaceColorChanged];
 
 	return YES;
 }
