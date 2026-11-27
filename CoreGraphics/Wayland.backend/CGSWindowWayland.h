@@ -91,7 +91,39 @@ typedef enum {
     BOOL _activated;
     BOOL _usesContents; // a program draws into the window with -drawImage:atPoint: (it set a style)
     BOOL _displayOverlay; // -becomeDisplayOverlay: made this window the cover of a display
+
+    // A toplevel window of the UI layer (see CGSWindow.h, -[CGSConnection newToplevelWindowWithAttributes:]): the
+    // UI layer says what the window is and when it is shown, the window system's objects follow. The role is made
+    // when the window is shown, from the hints, and is destroyed when the window is hidden.
+    BOOL _ui;
+    CGRect _uiFrame; // in the space of -setToplevelFrame:
+    CGSToplevelHints _uiHints;
+    CGSize _uiMinimumSize, _uiMaximumSize;
+    BOOL _uiLimitsSet;
+    // Who draws the window's frame, as asked: 0 not asked, 1 the compositor, 2 the client, 3 asked to leave it open.
+    int _uiDecorationRequest;
+    // What the compositor said about the frame, once it said.
+    BOOL _uiDecorationReported, _uiClientDecorated;
+    // The window's frame drawn by the UI layer inside the surface: where the content starts, in points from the top left
+    // corner of the surface.
+    CGPoint _uiContentOffset;
+    uint32_t _uiPopupGrabSerial;
+    uint32_t _uiRepositionToken;
+    // What the events of the configure sequence in progress said.
+    CGSToplevelConfigure _uiPending;
+    BOOL _uiMinimizeAdvertised;
+    BOOL _uiIgnoresMouse;
+    // The compositor's first configure of the role was acknowledged: content may be attached.
+    BOOL _uiConfigured;
+    // alpha-modifier-v1's object for the surface, and the opacity the UI layer asked for.
+    struct wl_proxy *_alphaModifier;
+    CGFloat _uiAlpha;
+    BOOL _uiAlphaSet;
 }
+
+- (instancetype) initToplevelWithAttributes: (const CGSToplevelAttributes *) attributes
+                                 connection: (CGSConnection *) connection
+                                   windowID: (CGSWindowID) windowID;
 
 - (void) handleEvent: (uint32_t) opcode
                 kind: (CGSWaylandObjectKind) kind
@@ -118,6 +150,31 @@ typedef enum {
 - (void) colorManagerAvailable;
 // Where the window is, as far as the connection knows (the rect that was asked for).
 - (CGPoint) frameOrigin;
+
+// The window's objects of the window system, for the UI layer that owns the window's content and what the protocol
+// has beyond CGSWindow.h (the toplevel's fullscreen, parent and move requests, the objects that must be made
+// before the first commit); NULL while the window is not shown or has not that role. They are valid until the window is
+// ordered out, and are the UI layer's to use, not to destroy.
+- (struct wl_proxy *) xdgSurfaceProxy;
+- (struct wl_proxy *) toplevelProxy;
+- (struct wl_proxy *) popupProxy;
+- (struct wl_proxy *) layerSurfaceProxy;
+// The pop-up grab: the serial of the input event that entitles the pop-up to a grab, set before the window is shown (0:
+// no grab).
+- (void) setToplevelPopupGrabSerial: (uint32_t) serial;
+// Where the window's content starts inside its surface when the UI layer draws a frame of its own, in points from the
+// top left corner: pop-ups of the window are placed relative to the content.
+- (void) setToplevelContentOffset: (CGPoint) offset;
+// Replaces CGSWindow's -setToplevelFrame: for a frame the window system itself reported (the UI layer's window
+// follows it): remembers it without asking the window system for it.
+- (void) noteToplevelFrame: (CGRect) frame;
+// Tells the window system that the frame is not decided by the UI layer (the compositor's choice: used when the
+// window has no title bar).
+- (void) unsetToplevelDecoration;
+// The alpha-modifier global arrived after the window was made: the window's opacity is told now.
+- (void) alphaModifierAvailable;
+// The opacity the window lists in CGWindowListCopyWindowInfo().
+- (CGFloat) listedAlpha;
 
 @end
 

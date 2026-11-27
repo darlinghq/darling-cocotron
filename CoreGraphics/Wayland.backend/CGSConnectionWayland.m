@@ -33,6 +33,8 @@
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import <CoreGraphics/CGSNativeConnection.h>
+#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGWindowLevel.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 
 #import <CoreGraphics/CGSKeyboardLayout.h>
@@ -110,6 +112,7 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectToplevel:
             case CGSWaylandObjectLayerSurface:
             case CGSWaylandObjectPopup:
+            case CGSWaylandObjectDecoration:
                 [(CGSWindowWayland *) object handleEvent: opcode
                                                     kind: objectKind
                                                arguments: args];
@@ -600,7 +603,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                            kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name interface: &xdg_wm_base_interface
-                           version: MIN(version, 2u)
+                           version: MIN(version, 6u)
                               kind: CGSWaylandObjectWmBase object: self];
     } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
         _layerShell = [self bindGlobal: name interface: &zwlr_layer_shell_v1_interface
@@ -665,6 +668,18 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                                        version: MIN(version, (uint32_t) wp_cursor_shape_manager_v1_interface.version)
                                           kind: CGSWaylandObjectNone object: nil];
         [(CGSWaylandPointer *) _pointerDecoder cursorGlobalsChanged];
+    } else if (strcmp(interface, "wp_alpha_modifier_v1") == 0 && _alphaModifierManager == NULL) {
+        _alphaModifierManagerName = name;
+        _alphaModifierManager = [self bindGlobal: name interface: &wp_alpha_modifier_v1_interface
+                                         version: 1 kind: CGSWaylandObjectNone object: nil];
+        // A window made before the global arrived gets its opacity now.
+        @synchronized (_windows) {
+            for (NSNumber *key in _windows) {
+                CGSWindow *window = [_windows objectForKey: key];
+                if ([window isKindOfClass: [CGSWindowWayland class]])
+                    [(CGSWindowWayland *) window alphaModifierAvailable];
+            }
+        }
     } else if (strcmp(interface, "wp_fractional_scale_manager_v1") == 0 && _fractionalScaleManager == NULL) {
         _fractionalScaleManagerName = name;
         _fractionalScaleManager = [self bindGlobal: name interface: &wp_fractional_scale_manager_v1_interface
@@ -758,6 +773,13 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         else
             _relativePointerManagerName = 0;
         [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+        return;
+    }
+    if (_alphaModifierManager != NULL && name == _alphaModifierManagerName) {
+        // The protocol says objects created with the manager survive its destruction.
+        WaylandMarshal(_alphaModifierManager, WP_ALPHA_MODIFIER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _alphaModifierManager = NULL;
+        _alphaModifierManagerName = 0;
         return;
     }
     if (_pointerWarp != NULL && name == _pointerWarpName) {
@@ -1590,6 +1612,77 @@ static NSDictionary *modeDictionary(int32_t width, int32_t height, double refres
         [self invalidateScreens];
     }
     return changed;
+}
+
+- (struct wl_proxy *) seat {
+    return _seat;
+}
+
+// The windows of the process: a Wayland client cannot see those of other clients. Front to back is not known, so the
+// window made last is first.
+- (NSArray<NSDictionary *> *) copyWindowDescriptions {
+    NSMutableArray<NSDictionary *> *result = [[NSMutableArray alloc] init];
+    NSArray *windows = [self copyAllWindows];
+    NSArray *sorted = [windows sortedArrayUsingComparator: ^NSComparisonResult(CGSWindow *a, CGSWindow *b) {
+        return a.windowId < b.windowId ? NSOrderedDescending : a.windowId > b.windowId ? NSOrderedAscending
+                                                                                        : NSOrderedSame;
+    }];
+    NSString *process = [[NSProcessInfo processInfo] processName];
+    for (CGSWindow *candidate in sorted) {
+        if (![candidate isKindOfClass: [CGSWindowWayland class]])
+            continue;
+        CGSWindowWayland *window = (CGSWindowWayland *) candidate;
+        CGRect bounds = CGRectNull;
+        if ([window getRect: &bounds] != kCGSErrorSuccess)
+            continue;
+        NSMutableDictionary *description = [NSMutableDictionary dictionary];
+        description[(NSString *) kCGWindowNumber] = @(window.windowId);
+        description[(NSString *) kCGWindowOwnerPID] = @(getpid());
+        description[(NSString *) kCGWindowOwnerName] = process;
+        description[(NSString *) kCGWindowLayer] =
+                @([window role] == CGSWaylandRoleLayer ? kCGMainMenuWindowLevel
+                  : [window role] == CGSWaylandRolePopup ? kCGPopUpMenuWindowLevel : kCGNormalWindowLevel);
+        description[(NSString *) kCGWindowAlpha] = @([window listedAlpha]);
+        description[(NSString *) kCGWindowIsOnscreen] = @([window isShown]);
+        description[(NSString *) kCGWindowStoreType] = @(kCGBackingStoreBuffered);
+        // Capturing windows is not supported, so no window can be read.
+        description[(NSString *) kCGWindowSharingState] = @(kCGWindowSharingNone);
+        description[(NSString *) kCGWindowMemoryUsage] = @((long long) bounds.size.width * bounds.size.height * 4);
+        CFDictionaryRef boundsDictionary = CGRectCreateDictionaryRepresentation(bounds);
+        if (boundsDictionary != NULL) {
+            description[(NSString *) kCGWindowBounds] = (NSDictionary *) boundsDictionary;
+            CFRelease(boundsDictionary);
+        }
+        CFTypeRef title = NULL;
+        if ([window getProperty: kCGSWindowTitle value: &title] == kCGSErrorSuccess && title != NULL) {
+            description[(NSString *) kCGWindowName] = (NSString *) title;
+            CFRelease(title);
+        }
+        [result addObject: description];
+    }
+    [windows release];
+    return result;
+}
+
+- (CGSWindow *) newToplevelWindowWithAttributes: (const CGSToplevelAttributes *) attributes {
+    CGSWindowID windowID = _nextWindowId++;
+    CGSWindowWayland *window =
+            [[CGSWindowWayland alloc] initToplevelWithAttributes: attributes
+                                                      connection: self
+                                                        windowID: windowID];
+    if (window == nil)
+        return nil;
+
+    @synchronized (_windows) {
+        [_windows setObject: window forKey: [NSNumber numberWithInt: windowID]];
+    }
+    [window release];
+    return window;
+}
+
+// The windows are shm buffers with an alpha channel, so what is behind them shows through.
+- (BOOL) supportsTranslucentToplevels {
+    return YES;
 }
 
 - (CGSWindow *) newWindow: (CGSRegionRef) region {
