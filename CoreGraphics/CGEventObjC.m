@@ -42,7 +42,7 @@ static const FieldRange commonFields[] = {
 	{39, 45}, {50, 55}, {58, 59}, {85, 85}, {87, 87}, {101, 107}, {141, 141}, {146, 146}, {166, 166}, {169, 169},
 	// Our own: what the window system backends attach to the input events they post (see
 	// kCGSKeyboardEventUnmodifiedUnicode in CoreGraphicsPrivate.h).
-	{180, 201},
+	{180, 209},
 };
 static const FieldRange mouseFields[] = { {0, 7}, {89, 92}, {108, 108}, {170, 171} };
 static const FieldRange keyFields[] = { {8, 10}, {76, 81}, {127, 128} };

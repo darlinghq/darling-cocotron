@@ -49,6 +49,7 @@ struct wl_proxy;
 
 @class CGSWindowWayland;
 @class WaylandColorManager;
+@class WaylandRenderManager;
 
 // Identifies the object a dispatched event belongs to, the way AppKit's backend
 // does: libwayland listener structs are unusable across the Darwin/Linux
@@ -70,7 +71,13 @@ typedef enum {
     CGSWaylandObjectKeyboardSync,
     CGSWaylandObjectPointer,
     CGSWaylandObjectPinchGesture,
+    CGSWaylandObjectHoldGesture,
+    CGSWaylandObjectInputTimestamp,
     CGSWaylandObjectTouch,
+    CGSWaylandObjectTabletSeat,
+    CGSWaylandObjectTablet,
+    CGSWaylandObjectTabletTool,
+    CGSWaylandObjectTabletPad,
     CGSWaylandObjectLockedPointer,
     CGSWaylandObjectRelativePointer,
     CGSWaylandObjectWarpLock,
@@ -112,6 +119,8 @@ typedef enum {
     NSMutableArray *_outputs;
     // Color management and representation, when the compositor offers them (WaylandColorManager).
     id _color;
+    // dma-buf, explicit synchronization and fifo, when the compositor offers them (WaylandRenderManager).
+    id _render;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
     id _outputManager;
@@ -127,8 +136,15 @@ typedef enum {
     id _pointerDecoder;
     // The seat's touch screen, which decodes the fingers into CGEvents (CGSWaylandTouch).
     id _touchDecoder;
+    // The tablet manager's tablet seats, which decode stylus tools into tablet CGEvents (CGSWaylandTablet).
+    id _tabletDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
+    // input-timestamps-unstable-v1: one timestamp object per device, handing high-resolution times
+    // to the device's decoder before the input event they describe.
+    struct wl_proxy *_inputTimestampsManager;
+    uint32_t _inputTimestampsName;
+    struct wl_proxy *_pointerTimestamps, *_keyboardTimestamps, *_touchTimestamps;
     // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers
     // none.
     struct wl_proxy *_pointerConstraints, *_relativePointerManager;
@@ -176,8 +192,14 @@ typedef enum {
 // The shared color manager, or nil when the compositor offers neither color protocol.
 - (WaylandColorManager *) colorManager;
 - (id) waylandColorManager;
+- (id) waylandRenderManager;
+- (BOOL) extendedDynamicRangeAvailable;
+// The shared render-protocol manager, used by this connection's windows.
+- (WaylandRenderManager *) renderManager;
 // Tells the windows that a color global arrived after they were created.
 - (void) notifyWindowsColorManagerAvailable;
+// Tells the windows that a render global arrived after they were created.
+- (void) notifyWindowsRenderManagerAvailable;
 
 // Runs the block after the events the connection has read are dispatched: not inside a listener of the
 // compositor's events, where a request that waits for the compositor would nest in the dispatch. Blocks queued by
@@ -195,6 +217,8 @@ typedef enum {
 - (struct wl_proxy *) seat;
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;
+// Creates or drops the input timestamp objects to match the seat's devices.
+- (void) updateInputTimestamps;
 // The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerConstraints;
 - (struct wl_proxy *) relativePointerManager;

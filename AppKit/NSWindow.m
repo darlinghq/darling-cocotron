@@ -3814,6 +3814,14 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
                 rotateWithEvent: event];
         break;
 
+    case NSEventTypeTabletPoint:
+        [[_backgroundView hitTest: [event locationInWindow]] tabletPoint: event];
+        break;
+
+    case NSEventTypeTabletProximity:
+        [[_backgroundView hitTest: [event locationInWindow]] tabletProximity: event];
+        break;
+
     case NSEventTypeDirectTouch:
         [self _sendTouchEvent: event];
         break;

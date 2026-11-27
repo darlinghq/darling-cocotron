@@ -17,6 +17,7 @@
  SOFTWARE. */
 
 #import <CoreGraphics/CGWindowPrivate.h>
+#import <IOSurface/IOSurfaceRef.h>
 #import <Onyx2D/O2Geometry.h>
 #include <wayland-util.h>
 
@@ -24,14 +25,17 @@
 #import "WaylandDisplay.h"
 #import "WaylandFullscreen.h"
 
-@class NSWindow, O2Context, WaylandSubWindow;
+@class NSWindow, NSColorSpace, O2Context, WaylandSubWindow;
 
 struct WaylandBuffer {
     struct wl_proxy *buffer;
-    void *data;
+    void *data;         // wl_shm mapping; NULL for a dma-buf buffer
     size_t size;
+    IOSurfaceRef surface; // retained while the buffer is attached
     int32_t width, height;
-    uint32_t format;
+    uint32_t format;    // wl_shm format, used to reuse a matching buffer
+    uint32_t drmFormat; // DRM format of a dma-buf attachment
+    uint64_t modifier;
     BOOL busy; // attached and not yet released by the compositor
 };
 
@@ -86,12 +90,20 @@ typedef enum {
     int32_t _pendingPopupX, _pendingPopupY;
     struct wl_proxy *_frameCallback;
     // Per-surface color objects and the compositor session this toplevel belongs to.
-    struct wl_proxy *_colorSurface, *_representationSurface, *_toplevelSession;
+    struct wl_proxy *_colorSurface, *_representationSurface, *_surfaceFeedback, *_toplevelSession;
+    // The compositor's preferred content description, when the application has not chosen one.
+    NSColorSpace *_preferredColorSpace;
     // xdg-dialog-v1: the dialog role of a sheet or modal panel, and its current modal hint.
     struct wl_proxy *_dialog;
     BOOL _dialogModal;
     // idle-inhibit-unstable-v1: held while this toplevel is mapped and visible.
     struct wl_proxy *_idleInhibitor;
+    // wp_content_type_v1: fullscreen windows are games, a visible window while the process holds a
+    // display sleep assertion is showing video, and every other window says none.
+    struct wl_proxy *_contentType;
+    uint32_t _contentTypeValue;
+    // keyboard-shortcuts-inhibit-unstable-v1: fullscreen windows take the compositor's shortcuts.
+    struct wl_proxy *_shortcutsInhibitor;
     NSString *_sessionName;
     BOOL _restoringSessionToplevel;
     // Once a surface has committed, a saved session state can no longer be restored on it.
@@ -222,6 +234,8 @@ typedef enum {
 // Gives the toplevel the application icon (xdg-toplevel-icon), when the compositor has the protocol.
 - (void) updateToplevelIcon;
 
+// The color space of the window's content, or sRGB when neither the window nor a screen reports one.
+- (NSColorSpace *) contentColorSpace;
 // Describes the surface's content color to the compositor, when it supports color management.
 - (void) updateSurfaceColor;
 // Creates the color objects once a surface exists and the manager has been bound.
@@ -231,6 +245,11 @@ typedef enum {
 - (void) joinSessionBeforeCommit;
 // Callbacks from the display when the color manager or session manager arrives later than the window.
 - (void) colorManagerAvailable;
+- (void) preferredColorInfoChanged;
+// Routes a preferred-description change to a subwindow or one of its Metal surfaces.
+- (BOOL) preferredSubwindowColorInfoChangedForFeedback: (struct wl_proxy *) feedback;
+// A dma-buf, syncobj or fifo global arrived after this surface was made.
+- (void) renderGlobalsAvailable;
 - (void) sessionManagerAvailable;
 // Called when the dialog manager arrives later than the window.
 - (void) dialogManagerAvailable;
@@ -238,6 +257,10 @@ typedef enum {
 - (void) updateToplevelTags;
 // Creates or destroys the idle inhibitor as this toplevel becomes visible or occluded.
 - (void) updateIdleInhibitor;
+// Tells the compositor what the surface shows when wp_content_type_v1 is available.
+- (void) updateContentType;
+// Takes or drops the compositor's keyboard shortcuts when the toplevel is fullscreen.
+- (void) updateShortcutsInhibitor;
 
 // Overrides of CGWindow's window-system session hooks (see CGWindowPrivate.h).
 - (NSString *) ensureSessionToplevelName;
@@ -246,6 +269,7 @@ typedef enum {
 - (BOOL) hasCommittedSurface;
 // Commits the surface and records that a session restore request is now too late.
 - (void) commitSurface;
+- (struct wl_proxy *) surfaceFeedback;
 - (struct wl_proxy *) toplevelSession;
 - (void) setToplevelSession: (struct wl_proxy *) proxy;
 

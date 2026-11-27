@@ -446,8 +446,8 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
     return 0;
 }
 
-// Darling has no pressure-sensitive input, so no event carries pressure stages
-// and only mouse events (NSEvent_mouse) have a pressure.
+// No pressure stages: only the mouse (NSEvent_mouse) and tablet (NSEvent_tablet) classes carry
+// pressure. The tablet accessors have neutral values on every other event.
 - (float) pressure {
     return 0;
 }
@@ -467,6 +467,74 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
 
 - (float) rotation {
     return 0;
+}
+
+- (NSInteger) absoluteX {
+    return 0;
+}
+
+- (NSInteger) absoluteY {
+    return 0;
+}
+
+- (NSInteger) absoluteZ {
+    return 0;
+}
+
+- (NSEventButtonMask) buttonMask {
+    return 0;
+}
+
+- (NSPoint) tilt {
+    return NSZeroPoint;
+}
+
+- (float) tangentialPressure {
+    return 0;
+}
+
+- (NSUInteger) vendorID {
+    return 0;
+}
+
+- (NSUInteger) tabletID {
+    return 0;
+}
+
+- (NSUInteger) pointingDeviceID {
+    return 0;
+}
+
+- (NSUInteger) deviceID {
+    return 0;
+}
+
+- (NSUInteger) systemTabletID {
+    return 0;
+}
+
+- (NSUInteger) vendorPointingDeviceType {
+    return 0;
+}
+
+- (NSUInteger) pointingDeviceSerialNumber {
+    return 0;
+}
+
+- (unsigned long long) uniqueID {
+    return 0;
+}
+
+- (NSUInteger) capabilityMask {
+    return 0;
+}
+
+- (NSPointingDeviceType) pointingDeviceType {
+    return NSPointingDeviceTypeUnknown;
+}
+
+- (BOOL) isEnteringProximity {
+    return NO;
 }
 
 - (NSString *) characters {

@@ -27,7 +27,11 @@
 // xdg-shell, xdg-decoration, xdg-output, viewporter, fractional-scale, xdg-activation,
 // pointer-gestures,
 // relative-pointer, pointer-constraints, text-input-v3, wlr-output-management, KDE appmenu,
-// xdg-toplevel-icon, color-management, color-representation and xdg-session-management XML. The
+// xdg-toplevel-icon, color-management, color-representation, xdg-session-management, linux-dmabuf,
+// linux-drm-syncobj, fifo and tablet-v2 XML. The scanner's client headers are not used: their inline
+// request stubs call the variadic wl_proxy_marshal_flags().
+// xdg-toplevel-icon, color-management, color-representation, xdg-session-management, content-type,
+// input-timestamps and keyboard-shortcuts-inhibit XML. The
 // scanner's client headers are not used: their inline request stubs call the variadic
 // wl_proxy_marshal_flags().
 extern const struct wl_interface wl_display_interface;
@@ -67,6 +71,7 @@ extern const struct wl_interface zxdg_decoration_manager_v1_interface;
 extern const struct wl_interface zxdg_toplevel_decoration_v1_interface;
 extern const struct wl_interface zwp_pointer_gestures_v1_interface;
 extern const struct wl_interface zwp_pointer_gesture_pinch_v1_interface;
+extern const struct wl_interface zwp_pointer_gesture_hold_v1_interface;
 extern const struct wl_interface zwp_relative_pointer_manager_v1_interface;
 extern const struct wl_interface zwp_relative_pointer_v1_interface;
 extern const struct wl_interface zwp_pointer_constraints_v1_interface;
@@ -111,6 +116,25 @@ extern const struct wl_interface wp_alpha_modifier_surface_v1_interface;
 extern const struct wl_interface xdg_toplevel_tag_manager_v1_interface;
 extern const struct wl_interface zwp_idle_inhibit_manager_v1_interface;
 extern const struct wl_interface zwp_idle_inhibitor_v1_interface;
+extern const struct wl_interface zwp_linux_dmabuf_v1_interface;
+extern const struct wl_interface zwp_linux_buffer_params_v1_interface;
+extern const struct wl_interface zwp_linux_dmabuf_feedback_v1_interface;
+extern const struct wl_interface wp_linux_drm_syncobj_manager_v1_interface;
+extern const struct wl_interface wp_linux_drm_syncobj_timeline_v1_interface;
+extern const struct wl_interface wp_linux_drm_syncobj_surface_v1_interface;
+extern const struct wl_interface wp_fifo_manager_v1_interface;
+extern const struct wl_interface wp_fifo_v1_interface;
+extern const struct wl_interface zwp_tablet_manager_v2_interface;
+extern const struct wl_interface zwp_tablet_seat_v2_interface;
+extern const struct wl_interface zwp_tablet_v2_interface;
+extern const struct wl_interface zwp_tablet_tool_v2_interface;
+extern const struct wl_interface zwp_tablet_pad_v2_interface;
+extern const struct wl_interface wp_content_type_manager_v1_interface;
+extern const struct wl_interface wp_content_type_v1_interface;
+extern const struct wl_interface zwp_input_timestamps_manager_v1_interface;
+extern const struct wl_interface zwp_input_timestamps_v1_interface;
+extern const struct wl_interface zwp_keyboard_shortcuts_inhibit_manager_v1_interface;
+extern const struct wl_interface zwp_keyboard_shortcuts_inhibitor_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -215,12 +239,17 @@ enum {
     // no such event and the pointer then has no high resolution wheel steps.
     WP_POINTER_EV_AXIS_VALUE120 = 9,
 
+    WP_GESTURES_GET_SWIPE = 0,
     WP_GESTURES_GET_PINCH = 1,
     WP_GESTURES_RELEASE = 2,
+    WP_GESTURES_GET_HOLD = 3, /* pointer-gestures version 3 */
     WP_PINCH_DESTROY = 0,
     WP_PINCH_EV_BEGIN = 0,
     WP_PINCH_EV_UPDATE = 1,
     WP_PINCH_EV_END = 2,
+    WP_HOLD_DESTROY = 0,
+    WP_HOLD_EV_BEGIN = 0,
+    WP_HOLD_EV_END = 1,
     WP_TEXT_INPUT_MANAGER_DESTROY = 0,
     WP_TEXT_INPUT_MANAGER_GET_TEXT_INPUT = 1,
     WP_TEXT_INPUT_DESTROY = 0,
@@ -277,6 +306,60 @@ enum {
     ZWP_IDLE_INHIBIT_MANAGER_DESTROY = 0,
     ZWP_IDLE_INHIBIT_MANAGER_CREATE_INHIBITOR = 1,
     ZWP_IDLE_INHIBITOR_DESTROY = 0,
+
+    // zwp_tablet_manager_v2 / zwp_tablet_seat_v2 / zwp_tablet_v2 / zwp_tablet_tool_v2.
+    // Tablet pads are not decoded (that is a separate protocol), but their objects are accepted and
+    // destroyed with the seat, so the interface table must match this tree's XML.
+    ZWP_TABLET_MANAGER_GET_TABLET_SEAT = 0,
+    ZWP_TABLET_MANAGER_DESTROY = 1,
+    ZWP_TABLET_SEAT_DESTROY = 0,
+    ZWP_TABLET_SEAT_EV_TABLET_ADDED = 0,
+    ZWP_TABLET_SEAT_EV_TOOL_ADDED = 1,
+    ZWP_TABLET_SEAT_EV_PAD_ADDED = 2,
+    ZWP_TABLET_DESTROY = 0,
+    ZWP_TABLET_EV_NAME = 0,
+    ZWP_TABLET_EV_ID = 1,
+    ZWP_TABLET_EV_PATH = 2,
+    ZWP_TABLET_EV_DONE = 3,
+    ZWP_TABLET_EV_REMOVED = 4,
+    ZWP_TABLET_TOOL_SET_CURSOR = 0,
+    ZWP_TABLET_TOOL_DESTROY = 1,
+    ZWP_TABLET_TOOL_EV_TYPE = 0,
+    ZWP_TABLET_TOOL_EV_HARDWARE_SERIAL = 1,
+    ZWP_TABLET_TOOL_EV_HARDWARE_ID_WACOM = 2,
+    ZWP_TABLET_TOOL_EV_CAPABILITY = 3,
+    ZWP_TABLET_TOOL_EV_DONE = 4,
+    ZWP_TABLET_TOOL_EV_REMOVED = 5,
+    ZWP_TABLET_TOOL_EV_PROXIMITY_IN = 6,
+    ZWP_TABLET_TOOL_EV_PROXIMITY_OUT = 7,
+    ZWP_TABLET_TOOL_EV_DOWN = 8,
+    ZWP_TABLET_TOOL_EV_UP = 9,
+    ZWP_TABLET_TOOL_EV_MOTION = 10,
+    ZWP_TABLET_TOOL_EV_PRESSURE = 11,
+    ZWP_TABLET_TOOL_EV_DISTANCE = 12,
+    ZWP_TABLET_TOOL_EV_TILT = 13,
+    ZWP_TABLET_TOOL_EV_ROTATION = 14,
+    ZWP_TABLET_TOOL_EV_SLIDER = 15,
+    ZWP_TABLET_TOOL_EV_WHEEL = 16,
+    ZWP_TABLET_TOOL_EV_BUTTON = 17,
+    ZWP_TABLET_TOOL_EV_FRAME = 18,
+    WP_CONTENT_TYPE_MANAGER_DESTROY = 0,
+    WP_CONTENT_TYPE_MANAGER_GET_SURFACE_CONTENT_TYPE = 1,
+    WP_CONTENT_TYPE_DESTROY = 0,
+    WP_CONTENT_TYPE_SET_CONTENT_TYPE = 1,
+
+    WP_INPUT_TIMESTAMPS_MANAGER_DESTROY = 0,
+    WP_INPUT_TIMESTAMPS_MANAGER_GET_KEYBOARD_TIMESTAMPS = 1,
+    WP_INPUT_TIMESTAMPS_MANAGER_GET_POINTER_TIMESTAMPS = 2,
+    WP_INPUT_TIMESTAMPS_MANAGER_GET_TOUCH_TIMESTAMPS = 3,
+    WP_INPUT_TIMESTAMPS_DESTROY = 0,
+    WP_INPUT_TIMESTAMPS_EV_TIMESTAMP = 0,
+
+    ZWP_KEYBOARD_SHORTCUTS_INHIBIT_MANAGER_DESTROY = 0,
+    ZWP_KEYBOARD_SHORTCUTS_INHIBIT_MANAGER_INHIBIT_SHORTCUTS = 1,
+    ZWP_KEYBOARD_SHORTCUTS_INHIBITOR_DESTROY = 0,
+    ZWP_KEYBOARD_SHORTCUTS_INHIBITOR_EV_ACTIVE = 0,
+    ZWP_KEYBOARD_SHORTCUTS_INHIBITOR_EV_INACTIVE = 1,
 
     WP_TOUCH_RELEASE = 0,
     WP_TOUCH_EV_DOWN = 0,
@@ -525,6 +608,53 @@ enum {
     WP_TOPLEVEL_SESSION_DESTROY = 0,
     WP_TOPLEVEL_SESSION_RENAME = 1,
     WP_TOPLEVEL_SESSION_EV_RESTORED = 0,
+
+    // zwp_linux_dmabuf_v1
+    WP_DMABUF_DESTROY = 0,
+    WP_DMABUF_CREATE_PARAMS = 1,
+    WP_DMABUF_GET_DEFAULT_FEEDBACK = 2,
+    WP_DMABUF_GET_SURFACE_FEEDBACK = 3,
+    WP_DMABUF_EV_FORMAT = 0,
+    WP_DMABUF_EV_MODIFIER = 1,
+
+    // zwp_linux_buffer_params_v1
+    WP_DMABUF_PARAMS_DESTROY = 0,
+    WP_DMABUF_PARAMS_ADD = 1,
+    WP_DMABUF_PARAMS_CREATE = 2,
+    WP_DMABUF_PARAMS_CREATE_IMMED = 3,
+    WP_DMABUF_PARAMS_SET_SAMPLING_DEVICE = 4,
+    WP_DMABUF_PARAMS_EV_CREATED = 0,
+    WP_DMABUF_PARAMS_EV_FAILED = 1,
+
+    // zwp_linux_dmabuf_feedback_v1
+    WP_DMABUF_FEEDBACK_DESTROY = 0,
+    WP_DMABUF_FEEDBACK_EV_DONE = 0,
+    WP_DMABUF_FEEDBACK_EV_FORMAT_TABLE = 1,
+    WP_DMABUF_FEEDBACK_EV_MAIN_DEVICE = 2,
+    WP_DMABUF_FEEDBACK_EV_TRANCHE_DONE = 3,
+    WP_DMABUF_FEEDBACK_EV_TRANCHE_TARGET_DEVICE = 4,
+    WP_DMABUF_FEEDBACK_EV_TRANCHE_FORMATS = 5,
+    WP_DMABUF_FEEDBACK_EV_TRANCHE_FLAGS = 6,
+
+    // wp_linux_drm_syncobj_manager_v1
+    WP_SYNCOBJ_MANAGER_DESTROY = 0,
+    WP_SYNCOBJ_MANAGER_GET_SURFACE = 1,
+    WP_SYNCOBJ_MANAGER_IMPORT_TIMELINE = 2,
+
+    // wp_linux_drm_syncobj_timeline_v1
+    WP_SYNCOBJ_TIMELINE_DESTROY = 0,
+
+    // wp_linux_drm_syncobj_surface_v1
+    WP_SYNCOBJ_SURFACE_DESTROY = 0,
+    WP_SYNCOBJ_SURFACE_SET_ACQUIRE_POINT = 1,
+    WP_SYNCOBJ_SURFACE_SET_RELEASE_POINT = 2,
+
+    // wp_fifo_manager_v1 / wp_fifo_v1
+    WP_FIFO_MANAGER_DESTROY = 0,
+    WP_FIFO_MANAGER_GET_FIFO = 1,
+    WP_FIFO_SET_BARRIER = 0,
+    WP_FIFO_WAIT_BARRIER = 1,
+    WP_FIFO_DESTROY = 2,
 };
 
 // Enum values from the same protocol files.
@@ -533,6 +663,31 @@ enum {
     WP_SEAT_CAPABILITY_KEYBOARD = 2,
     WP_SEAT_CAPABILITY_TOUCH = 4,
     WP_POINTER_BUTTON_STATE_PRESSED = 1,
+
+    // zwp_tablet_tool_v2.tool_type. The values come from tablet-unstable-v2.xml; the tool types
+    // are the Linux/Wacom values, not Cocoa's NSPointingDeviceType.
+    ZWP_TABLET_TOOL_TYPE_PEN = 0x140,
+    ZWP_TABLET_TOOL_TYPE_ERASER = 0x141,
+    ZWP_TABLET_TOOL_TYPE_BRUSH = 0x142,
+    ZWP_TABLET_TOOL_TYPE_PENCIL = 0x143,
+    ZWP_TABLET_TOOL_TYPE_AIRBRUSH = 0x144,
+    ZWP_TABLET_TOOL_TYPE_FINGER = 0x145,
+    ZWP_TABLET_TOOL_TYPE_MOUSE = 0x146,
+    ZWP_TABLET_TOOL_TYPE_LENS = 0x147,
+    // zwp_tablet_tool_v2.capability: one event per capability, numbered from 1, which is also the
+    // bit number in CGEvent's kCGTabletProximityEventCapabilityMask (the bits are vendor-defined,
+    // but using the protocol's numbering keeps every capability distinguishable).
+    ZWP_TABLET_TOOL_CAPABILITY_TILT = 1,
+    ZWP_TABLET_TOOL_CAPABILITY_PRESSURE = 2,
+    ZWP_TABLET_TOOL_CAPABILITY_DISTANCE = 3,
+    ZWP_TABLET_TOOL_CAPABILITY_ROTATION = 4,
+    ZWP_TABLET_TOOL_CAPABILITY_SLIDER = 5,
+    ZWP_TABLET_TOOL_CAPABILITY_WHEEL = 6,
+    ZWP_TABLET_TOOL_BUTTON_STATE_RELEASED = 0,
+    ZWP_TABLET_TOOL_BUTTON_STATE_PRESSED = 1,
+    ZWP_TABLET_TOOL_ERROR_ROLE = 0,
+    // zwp_tablet_pad_v2.removed: pads are not decoded, but the dispatcher drops their proxies.
+    ZWP_TABLET_PAD_EV_REMOVED = 7,
     WP_POINTER_AXIS_VERTICAL_SCROLL = 0,
     WP_POINTER_AXIS_HORIZONTAL_SCROLL = 1,
     // wl_pointer.axis_source: the finger source is a touch surface. Value from the Wayland core
@@ -552,6 +707,10 @@ enum {
     WP_TOPLEVEL_STATE_MAXIMIZED = 1,
     WP_TOPLEVEL_STATE_FULLSCREEN = 2,
     WP_TOPLEVEL_STATE_SUSPENDED = 9, /* xdg_toplevel version 6 */
+    WP_TOPLEVEL_STATE_CONSTRAINED_LEFT = 10, /* xdg_toplevel version 7 */
+    WP_TOPLEVEL_STATE_CONSTRAINED_RIGHT = 11,
+    WP_TOPLEVEL_STATE_CONSTRAINED_TOP = 12,
+    WP_TOPLEVEL_STATE_CONSTRAINED_BOTTOM = 13,
     WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE = 1,
     WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE = 2,
     WP_POSITIONER_ANCHOR_TOP_LEFT = 5,
@@ -642,6 +801,12 @@ enum {
     WP_SESSION_REASON_SESSION_RESTORE = 3,
 
     // wp_cursor_shape_device_v1.shape
+    // wp_content_type_v1.type
+    WP_CONTENT_TYPE_NONE = 0,
+    WP_CONTENT_TYPE_PHOTO = 1,
+    WP_CONTENT_TYPE_VIDEO = 2,
+    WP_CONTENT_TYPE_GAME = 3,
+
     WP_CURSOR_SHAPE_DEFAULT = 1,
     WP_CURSOR_SHAPE_CONTEXT_MENU = 2,
     WP_CURSOR_SHAPE_HELP = 3,
@@ -679,6 +844,20 @@ enum {
     // Since version 2 of wp_cursor_shape_manager_v1.
     WP_CURSOR_SHAPE_DND_ASK = 35,
     WP_CURSOR_SHAPE_ALL_RESIZE = 36,
+
+    // DRM fourcc codes and layout modifiers (linux drm_fourcc.h). The byte order makes
+    // ARGB8888 the format of an IOSurface with kCGBitmapByteOrder32Little and an alpha-first
+    // pixel layout.
+    WP_DRM_FORMAT_ARGB8888 = 0x34325241,
+    WP_DRM_FORMAT_XRGB8888 = 0x34325258,
+    WP_DRM_FORMAT_ABGR8888 = 0x34324241,
+    WP_DRM_FORMAT_XBGR8888 = 0x34324258,
+    // Half-float versions of the same little-endian RGBA/XRGB byte order. They carry
+    // EDR values above the reference white when the backing IOSurface stores half floats.
+    WP_DRM_FORMAT_ARGB16161616F = 0x48345241,
+    WP_DRM_FORMAT_XRGB16161616F = 0x48345258,
+    WP_DRM_FORMAT_MOD_LINEAR = 0,
+    WP_DRM_FORMAT_MOD_INVALID = 0x00ffffffffffffffULL,
 };
 
 // Linux input event codes (linux/input-event-codes.h) carried by wl_pointer.button.

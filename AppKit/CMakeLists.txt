@@ -272,6 +272,7 @@ set(AppKit_sources
 
 	NSEvent.subproj/NSEvent_periodic.m
 	NSEvent.subproj/NSEvent_mouse.m
+	NSEvent.subproj/NSEvent_tablet.m
 	NSEvent.subproj/NSEvent_CoreGraphics.m
 	NSEvent.subproj/NSEvent_other.m
 	NSEvent.subproj/NSEvent_keyboard.m
@@ -796,6 +797,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			AppKit
 			Onyx2D
 			CoreGraphics
+			IOSurface
 			OpenGL
 	)
 	target_include_directories(Wayland_backend PRIVATE

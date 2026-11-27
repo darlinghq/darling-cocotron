@@ -24,6 +24,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CGSWaylandClipboard.m
 			CGSWaylandPortalShortcuts.m
 			CGSWaylandTouch.m
+			CGSWaylandTablet.m
 			CGSWaylandKeymap.m
 			CGSWaylandOutputManager.m
 			CGSWindowWayland.m
@@ -34,6 +35,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			# Foundation and elfcalls with no AppKit dependency of its own.
 			../WaylandSupport/WaylandLibrary.m
 			../WaylandSupport/WaylandColor.m
+			../WaylandSupport/WaylandRender.m
 			${CG_WAYLAND_PROTOCOL_SOURCES}
 		INFO_PLIST
 			Info.plist
@@ -45,6 +47,7 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 			CoreGraphics
 			IOKit
 			dbus
+			IOSurface
 	)
 	target_include_directories(Wayland_cgbackend PRIVATE
 		../WaylandSupport

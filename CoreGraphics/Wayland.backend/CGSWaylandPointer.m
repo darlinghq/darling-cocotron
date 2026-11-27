@@ -47,6 +47,12 @@ enum {
 // wl_pointer.axis values are lengths in surface-local coordinates, the space pointer motion uses. A
 // notch of a wheel is this many of them, which is also what a source's pixels per line is by default
 // (CGEventSourceSetPixelsPerLine), so that a line delta and a pixel delta of the same movement agree.
+@interface CGSWaylandPointer ()
+- (void) destroyPinch;
+- (void) destroyHold;
+- (void) endHoldWithPhase: (int64_t) phase;
+@end
+
 static const double AxisUnitsPerLine = 10.0;
 
 // A Linux button code in Cocoa's numbering: the left, right and middle buttons are 0, 1 and 2, the side
@@ -72,6 +78,11 @@ static unsigned maskForCode(uint32_t code) {
 @implementation CGSWaylandPointer
 
 @synthesize pointerProxy = _pointer;
+
+- (void) setPendingTimestamp: (uint64_t) timestamp {
+    _pendingTimestamp = timestamp;
+    _hasPendingTimestamp = YES;
+}
 
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection {
     self = [super init];
@@ -124,16 +135,28 @@ static unsigned maskForCode(uint32_t code) {
 - (void) pointerGesturesChanged {
     struct wl_proxy *gestures = [_connection pointerGestures];
 
-    if (gestures != NULL && _pointer != NULL && _pinch == NULL) {
+    if (gestures != NULL && _pointer != NULL) {
         union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _pointer}};
-        _pinch = [_connection createObject: gestures
-                                    opcode: WP_GESTURES_GET_PINCH
-                                 interface: &zwp_pointer_gesture_pinch_v1_interface
-                                 arguments: args
-                                      kind: CGSWaylandObjectPinchGesture
-                                    object: self];
-    } else if (gestures == NULL || _pointer == NULL) {
+        if (_pinch == NULL) {
+            _pinch = [_connection createObject: gestures
+                                        opcode: WP_GESTURES_GET_PINCH
+                                     interface: &zwp_pointer_gesture_pinch_v1_interface
+                                     arguments: args
+                                          kind: CGSWaylandObjectPinchGesture
+                                        object: self];
+        }
+        // The hold gesture was added in version 3 of the manager.
+        if (_hold == NULL && WL.wl_proxy_get_version(gestures) >= 3) {
+            _hold = [_connection createObject: gestures
+                                       opcode: WP_GESTURES_GET_HOLD
+                                    interface: &zwp_pointer_gesture_hold_v1_interface
+                                    arguments: args
+                                         kind: CGSWaylandObjectHoldGesture
+                                       object: self];
+        }
+    } else {
         [self destroyPinch];
+        [self destroyHold];
     }
 }
 
@@ -145,10 +168,23 @@ static unsigned maskForCode(uint32_t code) {
     _pinch = NULL;
 }
 
+- (void) destroyHold {
+    if (_hold == NULL)
+        return;
+    [self endHoldWithPhase: kCGScrollPhaseCancelled];
+    if (WL.wl_proxy_get_version(_hold) >= 3)
+        WaylandMarshal(_hold, WP_HOLD_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+    else
+        WL.wl_proxy_destroy(_hold);
+    _hold = NULL;
+}
+
 - (void) stop {
     if (_pointer == NULL && _focus == NULL)
         return;
+    _hasPendingTimestamp = NO;
     [self destroyPinch];
+    [self destroyHold];
     [self releasePointerLockObjects];
     id<CGSNativeConnectionObserver> observer = [self observer];
     BOOL had = _pointer != NULL;
@@ -187,6 +223,8 @@ static unsigned maskForCode(uint32_t code) {
         [self releasePointerLockObjects];
     if (_pinchSurface == surface)
         [self endPinchWithPhase: CGSGesturePhaseCancelled];
+    if (_holdSurface == surface)
+        [self endHoldWithPhase: kCGScrollPhaseCancelled];
     // A finger scroll on a window that goes away ends as cancelled
     if (_fingerSurface == surface)
         [self cancelFingerScroll];
@@ -293,6 +331,11 @@ static unsigned maskForCode(uint32_t code) {
 // Lets the observer add what it knows, then posts the event to the taps and the process' event stream.
 - (void) postEvent: (CGEventRef) event {
     id<CGSNativeConnectionObserver> observer = [self observer];
+
+    if (_hasPendingTimestamp) {
+        CGEventSetTimestamp(event, _pendingTimestamp);
+        _hasPendingTimestamp = NO;
+    }
 
     // The observer is asked even for the events of a display overlay (it keeps the state of the buttons), but
     // no window can refuse them: the overlay's events always go to the process' event stream.
@@ -1020,6 +1063,46 @@ static int64_t wholeLines(double lines) {
 
     case WP_PINCH_EV_END:
         [self endPinchWithPhase: args[2].i ? CGSGesturePhaseCancelled : CGSGesturePhaseEnded];
+        break;
+    }
+}
+
+// A hold cancels the kinetic scrolling of the scroll view under the fingers. AppKit expresses that
+// with a scroll event of zero delta and a phase, not with a magnification or rotation.
+- (void) postHoldPhase: (int64_t) phase {
+    CGEventRef event = CGEventCreateScrollWheelEvent2((CGEventSourceRef) _source,
+                                                      kCGScrollEventUnitPixel, 2, 0, 0, 0);
+    if (event == NULL)
+        return;
+    CGEventSetIntegerValueField(event, kCGScrollWheelEventScrollPhase, phase);
+    CGEventSetLocation(event, [self globalLocationOfSurface: _holdSurface point: _point]);
+    [self addCommonFieldsTo: event surface: _holdSurface point: _point
+                    global: [self globalLocationOfSurface: _holdSurface point: _point]
+                     flags: [_connection modifierFlags]];
+    [self postEvent: event];
+}
+
+- (void) endHoldWithPhase: (int64_t) phase {
+    if (!_holdActive)
+        return;
+    [self postHoldPhase: phase];
+    _holdActive = NO;
+    _holdSurface = NULL;
+}
+
+- (void) holdEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    [self postPendingScroll];
+    switch (opcode) {
+    case WP_HOLD_EV_BEGIN:
+        _holdSurface = (struct wl_proxy *) args[2].o;
+        _holdActive = _holdSurface != NULL;
+        if (_holdActive)
+            [self postHoldPhase: kCGScrollPhaseBegan];
+        break;
+    case WP_HOLD_EV_END:
+        [self endHoldWithPhase: args[2].i ? kCGScrollPhaseCancelled : kCGScrollPhaseEnded];
+        break;
+    default:
         break;
     }
 }

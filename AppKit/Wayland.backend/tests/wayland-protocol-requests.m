@@ -10,7 +10,9 @@
 //   STEP sheet       a sheet on the window, closed again
 //   STEP modal       a window in an application modal session, closed again
 //   STEP pointer     [NSCursor set] and CGWarpMouseCursorPosition(), when the pointer entered the window
-//   STEP idle        no power assertion is held: CGDisplayIsAsleep() is queried, the display is not asleep
+//   STEP fullscreen-in   the window enters full screen
+//   STEP fullscreen-out  the window leaves full screen
+//   STEP idle            no power assertion is held: CGDisplayIsAsleep() is queried
 //   STEP assert      kIOPMAssertPreventUserIdleDisplaySleep is taken, as an application that plays video does
 //   STEP release     the assertion is released again
 //   STEP alpha       NSWindow.alphaValue 0.5, then 0 (the window is unmapped), then 1
@@ -21,6 +23,12 @@
 #import <IOKit/pwr_mgt/IOPMLib.h>
 #include <stdio.h>
 #include <unistd.h>
+
+// The fullscreen transition is asynchronous: the compositor has to confirm it before the backend
+// treats the surface as fullscreen.
+static BOOL isFullScreen(NSWindow *window) {
+    return ([window styleMask] & NSWindowStyleMaskFullScreen) != 0;
+}
 
 static void step(const char *name) {
     fprintf(stderr, "STEP %s\n", name);
@@ -113,6 +121,19 @@ int main(int argc, char **argv) {
                 runLoop(0.1);
             }
         }
+
+        step("fullscreen-in");
+        [window setCollectionBehavior: NSWindowCollectionBehaviorFullScreenPrimary];
+        [window toggleFullScreen: nil];
+        runLoop(2);
+        fprintf(stderr, "FULLSCREEN entered=%d\n", isFullScreen(window));
+        fflush(stderr);
+
+        step("fullscreen-out");
+        [window toggleFullScreen: nil];
+        runLoop(1);
+        fprintf(stderr, "FULLSCREEN left=%d\n", !isFullScreen(window));
+        fflush(stderr);
 
         step("idle");
         // The window is visible and nothing asks for the display to stay awake.

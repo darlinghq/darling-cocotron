@@ -16,6 +16,19 @@
 - (void) prepareRender;
 @end
 
+// A layer can be given its EDR property before the view has a native surface,
+// and a context can be given a new surface while its tree is already set up.
+static void UpdateSubwindowEDRContent(CALayer *layer, CGSubWindow *subwindow) {
+    if ([layer isKindOfClass: [CAOpenGLLayer class]]) {
+        CAOpenGLLayer *gl = (CAOpenGLLayer *) layer;
+        if ([subwindow respondsToSelector: @selector(setWantsExtendedDynamicRangeContent:forLayer:)])
+            [subwindow setWantsExtendedDynamicRangeContent: [gl wantsExtendedDynamicRangeContent]
+                                                  forLayer: layer];
+    }
+    for (CALayer *child in [layer sublayers])
+        UpdateSubwindowEDRContent(child, subwindow);
+}
+
 @implementation CALayerContext
 
 @synthesize glContext = _glContext;
@@ -99,6 +112,8 @@
 
     [_layer _setContext: self];
     [_renderer setLayer: layer];
+    if (_subwindow != nil)
+        UpdateSubwindowEDRContent(_layer, _subwindow);
     // Show the new tree even if nothing in it changes afterwards.
     if (_layer != nil)
         [self startTimerIfNeeded];
@@ -162,6 +177,8 @@
     [oldSubwindow release];
 
     [_subwindow setFrame: _frame];
+    if (_subwindow != nil)
+        UpdateSubwindowEDRContent(_layer, _subwindow);
 }
 
 - (void) invalidate {

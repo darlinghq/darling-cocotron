@@ -278,6 +278,15 @@ extern const CFStringRef kCGSDisplayColorReferenceLuminanceKey;
 extern const CFStringRef kCGSDisplayColorTargetMinLuminanceKey;
 extern const CFStringRef kCGSDisplayColorTargetMaxLuminanceKey;
 extern const CFStringRef kCGSDisplayColorICCProfileKey;
+// The remaining keys carry the optional parts of a version 3 parametric description. The
+// chromaticity keys hold an array of eight CFNumbers in r, g, b, white x/y order. The MaxCLL
+// and MaxFALL keys are the values defined by CTA-861-H, in cd/m^2. The transfer-function power
+// key is the exponent multiplied by 10000. An absent key means the compositor did not report it.
+extern const CFStringRef kCGSDisplayColorPrimariesChromaticityKey;
+extern const CFStringRef kCGSDisplayColorTargetPrimariesChromaticityKey;
+extern const CFStringRef kCGSDisplayColorTransferFunctionPowerKey;
+extern const CFStringRef kCGSDisplayColorTargetMaxCLLKey;
+extern const CFStringRef kCGSDisplayColorTargetMaxFALLKey;
 
 // Values of the primaries and transfer-function keys. The numbers are the window system's
 // color-management enum values; the names give the frameworks above CoreGraphics a stable
@@ -569,6 +578,21 @@ enum {
 	// window do not belong to gesture events), with the event's location. 0 when the event names the window
 	// system's window.
 	kCGSTouchWindowNumber = 201,
+	// Tablet tools: the documented proximity fields belong only to proximity CGEvents, but AppKit gets the
+	// tool's identity from the pointer events too. These common fields carry it on both kinds (the
+	// documented kCGTabletEventDeviceID/Vendor1/Vendor2/Vendor3 fields carry the ids that have a place in
+	// the pointer class). The vendor pointer type is the protocol's raw tool type, the pointer type is
+	// Cocoa's NSPointingDeviceType.
+	kCGSTabletPointerID = 202,
+	kCGSTabletSystemTabletID = 203,
+	kCGSTabletCapabilityMask = 204,
+	kCGSTabletVendorPointerType = 205,
+	kCGSTabletPointerType = 206,
+	kCGSTabletVendorPointerSerialNumber = 207,
+	// The documented "window under the pointer" fields belong to mouse events, to the exclusion of
+	// tablet events. These common fields say which window the tablet tool is over, for both kinds.
+	kCGSTabletWindowNumber = 208,
+	kCGSTabletWindowNumberThatCanHandleThisEvent = 209,
 };
 
 // The CGEvent type of the gesture events (NSEventTypeGesture), and the phases of a touch event

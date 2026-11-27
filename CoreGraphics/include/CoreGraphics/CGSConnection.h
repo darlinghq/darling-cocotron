@@ -214,6 +214,12 @@
 // shares for the color management of its windows instead of binding the compositor's globals again.
 // The default is nil.
 -(id) waylandColorManager;
+// The WaylandRenderManager (see WaylandRender.h) of a Wayland connection: the dma-buf, explicit
+// synchronization and fifo client. The framework above shares it, because a wl_surface takes only one
+// syncobj surface and one fifo object. The default is nil.
+-(id) waylandRenderManager;
+// Whether a display of this connection reports luminance above its reference white. The default is NO.
+-(BOOL) extendedDynamicRangeAvailable;
 
 // Implementations should also emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 // if layout changes.

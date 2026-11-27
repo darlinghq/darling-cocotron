@@ -42,7 +42,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
+@class WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager, WaylandRenderManager;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -151,6 +151,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // power assertion that prevents display sleep.
     struct wl_proxy *_idleInhibitManager;
     uint32_t _idleInhibitManagerName;
+    // wp_content_type_v1: the compositor is told whether a window shows a game or video.
+    struct wl_proxy *_contentTypeManager;
+    uint32_t _contentTypeManagerName;
+    // keyboard-shortcuts-inhibit-unstable-v1: fullscreen windows take the compositor's shortcuts.
+    struct wl_proxy *_shortcutsInhibitManager;
+    uint32_t _shortcutsInhibitManagerName;
 
 @protected
     struct wl_proxy *_seat;
@@ -208,6 +214,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) flush;
 // The shared color manager, or nil when the compositor offers neither protocol.
 - (WaylandColorManager *) colorManager;
+// The render-protocol manager used to attach buffers and queue frames: CoreGraphics' one, so that a
+// surface has one set of syncobj and fifo objects whichever framework presents on it.
+- (WaylandRenderManager *) renderManager;
+// Called when one of the render globals arrives, so surfaces made earlier can observe it.
+- (void) renderGlobalsAvailable;
 // Start a window-system session before any restored window is mapped. These implement the
 // NSDisplay (NSSessionRestoration) hooks declared in NSWindow-Private.h.
 - (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier;
@@ -266,4 +277,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (NSString *) applicationMenuObjectPath;
 
 - (struct wl_proxy *) newFractionalScaleForSurface: (struct wl_proxy *) surface owner: (id<WaylandFractionalScaleOwner>) owner;
+- (void) contentTypeManagerAvailable;
+- (void) shortcutsInhibitManagerAvailable;
 @end

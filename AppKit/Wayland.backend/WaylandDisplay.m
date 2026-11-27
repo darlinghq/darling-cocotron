@@ -33,6 +33,7 @@
 #import "WaylandLibrary.h"
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
+#import "WaylandRender.h"
 #import "WaylandWindow.h"
 #import "WaylandAppMenu.h"
 #import "WaylandToplevelIcon.h"
@@ -290,9 +291,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_dialogManager, _bell,
                                       _toplevelTagManager, _idleInhibitManager,
+                                      _contentTypeManager,
+                                      _shortcutsInhibitManager,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
+                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor,
+                                       _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
                 WL.wl_proxy_destroy(proxies[i]);
@@ -323,6 +327,15 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 // color objects per surface).
 - (WaylandColorManager *) colorManager {
     return _CGSNativeConnectionWaylandColorManager();
+}
+
+- (WaylandRenderManager *) renderManager {
+    return _CGSNativeConnectionWaylandRenderManager();
+}
+
+- (void) renderGlobalsAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) renderGlobalsAvailable];
 }
 
 #pragma mark - Window-system session
@@ -439,6 +452,16 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateIdleInhibitor];
 }
 
+- (void) contentTypeManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateContentType];
+}
+
+- (void) shortcutsInhibitManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateShortcutsInhibitor];
+}
+
 - (void) applicationIconImageChanged {
     [super applicationIconImageChanged];
     [_toplevelIcons applicationIconChanged];
@@ -508,6 +531,21 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [self outputsDidChange];
 }
 
+// The preferred description of one of our surfaces changed. CoreGraphics gave us the feedback
+// proxy; the window that owns it reads the description through the same color manager.
+- (void) nativeConnectionSurfaceColorPreferenceChanged: (void *) feedback {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window surfaceFeedback] == (struct wl_proxy *) feedback) {
+            [window preferredColorInfoChanged];
+            break;
+        }
+        // Metal layers and OpenGL subwindows can have surface feedback of their own.
+        if ([window preferredSubwindowColorInfoChangedForFeedback: (struct wl_proxy *) feedback])
+            break;
+    }
+}
+
 // CoreGraphics has rebuilt the screens with an output's new color description.
 - (void) nativeConnectionDisplayColorSpaceChanged {
     // Windows without an explicit color space follow the screen, so their surface descriptions
@@ -523,6 +561,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        forModes: nil];
 }
 
+// CoreGraphics bound a dma-buf, explicit synchronization or fifo global after the windows were made.
+- (void) nativeConnectionRenderManagerAvailable {
+    [self renderGlobalsAvailable];
+    [self flush];
+}
+
 // CoreGraphics bound a color management or color representation global after the windows were made.
 - (void) nativeConnectionColorManagerAvailable {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
@@ -533,8 +577,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 // The process took or dropped the power assertion that keeps the display awake: the windows hold
 // an idle inhibitor only while it is held.
 - (void) nativeConnectionDisplaySleepPreventionChanged {
-    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateIdleInhibitor];
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateContentType];
+    }
     [self flush];
 }
 
@@ -618,6 +664,24 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                           kind: 0
                                         object: nil];
         [self idleInhibitManagerAvailable];
+    } else if (strcmp(interface, "wp_content_type_manager_v1") == 0 && _contentTypeManager == NULL) {
+        _contentTypeManagerName = name;
+        _contentTypeManager = [self bindGlobal: name
+                                     interface: &wp_content_type_manager_v1_interface
+                                       version: 1
+                                          kind: 0
+                                        object: nil];
+        [self contentTypeManagerAvailable];
+    } else if (strcmp(interface, "zwp_keyboard_shortcuts_inhibit_manager_v1") == 0 &&
+               _shortcutsInhibitManager == NULL)
+    {
+        _shortcutsInhibitManagerName = name;
+        _shortcutsInhibitManager = [self bindGlobal: name
+                                          interface: &zwp_keyboard_shortcuts_inhibit_manager_v1_interface
+                                            version: 1
+                                               kind: 0
+                                             object: nil];
+        [self shortcutsInhibitManagerAvailable];
     } else if (strcmp(interface, "wl_compositor") == 0 && _compositor == NULL) {
         // Version 4 has wl_surface.damage_buffer.
         _compositorVersion = MIN(version, 4);
@@ -670,7 +734,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name
                          interface: &xdg_wm_base_interface
-                           version: MIN(version, 6)
+                           version: MIN(version, 7)
                               kind: WaylandObjectWmBase
                             object: self];
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 &&
@@ -679,7 +743,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _decorationManager =
                 [self bindGlobal: name
                        interface: &zxdg_decoration_manager_v1_interface
-                         version: 1
+                         version: MIN(version, 2u)
                             kind: 0
                           object: nil];
     } else if (strcmp(interface, "zwp_text_input_manager_v3") == 0 && _textInputManager == NULL) {
@@ -763,6 +827,22 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        WL_MARSHAL_FLAG_DESTROY, NULL);
         _idleInhibitManager = NULL;
         _idleInhibitManagerName = 0;
+        return;
+    }
+    if (_contentTypeManager != NULL && name == _contentTypeManagerName) {
+        // The content type objects already made from this factory stay valid.
+        WaylandMarshal(_contentTypeManager, WP_CONTENT_TYPE_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _contentTypeManager = NULL;
+        _contentTypeManagerName = 0;
+        return;
+    }
+    if (_shortcutsInhibitManager != NULL && name == _shortcutsInhibitManagerName) {
+        // Inhibitors stay valid; the windows destroy them when they are no longer needed.
+        WaylandMarshal(_shortcutsInhibitManager, ZWP_KEYBOARD_SHORTCUTS_INHIBIT_MANAGER_DESTROY,
+                       NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _shortcutsInhibitManager = NULL;
+        _shortcutsInhibitManagerName = 0;
         return;
     }
     if (_textInputManager && name == _textInputManagerName) {

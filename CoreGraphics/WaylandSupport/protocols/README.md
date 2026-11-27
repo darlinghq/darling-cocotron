@@ -185,3 +185,69 @@ can remember window rules across launches.
 - Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
 - Copyright: 2024 Xaver Hugl
 - Licence: the MIT permission notice at the top of the file.
+
+## linux-dmabuf
+
+`linux-dmabuf-v1.xml` is the stable `zwp_linux_dmabuf_v1` protocol. The CoreGraphics Wayland backend uses
+its feedback to choose a DRM format and modifier, and its buffer-params factory to attach buffers exported
+from IOSurface as DMA-BUFs.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `stable/linux-dmabuf/linux-dmabuf-v1.xml` (wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2014, 2015 Collabora, Ltd.
+- Licence: the MIT permission notice at the top of the file.
+
+## linux-drm-syncobj
+
+`linux-drm-syncobj-v1.xml` is the staging `wp_linux_drm_syncobj_manager_v1` protocol. The CoreGraphics
+Wayland backend uses it to give compositor commits an explicit acquire and release point on a DRM syncobj
+timeline when a DMA-BUF buffer is committed.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml` (wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2016 The Chromium Authors, 2017 Intel Corporation, 2018 Collabora, Ltd, 2021 Simon Ser
+- Licence: the MIT permission notice at the top of the file.
+
+## fifo
+
+`fifo-v1.xml` is the staging `wp_fifo_manager_v1` protocol. The CoreGraphics Wayland backend uses it to
+ask the compositor to keep each update on the surface for at least one refresh cycle, so presented frames
+are not skipped.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/fifo/fifo-v1.xml` (wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2023 Valve Corporation
+- Licence: the MIT permission notice at the top of the file.
+## pointer-gestures
+
+`pointer-gestures-unstable-v1.xml` is kept here at version 3 so the interface table always contains
+`zwp_pointer_gesture_hold_v1`, which the CoreGraphics Wayland backend uses for hold gestures. Older
+releases of wayland-protocols ship only version 2 of this XML, without the hold interface.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `unstable/pointer-gestures/pointer-gestures-unstable-v1.xml` (wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2015, 2021 Red Hat Inc.
+- Licence: the MIT permission notice at the top of the file.
+
+## Content type, input timestamps and shortcuts inhibition
+
+`content-type-v1.xml`, `input-timestamps-unstable-v1.xml` and `keyboard-shortcuts-inhibit-unstable-v1.xml` are kept here so
+the backends build and use these features on systems whose wayland-protocols release predates them.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols (wayland-protocols 1.50),
+  commit `3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8`
+- Licence: the MIT permission notices in the files.
+
+| File | Path in wayland-protocols | Copyright |
+| --- | --- | --- |
+| `content-type-v1.xml` | `staging/content-type/content-type-v1.xml` | 2021 Emmanuel Gil Peyrot, 2022 Xaver Hugl |
+| `input-timestamps-unstable-v1.xml` | `unstable/input-timestamps/input-timestamps-unstable-v1.xml` | 2017 Collabora, Ltd. |
+| `keyboard-shortcuts-inhibit-unstable-v1.xml` | `unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml` | 2017 Red Hat Inc. |
+
+AppKit uses content type for surfaces whose role it knows (a fullscreen window is a game, a window
+shown while the process holds a display sleep assertion is video), and keyboard shortcuts inhibition for fullscreen windows. CoreGraphics
+uses input timestamps to date CGEvents.

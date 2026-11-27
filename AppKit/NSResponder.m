@@ -322,6 +322,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     [_nextResponder performSelector: _cmd withObject: event];
 }
 
+- (void) tabletPoint: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
+- (void) tabletProximity: (NSEvent *) event {
+    [_nextResponder performSelector: _cmd withObject: event];
+}
+
 - (void) touchesBeganWithEvent: (NSEvent *) event {
     [_nextResponder performSelector: _cmd withObject: event];
 }

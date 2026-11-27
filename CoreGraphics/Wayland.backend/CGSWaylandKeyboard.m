@@ -53,6 +53,11 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
 
 @synthesize focusSurface = _focus;
 
+- (void) setPendingTimestamp: (uint64_t) timestamp {
+    _pendingTimestamp = timestamp;
+    _hasPendingTimestamp = YES;
+}
+
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection keymap: (CGSWaylandKeymap *) keymap {
     self = [super init];
     if (self == nil)
@@ -148,6 +153,10 @@ static void repeatTimerCallback(CFRunLoopTimerRef timer, void *info) {
         return;
     if (type == kCGEventFlagsChanged)
         CGEventSetType(event, type);
+    if (_hasPendingTimestamp) {
+        CGEventSetTimestamp(event, _pendingTimestamp);
+        _hasPendingTimestamp = NO;
+    }
     CGEventSetFlags(event, (CGEventFlags) flags);
 
     NSUInteger length = [characters length];
@@ -467,6 +476,7 @@ static double repeatPreferenceMilliseconds(CFStringRef key) {
     [self resetComposition];
     [self cancelPendingModifier];
     _focus = NULL;
+    _hasPendingTimestamp = NO;
 }
 
 - (void) surfaceDestroyed: (struct wl_proxy *) surface {
