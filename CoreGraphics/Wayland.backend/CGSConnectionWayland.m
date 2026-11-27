@@ -2147,7 +2147,7 @@ static NSDictionary *modeDictionary(int32_t width, int32_t height, double refres
 }
 
 - (CGSWindow *) newToplevelWindowWithAttributes: (const CGSToplevelAttributes *) attributes {
-    CGSWindowID windowID = _nextWindowId++;
+    CGSWindowID windowID = [self _allocateWindowID];
     CGSWindowWayland *window =
             [[CGSWindowWayland alloc] initToplevelWithAttributes: attributes
                                                       connection: self
@@ -2168,7 +2168,7 @@ static NSDictionary *modeDictionary(int32_t width, int32_t height, double refres
 }
 
 - (CGSWindow *) newWindow: (CGSRegionRef) region {
-    CGSWindowID windowID = _nextWindowId++;
+    CGSWindowID windowID = [self _allocateWindowID];
     CGSWindowWayland *window =
             [[CGSWindowWayland alloc] initWithRegion: region
                                           connection: self
