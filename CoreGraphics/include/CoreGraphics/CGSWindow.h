@@ -26,6 +26,7 @@
 @class CGSSurface;
 @class CGSConnection;
 @class CGSWindow;
+@protocol CGSDragDestination;
 
 // What the window system tells about a toplevel window of the UI layer (see -setToplevelEventProc:info:).
 // The events are those of the UI layer's window callbacks: a backend posts the ones its window system has.
@@ -110,6 +111,7 @@ typedef struct {
 	CGWindowLevel _level;
 	CGSToplevelEventProc _toplevelEventProc;
 	void* _toplevelEventInfo;
+	id<CGSDragDestination> _dragDestination;
 }
 
 -(instancetype) initWithRegion:(CGSRegionRef) region
@@ -211,6 +213,13 @@ typedef struct {
 // For a dock window (see CGSToplevelKindDock) before it is shown: the window is on every desktop, outside the
 // task lists, above the windows, and reserves the strip along the top edge of the screen it covers.
 -(CGError) reserveToplevelDockStrip;
+
+// What the window does with the drags over it (see CGSDrag.h); nil for none, which is what a window starts with.
+// The destination is retained. The backends override -dragDestinationChanged to tell the window system that the
+// window takes drops (or no more); the default window system has no drag and drop and does nothing.
+-(void) setDragDestination:(id<CGSDragDestination>) destination;
+-(id<CGSDragDestination>) dragDestination;
+-(void) dragDestinationChanged;
 
 // Ordering, levels, the keyboard focus, miniaturizing and fullscreen of a toplevel window. The UI layer decides
 // when; the window system's calls are made here. A backend that cannot do one of them keeps the default, which

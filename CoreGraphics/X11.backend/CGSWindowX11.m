@@ -18,6 +18,7 @@
 */
 #import "CGSWindowX11.h"
 #import "CGSConnectionX11.h"
+#import "CGSX11Drag.h"
 #import "CGSSurfaceX11.h"
 #import "X11WindowOwner.h"
 #import "X11Monitors.h"
@@ -898,9 +899,19 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	_occluded = NO;
 	_configureKnown = NO;
 	[self _refreshToplevelShapes];
+	// A window that takes drops is a target on its new X window as well.
+	if (_dragDestination != nil)
+		[self dragDestinationChanged];
 	XFlush(_display);
 	[_x11Connection _toplevelWindowCreated];
 	return YES;
+}
+
+// The window takes drops (XDND), or no more.
+-(void) dragDestinationChanged
+{
+	if (_x11Connection != nil && _window != None)
+		[[_x11Connection _drag] windowDestinationChanged: self];
 }
 
 -(CGError) recreateToplevelWithAttributes:(const CGSToplevelAttributes*) attributes

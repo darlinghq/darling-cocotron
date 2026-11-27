@@ -44,7 +44,24 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 - (void) dealloc {
     CGContextRelease(_contents);
     [_surfaces release];
+    [_dragDestination release];
     [super dealloc];
+}
+
+- (void) setDragDestination: (id<CGSDragDestination>) destination {
+    if (destination == _dragDestination)
+        return;
+    id<CGSDragDestination> old = _dragDestination;
+    _dragDestination = [destination retain];
+    [old release];
+    [self dragDestinationChanged];
+}
+
+- (id<CGSDragDestination>) dragDestination {
+    return _dragDestination;
+}
+
+- (void) dragDestinationChanged {
 }
 
 - (CGSSurface *) surfaceForId: (CGSSurfaceID) surfaceId {
