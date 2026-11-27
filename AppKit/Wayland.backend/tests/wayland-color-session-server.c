@@ -142,9 +142,22 @@ static void compositor_create_surface(struct wl_client *c, struct wl_resource *r
     wl_resource_set_implementation(surface->resource, &surface_impl, surface, surface_gone);
 }
 
+// Regions are accepted and ignored: Xwayland, which the X11 tablet session runs on this compositor, asks for them.
+static void region_destroy(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
+static const struct wl_region_interface region_impl = {
+    .destroy = region_destroy,
+    .add = noop,
+    .subtract = noop,
+};
+
+static void compositor_create_region(struct wl_client *c, struct wl_resource *r, uint32_t id) {
+    struct wl_resource *region = wl_resource_create(c, &wl_region_interface, wl_resource_get_version(r), id);
+    wl_resource_set_implementation(region, &region_impl, NULL, NULL);
+}
+
 static const struct wl_compositor_interface compositor_impl = {
     .create_surface = compositor_create_surface,
-    .create_region = noop,
+    .create_region = compositor_create_region,
 };
 
 static void bind_compositor(struct wl_client *c, void *data, uint32_t version, uint32_t id) {

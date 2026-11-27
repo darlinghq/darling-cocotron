@@ -595,6 +595,68 @@ enum {
 	kCGSTabletWindowNumberThatCanHandleThisEvent = 209,
 };
 
+// Tablet tools, for the window system backends: they describe what their window system says about a
+// tool, and CoreGraphics makes the tablet CGEvent (kCGEventTabletPointer or kCGEventTabletProximity)
+// from it, so that every backend fills the documented kCGTablet* fields and the common fields above
+// the same way. Cocoa's NSPointingDeviceType values and the tablet button mask (NSEventButtonMask
+// bits) are repeated here because CoreGraphics is below AppKit.
+enum {
+	kCGSTabletPointingDeviceUnknown = 0,
+	kCGSTabletPointingDevicePen = 1,
+	kCGSTabletPointingDeviceCursor = 2,
+	kCGSTabletPointingDeviceEraser = 3,
+};
+enum {
+	kCGSTabletButtonTip = 1,
+	kCGSTabletButtonLowerSide = 2,
+	kCGSTabletButtonUpperSide = 4,
+};
+// The bits of the capability mask: the Wayland tablet protocol's capability numbers.
+enum {
+	kCGSTabletCapabilityTilt = 1 << 1,
+	kCGSTabletCapabilityPressure = 1 << 2,
+	kCGSTabletCapabilityDistance = 1 << 3,
+	kCGSTabletCapabilityRotation = 1 << 4,
+	kCGSTabletCapabilitySlider = 1 << 5,
+	kCGSTabletCapabilityWheel = 1 << 6,
+};
+typedef struct {
+	CGEventSourceRef source;      // the event source of the hardware state
+	bool proximity;               // a proximity event, not a pointer event
+	bool entering;                // the tool enters proximity (proximity events)
+	uint64_t flags;               // CGEventFlags: the modifiers of the keyboard
+	CGPoint location;             // global (CGEventSetLocation)
+	bool hasNativeLocation;       // nativeLocation is known (kCGSEventNativeLocationX/Y)
+	CGPoint nativeLocation;       // in the window system window
+	double nativeLocationScale;   // what the backend's window system decoder expects it multiplied by (1024 for
+	                              // points on Wayland, 1 for the device pixels of X11)
+	bool hasPostedLocation;       // location is a real position (kCGSEventPostedLocationX/Y)
+	CGPoint axes;                 // the absolute X and Y axes of the tablet (kCGTabletEventPointX/Y)
+	uint32_t windowID;            // the CGS window under the tool, 0 when none
+	int64_t nativeWindow;         // the window system window
+	int64_t inputSerial;          // kCGSEventInputSerial: not 0 only for a press
+	double pressure, distance;    // 0 to 1
+	double tiltX, tiltY;          // -1 to 1, 1 being a pen parallel to the tablet
+	double rotation, tangentialPressure;
+	uint32_t buttonMask;          // kCGSTabletButton* bits
+	uint32_t vendorID, tabletID;
+	uint32_t pointerID;           // the tool's own number (the low half of its serial where it has one)
+	uint32_t deviceID;
+	uint64_t toolSerial;
+	uint32_t vendorPointerType;   // the window system's own number for the kind of tool
+	uint32_t pointerType;         // kCGSTabletPointingDevice*
+	uint64_t capabilities;        // kCGSTabletCapability* bits
+} CGSTabletSample;
+// Makes the event for a sample (NULL when none can be made); the caller posts it with
+// _CGSEventStreamPost() and releases it.
+extern CGEventRef _CGSTabletEventCreate(const CGSTabletSample *sample);
+// A stable number for the tool and tablet pair, for the device id of the tablet events. Window
+// systems with no such number derive it from the hardware serial and the tablet's ids; extra tells
+// apart devices that have neither (the window system's own device number, or 0). Never 0.
+extern uint32_t _CGSTabletDeviceID(uint64_t toolSerial, uint32_t vendorID, uint32_t tabletID, uint32_t extra);
+// Tilt in degrees from the tablet's normal, as the -1 to 1 the events carry.
+extern double _CGSTabletNormalizedTilt(double degrees);
+
 // The CGEvent type of the gesture events (NSEventTypeGesture), and the phases of a touch event
 // (NSTouchPhase bits).
 enum {
