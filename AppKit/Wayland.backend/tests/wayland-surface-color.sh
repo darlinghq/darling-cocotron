@@ -3,7 +3,7 @@
 # Copyright (C) 2026 Lubos Dolezel
 #
 # Runs wayland-color-surface-client.c against wayland-color-session-server.c in its "surface"
-# scenario. The client stands in for a toplevel, an OpenGL subwindow and a Metal layer surface;
+# scenario. The client stands in for a toplevel and two OpenGL subwindow surfaces;
 # each one gets its own color-management objects and must react on its own when the compositor
 # changes the preferred description. No guest or real compositor is needed.
 #

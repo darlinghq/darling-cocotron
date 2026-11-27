@@ -4,8 +4,7 @@
   Licensed under the MIT license, the same as the rest of this project.
 */
 // Guest-side client for the "surface" scenario of wayland-color-session-server. It stands in for
-// the three surfaces a window can present: the toplevel, an OpenGL subwindow and a Metal layer's
-// own surface. Each one gets its own color-management surface and feedback. When the compositor
+// three surfaces of a window: the toplevel and two OpenGL subwindows. Each one gets its own color-management surface and feedback. When the compositor
 // changes the preferred description, every surface independently chooses a new description with
 // BT.2020/PQ HDR metadata; the server logs show which surface made which choice.
 #define _GNU_SOURCE
@@ -119,7 +118,7 @@ int main(void) {
         return 2;
     }
 
-    static const char *labels[3] = {"parent", "opengl", "metal"};
+    static const char *labels[3] = {"parent", "opengl", "second"};
     for (size_t i = 0; i < 3; i++) {
         struct client_surface *surface = &surfaces[i];
         surface->label = labels[i];
