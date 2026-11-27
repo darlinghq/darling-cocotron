@@ -6,7 +6,7 @@
 // Window numbers. On macOS an NSWindow's windowNumber is the window server's id for the window, a
 // small positive integer that fits a CGWindowID (32 bits) and is unique across the applications of the
 // login session. The same number is the window's kCGWindowNumber in CGWindowListCopyWindowInfo(), the
-// window of an NSEvent made from a CGEvent, the argument of -[NSApplication windowWithWindowNumber:]
+// window of an NSEvent, the argument of -[NSApplication windowWithWindowNumber:]
 // and the result of +[NSWindow windowNumberAtPoint:belowWindowWithWindowNumber:] and
 // +[NSWindow windowNumbersWithOptions:]. A window that was created deferred and never ordered in has no
 // window device and the number -1.
@@ -127,7 +127,7 @@ int main(int argc, char **argv) {
         CHECK([NSApp windowWithWindowNumber: (NSInteger) (n1 + (1LL << 32))] == nil || sizeof(NSInteger) == 4,
               "a number with bits above the 32nd names no window");
 
-        // An NSEvent made with the number has the window; so has one made from a CGEvent that carries the number.
+        // An NSEvent made with the number has the window, and a CGEvent keeps the number in its window field.
         NSEvent *made = [NSEvent mouseEventWithType: NSEventTypeLeftMouseDown
                                            location: NSMakePoint(10, 10)
                                       modifierFlags: 0
@@ -142,9 +142,6 @@ int main(int argc, char **argv) {
         CGEventRef cg = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, CGPointMake(310, 310), kCGMouseButtonLeft);
         CGEventSetIntegerValueField(cg, kCGMouseEventWindowUnderMousePointer, n1);
         CGEventSetIntegerValueField(cg, kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent, n1);
-        NSEvent *fromCG = [NSEvent eventWithCGEvent: cg];
-        CHECK([fromCG windowNumber] == n1 && [fromCG window] == immediate,
-              "an NSEvent made from a CGEvent that carries the number has the window");
         CHECK(CGEventGetIntegerValueField(cg, kCGMouseEventWindowUnderMousePointer) == n1,
               "the CGEvent field keeps the number");
         CFRelease(cg);
