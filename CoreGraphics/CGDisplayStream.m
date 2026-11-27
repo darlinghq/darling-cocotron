@@ -21,6 +21,7 @@
 #import <Foundation/Foundation.h>
 #import <IOSurface/IOSurfaceRef.h>
 #include <string.h>
+#include <time.h>
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
 #include <screen_capture_backend.h>
 #endif
@@ -78,6 +79,11 @@ enum {
     BOOL _showCursor;
     BOOL _running;
     BOOL _stopPending;
+    double _minimumFrameTime;
+    NSUInteger _queueDepth;
+    NSUInteger _queuedFrames;
+    uint64_t _lastFrameTimeNs;
+    size_t _pendingDrops;
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
     struct darling_screen_capture_stream *_capture;
     IOSurfaceRef _surface;
@@ -121,6 +127,39 @@ static BOOL propertyBool(CFDictionaryRef properties, CFStringRef key, BOOL fallb
     if (value == NULL || CFGetTypeID(value) != CFBooleanGetTypeID())
         return fallback;
     return CFBooleanGetValue(value) ? YES : NO;
+}
+
+static double propertyDouble(CFDictionaryRef properties, CFStringRef key) {
+    CFNumberRef value;
+    double result = 0;
+    if (properties == NULL)
+        return 0;
+    value = (CFNumberRef) CFDictionaryGetValue(properties, key);
+    if (value == NULL || CFGetTypeID(value) != CFNumberGetTypeID())
+        return 0;
+    if (!CFNumberGetValue(value, kCFNumberDoubleType, &result))
+        return 0;
+    return result > 0 ? result : 0;
+}
+
+static NSInteger propertyInteger(CFDictionaryRef properties, CFStringRef key) {
+    CFNumberRef value;
+    int64_t result = 0;
+    if (properties == NULL)
+        return 0;
+    value = (CFNumberRef) CFDictionaryGetValue(properties, key);
+    if (value == NULL || CFGetTypeID(value) != CFNumberGetTypeID())
+        return 0;
+    if (!CFNumberGetValue(value, kCFNumberSInt64Type, &result))
+        return 0;
+    return (NSInteger) result;
+}
+
+static uint64_t monotonicTimeNs(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        return 0;
+    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
 }
 
 static CGRect propertyRect(CFDictionaryRef properties, CFStringRef key, BOOL *hasValue) {
@@ -257,6 +296,11 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
     _preserveAspectRatio = propertyBool(properties, kCGDisplayStreamPreserveAspectRatio, NO);
     _sourceRect = propertyRect(properties, kCGDisplayStreamSourceRect, &_hasSourceRect);
     _destinationRect = propertyRect(properties, kCGDisplayStreamDestinationRect, &_hasDestinationRect);
+    _minimumFrameTime = propertyDouble(properties, kCGDisplayStreamMinimumFrameTime);
+    {
+        NSInteger depth = propertyInteger(properties, kCGDisplayStreamQueueDepth);
+        _queueDepth = depth > 0 ? (NSUInteger) depth : 0;
+    }
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
     _surface = createSurface(width, height, ioSurfacePixelFormat(pixelFormat), &_surfaceBase, &_surfaceStride);
 #endif
@@ -286,6 +330,9 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
 }
 - (CGError) start {
     if (_running) return kCGErrorSuccess;
+    _lastFrameTimeNs = 0;
+    _pendingDrops = 0;
+    _queuedFrames = 0;
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
     if (_surface == NULL) return kCGErrorFailure;
     {
@@ -344,9 +391,33 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
     CGDisplayStreamUpdate *update;
     uint32_t dx, dy, dw, dh;
     int32_t sx, sy;
+    if (_minimumFrameTime > 0) {
+        uint64_t now = monotonicTimeNs();
+        uint64_t minimumNs = (uint64_t) (_minimumFrameTime * 1000000000.0);
+        if (minimumNs > 0 && _lastFrameTimeNs != 0 && now >= _lastFrameTimeNs
+                && now - _lastFrameTimeNs < minimumNs)
+            return;
+        _lastFrameTimeNs = now;
+    }
     if (CGRectIsNull(source) || CGRectIsEmpty(source)) return;
     destination = CGRectIntersection(fittedRect(source, destination, _preserveAspectRatio), fullSurface);
     if (CGRectIsNull(destination) || CGRectIsEmpty(destination)) return;
+    {
+        BOOL full = NO;
+        @synchronized (self) {
+            if (_queueDepth > 0) {
+                NSUInteger queued = _queue != NULL ? _queuedFrames : [_pending count];
+                if (queued >= _queueDepth - 1)
+                    full = YES;
+                else if (_queue != NULL)
+                    _queuedFrames++;
+            }
+        }
+        if (full) {
+            _pendingDrops++;
+            return;
+        }
+    }
     sx = (int32_t) (source.origin.x - bounds.origin.x);
     sy = (int32_t) (source.origin.y - bounds.origin.y);
     dx = (uint32_t) destination.origin.x; dy = (uint32_t) destination.origin.y;
@@ -357,12 +428,16 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
         for (y = 0; y < dh; y++) swizzleBGRA(_surfaceBase + (dy + y) * _surfaceStride + dx * 4, dw, _pixelFormat);
     }
     IOSurfaceUnlock(_surface, 0, NULL);
-    update = [[CGDisplayStreamUpdate alloc] initWithRect: destination dropCount: 0];
+    update = [[CGDisplayStreamUpdate alloc] initWithRect: destination dropCount: _pendingDrops];
+    _pendingDrops = 0;
     if (_queue != NULL) {
         CGDisplayStreamFrameAvailableHandler handler = [_handler retain];
         CFRetain(_surface); [update retain];
         dispatch_async(_queue, ^{
             handler(kCGDisplayStreamFrameStatusFrameComplete, (uint64_t) frame->pts_ns, _surface, (CGDisplayStreamUpdateRef) update);
+            @synchronized (self) {
+                if (_queuedFrames > 0) _queuedFrames--;
+            }
             CFRelease(_surface); [update release]; [handler release];
         });
         [update release];

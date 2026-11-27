@@ -183,8 +183,8 @@ add_separated_framework(CoreGraphics
 		ColorSync
 )
 
-# CGDisplayStream uses the same ScreenCast/PipeWire session as the higher-level
-# capture frameworks. The static client is linked per architecture slice.
+# CGDisplayStream uses the same ScreenCast/PipeWire client dylib as the
+# higher-level capture frameworks, so portal state is shared process-wide.
 if (HAVE_PIPEWIRE)
 	foreach (arch IN LISTS DARLING_ARCHS)
 		target_link_libraries(CoreGraphics_${arch} PRIVATE darling_pipewire_client)

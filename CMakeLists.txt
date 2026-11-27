@@ -20,3 +20,16 @@ add_subdirectory(CoreText)
 add_subdirectory(Cocoa)
 add_subdirectory(CoreData)
 add_subdirectory(QuartzCore)
+
+# In the Darling superproject the host tests are driven by the top-level build.
+# Standalone cocotron builds register the lower-layer source contract here.
+if (CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+	find_package(Python3 COMPONENTS Interpreter QUIET)
+	if (Python3_Interpreter_FOUND)
+		enable_testing()
+		add_test(NAME cgdisplaystream_contract_host
+			COMMAND ${Python3_EXECUTABLE}
+				${CMAKE_CURRENT_SOURCE_DIR}/tests/cgdisplaystream_contract_host.py
+				${CMAKE_CURRENT_SOURCE_DIR})
+	endif ()
+endif ()
