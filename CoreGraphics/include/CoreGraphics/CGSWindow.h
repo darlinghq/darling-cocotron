@@ -364,6 +364,14 @@ typedef struct {
 // The backends show the contents: called after the part of the contents in rect has changed, and by
 // the backend itself when the window system asks for a repaint. The default shows nothing.
 -(void) presentRect:(CGRect) rect;
+// A UI layer that draws the window itself (a toplevel made with -[CGSConnection newToplevelWindowWithAttributes:])
+// shows what it drew: bytes are the window's device-pixel backing (32 bits per pixel, premultiplied, the alpha first,
+// little-endian: BGRA in memory), width and height its size in pixels, rowBytes the distance of the rows; damage is the part
+// that changed, in pixels from the top left corner. The window shows the pixels where they are, without taking a copy to
+// keep (the caller keeps them until it draws again), so the call may not outlive them. Returns NO, and shows nothing,
+// when the window system has no such path (the caller then presents its backing by other means).
+-(BOOL) presentBackingBytes:(const void*) bytes width:(size_t) width height:(size_t) height
+	bytesPerRow:(size_t) rowBytes damage:(CGRect) damage;
 // Sets the style bits (kCGSWindowStyle...). The backends override it to apply them to their
 // windows (it may be called before the window is first ordered in, and again later).
 -(CGError) setStyle:(uint32_t) styleFlags;

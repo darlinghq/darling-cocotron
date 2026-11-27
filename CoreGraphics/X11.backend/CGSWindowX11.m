@@ -479,6 +479,34 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 	}];
 }
 
+// The pixels the UI layer drew are put on the window where they are: the XImage points at them, and nothing is
+// kept. The image has the depth of the window's visual (the window of an alpha visual is composited by the window manager,
+// which takes the premultiplied pixels as they are).
+-(BOOL) presentBackingBytes:(const void*) bytes width:(size_t) width height:(size_t) height
+	bytesPerRow:(size_t) rowBytes damage:(CGRect) damage
+{
+	if (!_toplevel || _window == None || _visualInfo == NULL || bytes == NULL || width == 0 || height == 0 ||
+		width > 65535 || height > 65535 || rowBytes < width * 4)
+		return NO;
+
+	CGRect part = CGRectIntersection(CGRectIntegral(damage), CGRectMake(0, 0, width, height));
+	if (CGRectIsNull(part) || part.size.width < 1 || part.size.height < 1)
+		return YES;
+	if (_gc == None)
+		_gc = XCreateGC(_display, _window, 0, NULL);
+	XImage* image = XCreateImage(_display, _visualInfo->visual, (unsigned) _visualInfo->depth, ZPixmap, 0,
+		(char*) bytes, (unsigned) width, (unsigned) height, 32, (int) rowBytes);
+	if (image == NULL)
+		return NO;
+	XPutImage(_display, _window, _gc, image, (int) part.origin.x, (int) part.origin.y, (int) part.origin.x,
+		(int) part.origin.y, (unsigned) part.size.width, (unsigned) part.size.height);
+	// The pixels are the caller's
+	image->data = NULL;
+	XDestroyImage(image);
+	XFlush(_display);
+	return YES;
+}
+
 // Without a compositor an X11 window cannot be translucent: the window takes the outline of what
 // has any alpha, so a transparent window does not block what is below where it draws nothing.
 -(void) _shapeWindowToAlpha:(const uint8_t*) bytes rowBytes:(size_t) rowBytes size:(CGSize) size

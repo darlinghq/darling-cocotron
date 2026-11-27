@@ -389,6 +389,14 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 - (void) presentRect: (CGRect) rect {
 }
 
+- (BOOL) presentBackingBytes: (const void *) bytes
+                       width: (size_t) width
+                      height: (size_t) height
+                 bytesPerRow: (size_t) rowBytes
+                      damage: (CGRect) damage {
+    return NO;
+}
+
 // A bitmap of 8 bits per component, little-endian 32-bit pixels with the alpha first (BGRA in
 // memory), premultiplied: the layout both X11 (24-bit TrueColor) and wl_shm's ARGB8888 take.
 static CGContextRef createContents(size_t width, size_t height) {

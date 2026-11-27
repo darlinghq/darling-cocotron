@@ -1275,7 +1275,18 @@ static BOOL X11WindowManagerSupports(Display *display, const char *name) {
         return;
     [self drawChromelessOutline];
     O2ContextFlush(_context);
-    [self openGLFlushBuffer];
+    // A layer tree covering the window presents into its own drawable, so the backing is not shown then. Otherwise the
+    // window system's window shows the pixels from where they are.
+    if (_layerDrawableOwner == nil) {
+        O2Surface *surface = [_context surface];
+        size_t width = O2SurfaceGetWidth(surface), height = O2SurfaceGetHeight(surface);
+        if (![_cgsWindow presentBackingBytes: O2SurfaceGetPixelBytes(surface)
+                                       width: width
+                                      height: height
+                                 bytesPerRow: O2SurfaceGetBytesPerRow(surface)
+                                      damage: CGRectMake(0, 0, width, height)])
+            [self openGLFlushBuffer];
+    }
     // Layer trees in child windows show the pixels drawn beneath them (see
     // -[X11SubWindow createBackdropImage]).
     [[NSNotificationCenter defaultCenter]
