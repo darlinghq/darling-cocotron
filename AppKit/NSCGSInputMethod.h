@@ -24,6 +24,9 @@
 - (void) setEnabled: (BOOL) enabled;
 // A toplevel event of the window; returns whether it was an input method event.
 - (BOOL) handleToplevelEvent: (const CGSToplevelEvent *) event;
+// The window's first responder changed: the input method is enabled for a window whose first responder takes text
+// (and disabled otherwise), and told where its caret is.
+- (void) firstResponderChanged;
 // The caret of the client moved: the input method is told where the candidates belong.
 - (void) candidateRectChanged;
 // The window is going away.

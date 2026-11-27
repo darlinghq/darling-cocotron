@@ -100,7 +100,30 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
         [[_waylandConnection renderManager] observeSurface: _surface];
 }
 
+- (CGPoint) toplevelContentOffset {
+    return _uiContentOffset;
+}
+
+// The window's input method state is what the connection's text input sends to the compositor while this window has
+// the text input focus (see CGSInputMethod.h).
+- (void) inputMethodEnabledChanged {
+    [_waylandConnection inputMethodWindowChanged: self];
+}
+
+- (void) inputMethodCursorRectChanged {
+    [_waylandConnection inputMethodWindowChanged: self];
+}
+
+- (void) inputMethodSurroundingTextChanged {
+    [_waylandConnection inputMethodWindowChanged: self];
+}
+
+- (void) inputMethodContentTypeChanged {
+    [_waylandConnection inputMethodWindowChanged: self];
+}
+
 - (void) dealloc {
+    [_waylandConnection inputMethodWindowDestroyed: [self windowId]];
     // The surface's wl_egl_window references our wl_surface, so it has to go
     // first; -[CGSWindow dealloc] would only release _surfaces after this body.
     @synchronized (_surfaces) {
@@ -971,6 +994,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 // destroyed and created again when the window is shown. The wl_surface stays: what the UI layer attached to it keeps
 // its place.
 - (CGError) hideToplevel {
+    [_waylandConnection inputMethodWindowUnmapped: self];
     _shown = NO;
     _uiConfigured = NO;
     if (_role == CGSWaylandRoleNone)
@@ -1134,6 +1158,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 
     switch (place) {
     case kCGSOrderOut: {
+        [_waylandConnection inputMethodWindowUnmapped: self];
         _shown = NO;
         // The pointer lock held for an overlay that goes away is made on a window again.
         if (_displayOverlay)

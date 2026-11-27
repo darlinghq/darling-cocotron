@@ -61,7 +61,6 @@ typedef enum {
     WaylandObjectDecoration,
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
-    WaylandObjectTextInput,
     WaylandObjectDataDevice,
     WaylandObjectDataOffer,
     WaylandObjectDataSource,
@@ -161,16 +160,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 @protected
     struct wl_proxy *_seat;
     struct wl_proxy *_pointer;
-    // text-input-v3: the input method's composition and commits for the focused text input
-    // client. The text input object exists once the manager and the seat are both bound.
-    struct wl_proxy *_textInputManager, *_textInput;
-    uint32_t _textInputManagerName;
-    WaylandWindow *_textInputWindow; // the surface the compositor entered; nonretained
-    BOOL _textInputEnabled;
-    NSRect _textInputRect;           // the last cursor rectangle sent, surface coordinates
-    NSString *_textInputPendingPreedit, *_textInputPendingCommit;
-    int _textInputPendingCursorBegin, _textInputPendingCursorEnd;
-    NSString *_textInputPreedit;     // the composition the client currently shows
     // The outputs and the rest of the connection are set up; changes of the outputs are passed on.
     BOOL _setupDone;
     // A change of the outputs waits for the end of the pass over the events.

@@ -78,6 +78,10 @@ typedef enum {
 	// is on the screen. Posted from inside -orderWindow:relativeTo: with kCGSOrderIn, once per showing, for a UI layer that
 	// has to give the window system more about the window before its first frame (Wayland: before the first commit).
 	kCGSToplevelEventWillShow,
+	// The window's input method deleted text around the caret, which the UI layer's text input client answers for (see
+	// CGSInputMethod.h, _CGSInputMethodSetSurroundingText): textRange.location is how much text before the caret and
+	// textRange.length how much after it, in UTF-16 units. Posted before the commit and the preedit that come with it.
+	kCGSToplevelEventInputMethodDeleteSurrounding,
 } CGSToplevelEventKind;
 
 // What kCGSToplevelEventConfigured carries.
@@ -101,7 +105,7 @@ typedef struct {
 	CGFloat oldScale;  // kCGSToplevelEventBackingScaleChanged
 	bool state;        // kCGSToplevelEventOcclusionChanged, kCGSToplevelEventFullscreenChanged
 	CFStringRef text;  // kCGSToplevelEventInputMethodPreedit and ...Commit; valid during the call only
-	CFRange textRange; // kCGSToplevelEventInputMethodPreedit
+	CFRange textRange; // kCGSToplevelEventInputMethodPreedit, kCGSToplevelEventInputMethodDeleteSurrounding
 	CGSToplevelConfigure configure; // kCGSToplevelEventConfigured
 } CGSToplevelEvent;
 
@@ -148,6 +152,9 @@ typedef struct {
 	id<CGSDragDestination> _dragDestination;
 	BOOL _inputMethodEnabled;
 	CGRect _inputMethodCursorRect;
+	NSString* _inputMethodSurroundingText;
+	CFRange _inputMethodSurroundingSelection;
+	uint32_t _inputMethodContentHint, _inputMethodContentPurpose;
 }
 
 -(instancetype) initWithRegion:(CGSRegionRef) region
@@ -266,6 +273,16 @@ typedef struct {
 -(CGRect) inputMethodCursorRect;
 -(void) inputMethodEnabledChanged;
 -(void) inputMethodCursorRectChanged;
+// The text around the caret and the kind of text the window takes, as _CGSInputMethodSetSurroundingText and
+// _CGSInputMethodSetContentType say them. The surrounding text starts out nil, and the content type as 0 and 0.
+-(void) setInputMethodSurroundingText:(NSString*) text selection:(CFRange) selection;
+-(NSString*) inputMethodSurroundingText;
+-(CFRange) inputMethodSurroundingSelection;
+-(void) setInputMethodContentHint:(uint32_t) hint purpose:(uint32_t) purpose;
+-(uint32_t) inputMethodContentHint;
+-(uint32_t) inputMethodContentPurpose;
+-(void) inputMethodSurroundingTextChanged;
+-(void) inputMethodContentTypeChanged;
 
 // Ordering, levels, the keyboard focus, miniaturizing and fullscreen of a toplevel window. The UI layer decides
 // when; the window system's calls are made here. A backend that cannot do one of them keeps the default, which

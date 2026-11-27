@@ -89,6 +89,7 @@ typedef enum {
     CGSWaylandObjectDataSource,
     CGSWaylandObjectCursorScale,
     CGSWaylandObjectDecoration,
+    CGSWaylandObjectTextInput,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -138,6 +139,8 @@ typedef enum {
     id _touchDecoder;
     // The tablet manager's tablet seats, which decode stylus tools into tablet CGEvents (CGSWaylandTablet).
     id _tabletDecoder;
+    // The seat's text input, the compositor's input method for the windows (CGSWaylandInputMethod).
+    id _inputMethodDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
     // input-timestamps-unstable-v1: one timestamp object per device, handing high-resolution times
@@ -242,6 +245,11 @@ typedef enum {
 - (void) flushPendingPointerEvents;
 // Posts the modifier key change the keyboard decoder holds back until the compositor confirms it.
 - (void) flushPendingKeyboardEvents;
+
+// The windows' input method (see CGSInputMethod.h): the text input of the seat.
+- (void) inputMethodWindowChanged: (CGSWindow *) window;
+- (void) inputMethodWindowUnmapped: (CGSWindow *) window;
+- (void) inputMethodWindowDestroyed: (uint32_t) windowID;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
 // Whether the surface is that of a display overlay (a window made with -becomeDisplayOverlay:), and the

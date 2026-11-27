@@ -28,6 +28,7 @@
 #import <CoreGraphics/CGSServerSPI.h>
 #import <IOSurface/IOSurface.h>
 #import "../DarlingWindowPresentation.h"
+#import "../NSCGSInputMethod.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColorSpace.h>
 #import <AppKit/NSScreen.h>
@@ -136,6 +137,9 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [self destroySurface];
     // CoreGraphics destroys the window system's window, with the surface.
     [_cgsWindow setToplevelEventProc: NULL info: NULL];
+    [_inputMethod invalidate];
+    [_inputMethod release];
+    _inputMethod = nil;
     if (_cgsWindow != nil)
         CGSReleaseWindow(CGSMainConnectionID(), [_cgsWindow windowId]);
     [_cgsWindow release];
@@ -160,11 +164,25 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _delegate = nil;
 
     [self unmap];
+    [_inputMethod invalidate];
+    [_inputMethod release];
+    _inputMethod = nil;
     if (_display != nil) {
         [_display windowDestroyed: self];
         // Children retain this window until their EGL surfaces are released.
         // Keep the native parent surface/display alive for that whole lifetime.
     }
+}
+
+// The window uses the window system's input method, which CoreGraphics runs, for the text of its first responder; what
+// it composes comes back as toplevel events (see -toplevelEvent:).
+- (void) updateInputMethodSpot {
+    if (_inputMethod == nil) {
+        if (_cgsWindow == nil || _invalidated || ![NSCGSInputMethod available])
+            return;
+        _inputMethod = [[NSCGSInputMethod alloc] initWithPlatformWindow: self cgsWindow: _cgsWindow];
+    }
+    [_inputMethod firstResponderChanged];
 }
 
 - (void) setDelegate: (id) delegate {
@@ -858,6 +876,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // Reports to the NSWindow that this window is the compositor's focus (or the key window of a window
 // that is never shown). The NSWindow decides whether that makes it key.
 - (void) reportActivationDisplayingIfNeeded: (BOOL) displayIfNeeded {
+    // The text input focus follows the keyboard focus: what the first responder takes is told before it arrives.
+    [self updateInputMethodSpot];
     _reportingActivation = YES;
     [_delegate platformWindowActivated: self displayIfNeeded: displayIfNeeded];
     _reportingActivation = NO;
@@ -1935,6 +1955,11 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
         break;
     case kCGSToplevelEventDismissed:
         [self dismissed];
+        break;
+    case kCGSToplevelEventInputMethodPreedit:
+    case kCGSToplevelEventInputMethodCommit:
+    case kCGSToplevelEventInputMethodDeleteSurrounding:
+        [_inputMethod handleToplevelEvent: event];
         break;
     default:
         break;

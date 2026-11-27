@@ -25,7 +25,7 @@
 #import "WaylandDisplay.h"
 #import "WaylandFullscreen.h"
 
-@class NSWindow, NSColorSpace, O2Context, WaylandSubWindow;
+@class NSWindow, NSColorSpace, O2Context, WaylandSubWindow, NSCGSInputMethod;
 
 struct WaylandBuffer {
     struct wl_proxy *buffer;
@@ -55,6 +55,8 @@ typedef enum {
     // role), which it makes when the window is shown, and tells what the compositor says of them. _surface and the
     // other proxies below are its objects, which this window draws into and extends.
     CGSWindow *_cgsWindow;
+    // The window's use of the window system's input method, which CoreGraphics runs (see NSCGSInputMethod).
+    NSCGSInputMethod *_inputMethod;
     WaylandDisplay *_display;
     BOOL _invalidated;
     NSMutableArray *_subwindows; // nonretained pointers; children retain their parent
@@ -216,6 +218,8 @@ typedef enum {
 // protocol), or takes the address back when there is no menu or no toplevel.
 - (void) updateApplicationMenu;
 - (NSPoint) contentOffset;
+// The first responder or the caret changed: the input method is told whether the window takes text and where.
+- (void) updateInputMethodSpot;
 - (BOOL) isDecorationPoint: (CGPoint) point;
 - (BOOL) decorationButton: (uint32_t) button pressed: (BOOL) pressed
                    serial: (uint32_t) serial atPoint: (CGPoint) point;
