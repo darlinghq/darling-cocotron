@@ -11,7 +11,7 @@
 #define X11_MONITORS_H
 
 #include <X11/Xlib.h>
-#include <X11/extensions/Xrandr.h>
+#include "X11Xrandr.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
