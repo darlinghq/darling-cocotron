@@ -239,7 +239,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         return;
     NSDictionary *preferred = _surfaceFeedback != NULL
                               ? [color preferredInfoForFeedback: _surfaceFeedback] : nil;
-    WaylandColorHDRMetadata metadata = WaylandHDRMetadataFromColorInfo(preferred, space);
+    WaylandColorHDRMetadata metadata = [color hdrMetadataForColorInfo: preferred space: space];
     [color setColorSpace: space
          renderingIntent: WP_COLOR_RENDER_INTENT_PERCEPTUAL
               hdrMetadata: &metadata

@@ -212,7 +212,7 @@ static const int32_t *ColorSpaceMasteringPrimaries(CGColorSpaceRef space) {
     return NULL;
 }
 
-WaylandColorHDRMetadata WaylandHDRMetadataFromColorInfo(NSDictionary *info, CGColorSpaceRef space) {
+static WaylandColorHDRMetadata HDRMetadataFromColorInfo(NSDictionary *info, CGColorSpaceRef space) {
     WaylandColorHDRMetadata metadata = {0};
     const int32_t *xy = ColorSpaceMasteringPrimaries(space);
 
@@ -1191,6 +1191,10 @@ WaylandColorHDRMetadata WaylandHDRMetadataFromColorInfo(NSDictionary *info, CGCo
     default:
         break;
     }
+}
+
+- (WaylandColorHDRMetadata) hdrMetadataForColorInfo: (NSDictionary *) info space: (CGColorSpaceRef) space {
+    return HDRMetadataFromColorInfo(info, space);
 }
 
 @end

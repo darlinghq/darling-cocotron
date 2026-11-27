@@ -327,7 +327,7 @@ static WaylandColorHDRMetadata MergeHDRMetadata(WaylandColorHDRMetadata base,
     if (space == NULL)
         return;
     NSDictionary *info = [self colorInfoForFeedback: _surfaceFeedback];
-    WaylandColorHDRMetadata metadata = WaylandHDRMetadataFromColorInfo(info, space);
+    WaylandColorHDRMetadata metadata = [color hdrMetadataForColorInfo: info space: space];
     [color setColorSpace: space
          renderingIntent: WP_COLOR_RENDER_INTENT_PERCEPTUAL
               hdrMetadata: &metadata
@@ -357,7 +357,7 @@ static WaylandColorHDRMetadata MergeHDRMetadata(WaylandColorHDRMetadata base,
     if (space == NULL)
         return;
     WaylandColorHDRMetadata metadata =
-            WaylandHDRMetadataFromColorInfo([self colorInfoForFeedback: metal->feedback], space);
+            [color hdrMetadataForColorInfo: [self colorInfoForFeedback: metal->feedback] space: space];
     if (description != NULL)
         metadata = MergeHDRMetadata(metadata, description);
     [color setColorSpace: space

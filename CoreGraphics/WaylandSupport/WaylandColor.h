@@ -66,7 +66,6 @@ typedef struct {
 
 // Static HDR metadata a backend can derive from a compositor's preferred image description. The
 // keys of `info` are the kCGSDisplayColor* keys; values of an unrecognized type are ignored.
-WaylandColorHDRMetadata WaylandHDRMetadataFromColorInfo(NSDictionary *info, CGColorSpaceRef space);
 
 // Owned by a backend's display/connection. The backend binds the globals with its own
 // -bindGlobal:, installing the backend's dispatcher (and passing this manager as the object),
@@ -142,6 +141,9 @@ WaylandColorHDRMetadata WaylandHDRMetadataFromColorInfo(NSDictionary *info, CGCo
         renderingIntent: (uint32_t) intent
              hdrMetadata: (const WaylandColorHDRMetadata *) metadata
                onSurface: (struct wl_proxy *) surfaceManager;
+// The HDR metadata a surface of `space` should carry, from the color info of an output or a surface
+// feedback (nil: none). A method so that the framework above, which does not link this file, can use it.
+- (WaylandColorHDRMetadata) hdrMetadataForColorInfo: (NSDictionary *) info space: (CGColorSpaceRef) space;
 
 // Describes non-RGB contents of a representation surface. The values are sent only when they are
 // allowed for the surface's pixel format; the caller is responsible for the chroma location of 4:2:0
