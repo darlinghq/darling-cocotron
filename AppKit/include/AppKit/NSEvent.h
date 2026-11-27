@@ -70,6 +70,12 @@ typedef NS_ENUM(NSUInteger, NSEventType) {
 
     NSEventTypeScrollWheel = 22,
 
+    // Graphics tablets: the CGEvent types of the same number. A pointer event carries the
+    // pressure, tilt, rotation and button state in the tablet accessors below; a proximity event
+    // describes the tool that entered or left the tablet.
+    NSEventTypeTabletPoint = 23,
+    NSEventTypeTabletProximity = 24,
+
     NSEventTypeOtherMouseDown = 25,
 
     NSEventTypeOtherMouseUp = 26,
@@ -113,6 +119,8 @@ enum {
     NSPeriodic = 16,
     NSCursorUpdate = 17,
     NSScrollWheel = 22,
+    NSTabletPoint = 23,
+    NSTabletProximity = 24,
     NSOtherMouseDown = 25,
     NSOtherMouseUp = 26,
     NSOtherMouseDragged = 27,
@@ -139,6 +147,8 @@ typedef NS_OPTIONS(unsigned long long, NSEventMask) {
     NSEventMaskPeriodic = 1ULL << NSEventTypePeriodic,
     NSEventMaskCursorUpdate = 1ULL << NSEventTypeCursorUpdate,
     NSEventMaskScrollWheel = 1ULL << NSEventTypeScrollWheel,
+    NSEventMaskTabletPoint = 1ULL << NSEventTypeTabletPoint,
+    NSEventMaskTabletProximity = 1ULL << NSEventTypeTabletProximity,
     NSEventMaskApplicationDefined = 1ULL << NSEventTypeApplicationDefined,
     NSEventMaskAppKitDefined = 1ULL << NSEventTypeAppKitDefined,
     NSEventMaskOtherMouseDown = 1ULL << NSEventTypeOtherMouseDown,
@@ -172,6 +182,8 @@ static const NSEventMask NSFlagsChangedMask = NSEventMaskFlagsChanged;
 static const NSEventMask NSPeriodicMask = NSEventMaskPeriodic;
 static const NSEventMask NSCursorUpdateMask = NSEventMaskCursorUpdate;
 static const NSEventMask NSScrollWheelMask = NSEventMaskScrollWheel;
+static const NSEventMask NSTabletPointMask = NSEventMaskTabletPoint;
+static const NSEventMask NSTabletProximityMask = NSEventMaskTabletProximity;
 static const NSEventMask NSApplicationDefinedMask = NSEventMaskApplicationDefined;
 static const NSEventMask NSAppKitDefinedMask = NSEventMaskAppKitDefined;
 static const NSEventMask NSOtherMouseDownMask = NSEventMaskOtherMouseDown;
@@ -463,6 +475,27 @@ typedef NS_OPTIONS(NSUInteger, NSEventSwipeTrackingOptions) {
 @property(readonly) NSInteger stage;
 @property(readonly) CGFloat stageTransition;
 @property(nonatomic, readonly) float rotation;
+
+// Tablet accessors (NSEventTypeTabletPoint and NSEventTypeTabletProximity). Every other event
+// gives the documented neutral value. The absolute coordinates are in the tablet's coordinate
+// space, not the screen's; use -locationInWindow for where on screen the tool is.
+@property(readonly) NSInteger absoluteX;
+@property(readonly) NSInteger absoluteY;
+@property(readonly) NSInteger absoluteZ;
+@property(readonly) NSEventButtonMask buttonMask;
+@property(readonly) NSPoint tilt;
+@property(readonly) float tangentialPressure;
+@property(readonly) NSUInteger vendorID;
+@property(readonly) NSUInteger tabletID;
+@property(readonly) NSUInteger pointingDeviceID;
+@property(readonly) NSUInteger deviceID;
+@property(readonly) NSUInteger systemTabletID;
+@property(readonly) NSUInteger vendorPointingDeviceType;
+@property(readonly) NSUInteger pointingDeviceSerialNumber;
+@property(readonly) unsigned long long uniqueID;
+@property(readonly) NSUInteger capabilityMask;
+@property(readonly) NSPointingDeviceType pointingDeviceType;
+@property(getter=isEnteringProximity, readonly) BOOL enteringProximity;
 @property(nonatomic, readonly) BOOL hasPreciseScrollingDeltas;
 @property(nonatomic, readonly) CGFloat scrollingDeltaX;
 @property(nonatomic, readonly) CGFloat scrollingDeltaY;

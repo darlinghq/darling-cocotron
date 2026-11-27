@@ -278,6 +278,15 @@ extern const CFStringRef kCGSDisplayColorReferenceLuminanceKey;
 extern const CFStringRef kCGSDisplayColorTargetMinLuminanceKey;
 extern const CFStringRef kCGSDisplayColorTargetMaxLuminanceKey;
 extern const CFStringRef kCGSDisplayColorICCProfileKey;
+// The remaining keys carry the optional parts of a version 3 parametric description. The
+// chromaticity keys hold an array of eight CFNumbers in r, g, b, white x/y order. The MaxCLL
+// and MaxFALL keys are the values defined by CTA-861-H, in cd/m^2. The transfer-function power
+// key is the exponent multiplied by 10000. An absent key means the compositor did not report it.
+extern const CFStringRef kCGSDisplayColorPrimariesChromaticityKey;
+extern const CFStringRef kCGSDisplayColorTargetPrimariesChromaticityKey;
+extern const CFStringRef kCGSDisplayColorTransferFunctionPowerKey;
+extern const CFStringRef kCGSDisplayColorTargetMaxCLLKey;
+extern const CFStringRef kCGSDisplayColorTargetMaxFALLKey;
 
 // Values of the primaries and transfer-function keys. The numbers are the window system's
 // color-management enum values; the names give the frameworks above CoreGraphics a stable
@@ -481,6 +490,7 @@ extern void CGContextSetOwnerIdentity(CGContextRef context, task_id_token_t owne
 // Private numeric helpers.
 extern bool CGFloatIsValid(CGFloat value);
 extern size_t CGBitmapGetAlignedBytesPerRow(size_t bytesPerRow);
+COREGRAPHICS_EXPORT bool CGImageGetHeadroom(CGImageRef image, float *headroom);
 
 extern CGEventRef CGEventCreateWithEventRecord(const CGSEventRecordPtr event, uint32_t eventRecordSize);
 extern CGError CGEventGetEventRecord(CGEventRef event, CGSEventRecordPtr eventRecord, uint32_t eventRecordSize);
@@ -568,7 +578,84 @@ enum {
 	// window do not belong to gesture events), with the event's location. 0 when the event names the window
 	// system's window.
 	kCGSTouchWindowNumber = 201,
+	// Tablet tools: the documented proximity fields belong only to proximity CGEvents, but AppKit gets the
+	// tool's identity from the pointer events too. These common fields carry it on both kinds (the
+	// documented kCGTabletEventDeviceID/Vendor1/Vendor2/Vendor3 fields carry the ids that have a place in
+	// the pointer class). The vendor pointer type is the protocol's raw tool type, the pointer type is
+	// Cocoa's NSPointingDeviceType.
+	kCGSTabletPointerID = 202,
+	kCGSTabletSystemTabletID = 203,
+	kCGSTabletCapabilityMask = 204,
+	kCGSTabletVendorPointerType = 205,
+	kCGSTabletPointerType = 206,
+	kCGSTabletVendorPointerSerialNumber = 207,
+	// The documented "window under the pointer" fields belong to mouse events, to the exclusion of
+	// tablet events. These common fields say which window the tablet tool is over, for both kinds.
+	kCGSTabletWindowNumber = 208,
+	kCGSTabletWindowNumberThatCanHandleThisEvent = 209,
 };
+
+// Tablet tools, for the window system backends: they describe what their window system says about a
+// tool, and CoreGraphics makes the tablet CGEvent (kCGEventTabletPointer or kCGEventTabletProximity)
+// from it, so that every backend fills the documented kCGTablet* fields and the common fields above
+// the same way. Cocoa's NSPointingDeviceType values and the tablet button mask (NSEventButtonMask
+// bits) are repeated here because CoreGraphics is below AppKit.
+enum {
+	kCGSTabletPointingDeviceUnknown = 0,
+	kCGSTabletPointingDevicePen = 1,
+	kCGSTabletPointingDeviceCursor = 2,
+	kCGSTabletPointingDeviceEraser = 3,
+};
+enum {
+	kCGSTabletButtonTip = 1,
+	kCGSTabletButtonLowerSide = 2,
+	kCGSTabletButtonUpperSide = 4,
+};
+// The bits of the capability mask: the Wayland tablet protocol's capability numbers.
+enum {
+	kCGSTabletCapabilityTilt = 1 << 1,
+	kCGSTabletCapabilityPressure = 1 << 2,
+	kCGSTabletCapabilityDistance = 1 << 3,
+	kCGSTabletCapabilityRotation = 1 << 4,
+	kCGSTabletCapabilitySlider = 1 << 5,
+	kCGSTabletCapabilityWheel = 1 << 6,
+};
+typedef struct {
+	CGEventSourceRef source;      // the event source of the hardware state
+	bool proximity;               // a proximity event, not a pointer event
+	bool entering;                // the tool enters proximity (proximity events)
+	uint64_t flags;               // CGEventFlags: the modifiers of the keyboard
+	CGPoint location;             // global (CGEventSetLocation)
+	bool hasNativeLocation;       // nativeLocation is known (kCGSEventNativeLocationX/Y)
+	CGPoint nativeLocation;       // in the window system window
+	double nativeLocationScale;   // what the backend's window system decoder expects it multiplied by (1024 for
+	                              // points on Wayland, 1 for the device pixels of X11)
+	bool hasPostedLocation;       // location is a real position (kCGSEventPostedLocationX/Y)
+	CGPoint axes;                 // the absolute X and Y axes of the tablet (kCGTabletEventPointX/Y)
+	uint32_t windowID;            // the CGS window under the tool, 0 when none
+	int64_t nativeWindow;         // the window system window
+	int64_t inputSerial;          // kCGSEventInputSerial: not 0 only for a press
+	double pressure, distance;    // 0 to 1
+	double tiltX, tiltY;          // -1 to 1, 1 being a pen parallel to the tablet
+	double rotation, tangentialPressure;
+	uint32_t buttonMask;          // kCGSTabletButton* bits
+	uint32_t vendorID, tabletID;
+	uint32_t pointerID;           // the tool's own number (the low half of its serial where it has one)
+	uint32_t deviceID;
+	uint64_t toolSerial;
+	uint32_t vendorPointerType;   // the window system's own number for the kind of tool
+	uint32_t pointerType;         // kCGSTabletPointingDevice*
+	uint64_t capabilities;        // kCGSTabletCapability* bits
+} CGSTabletSample;
+// Makes the event for a sample (NULL when none can be made); the caller posts it with
+// _CGSEventStreamPost() and releases it.
+extern CGEventRef _CGSTabletEventCreate(const CGSTabletSample *sample);
+// A stable number for the tool and tablet pair, for the device id of the tablet events. Window
+// systems with no such number derive it from the hardware serial and the tablet's ids; extra tells
+// apart devices that have neither (the window system's own device number, or 0). Never 0.
+extern uint32_t _CGSTabletDeviceID(uint64_t toolSerial, uint32_t vendorID, uint32_t tabletID, uint32_t extra);
+// Tilt in degrees from the tablet's normal, as the -1 to 1 the events carry.
+extern double _CGSTabletNormalizedTilt(double degrees);
 
 // The CGEvent type of the gesture events (NSEventTypeGesture), and the phases of a touch event
 // (NSTouchPhase bits).

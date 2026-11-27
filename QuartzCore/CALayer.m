@@ -12,10 +12,12 @@
 #import "CAKeyedCoding.h"
 #import <QuartzCore/CATransactionPrivate.h>
 #import "CALayerInternal.h"
+#import "CAPresentationModifier.h"
 
 NSString *const kCAFilterLinear = @"linear";
 NSString *const kCAFilterNearest = @"nearest";
 NSString *const kCAFilterTrilinear = @"trilinear";
+NSString *const kCAFilterBox = @"box";
 
 NSString *const kCAGravityResizeAspect = @"resizeAspect";
 NSString *const kCAGravityResizeAspectFill = @"resizeAspectFill";
@@ -40,7 +42,14 @@ NSString *const kCATransition = @"transition";
 NSString *const kCAContentsFormatRGBA8Uint = @"RGBA8";
 NSString *const kCAContentsFormatRGBA16Float = @"RGBAh";
 NSString *const kCAContentsFormatGray8Uint = @"Gray8";
+NSString *const kCAContentsFormatA8 = @"A8";
 NSString *const kCAContentsFormatAutomatic = @"Automatic";
+
+NSString *const kCAContentsScalingRepeat = @"repeat";
+NSString *const kCAContentsScalingStretch = @"stretch";
+
+NSString *const kCALayerContentsSwizzleAAAA = @"AAAA";
+NSString *const kCALayerContentsSwizzleRGBA = @"RGBA";
 
 NSString *const CADynamicRangeAutomatic = @"automatic";
 NSString *const CADynamicRangeStandard = @"standard";
@@ -639,6 +648,12 @@ static BOOL contentsUnchanged(CALayer *layer, id value) {
     NS_EXTRA(CALayer, self)->_animations = [[NSMutableDictionary alloc] init];
     NS_EXTRA(CALayer, self)->_speed = 1;
     NS_EXTRA(CALayer, self)->_fillMode = [kCAFillModeRemoved copy];
+    // QUIRK: a new layer has contentsSwizzle "RGBA", contentsScaling "stretch" and a white
+    // contentsMultiplyColor. These SPI properties are not documented. Evidence: black-box observation on
+    // macOS 26.7.3 (tier 2). Test: tests/quartzcore-swiftui-layer-spis.m
+    NS_EXTRA(CALayer, self)->_contentsSwizzle = [kCALayerContentsSwizzleRGBA copy];
+    NS_EXTRA(CALayer, self)->_contentsScaling = [kCAContentsScalingStretch copy];
+    NS_EXTRA(CALayer, self)->_contentsMultiplyColor = CGColorCreateGenericRGB(1, 1, 1, 1);
 }
 
 - init {
@@ -985,6 +1000,11 @@ static BOOL isOpaqueBlack(CGColorRef color) {
         CGColorRelease(NS_EXTRA(CALayer, self)->_borderColor);
     [NS_EXTRA(CALayer, self)->_contents release];
     [NS_EXTRA(CALayer, self)->_textureContents release];
+    [NS_EXTRA(CALayer, self)->_contentsSwizzle release];
+    [NS_EXTRA(CALayer, self)->_contentsScaling release];
+    if (NS_EXTRA(CALayer, self)->_contentsMultiplyColor)
+        CGColorRelease(NS_EXTRA(CALayer, self)->_contentsMultiplyColor);
+    [NS_EXTRA(CALayer, self)->_presentationModifiers release];
     NS_EXTRA_FREE(CALayer, self);
     [super dealloc];
 }
@@ -2163,6 +2183,74 @@ static id<CAAction> actionInStyle(NSDictionary *style, NSString *key) {
 
 - (BOOL) _drawLayerContents: (CGRect) bounds opacity: (float) opacity {
     return NO;
+}
+
+- (NSString *) contentsSwizzle {
+    return NS_EXTRA(CALayer, self)->_contentsSwizzle;
+}
+
+- (void) setContentsSwizzle: (NSString *) value {
+    value = [value copy];
+    [NS_EXTRA(CALayer, self)->_contentsSwizzle release];
+    NS_EXTRA(CALayer, self)->_contentsSwizzle = value;
+}
+
+- (NSString *) contentsScaling {
+    return NS_EXTRA(CALayer, self)->_contentsScaling;
+}
+
+- (void) setContentsScaling: (NSString *) value {
+    value = [value copy];
+    [NS_EXTRA(CALayer, self)->_contentsScaling release];
+    NS_EXTRA(CALayer, self)->_contentsScaling = value;
+}
+
+- (CGColorRef) contentsMultiplyColor {
+    return NS_EXTRA(CALayer, self)->_contentsMultiplyColor;
+}
+
+- (void) setContentsMultiplyColor: (CGColorRef) value {
+    replaceColor(&NS_EXTRA(CALayer, self)->_contentsMultiplyColor, value);
+}
+
+- (BOOL) wantsExtendedDynamicRangeContent {
+    return NS_EXTRA(CALayer, self)->_layerWantsExtendedDynamicRangeContent;
+}
+
+- (void) setWantsExtendedDynamicRangeContent: (BOOL) value {
+    NS_EXTRA(CALayer, self)->_layerWantsExtendedDynamicRangeContent = value;
+}
+
+- (CGFloat) contentsMaximumDesiredEDR {
+    return NS_EXTRA(CALayer, self)->_contentsMaximumDesiredEDR;
+}
+
+- (void) setContentsMaximumDesiredEDR: (CGFloat) value {
+    NS_EXTRA(CALayer, self)->_contentsMaximumDesiredEDR = value;
+}
+
+- (NSArray *) presentationModifiers {
+    NSMutableArray *mods = NS_EXTRA(CALayer, self)->_presentationModifiers;
+    return mods != nil ? [[mods copy] autorelease] : nil;
+}
+
+- (void) setPresentationModifiers: (NSArray *) modifiers {
+    [NS_EXTRA(CALayer, self)->_presentationModifiers release];
+    NS_EXTRA(CALayer, self)->_presentationModifiers = modifiers != nil ? [modifiers mutableCopy] : nil;
+}
+
+- (void) addPresentationModifier: (CAPresentationModifier *) modifier {
+    if (modifier == nil)
+        return;
+    if (NS_EXTRA(CALayer, self)->_presentationModifiers == nil)
+        NS_EXTRA(CALayer, self)->_presentationModifiers = [[NSMutableArray alloc] init];
+    [NS_EXTRA(CALayer, self)->_presentationModifiers addObject: modifier];
+}
+
+- (void) removePresentationModifier: (CAPresentationModifier *) modifier {
+    if (modifier == nil)
+        return;
+    [NS_EXTRA(CALayer, self)->_presentationModifiers removeObject: modifier];
 }
 
 @end

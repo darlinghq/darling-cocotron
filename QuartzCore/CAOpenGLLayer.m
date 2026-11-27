@@ -42,6 +42,11 @@
 
 - (void) setWantsExtendedDynamicRangeContent: (BOOL) val {
     NS_EXTRA(CAOpenGLLayer, self)->_wantsExtendedDynamicRangeContent = val;
+    // The layer's frames are composited into its context's native surface. Let a
+    // backend that can describe that surface know that this layer needs EDR.
+    CGSubWindow *subwindow = [NS_EXTRA(CALayer, self)->_context subwindow];
+    if ([subwindow respondsToSelector: @selector(setWantsExtendedDynamicRangeContent:forLayer:)])
+        [subwindow setWantsExtendedDynamicRangeContent: val forLayer: self];
 }
 
 - (BOOL) canDrawInCGLContext: (CGLContextObj) ctx pixelFormat: (CGLPixelFormatObj) pf forLayerTime: (CFTimeInterval) t displayTime: (const CVTimeStamp *) ts {

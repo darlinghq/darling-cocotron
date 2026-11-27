@@ -53,10 +53,15 @@ struct wl_proxy;
     uint32_t _repeatKeycode;
     CFRunLoopTimerRef _repeatTimer;
     void *_source; // CGEventSourceRef of the hardware state
+    // The high-resolution time of the next input event, in CGEvent's clock (nanoseconds since boot).
+    uint64_t _pendingTimestamp;
+    BOOL _hasPendingTimestamp;
 }
 
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection keymap: (CGSWaylandKeymap *) keymap;
 
+// The timestamp of the next input event, from input-timestamps-unstable-v1.
+- (void) setPendingTimestamp: (uint64_t) timestamp;
 // An event of the wl_keyboard.
 - (void) keyboardEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
 // The wl_callback of the pending modifier key is done.

@@ -384,6 +384,11 @@ const CFStringRef kCGSDisplayColorReferenceLuminanceKey = CFSTR("ReferenceLumina
 const CFStringRef kCGSDisplayColorTargetMinLuminanceKey = CFSTR("TargetMinLuminance");
 const CFStringRef kCGSDisplayColorTargetMaxLuminanceKey = CFSTR("TargetMaxLuminance");
 const CFStringRef kCGSDisplayColorICCProfileKey = CFSTR("ICCProfile");
+const CFStringRef kCGSDisplayColorPrimariesChromaticityKey = CFSTR("PrimariesChromaticity");
+const CFStringRef kCGSDisplayColorTargetPrimariesChromaticityKey = CFSTR("TargetPrimariesChromaticity");
+const CFStringRef kCGSDisplayColorTransferFunctionPowerKey = CFSTR("TransferFunctionPower");
+const CFStringRef kCGSDisplayColorTargetMaxCLLKey = CFSTR("TargetMaxCLL");
+const CFStringRef kCGSDisplayColorTargetMaxFALLKey = CFSTR("TargetMaxFALL");
 
 CFArrayRef CGDisplayCopyAllDisplayModes(CGDirectDisplayID displayIndex,
                                         CFDictionaryRef options)

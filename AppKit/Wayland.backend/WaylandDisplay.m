@@ -16,7 +16,6 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import <AppKit/NSTextInputBackend.h>
 #import "WaylandDisplay.h"
 #import "../private-include/AppKit/NSEventTime.h"
 #import "NSEvent_gesture.h"
@@ -33,6 +32,7 @@
 #import "WaylandLibrary.h"
 #import "WaylandPointerLock.h"
 #import "WaylandProtocol.h"
+#import "WaylandRender.h"
 #import "WaylandWindow.h"
 #import "WaylandAppMenu.h"
 #import "WaylandToplevelIcon.h"
@@ -273,7 +273,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [_dataDevice release];
 
     _CGSSetNativeConnectionObserver(nil);
-    [self cancelActivationRequest];
 
     [_appMenu release];
     _appMenu = nil;
@@ -290,9 +289,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_dialogManager, _bell,
                                       _toplevelTagManager, _idleInhibitManager,
-                                      _textInput, _textInputManager,
+                                      _contentTypeManager,
+                                      _shortcutsInhibitManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
+                                      _shm, _viewporter, _fractionalScaleManager, _appMenuManager, _subcompositor, _compositor,
+                                       _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
                 WL.wl_proxy_destroy(proxies[i]);
@@ -323,6 +324,15 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 // color objects per surface).
 - (WaylandColorManager *) colorManager {
     return _CGSNativeConnectionWaylandColorManager();
+}
+
+- (WaylandRenderManager *) renderManager {
+    return _CGSNativeConnectionWaylandRenderManager();
+}
+
+- (void) renderGlobalsAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) renderGlobalsAvailable];
 }
 
 #pragma mark - Window-system session
@@ -439,6 +449,16 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateIdleInhibitor];
 }
 
+- (void) contentTypeManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateContentType];
+}
+
+- (void) shortcutsInhibitManagerAvailable {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateShortcutsInhibitor];
+}
+
 - (void) applicationIconImageChanged {
     [super applicationIconImageChanged];
     [_toplevelIcons applicationIconChanged];
@@ -508,6 +528,21 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     [self outputsDidChange];
 }
 
+// The preferred description of one of our surfaces changed. CoreGraphics gave us the feedback
+// proxy; the window that owns it reads the description through the same color manager.
+- (void) nativeConnectionSurfaceColorPreferenceChanged: (void *) feedback {
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
+        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
+        if ([window surfaceFeedback] == (struct wl_proxy *) feedback) {
+            [window preferredColorInfoChanged];
+            break;
+        }
+        // Metal layers and OpenGL subwindows can have surface feedback of their own.
+        if ([window preferredSubwindowColorInfoChangedForFeedback: (struct wl_proxy *) feedback])
+            break;
+    }
+}
+
 // CoreGraphics has rebuilt the screens with an output's new color description.
 - (void) nativeConnectionDisplayColorSpaceChanged {
     // Windows without an explicit color space follow the screen, so their surface descriptions
@@ -523,6 +558,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        forModes: nil];
 }
 
+// CoreGraphics bound a dma-buf, explicit synchronization or fifo global after the windows were made.
+- (void) nativeConnectionRenderManagerAvailable {
+    [self renderGlobalsAvailable];
+    [self flush];
+}
+
 // CoreGraphics bound a color management or color representation global after the windows were made.
 - (void) nativeConnectionColorManagerAvailable {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
@@ -533,14 +574,17 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 // The process took or dropped the power assertion that keeps the display awake: the windows hold
 // an idle inhibitor only while it is held.
 - (void) nativeConnectionDisplaySleepPreventionChanged {
-    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateIdleInhibitor];
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateContentType];
+    }
     [self flush];
 }
 
-// Another process asked for the activation of this one's windows (see _CGSActivateProcess).
+// Another process asked for the activation of this one's windows (see _CGSActivateProcess). The compositor is asked by
+// CoreGraphics, which follows this; an application that is asked to activate shows the windows it was holding back.
 - (void) nativeConnectionActivationRequested {
-    [self requestActivation];
+    [self mapDeferredWindows];
 }
 
 // Sends the requests made since the last wait, and handles the events libwayland has already
@@ -618,6 +662,24 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                           kind: 0
                                         object: nil];
         [self idleInhibitManagerAvailable];
+    } else if (strcmp(interface, "wp_content_type_manager_v1") == 0 && _contentTypeManager == NULL) {
+        _contentTypeManagerName = name;
+        _contentTypeManager = [self bindGlobal: name
+                                     interface: &wp_content_type_manager_v1_interface
+                                       version: 1
+                                          kind: 0
+                                        object: nil];
+        [self contentTypeManagerAvailable];
+    } else if (strcmp(interface, "zwp_keyboard_shortcuts_inhibit_manager_v1") == 0 &&
+               _shortcutsInhibitManager == NULL)
+    {
+        _shortcutsInhibitManagerName = name;
+        _shortcutsInhibitManager = [self bindGlobal: name
+                                          interface: &zwp_keyboard_shortcuts_inhibit_manager_v1_interface
+                                            version: 1
+                                               kind: 0
+                                             object: nil];
+        [self shortcutsInhibitManagerAvailable];
     } else if (strcmp(interface, "wl_compositor") == 0 && _compositor == NULL) {
         // Version 4 has wl_surface.damage_buffer.
         _compositorVersion = MIN(version, 4);
@@ -634,10 +696,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _fractionalScaleManagerName = name;
         _fractionalScaleManager = [self bindGlobal: name interface: &wp_fractional_scale_manager_v1_interface
                                           version: 1 kind: 0 object: nil];
-    } else if (strcmp(interface, "xdg_activation_v1") == 0 && _activation == NULL) {
-        _activationName = name;
-        _activation = [self bindGlobal: name interface: &xdg_activation_v1_interface
-                               version: 1 kind: 0 object: nil];
     } else if (strcmp(interface, "org_kde_kwin_appmenu_manager") == 0 && _appMenuManager == NULL) {
         // Version 2 adds the manager's release request.
         _appMenuManagerName = name;
@@ -670,7 +728,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name
                          interface: &xdg_wm_base_interface
-                           version: MIN(version, 6)
+                           version: MIN(version, 7)
                               kind: WaylandObjectWmBase
                             object: self];
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 &&
@@ -679,14 +737,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _decorationManager =
                 [self bindGlobal: name
                        interface: &zxdg_decoration_manager_v1_interface
-                         version: 1
+                         version: MIN(version, 2u)
                             kind: 0
                           object: nil];
-    } else if (strcmp(interface, "zwp_text_input_manager_v3") == 0 && _textInputManager == NULL) {
-        _textInputManagerName = name;
-        _textInputManager = [self bindGlobal: name interface: &zwp_text_input_manager_v3_interface
-                                     version: 1 kind: 0 object: nil];
-        [self attachTextInput];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame.
         _seat = [self bindGlobal: name
@@ -694,7 +747,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                          version: MIN(version, 5)
                             kind: WaylandObjectSeat
                           object: self];
-        [self attachTextInput];
     } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
         _layerShellName = name;
         // Version 4 adds the on-demand keyboard interactivity the bar asks for.
@@ -765,10 +817,20 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _idleInhibitManagerName = 0;
         return;
     }
-    if (_textInputManager && name == _textInputManagerName) {
-        [self detachTextInput];
-        WaylandMarshal(_textInputManager, WP_TEXT_INPUT_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-        _textInputManager = NULL; _textInputManagerName = 0;
+    if (_contentTypeManager != NULL && name == _contentTypeManagerName) {
+        // The content type objects already made from this factory stay valid.
+        WaylandMarshal(_contentTypeManager, WP_CONTENT_TYPE_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _contentTypeManager = NULL;
+        _contentTypeManagerName = 0;
+        return;
+    }
+    if (_shortcutsInhibitManager != NULL && name == _shortcutsInhibitManagerName) {
+        // Inhibitors stay valid; the windows destroy them when they are no longer needed.
+        WaylandMarshal(_shortcutsInhibitManager, ZWP_KEYBOARD_SHORTCUTS_INHIBIT_MANAGER_DESTROY,
+                       NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _shortcutsInhibitManager = NULL;
+        _shortcutsInhibitManagerName = 0;
         return;
     }
     if (_fractionalScaleManager && name == _fractionalScaleManagerName) {
@@ -800,12 +862,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         // their windows unmap.
         WL.wl_proxy_destroy(_plasmaShell);
         _plasmaShell = NULL; _plasmaShellName = 0;
-        return;
-    }
-    if (_activation && name == _activationName) {
-        [self cancelActivationRequest];
-        WaylandMarshal(_activation, WP_ACTIVATION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-        _activation = NULL; _activationName = 0;
         return;
     }
     if (_viewporter && name == _viewporterName) {
@@ -941,13 +997,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         // object and decodes them into CGEvents.
         break;
 
-    case WaylandObjectTextInput:
-        [self textInputEvent: opcode arguments: args];
-        break;
-
-    case WaylandObjectActivationToken:
-        if (proxy == _activationToken && opcode == WP_ACTIVATION_TOKEN_EV_DONE)
-            [self activationTokenDone: args[0].s];
         break;
 
     case WaylandObjectSession:
@@ -1198,209 +1247,20 @@ static NSUInteger buttonMaskForNumber(int64_t number) {
     return YES;
 }
 
-#pragma mark - Text input (text-input-v3)
-
-// The compositor's input method sends the composition (preedit_string) and the final text
-// (commit_string) between enter and leave, as one state applied at done. They go to the
-// text input client of the window's first responder through its NSTextInputContext.
-
-- (void) attachTextInput {
-    if (_textInputManager == NULL || _seat == NULL || _textInput != NULL)
-        return;
-    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _seat}};
-    _textInput = WaylandCreateObject(_textInputManager, WP_TEXT_INPUT_MANAGER_GET_TEXT_INPUT,
-                                     &zwp_text_input_v3_interface, args,
-                                     WaylandObjectTextInput, self);
-}
-
-- (void) detachTextInput {
-    if (_textInput == NULL)
-        return;
-    [self textInputLeft];
-    WaylandMarshal(_textInput, WP_TEXT_INPUT_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-    _textInput = NULL;
-}
-
-- (NSTextInputContext *) textInputContext {
-    return _textInputWindow != nil
-            ? [NSTextInputContext inputContextForWindow: [_textInputWindow delegate]] : nil;
-}
-
-// Sends the text input state to the compositor: whether the first responder takes text and where
-// its caret is. Only a change is sent, because the compositor answers every commit.
-- (void) syncTextInput {
-    if (_textInput == NULL || _textInputWindow == nil)
-        return;
-
-    NSTextInputContext *context = [self textInputContext];
-    BOOL wanted = context != nil;
-    BOOL changed = NO;
-
-    if (wanted != _textInputEnabled) {
-        WaylandMarshal(_textInput, wanted ? WP_TEXT_INPUT_ENABLE : WP_TEXT_INPUT_DISABLE,
-                       NULL, 0, NULL);
-        _textInputEnabled = wanted;
-        changed = YES;
-        if (!wanted) {
-            [_textInputPreedit release];
-            _textInputPreedit = nil;
-        }
-    }
-    if (wanted) {
-        // The caret rectangle in the surface's logical coordinates, y down.
-        NSRect screenRect = [context candidateRectOnScreen];
-        NSRect rect = NSZeroRect;
-        if (!NSEqualRects(screenRect, NSZeroRect)) {
-            NSRect windowRect = [[_textInputWindow delegate] convertRectFromScreen: screenRect];
-            NSPoint offset = [_textInputWindow contentOffset];
-            rect = NSMakeRect(NSMinX(windowRect) + offset.x,
-                              [_textInputWindow frame].size.height - NSMaxY(windowRect) + offset.y,
-                              NSWidth(windowRect), NSHeight(windowRect));
-        }
-        if (!NSEqualRects(rect, _textInputRect) || changed) {
-            union wl_argument args[4] = {{.i = (int32_t) floor(rect.origin.x)},
-                                         {.i = (int32_t) floor(rect.origin.y)},
-                                         {.i = (int32_t) ceil(rect.size.width)},
-                                         {.i = (int32_t) ceil(rect.size.height)}};
-            WaylandMarshal(_textInput, WP_TEXT_INPUT_SET_CURSOR_RECTANGLE, NULL, 0, args);
-            _textInputRect = rect;
-            changed = YES;
-        }
-    }
-    if (changed) {
-        WaylandMarshal(_textInput, WP_TEXT_INPUT_COMMIT, NULL, 0, NULL);
-        [self flush];
-    }
-}
-
-- (void) textInputCandidateRectChangedInWindow: (NSWindow *) window {
-    if (_textInputWindow != nil && [_textInputWindow delegate] == window)
-        [self syncTextInput];
-}
-
-// The compositor took the text input away from the window: a composition that was showing is
-// removed, as no commit can follow it.
-- (void) textInputLeft {
-    NSTextInputContext *context = [self textInputContext];
-
-    if (_textInputPreedit != nil)
-        [context cancelComposition];
-    [_textInputPreedit release];
-    _textInputPreedit = nil;
-    [_textInputPendingPreedit release];
-    _textInputPendingPreedit = nil;
-    [_textInputPendingCommit release];
-    _textInputPendingCommit = nil;
-    _textInputWindow = nil;
-    _textInputEnabled = NO;
-    _textInputRect = NSZeroRect;
-}
-
-// Converts a byte offset in the UTF-8 string to a UTF-16 offset in `text`.
-static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
-    if (byteOffset < 0)
-        return [text length];
-
-    NSUInteger length = [text length];
-    NSUInteger offset = 0;
-    int bytes = 0;
-
-    while (offset < length && bytes < byteOffset) {
-        unichar c = [text characterAtIndex: offset];
-        if (c >= 0xD800 && c < 0xDC00 && offset + 1 < length) {
-            bytes += 4;
-            offset += 2;
-        } else {
-            bytes += c < 0x80 ? 1 : (c < 0x800 ? 2 : 3);
-            offset++;
-        }
-    }
-    return offset;
-}
-
-// Applies one done batch in the order the protocol gives: the old composition goes, the
-// committed text is inserted, the new composition is shown with its caret.
-- (void) textInputDone {
-    NSTextInputContext *context = [self textInputContext];
-    NSString *commit = [_textInputPendingCommit autorelease];
-    NSString *preedit = [_textInputPendingPreedit autorelease];
-    int cursorBegin = _textInputPendingCursorBegin;
-    int cursorEnd = _textInputPendingCursorEnd;
-
-    _textInputPendingCommit = nil;
-    _textInputPendingPreedit = nil;
-    _textInputPendingCursorBegin = _textInputPendingCursorEnd = -1;
-
-    if (context == nil)
-        return;
-    if ([preedit length] == 0)
-        preedit = nil;
-    // Nothing the client has not already got: the compositor answers each commit with a done.
-    BOOL samePreedit = preedit == nil ? _textInputPreedit == nil : [preedit isEqualToString: _textInputPreedit];
-    if ([commit length] == 0 && samePreedit)
-        return;
-
-    if ([commit length] > 0) {
-        [context cancelComposition];
-        [_textInputPreedit release];
-        _textInputPreedit = nil;
-        [context commitComposition: commit];
-    }
-    if (preedit == nil) {
-        if (_textInputPreedit != nil)
-            [context cancelComposition];
-        [_textInputPreedit release];
-        _textInputPreedit = nil;
-        return;
-    }
-    NSUInteger begin = utf16OffsetOfUTF8Offset(preedit, cursorBegin);
-    NSUInteger end = cursorEnd < 0 ? begin : utf16OffsetOfUTF8Offset(preedit, cursorEnd);
-    if (end < begin)
-        end = begin;
-    [_textInputPreedit release];
-    _textInputPreedit = [preedit copy];
-    [context updateComposition: preedit selection: NSMakeRange(begin, end - begin)];
-}
-
-- (void) textInputEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
-    switch (opcode) {
-    case WP_TEXT_INPUT_EV_ENTER:
-        [self textInputLeft];
-        _textInputWindow = [self windowForSurface: (struct wl_proxy *) args[0].o];
-        [self syncTextInput];
-        break;
-
-    case WP_TEXT_INPUT_EV_LEAVE:
-        [self textInputLeft];
-        break;
-
-    case WP_TEXT_INPUT_EV_PREEDIT_STRING:
-        [_textInputPendingPreedit release];
-        _textInputPendingPreedit = args[0].s != NULL ? [[NSString alloc] initWithUTF8String: args[0].s] : nil;
-        _textInputPendingCursorBegin = args[1].i;
-        _textInputPendingCursorEnd = args[2].i;
-        break;
-
-    case WP_TEXT_INPUT_EV_COMMIT_STRING:
-        [_textInputPendingCommit release];
-        _textInputPendingCommit = args[0].s != NULL ? [[NSString alloc] initWithUTF8String: args[0].s] : nil;
-        break;
-
-    case WP_TEXT_INPUT_EV_DELETE_SURROUNDING_TEXT:
-        // No surrounding text is reported to the input method, so it has nothing to delete.
-        break;
-
-    case WP_TEXT_INPUT_EV_DONE:
-        [self textInputDone];
-        break;
-    }
-}
-
 // Wayland clients can't move the pointer, but while it is locked the cursor is
 // the application's own and a warp only moves where it is. That position is
 // where +[NSEvent mouseLocation] reports it and where the pointer reappears on unlock.
 // Without a lock the call does nothing, and nothing pretends otherwise.
 // position is in CoreGraphics' global space, as -[NSDisplay warpMouse:] documents.
+// The window system's input method follows the first responder and the caret (see NSCGSInputMethod): the window
+// tells CoreGraphics, which runs the text input protocol.
+- (void) textInputCandidateRectChangedInWindow: (NSWindow *) window {
+    WaylandWindow *platformWindow = (WaylandWindow *) [window platformWindow];
+
+    if ([platformWindow isKindOfClass: [WaylandWindow class]])
+        [platformWindow updateInputMethodSpot];
+}
+
 #pragma mark - Pointer lock
 
 // The window to lock: the one activated last. The lock activates once it also
@@ -1591,6 +1451,30 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     return count;
 }
 
+- (BOOL) fullscreenScreenFrameForSize: (NSSize) size entered: (NSSet *) entered frame: (NSRect *) frame {
+    NSArray *outputs = [self outputsWithModes];
+    NSArray *screens = [self screens];
+    BOOL found = NO;
+    NSUInteger matches = 0;
+    NSRect match = NSZeroRect, enteredMatch = NSZeroRect;
+    for (NSUInteger i = 0; i < [outputs count] && i < [screens count]; i++) {
+        NSRect screen = [(NSScreen *) screens[i] frame];
+        if (WaylandFullscreenRound(screen.size.width) != WaylandFullscreenRound(size.width) ||
+            WaylandFullscreenRound(screen.size.height) != WaylandFullscreenRound(size.height))
+            continue;
+        matches++;
+        match = screen;
+        if ([entered containsObject: [NSValue valueWithPointer: ((WaylandOutput *) outputs[i])->_proxy]]) {
+            enteredMatch = screen;
+            found = YES;
+        }
+    }
+    if (!found && matches != 1)
+        return NO;
+    *frame = found ? enteredMatch : match;
+    return YES;
+}
+
 #pragma mark - Windows
 
 - (struct wl_proxy *) seat { return _seat; }
@@ -1641,26 +1525,23 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     return nil;
 }
 
-// The window a window of a raised level, or any window that is not an application window, is made
-// transient for: the window it is attached to as a child window, else the application's key
-// window, else its main window, provided it is a mapped toplevel and naming it would
-// not make a window its own ancestor.
-- (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window {
+// The windows a window of a raised level, or any window that is not an application window, may be made transient for,
+// best first: the window it is attached to as a child window, its sheet's parent, the application's key window, else its
+// main window, provided it is a mapped toplevel. The window system window takes the first it accepts (one that would
+// make a window its own ancestor is refused).
+- (NSArray *) levelParentCandidatesForWindow: (WaylandWindow *) window {
     NSWindow *candidates[4] = {[[window delegate] parentWindow], [[window delegate] sheetParent], [NSApp keyWindow],
                                 [NSApp mainWindow]};
+    NSMutableArray *result = [NSMutableArray array];
 
     for (int i = 0; i < 4; i++) {
         id platform = [candidates[i] platformWindow];
-        if (![platform isKindOfClass: [WaylandWindow class]] || ![platform isMapped] || [platform isPopup])
+        if (![platform isKindOfClass: [WaylandWindow class]] || platform == window || ![platform isMapped] ||
+            [platform isPopup])
             continue;
-        const void *ancestors[16];
-        int count = 0;
-        for (WaylandWindow *up = [platform levelParent]; up != nil && count < 16; up = [up levelParent])
-            ancestors[count++] = up;
-        if (DarlingWindowParentAllowed(window, platform, ancestors, count))
-            return platform;
+        [result addObject: platform];
     }
-    return nil;
+    return result;
 }
 
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent {
@@ -1824,20 +1705,14 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
         CFArrayRemoveValueAtIndex(_windows, index);
         CFArrayInsertValueAtIndex(_windows, 0, window);
     }
+    // The window system window keeps the order of the windows too (see -[CGSWindow orderToplevelAbove:]).
+    [window activatedInWindowSystem];
     _CGSNativeConnectionPointerLockTargetChanged();
 }
 
 - (void) windowUnmapped: (WaylandWindow *) window {
-    // The compositor reparents the window's transient children itself.
-    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
-        WaylandWindow *other = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
-        if ([other levelParent] == window)
-            [other levelParentUnmapped];
-    }
     // The window to lock the pointer to may be another one now (after the window is gone from the list).
     [self performAfterDispatch: ^{ _CGSNativeConnectionPointerLockTargetChanged(); }];
-    if (_textInputWindow == window)
-        [self textInputLeft];
     [_draggingManager windowUnmapped: window];
     if (_dragPressWindow == window) [self consumeDragPress];
     if (_pointerWindow == window) {
@@ -1868,16 +1743,15 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
         CFArrayRemoveValueAtIndex(_windows, index);
 }
 
-// Most recently activated first; Wayland doesn't expose the stacking order.
+// The window numbers of this app's windows, frontmost first: the window system window keeps the order, which on Wayland
+// is the one the windows were activated in (the stacking order is not exposed), and lists them in the order
+// CGWindowListCopyWindowInfo lists them in.
 - (NSArray *) orderedWindowNumbers {
-    NSMutableArray *result = [NSMutableArray array];
-    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
-        WaylandWindow *window =
-                (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
-        if ([window isOrderedIn])
-            [result addObject: @([window windowNumber])];
-    }
-    return result;
+    // A window gets its number, and so its place in the registry that maps numbers back to windows, when it is first
+    // asked for it; the numbers CoreGraphics lists have to be known by then.
+    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
+        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) windowNumber];
+    return _CGSOrderedToplevelWindowIDs();
 }
 
 #pragma mark - Cursors
@@ -1953,38 +1827,7 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 
 #pragma mark - Activation
 
-// Wayland has no protocol to activate another client's window: the request goes
-// to the process, as a Darwin notification that its own backend answers with
-// -requestActivation (see _CGSActivateProcess).
-- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
-    if (processIdentifier <= 0 || processIdentifier == getpid())
-        return NO;
-    return _CGSActivateProcess(processIdentifier, kCGSActivateProcessFrontWindowOnly) ==
-           kCGErrorSuccess;
-}
-
-// The window an activation request is for: the key window, else the main window,
-// else the window that was active most recently.
-- (WaylandWindow *) windowForActivation {
-    NSWindow *candidates[] = {[NSApp keyWindow], [NSApp mainWindow]};
-    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
-        id platform = [candidates[i] platformWindow];
-        if ([platform isKindOfClass: [WaylandWindow class]] && [platform isMapped] &&
-            ![platform isPopup])
-            return platform;
-    }
-    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++) {
-        WaylandWindow *window = (WaylandWindow *) CFArrayGetValueAtIndex(_windows, i);
-        if ([window isMapped] && ![window isPopup])
-            return window;
-    }
-    return nil;
-}
-
-// Asks the compositor, through xdg-activation, to focus one of our windows. The
-// compositor decides: it may only mark the window as wanting attention. The token
-// carries the serial of the last input event when there is one, because
-// compositors refuse requests that cannot be tied to user input.
+// Whether the display is mapping the windows that were held back for an activation.
 - (BOOL) mappingForActivation {
     return _mappingForActivation;
 }
@@ -2004,80 +1847,6 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
 
 - (void) applicationBecameActive: (NSNotification *) notification {
     [self mapDeferredWindows];
-}
-
-- (void) requestActivation {
-    if (_activation == NULL || _activationToken != NULL)
-        return;
-    // An application that is asked to activate shows the windows it was holding back.
-    [self mapDeferredWindows];
-    WaylandWindow *window = [self windowForActivation];
-    [self requestActivationOf: window from: window];
-}
-
-// The same request for a given window, for instance one the compositor was asked to minimize. The
-// requesting surface the token names (xdg-activation set_surface) is not the surface to activate:
-// it is the key or main window, when there is another one that is shown. GUESS: with none the token
-// names no surface, which the protocol allows and some compositors refuse. Returns whether a
-// request was made; one is not while another waits for its token, and then nothing was asked.
-- (BOOL) requestActivationOfWindow: (WaylandWindow *) window {
-    NSWindow *candidates[] = {[NSApp keyWindow], [NSApp mainWindow]};
-    WaylandWindow *requester = nil;
-    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]) && requester == nil; i++) {
-        id platform = [candidates[i] platformWindow];
-        if ([platform isKindOfClass: [WaylandWindow class]] && platform != window &&
-            [platform isMapped] && ![platform isPopup] && ![platform isMiniaturized])
-            requester = platform;
-    }
-    return [self requestActivationOf: window from: requester];
-}
-
-- (BOOL) requestActivationOf: (WaylandWindow *) window from: (WaylandWindow *) requester {
-    if (_activation == NULL || _activationToken != NULL)
-        return NO;
-    struct wl_proxy *surface = [window surface];
-    if (surface == NULL)
-        return NO;
-
-    union wl_argument none[1] = {{.o = NULL}};
-    _activationToken = WaylandCreateObject(_activation, WP_ACTIVATION_GET_TOKEN,
-                                           &xdg_activation_token_v1_interface, none,
-                                           WaylandObjectActivationToken, self);
-    if (_inputSerial != 0 && _seat != NULL) {
-        union wl_argument serial[2] = {{.u = _inputSerial}, {.o = (struct wl_object *) _seat}};
-        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SERIAL, NULL, 0, serial);
-    }
-    struct wl_proxy *requesting = [requester surface];
-    if (requesting != NULL) {
-        union wl_argument forSurface[1] = {{.o = (struct wl_object *) requesting}};
-        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SURFACE, NULL, 0, forSurface);
-    }
-    WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_COMMIT, NULL, 0, NULL);
-    _activationWindow = [window retain];
-    [self flush];
-    return YES;
-}
-
-- (void) cancelActivationRequest {
-    if (_activationToken != NULL) {
-        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_DESTROY, NULL,
-                       WL_MARSHAL_FLAG_DESTROY, NULL);
-        _activationToken = NULL;
-    }
-    [_activationWindow release];
-    _activationWindow = nil;
-}
-
-- (void) activationTokenDone: (const char *) token {
-    WaylandWindow *window = _activationWindow;
-    struct wl_proxy *surface = [window isInvalidated] ? NULL : [window surface];
-
-    if (_activation != NULL && surface != NULL) {
-        union wl_argument args[2] = {{.s = token}, {.o = (struct wl_object *) surface}};
-        WaylandMarshal(_activation, WP_ACTIVATION_ACTIVATE, NULL, 0, args);
-    }
-    [self cancelActivationRequest];
-    [self flush];
 }
 
 @end

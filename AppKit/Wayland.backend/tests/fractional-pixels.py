@@ -21,7 +21,7 @@ def check_capture(directory, scale):
     matches = [n for n in nodes(tree) if n.get('name') == 'Fractional live fixture']
     assert len(matches) == 1 and matches[0]['shell'] == 'xdg_shell'
     rect = matches[0]['rect']
-    assert (rect['width'], rect['height']) == (601, 422)
+    assert rect['width'] == 601 and 401 < rect['height'] <= 401 + 40  # content plus the title bar
     path = str(directory / (stem + '.png'))
     width, height = map(int, subprocess.check_output(['magick', 'identify', '-format', '%w %h', path]).split())
     pixels = subprocess.check_output(['magick', path, '-depth', '8', 'RGB:-'])
@@ -41,9 +41,9 @@ def check_capture(directory, scale):
     result = []
     for name, (x0, y0, x1, y1), expected in regions:
         box = (math.ceil((rect['x'] + x0) * scale),
-               math.ceil((rect['y'] + 422 - y1) * scale),
+               math.ceil((rect['y'] + rect['height'] - y1) * scale),
                math.floor((rect['x'] + x1) * scale),
-               math.floor((rect['y'] + 422 - y0) * scale))
+               math.floor((rect['y'] + rect['height'] - y0) * scale))
         assert 0 <= box[0] < box[2] <= width and 0 <= box[1] < box[3] <= height
         wanted = bytes(expected) * (box[2] - box[0])
         for y in range(box[1], box[3]):
@@ -55,4 +55,4 @@ def check_capture(directory, scale):
 
 if __name__ == '__main__':
     import sys
-    print(json.dumps({str(s): check_capture(sys.argv[1], s) for s in (1.25, 1.5, 1.75)}, indent=2))
+    print(json.dumps({str(s): check_capture(sys.argv[1], s) for s in (1.25, 1.5, 2.25)}, indent=2))

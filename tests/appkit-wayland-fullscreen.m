@@ -7,8 +7,8 @@
 // seen through the AppKit API. Needs a compositor that honours the requests, such as a
 // headless sway: run with DARLING_APPKIT_BACKEND=wayland and WAYLAND_DISPLAY set; prints
 // SKIP otherwise. A titled window that is made fullscreen has the fullscreen style bit and
-// the size of its screen once the compositor has answered, and returns to its previous
-// size when it leaves fullscreen. A borderless window the size of the screen is promoted
+// the frame of its screen (with a content view that fills it) once the compositor has answered,
+// and returns to its previous size when it leaves fullscreen. A borderless window the size of the screen is promoted
 // without asking.
 #import <AppKit/AppKit.h>
 #include <math.h>
@@ -67,6 +67,13 @@ int main(void) {
         });
         expect(entered, "toggleFullScreen: gives the fullscreen style and the screen's width");
         expect(fabs([[window contentView] frame].size.height - screen.size.height) < 2, "and its height");
+        // A fullscreen window is the screen's frame and its content fills it (the menu strip is out of the way).
+        NSRect frame = [window frame];
+        expect(fabs(frame.origin.x - screen.origin.x) < 2 && fabs(frame.origin.y - screen.origin.y) < 2 &&
+               fabs(frame.size.width - screen.size.width) < 2 && fabs(frame.size.height - screen.size.height) < 2,
+               "the frame of a fullscreen window is the screen's frame");
+        expect(NSEqualSizes([[window contentView] frame].size, frame.size),
+               "the content view of a fullscreen window is as large as its frame");
 
         [window toggleFullScreen: nil];
         BOOL left = waitFor(^BOOL {
@@ -74,6 +81,8 @@ int main(void) {
                    fabs([[window contentView] frame].size.width - before.width) < 2;
         });
         expect(left, "leaving fullscreen restores the previous size");
+        expect(fabs([[window contentView] frame].size.height - before.height) < 2,
+               "and the previous height, with the menu strip back");
         [window orderOut: nil];
         [window release];
 

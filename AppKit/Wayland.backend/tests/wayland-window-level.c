@@ -1,4 +1,4 @@
-// Drives WaylandWindowLevel.h against a real compositor: a toplevel made transient
+// Drives WaylandToplevelRequests.h against a real compositor: a toplevel made transient
 // for another with xdg_toplevel.set_parent, the relation removed again, and a parent
 // that unmaps while it has a transient child. The compositor must raise no protocol
 // error and the child must stay mapped. Also checks the level policy
@@ -12,7 +12,8 @@
 #include <unistd.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
-#include "../WaylandWindowLevel.h"
+#include "../../DarlingWindowLevelPolicy.h"
+#include "WaylandToplevelRequests.h"
 
 struct wl_proxy *WaylandMarshal(struct wl_proxy *proxy, uint32_t opcode,
                                 const struct wl_interface *interface,

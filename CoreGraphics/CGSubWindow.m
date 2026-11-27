@@ -27,6 +27,10 @@ NSString *const CGSubWindowBackdropDidChangeNotification = @"CGSubWindowBackdrop
 - (void) flush {}
 - (BOOL) requiresMainThreadPresentation { return NO; }
 - (uint32_t) refreshMillihertz { return 0; }
+- (void) setWantsExtendedDynamicRangeContent: (BOOL) wants forLayer: (id) layer {
+    (void) wants;
+    (void) layer;
+}
 
 - (void) show {
     O2InvalidAbstractInvocation();

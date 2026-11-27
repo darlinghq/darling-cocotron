@@ -12,47 +12,16 @@
 // Usage: coregraphics-wayland-toplevel-events <directory>
 #import <Foundation/Foundation.h>
 #include <CoreGraphics/CoreGraphics.h>
+#import <CoreGraphics/CGSWindow.h>
 #include <dlfcn.h>
 #include <stdio.h>
 #include <unistd.h>
 
-// CGSToplevelEvent of CGSWindow.h
-enum {
-    EventCloseRequested = 1,
-    EventConfigured = 16,
-    EventWillShow = 18,
-};
-typedef struct {
-    int width, height, popupX, popupY;
-    bool activated, maximized, fullscreen, suspended, minimizeAdvertised, decorationReported, clientDecorated;
-} ToplevelConfigure;
-typedef struct {
-    int kind;
-    CGRect rect;
-    bool resized;
-    CGFloat oldScale;
-    bool state;
-    ToplevelConfigure configure;
-} ToplevelEvent;
-typedef void (*ToplevelEventProc)(id window, const ToplevelEvent *event, void *info);
-
-typedef struct {
-    CGRect frame;
-    bool unmanaged;
-    bool translucent;
-} ToplevelAttributes;
-
-typedef struct {
-    int kind;
-    bool acceptsKeyboardInput, takesFocusWhenShown, skipsTaskList;
-    id transientFor;
-} ToplevelHints;
-
 @protocol ToplevelWindow
-- (void)setToplevelEventProc:(ToplevelEventProc)proc info:(void *)info;
+- (void)setToplevelEventProc:(CGSToplevelEventProc)proc info:(void *)info;
 - (CGError)setProperty:(CFStringRef)key value:(CFTypeRef)value;
 - (CGError)orderWindow:(int)place relativeTo:(id)other;
-- (CGError)setToplevelHints:(const ToplevelHints *)hints;
+- (CGError)setToplevelHints:(const CGSToplevelHints *)hints;
 - (CGError)setToplevelMinimumSize:(CGSize)minimum maximumSize:(CGSize)maximum;
 - (CGError)setToplevelDecorated:(BOOL)decorated;
 - (CGError)drawImage:(CGImageRef)image atPoint:(CGPoint)origin;
@@ -72,15 +41,15 @@ static int failures;
     } while (0)
 
 #define MAX_EVENTS 256
-static ToplevelEvent heard[MAX_EVENTS];
+static CGSToplevelEvent heard[MAX_EVENTS];
 static int heardCount;
 static int mainThreadOnly = 1;
 static int willShowBeforeConfigure = 1;
 
-static void record(id window, const ToplevelEvent *event, void *info) {
+static void record(CGSWindow *window, const CGSToplevelEvent *event, void *info) {
     if (![NSThread isMainThread])
         mainThreadOnly = 0;
-    if (event->kind == EventConfigured && heardCount == 0)
+    if (event->kind == kCGSToplevelEventConfigured && heardCount == 0)
         willShowBeforeConfigure = 0;
     if (heardCount < MAX_EVENTS)
         heard[heardCount++] = *event;
@@ -122,12 +91,12 @@ int main(int argc, char **argv) {
     @autoreleasepool {
         if (argc != 2)
             return 2;
-        id<ToplevelWindow> (*newToplevel)(const ToplevelAttributes *) = dlsym(RTLD_DEFAULT, "_CGSNewToplevelWindow");
+        id<ToplevelWindow> (*newToplevel)(const CGSToplevelAttributes *) = dlsym(RTLD_DEFAULT, "_CGSNewToplevelWindow");
         if (!newToplevel) {
             printf("FAIL: the toplevel window functions are missing\n");
             return 1;
         }
-        ToplevelAttributes attributes = {CGRectMake(300, 400, 320, 240), false, false};
+        CGSToplevelAttributes attributes = {CGRectMake(300, 400, 320, 240), false, false};
         id<ToplevelWindow> window = newToplevel(&attributes);
         if (window == nil) {
             printf("SKIP: this window system makes no toplevel windows\n");
@@ -138,16 +107,16 @@ int main(int argc, char **argv) {
         CHECK(CGRectEqualToRect(frame, attributes.frame), "the window reports the frame it was given");
         [window setToplevelEventProc:record info:NULL];
         [window setProperty:CFSTR("WindowTitle") value:@"tl-events-wl"];
-        ToplevelHints hints = {0, true, true, false, nil};
+        CGSToplevelHints hints = {kCGSToplevelKindNormal, true, true, false, nil};
         CHECK([window setToplevelHints:&hints] == 0, "hints are accepted");
         CHECK([window setToplevelMinimumSize:CGSizeMake(100, 80) maximumSize:CGSizeMake(0, 0)] == 0,
               "size limits are accepted");
         CHECK([window setToplevelDecorated:YES] == 0, "the decoration mode is accepted");
         CHECK([window orderWindow:1 relativeTo:nil] == 0, "the window is shown");
         listen(1.0);
-        CHECK(count(EventWillShow) == 1, "the window tells it is about to be shown, once");
+        CHECK(count(kCGSToplevelEventWillShow) == 1, "the window tells it is about to be shown, once");
         CHECK(willShowBeforeConfigure, "the objects of the window are made before the compositor configures them");
-        CHECK(count(EventConfigured) >= 1, "the compositor's configure of the role is reported");
+        CHECK(count(kCGSToplevelEventConfigured) >= 1, "the compositor's configure of the role is reported");
         // The first buffer maps a Wayland toplevel.
         draw(window, 320, 240);
         listen(0.5);
@@ -157,7 +126,7 @@ int main(int argc, char **argv) {
         // The driver asks the compositor to close the window: a request that is reported once.
         waitFor(argv[1], "go1");
         listen(1.0);
-        CHECK(count(EventCloseRequested) == 1, "a close request is reported once");
+        CHECK(count(kCGSToplevelEventCloseRequested) == 1, "a close request is reported once");
         CHECK(mainThreadOnly, "the events come on the main thread");
         heardCount = 0;
         printf("STAGE 1\n");
@@ -174,8 +143,8 @@ int main(int argc, char **argv) {
         waitFor(argv[1], "go3");
         CHECK([window orderWindow:1 relativeTo:nil] == 0, "the window is shown again");
         listen(1.0);
-        CHECK(count(EventWillShow) == 1, "a window that is shown again tells so again");
-        CHECK(count(EventConfigured) >= 1, "the compositor configures the new role");
+        CHECK(count(kCGSToplevelEventWillShow) == 1, "a window that is shown again tells so again");
+        CHECK(count(kCGSToplevelEventConfigured) >= 1, "the compositor configures the new role");
         draw(window, 320, 240);
         listen(0.5);
         printf("STAGE 3\n");

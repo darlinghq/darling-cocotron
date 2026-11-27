@@ -347,12 +347,6 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
     return 1;
 }
 
-// Brings the windows of the given process to the front. Backends that can
-// do so override this; the default reports that nothing was activated.
-- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
-    return NO;
-}
-
 // Whether the pointer functions of CoreGraphics reach this display (see CGSPointerController.h).
 - (BOOL) usesPointerController {
     return YES;

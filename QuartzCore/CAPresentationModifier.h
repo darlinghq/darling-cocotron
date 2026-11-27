@@ -29,34 +29,58 @@
 
 @interface CAPresentationModifierGroup : NSObject {
     NSUInteger _capacity;
+    NSUInteger _count;
+    BOOL _updatesAsynchronously;
 }
 
 + (instancetype) groupWithCapacity: (NSUInteger) capacity;
 - (instancetype) initWithCapacity: (NSUInteger) capacity;
 
+@property(nonatomic) BOOL updatesAsynchronously;
+@property(readonly) NSUInteger count;
 @property(readonly) NSUInteger capacity;
 
 - (void) flush;
+- (void) flushWithTargetTime: (double) targetTime;
+- (void) flushLocally;
+- (void) flushLocallyWithTargetTime: (double) targetTime;
 - (void) flushWithTransaction;
+- (void) flushWithTransactionAndTargetTime: (double) targetTime;
 
 @end
 
 @interface CAPresentationModifier : NSObject {
     NSString *_keyPath;
     id _value;
+    id _velocity;
     BOOL _additive;
+    BOOL _enabled;
     CAPresentationModifierGroup *_group;
 }
+
+- (instancetype) initWithKeyPath: (NSString *) keyPath
+                    initialValue: (id) value
+                        additive: (BOOL) additive;
 
 - (instancetype) initWithKeyPath: (NSString *) keyPath
                     initialValue: (id) value
                         additive: (BOOL) additive
                            group: (CAPresentationModifierGroup *) group;
 
+- (instancetype) initWithKeyPath: (NSString *) keyPath
+                    initialValue: (id) initialValue
+                 initialVelocity: (id) initialVelocity
+                        additive: (BOOL) additive
+  preferredFrameRateRangeMaximum: (NSInteger) preferredFrameRateRangeMaximum
+                           group: (CAPresentationModifierGroup *) group;
+
 @property(readonly, copy) NSString *keyPath;
+@property(nonatomic, getter=isEnabled) BOOL enabled;
 @property(retain) id value;
 // The getter is -additive (as on macOS 26.7.3, which has no -isAdditive).
 @property(readonly) BOOL additive;
 @property(readonly, retain) CAPresentationModifierGroup *group;
+
+- (void) setValue: (id) value velocity: (id) velocity;
 
 @end

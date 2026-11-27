@@ -53,6 +53,7 @@
 #include "X11InputMask.h"
 
 @class CGSConnectionX11;
+@class CGSX11Tablet;
 
 // A scroll axis of an input device: the valuator that carries it and the distance of one notch of a wheel.
 typedef struct {
@@ -106,6 +107,8 @@ typedef struct {
     // have them (2.2 and 2.4), and the pinch in progress: its window, the scale it last reported and where its last
     // event was (in the window, in device pixels, and on the root window).
     BOOL _touchSelectable, _pinchSelectable;
+    // The graphics tablets (CGSX11Tablet.m); nil without XInput2.
+    CGSX11Tablet *_tablet;
     BOOL _pinchActive;
     Window _pinchWindow;
     double _pinchScale;
@@ -166,6 +169,9 @@ typedef struct {
 // Relative mode: whether it is wanted, and the frozen cursor in root pixels when the grab is held.
 - (BOOL) relativeMouseRequested: (BOOL *) requested frozenRoot: (CGPoint *) root;
 
+- (CGSX11Tablet *) tablet;
+// The window of the process the pointer is over, and where in it and on the root window.
+- (BOOL) windowUnderPointer: (Window *) found x: (int *) foundX y: (int *) foundY root: (CGPoint *) rootPoint state: (unsigned int *) state;
 - (void) setScrollAxes: (const CGSX11ScrollAxis *) axes count: (int) count;
 - (void) rawMotionEvent: (const XIRawEvent *) event;
 

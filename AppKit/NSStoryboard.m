@@ -130,7 +130,7 @@ static void setCurrentInstantiatingStoryboard(NSStoryboard *storyboard) {
 - (void) _instantiateAsMainStoryboard {
     NSString *menuName = [NS_EXTRA(NSStoryboard, self)->_info objectForKey: NSStoryboardMainMenuKey];
     if (menuName != nil)
-        [self _instantiateNibNamed: menuName owner: NSApp];
+        [[self _instantiateNibNamed: menuName owner: NSApp] retain];
 
     id controller = [self instantiateInitialController];
     if (controller == nil)

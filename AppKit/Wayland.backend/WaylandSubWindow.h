@@ -34,6 +34,10 @@ struct wl_egl_window;
     CGRect _frame, _fullRect, _pendingRect, _presentedRect;
     BOOL _visible, _clipped;
     int _flushPending; // a flush hop to the main thread is queued (atomic)
+    // Color-management objects for this subwindow's EGL surface.
+    struct wl_proxy *_colorSurface, *_representationSurface, *_surfaceFeedback;
+    // OpenGL layers that asked for EDR content, by layer (not retained).
+    NSHashTable *_edrLayers;
     // The surfaces Metal layers present to, by layer (not retained): WaylandMetalSurface objects.
     NSMapTable *_metalSurfaces;
 }
@@ -50,4 +54,8 @@ struct wl_egl_window;
 // subsurfaces made for the old one go first, and the new one gets them when it has its role.
 - (void) parentSurfaceWillBeReplaced;
 - (void) parentSurfaceReplaced;
+// Color management for this subwindow and its Metal surfaces. Returns whether the feedback
+// belonged to one of them; the parent window uses that to route compositor callbacks.
+- (BOOL) preferredColorInfoChangedForFeedback: (struct wl_proxy *) feedback;
+- (void) colorManagerAvailable;
 @end

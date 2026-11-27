@@ -51,6 +51,9 @@ struct wl_proxy;
     // Declared here: the i386 slice has the legacy Objective-C ABI, which has no ivars in the @implementation.
     CGSConnectionWayland *_connection; // not retained: the connection owns the pointer
     void *_source;                     // CGEventSourceRef of the hardware state
+    // The high-resolution time of the next input event, in CGEvent's clock (nanoseconds since boot).
+    uint64_t _pendingTimestamp;
+    BOOL _hasPendingTimestamp;
     struct wl_proxy *_pointer;
     struct wl_proxy *_pinch;
     // Where the pointer is: the surface (compared by value), the compositor's serial of the enter, the
@@ -95,6 +98,10 @@ struct wl_proxy;
     struct wl_proxy *_pinchSurface;
     BOOL _pinchActive;
     double _pinchScale;
+    // The hold gesture of pointer-gestures v3: a hold with no movement is sent as a zero scroll
+    // event with a phase, which is how AppKit cancels a kinetic scroll.
+    struct wl_proxy *_hold, *_holdSurface;
+    BOOL _holdActive;
     // The pointer lock of the relative mouse mode: the lock and relative pointer objects, the surface locked
     // and whether the compositor has activated the lock; the part of the relative motion that the whole
     // deltas did not carry.
@@ -115,9 +122,12 @@ struct wl_proxy;
 - (void) seatCapabilities: (uint32_t) capabilities seat: (struct wl_proxy *) seat;
 // The compositor offers (or no longer offers) the pointer gestures: the pinch object follows it.
 - (void) pointerGesturesChanged;
-// An event of the wl_pointer, or of the pinch gesture object.
+// The timestamp of the next input event, from input-timestamps-unstable-v1.
+- (void) setPendingTimestamp: (uint64_t) timestamp;
+// An event of the wl_pointer, or of the pinch or hold gesture object.
 - (void) pointerEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
 - (void) pinchEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
+- (void) holdEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
 // Posts the scroll frame that is not complete yet (before an event of another device).
 - (void) flushPending;
 // The connection closes, or the seat has no pointer any more.

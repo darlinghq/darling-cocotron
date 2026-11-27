@@ -49,6 +49,7 @@ struct wl_proxy;
 
 @class CGSWindowWayland;
 @class WaylandColorManager;
+@class WaylandRenderManager;
 
 // Identifies the object a dispatched event belongs to, the way AppKit's backend
 // does: libwayland listener structs are unusable across the Darwin/Linux
@@ -70,7 +71,13 @@ typedef enum {
     CGSWaylandObjectKeyboardSync,
     CGSWaylandObjectPointer,
     CGSWaylandObjectPinchGesture,
+    CGSWaylandObjectHoldGesture,
+    CGSWaylandObjectInputTimestamp,
     CGSWaylandObjectTouch,
+    CGSWaylandObjectTabletSeat,
+    CGSWaylandObjectTablet,
+    CGSWaylandObjectTabletTool,
+    CGSWaylandObjectTabletPad,
     CGSWaylandObjectLockedPointer,
     CGSWaylandObjectRelativePointer,
     CGSWaylandObjectWarpLock,
@@ -82,6 +89,8 @@ typedef enum {
     CGSWaylandObjectDataSource,
     CGSWaylandObjectCursorScale,
     CGSWaylandObjectDecoration,
+    CGSWaylandObjectTextInput,
+    CGSWaylandObjectActivationToken,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -103,8 +112,15 @@ typedef enum {
     // alpha-modifier-v1, when the compositor offers it: the opacity of a window's surface (-[CGSWindow setToplevelAlpha:]).
     struct wl_proxy *_alphaModifierManager;
     uint32_t _alphaModifierManagerName;
+    // xdg-activation-v1, when the compositor offers it: asks the compositor to focus a window of the process (see
+    // -requestActivationOfWindow:from:).
+    struct wl_proxy *_activation;
+    uint32_t _activationName;
 
 @protected
+    // The request for activation that waits for its token, and the window it is for (retained).
+    struct wl_proxy *_activationToken;
+    CGSWindowWayland *_activationWindow;
     struct wl_proxy *_registry;
     // A Unix domain socket, not a Mach port, so CFRunLoop is used directly.
     CFSocketRef _cfSocket;
@@ -112,6 +128,8 @@ typedef enum {
     NSMutableArray *_outputs;
     // Color management and representation, when the compositor offers them (WaylandColorManager).
     id _color;
+    // dma-buf, explicit synchronization and fifo, when the compositor offers them (WaylandRenderManager).
+    id _render;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
     id _outputManager;
@@ -127,8 +145,17 @@ typedef enum {
     id _pointerDecoder;
     // The seat's touch screen, which decodes the fingers into CGEvents (CGSWaylandTouch).
     id _touchDecoder;
+    // The tablet manager's tablet seats, which decode stylus tools into tablet CGEvents (CGSWaylandTablet).
+    id _tabletDecoder;
+    // The seat's text input, the compositor's input method for the windows (CGSWaylandInputMethod).
+    id _inputMethodDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
+    // input-timestamps-unstable-v1: one timestamp object per device, handing high-resolution times
+    // to the device's decoder before the input event they describe.
+    struct wl_proxy *_inputTimestampsManager;
+    uint32_t _inputTimestampsName;
+    struct wl_proxy *_pointerTimestamps, *_keyboardTimestamps, *_touchTimestamps;
     // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers
     // none.
     struct wl_proxy *_pointerConstraints, *_relativePointerManager;
@@ -176,8 +203,14 @@ typedef enum {
 // The shared color manager, or nil when the compositor offers neither color protocol.
 - (WaylandColorManager *) colorManager;
 - (id) waylandColorManager;
+- (id) waylandRenderManager;
+- (BOOL) extendedDynamicRangeAvailable;
+// The shared render-protocol manager, used by this connection's windows.
+- (WaylandRenderManager *) renderManager;
 // Tells the windows that a color global arrived after they were created.
 - (void) notifyWindowsColorManagerAvailable;
+// Tells the windows that a render global arrived after they were created.
+- (void) notifyWindowsRenderManagerAvailable;
 
 // Runs the block after the events the connection has read are dispatched: not inside a listener of the
 // compositor's events, where a request that waits for the compositor would nest in the dispatch. Blocks queued by
@@ -195,6 +228,8 @@ typedef enum {
 - (struct wl_proxy *) seat;
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;
+// Creates or drops the input timestamp objects to match the seat's devices.
+- (void) updateInputTimestamps;
 // The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerConstraints;
 - (struct wl_proxy *) relativePointerManager;
@@ -218,6 +253,23 @@ typedef enum {
 - (void) flushPendingPointerEvents;
 // Posts the modifier key change the keyboard decoder holds back until the compositor confirms it.
 - (void) flushPendingKeyboardEvents;
+
+// The windows' input method (see CGSInputMethod.h): the text input of the seat.
+- (void) inputMethodWindowChanged: (CGSWindow *) window;
+- (void) inputMethodWindowUnmapped: (CGSWindow *) window;
+- (void) inputMethodWindowDestroyed: (uint32_t) windowID;
+// Asks the compositor, through xdg-activation, to focus a window of this process. The compositor decides: it may only mark
+// the window as wanting attention. The token carries the serial of the last key or button press when there is one,
+// because compositors refuse requests that cannot be tied to user input. The requester is the window the token names as the
+// one that asks (xdg-activation set_surface), nil for none: GUESS: the protocol allows no surface, and some compositors refuse
+// that. The variant without a requester picks one: a shown window other than the one to activate. Returns whether a
+// request was made; one is not while another waits for its token, and then nothing was asked.
+- (BOOL) requestActivationOfWindow: (CGSWindowWayland *) window from: (CGSWindowWayland *) requester;
+- (BOOL) requestActivationOfWindow: (CGSWindowWayland *) window;
+- (void) cancelActivationRequest;
+- (void) activationTokenDone: (const char *) token;
+// The window an activation request from another process is for: the one activated last that is shown as a toplevel.
+- (CGSWindowWayland *) windowForActivation;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
 // Whether the surface is that of a display overlay (a window made with -becomeDisplayOverlay:), and the

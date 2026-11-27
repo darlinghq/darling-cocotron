@@ -676,6 +676,10 @@ static NSString *menuBarStylePreference(void) {
     if (![NSWindow _usesInWindowMenuBar])
         return NO;
 
+    // The menu bar is out of the way in full screen: the content fills the frame.
+    if (styleMask & NSWindowStyleMaskFullScreen)
+        return NO;
+
     // A full-size content view covers the whole frame, leaving no room for
     // the menu.
     return (styleMask & NSTitledWindowMask) &&
@@ -1044,6 +1048,7 @@ static NSString *menuBarStylePreference(void) {
     [self _sizeLimitsChanged];
 
     [self _hideMenuViewIfNeeded];
+    [self _updateMenuViewForFullScreen];
 
     [_backgroundView resizeSubviewsWithOldSize: [_backgroundView frame].size];
     [_backgroundView setNeedsDisplay: YES]; // FIXME: verify this is done
@@ -3814,6 +3819,14 @@ static NSRect constrainRectToScreen(NSRect rect, NSScreen *screen) {
                 rotateWithEvent: event];
         break;
 
+    case NSEventTypeTabletPoint:
+        [[_backgroundView hitTest: [event locationInWindow]] tabletPoint: event];
+        break;
+
+    case NSEventTypeTabletProximity:
+        [[_backgroundView hitTest: [event locationInWindow]] tabletProximity: event];
+        break;
+
     case NSEventTypeDirectTouch:
         [self _sendTouchEvent: event];
         break;
@@ -4591,6 +4604,25 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     if ([self hasMainMenu] && NS_EXTRA(NSWindow, self)->_menuView != nil && ![NS_EXTRA(NSWindow, self)->_menuView isHidden]) {
         [NS_EXTRA(NSWindow, self)->_menuView setHidden: YES];
         [self _resizeWithOldMenuViewSize: [NS_EXTRA(NSWindow, self)->_menuView frame].size];
+    }
+}
+
+// A window in full screen has no menu strip, and the content fills the frame (the screen's frame); the strip comes
+// back when the window leaves full screen. Unlike -_hideMenuViewIfNeeded this does not resize the window: the
+// window system decides the frame of a full screen window.
+- (void) _updateMenuViewForFullScreen {
+    NSView *menuView = NS_EXTRA(NSWindow, self)->_menuView;
+
+    if (menuView == nil)
+        return;
+    if (NS_EXTRA(NSWindow, self)->_styleMask & NSWindowStyleMaskFullScreen) {
+        if (![menuView isHidden]) {
+            [menuView setHidden: YES];
+            NS_EXTRA(NSWindow, self)->_menuViewHiddenForFullScreen = YES;
+        }
+    } else if (NS_EXTRA(NSWindow, self)->_menuViewHiddenForFullScreen) {
+        NS_EXTRA(NSWindow, self)->_menuViewHiddenForFullScreen = NO;
+        [menuView setHidden: NO];
     }
 }
 

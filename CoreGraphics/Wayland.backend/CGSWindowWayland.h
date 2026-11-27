@@ -119,6 +119,21 @@ typedef enum {
     struct wl_proxy *_alphaModifier;
     CGFloat _uiAlpha;
     BOOL _uiAlphaSet;
+
+    // Relation, order, focus, minimizing and fullscreen of the window (see CGSWindow.h). What the compositor said of the
+    // window is kept as of the configure that said it; what the UI layer asked for is kept as asked.
+    int _uiLevel;
+    BOOL _uiStacksByLevel;
+    // Ordered in by the UI layer but kept from the compositor (see -setToplevelHeldBack:).
+    BOOL _uiHeldBack;
+    // The order the process knows of its windows: the window activated or ordered to the front last comes first, the
+    // others follow in the order they were made (see -[CGSConnectionWayland orderedToplevelWindowIDs]).
+    uint64_t _orderStamp, _creationStamp;
+    BOOL _uiActivated, _uiSuspended;
+    BOOL _uiMinimized;
+    // Fullscreen: what was asked for, what the compositor said, and whether a change waits for its answer.
+    BOOL _uiFullscreenRequested, _uiFullscreen, _uiFullscreenSettling;
+    NSUInteger _uiSettleToken;
 }
 
 - (instancetype) initToplevelWithAttributes: (const CGSToplevelAttributes *) attributes
@@ -128,6 +143,26 @@ typedef enum {
 - (void) handleEvent: (uint32_t) opcode
                 kind: (CGSWaylandObjectKind) kind
            arguments: (union wl_argument *) args;
+
+// The order of the window among the process' windows (see the connection's -orderedToplevelWindowIDs): larger is further
+// in front. A window that was never ordered or activated is behind those that were, the older window in front.
+- (uint64_t) orderRank;
+// Whether the UI layer ordered the window in: shown, or held back from the compositor.
+- (BOOL) isOrderedIn;
+// Whether the window is a toplevel window of the UI layer (see CGSWindow.h).
+- (BOOL) isUIToplevel;
+// The window was asked to be activated through xdg-activation and the compositor did not minimize it any more (see
+// -[CGSConnectionWayland requestActivationOfWindow:from:]).
+- (BOOL) isMinimizedByRequest;
+// Whether the compositor minimizes toplevels when asked (see -miniaturizeToplevel).
+- (BOOL) compositorMinimizes;
+// A toplevel of this connection was hidden: windows that were related to it lose the relation, as the compositor
+// drops it.
+- (void) relatedToplevelHidden: (CGSWindowWayland *) hidden;
+// Asks the compositor to fullscreen the window on an output (a wl_output, NULL: its choice) or to leave fullscreen. The
+// UI layer chooses the output, as it knows what the window's surface entered (see -setToplevelFullscreen:force:, which lets
+// the compositor choose).
+- (CGError) setToplevelFullscreen: (BOOL) fullscreen onOutput: (struct wl_proxy *) output force: (BOOL) force;
 
 // The role the window has, CGSWaylandRoleNone before it is first used.
 - (CGSWaylandRole) role;
@@ -148,8 +183,12 @@ typedef enum {
 - (void) bufferReleased: (struct wl_proxy *) buffer opcode: (uint32_t) opcode;
 // A color global arrived after the window was made: create its per-surface objects now.
 - (void) colorManagerAvailable;
+- (void) renderManagerAvailable;
 // Where the window is, as far as the connection knows (the rect that was asked for).
 - (CGPoint) frameOrigin;
+// Where the window's content starts in the surface, when the UI layer draws the window's frame inside it (see
+// -setToplevelContentOffset:).
+- (CGPoint) toplevelContentOffset;
 
 // The window's objects of the window system, for the UI layer that owns the window's content and what the protocol
 // has beyond CGSWindow.h (the toplevel's fullscreen, parent and move requests, the objects that must be made

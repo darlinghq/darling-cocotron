@@ -3,8 +3,13 @@
 `fake-input-method.c` is a Wayland input method (zwp_input_method_v2) that composes text on a
 compositor which has it (sway, other wlroots compositors). When a text input client enables
 text input, it sends the composition "ka", then the composition of the kana for it, then commits
-that kana as final text, then composes "x" and cancels it. `../appkit-wayland-text-input.m`
-(Darling's Wayland AppKit backend) runs against it.
+that kana as final text, then composes "x" and cancels it. Then it composes "a" and U+20BB7 (a
+character outside the BMP) and commits that character and U+1F600, and last deletes text around the
+caret (1 byte before it, 4 after) while committing U+00FC. It prints what the client tells it of its
+text (`surrounding "<text>" <cursor> <anchor>`, bytes of UTF-8) and kind of text
+(`content_type <hint> <purpose>`). `../appkit-wayland-text-input.m` (Darling's Wayland AppKit
+backend) and `../coregraphics-wayland-input-method-no-appkit.m` (CoreGraphics without AppKit, run by
+`../coregraphics-wayland-input-method-no-appkit.sh`, which checks what was printed) run against it.
 
 Build on the host (needs wayland-client and wayland-scanner):
 

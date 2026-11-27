@@ -528,6 +528,14 @@ void NSColorInitializeDynamicSystemColors(void);
     return [NSColor colorWithCatalogName: @"System" colorName: @"controlAccentColor"];
 }
 
+bool NSUserAccentHasHardwareColor(void) {
+    return false;
+}
+
+NSString *NSUserAccentColorGetHardwareAccentColorName(void) {
+    return nil;
+}
+
 // QUIRK: AppleAquaColorVariant == 6 corresponds to Graphite control tint (or AppleAccentColor == -1).
 // Any other variant or default is NSBlueControlTint (value 1, not NSDefaultControlTint which is 0).
 // Evidence: black-box reads of +currentControlTint on macOS 10.14.4 and 26.7.3 (tier 2): AppleAccentColor -1 and

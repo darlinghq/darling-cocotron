@@ -41,6 +41,7 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSEvent_mouse.h>
+#import "NSEvent.subproj/NSEvent_tablet.h"
 #import "NSEvent_gesture.h"
 #import <AppKit/NSEvent_keyboard.h>
 #import <AppKit/NSEvent_other.h>
@@ -358,6 +359,43 @@ CGEventRef _NSEventCreateCGEvent(NSEvent *event, CGFloat mainScreenMaxY) {
                                     [event windowNumber]);
         break;
     }
+    case NSEventTypeTabletPoint:
+    case NSEventTypeTabletProximity: {
+        cgEvent = CGEventCreate(NULL);
+        if (cgEvent == NULL)
+            break;
+        CGEventSetType(cgEvent, (CGEventType) type);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletEventPointX, [event absoluteX]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletEventPointY, [event absoluteY]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletEventPointZ, [event absoluteZ]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletEventPointButtons, [event buttonMask]);
+        CGEventSetDoubleValueField(cgEvent, kCGTabletEventPointPressure, [event pressure]);
+        CGEventSetDoubleValueField(cgEvent, kCGTabletEventTiltX, [event tilt].x);
+        CGEventSetDoubleValueField(cgEvent, kCGTabletEventTiltY, [event tilt].y);
+        CGEventSetDoubleValueField(cgEvent, kCGTabletEventRotation, [event rotation]);
+        CGEventSetDoubleValueField(cgEvent, kCGTabletEventTangentialPressure, [event tangentialPressure]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventVendorID, [event vendorID]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventTabletID, [event tabletID]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventPointerID, [event pointingDeviceID]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventDeviceID, [event deviceID]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventSystemTabletID, [event systemTabletID]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventVendorPointerType, [event vendorPointingDeviceType]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventVendorPointerSerialNumber,
+                                    [event pointingDeviceSerialNumber]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventVendorUniqueID, [event uniqueID]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventCapabilityMask, [event capabilityMask]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventPointerType, [event pointingDeviceType]);
+        CGEventSetIntegerValueField(cgEvent, kCGTabletProximityEventEnterProximity, [event isEnteringProximity]);
+        CGEventSetIntegerValueField(cgEvent, kCGSTabletPointerID, [event pointingDeviceID]);
+        CGEventSetIntegerValueField(cgEvent, kCGSTabletSystemTabletID, [event systemTabletID]);
+        CGEventSetIntegerValueField(cgEvent, kCGSTabletCapabilityMask, [event capabilityMask]);
+        CGEventSetIntegerValueField(cgEvent, kCGSTabletVendorPointerType, [event vendorPointingDeviceType]);
+        CGEventSetIntegerValueField(cgEvent, kCGSTabletPointerType, [event pointingDeviceType]);
+        CGEventSetIntegerValueField(cgEvent, kCGSTabletVendorPointerSerialNumber, [event pointingDeviceSerialNumber]);
+        CGEventSetIntegerValueField(cgEvent, kCGSTabletWindowNumber, [event windowNumber]);
+        CGEventSetIntegerValueField(cgEvent, kCGSTabletWindowNumberThatCanHandleThisEvent, [event windowNumber]);
+        break;
+    }
     case NSScrollWheel: {
         CGFloat deltaY = [event deltaY], deltaX = [event deltaX];
         cgEvent = CGEventCreateScrollWheelEvent(NULL, kCGScrollEventUnitLine, 2, (int32_t) deltaY, (int32_t) deltaX);
@@ -521,6 +559,39 @@ NSEvent *_NSEventCreateFromCGEvent(CGEventRef cgEvent) {
             [[NSDisplay currentDisplay] pointerEventCreated: mouse fromCGEvent: cgEvent];
         }
         result = mouse;
+        break;
+    }
+    case kCGEventTabletPointer:
+    case kCGEventTabletProximity: {
+        // A tablet belongs to the window under the tool like the pointer does. The backend posts
+        // the fields; AppKit only reads them, so the same protocol works for Wayland and X11.
+        NSInteger windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGSTabletWindowNumberThatCanHandleThisEvent);
+        if (windowNumber == 0)
+            windowNumber = (NSInteger) CGEventGetIntegerValueField(cgEvent, kCGSTabletWindowNumber);
+        NSPoint windowLocation = NSZeroPoint;
+        BOOL hasWindowLocation = NO;
+        if (CGEventGetIntegerValueField(cgEvent, kCGSEventNativeWindow) != 0) {
+            NSInteger nativeNumber = 0;
+            if ([[NSDisplay currentDisplay] windowNumber: &nativeNumber
+                                                location: &windowLocation
+                                             hasLocation: &hasWindowLocation
+                                         forPointerEvent: cgEvent])
+                windowNumber = nativeNumber;
+        }
+        NSWindow *window = windowNumber != 0 ? [NSApp windowWithWindowNumber: windowNumber] : nil;
+        NSPoint location = screenLocation(cgEvent);
+        if (window != nil)
+            location = hasWindowLocation ? windowLocation : [window convertScreenToBase: location];
+        else
+            windowNumber = 0;
+        result = [[NSEvent_tablet alloc]
+                initWithType: type == kCGEventTabletPointer ? NSEventTypeTabletPoint : NSEventTypeTabletProximity
+                    location: location
+               modifierFlags: flags
+                   timestamp: timestamp
+                windowNumber: windowNumber
+                     context: nil
+                     cgEvent: cgEvent];
         break;
     }
     case 18: // NSEventTypeRotate

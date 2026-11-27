@@ -42,7 +42,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
+@class WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager, WaylandRenderManager;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -61,14 +61,12 @@ typedef enum {
     WaylandObjectDecoration,
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
-    WaylandObjectTextInput,
     WaylandObjectDataDevice,
     WaylandObjectDataOffer,
     WaylandObjectDataSource,
     WaylandObjectFractionalScale,
     WaylandObjectLockedPointer,
     WaylandObjectRelativePointer,
-    WaylandObjectActivationToken,
     WaylandObjectLayerSurface,
     WaylandObjectIconManager,
     // The session protocol's objects. These are above the color manager's range so the two sets
@@ -98,12 +96,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_registry;
     struct wl_proxy *_compositor;
     struct wl_proxy *_viewporter, *_fractionalScaleManager;
-    // xdg-activation: asks the compositor to focus one of our windows (see
-    // -requestActivation). The token object and the window it is for exist only
-    // while a request waits for the compositor's token.
-    struct wl_proxy *_activation, *_activationToken;
-    uint32_t _activationName;
-    WaylandWindow *_activationWindow;
     // Windows of an inactive application that were not mapped are being mapped for an activation.
     BOOL _mappingForActivation;
     uint32_t _viewporterName, _fractionalScaleManagerName;
@@ -151,20 +143,16 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // power assertion that prevents display sleep.
     struct wl_proxy *_idleInhibitManager;
     uint32_t _idleInhibitManagerName;
+    // wp_content_type_v1: the compositor is told whether a window shows a game or video.
+    struct wl_proxy *_contentTypeManager;
+    uint32_t _contentTypeManagerName;
+    // keyboard-shortcuts-inhibit-unstable-v1: fullscreen windows take the compositor's shortcuts.
+    struct wl_proxy *_shortcutsInhibitManager;
+    uint32_t _shortcutsInhibitManagerName;
 
 @protected
     struct wl_proxy *_seat;
     struct wl_proxy *_pointer;
-    // text-input-v3: the input method's composition and commits for the focused text input
-    // client. The text input object exists once the manager and the seat are both bound.
-    struct wl_proxy *_textInputManager, *_textInput;
-    uint32_t _textInputManagerName;
-    WaylandWindow *_textInputWindow; // the surface the compositor entered; nonretained
-    BOOL _textInputEnabled;
-    NSRect _textInputRect;           // the last cursor rectangle sent, surface coordinates
-    NSString *_textInputPendingPreedit, *_textInputPendingCommit;
-    int _textInputPendingCursorBegin, _textInputPendingCursorEnd;
-    NSString *_textInputPreedit;     // the composition the client currently shows
     // The outputs and the rest of the connection are set up; changes of the outputs are passed on.
     BOOL _setupDone;
     // A change of the outputs waits for the end of the pass over the events.
@@ -208,6 +196,11 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) flush;
 // The shared color manager, or nil when the compositor offers neither protocol.
 - (WaylandColorManager *) colorManager;
+// The render-protocol manager used to attach buffers and queue frames: CoreGraphics' one, so that a
+// surface has one set of syncobj and fifo objects whichever framework presents on it.
+- (WaylandRenderManager *) renderManager;
+// Called when one of the render globals arrives, so surfaces made earlier can observe it.
+- (void) renderGlobalsAvailable;
 // Start a window-system session before any restored window is mapped. These implement the
 // NSDisplay (NSSessionRestoration) hooks declared in NSWindow-Private.h.
 - (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier;
@@ -228,7 +221,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (uint32_t) refreshForOutput: (struct wl_proxy *) output; // millihertz, 0 if unknown
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForGenericPopup: (WaylandWindow *) window;
-- (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
+- (NSArray *) levelParentCandidatesForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
 // Fills `result` and `proxies` with up to `max` outputs in -screens order (the order of the displays): their
@@ -239,6 +232,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                      proxies: (struct wl_proxy **) proxies
                          max: (size_t) max
                      entered: (NSSet *) entered;
+// The frame of the screen that a fullscreen window of this logical size fills: the output the window has entered
+// whose size it is (the only output of that size when it has entered none). NO when there is no such screen.
+- (BOOL) fullscreenScreenFrameForSize: (NSSize) size entered: (NSSet *) entered frame: (NSRect *) frame;
 - (void) unmapPopupsForParent: (WaylandWindow *) parent;
 - (void) mapPopupsWaitingForParent;
 - (void) cancelPopupMenus;
@@ -256,7 +252,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) windowUnmapped: (WaylandWindow *) window;
 - (void) applicationFocusMayHaveLeft;
 - (BOOL) mappingForActivation;
-- (BOOL) requestActivationOfWindow: (WaylandWindow *) window;
 - (void) mapDeferredWindows;
 - (void) windowDestroyed: (WaylandWindow *) window;
 
@@ -266,4 +261,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (NSString *) applicationMenuObjectPath;
 
 - (struct wl_proxy *) newFractionalScaleForSurface: (struct wl_proxy *) surface owner: (id<WaylandFractionalScaleOwner>) owner;
+- (void) contentTypeManagerAvailable;
+- (void) shortcutsInhibitManagerAvailable;
 @end

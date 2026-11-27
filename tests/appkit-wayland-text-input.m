@@ -9,6 +9,10 @@
 // with WAYLAND_DISPLAY set to the compositor's socket (an absolute host path), the fake input
 // method started, and DARLING_TEST_INPUT_METHOD=1. Without that variable the test prints SKIP
 // when the backend is not Wayland or no composition arrives.
+//
+// The composition and the committed text include characters outside the BMP (U+20BB7 and U+1F600; the caret of the
+// composition "a" and U+20BB7 is after the pair, at UTF-16 offset 3) and non-ASCII text (U+00FC). The input method also
+// deletes text around the caret; this client does not tell the input method its text, so there is nothing to delete.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #include <stdio.h>
@@ -76,7 +80,8 @@ int main(void) {
             return required ? 1 : 0;
         }
 
-        NSString *expected = @"mark:ka sel=2,0|mark:か sel=1,0|mark: sel=0,0|insert:か|mark:x sel=1,0|mark: sel=0,0";
+        NSString *expected = @"mark:ka sel=2,0|mark:か sel=1,0|mark: sel=0,0|insert:か|mark:x sel=1,0|mark: sel=0,0|"
+                          @"mark:a\U00020BB7 sel=3,0|mark: sel=0,0|insert:\U00020BB7\U0001F600|insert:ü";
         NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow: 20];
         while ([deadline timeIntervalSinceNow] > 0 &&
                ![[client->log componentsJoinedByString: @"|"] isEqualToString: expected])
@@ -91,7 +96,7 @@ int main(void) {
             printf("FAIL: client saw \"%s\"\n      expected \"%s\"\n", [actual UTF8String], [expected UTF8String]);
             failures++;
         }
-        if (![client->text isEqualToString: @"か"]) {
+        if (![client->text isEqualToString: @"か\U00020BB7\U0001F600ü"]) {
             printf("FAIL: committed text is \"%s\"\n", [client->text UTF8String]);
             failures++;
         }

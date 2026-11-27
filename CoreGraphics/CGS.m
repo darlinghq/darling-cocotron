@@ -881,6 +881,16 @@ id _CGSNativeConnectionWaylandColorManager(void)
 	return [nativeConnection() waylandColorManager];
 }
 
+id _CGSNativeConnectionWaylandRenderManager(void)
+{
+	return [nativeConnection() waylandRenderManager];
+}
+
+bool _CGSExtendedDynamicRangeAvailable(void)
+{
+	return [nativeConnection() extendedDynamicRangeAvailable] ? true : false;
+}
+
 bool _CGSNativeConnectionDisplaySleepPrevented(void)
 {
 	return [nativeConnection() displaySleepPrevented];

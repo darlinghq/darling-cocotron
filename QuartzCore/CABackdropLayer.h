@@ -30,10 +30,16 @@
 @interface CABackdropLayer : CALayer {
     NS_EXTRA_IVARS_BEGIN(CABackdropLayer)
         BOOL _windowServerAware;
+        CGFloat _scale;
+        BOOL _allowsInPlaceFiltering;
+        NSString *_groupName;
     NS_SIDE_IVARS_END(CABackdropLayer)
 }
 
 // Whether the window server content behind the window is part of the backdrop.
 @property BOOL windowServerAware;
+@property (nonatomic) CGFloat scale;
+@property (nonatomic) BOOL allowsInPlaceFiltering;
+@property (nonatomic, copy) NSString *groupName;
 
 @end

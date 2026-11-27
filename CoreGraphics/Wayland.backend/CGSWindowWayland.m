@@ -23,6 +23,8 @@
 #import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import "WaylandRender.h"
+#import "WaylandToplevelRequests.h"
 
 #import <CoreGraphics/CGSSurface.h>
 #import <Foundation/NSDictionary.h>
@@ -35,6 +37,9 @@
 
 static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
 
+// Numbers the windows' places in the order the process knows of them (see -orderRank).
+static uint64_t sOrderCounter;
+
 @implementation CGSWindowWayland
 
 - (instancetype) initWithRegion: (CGSRegionRef) region
@@ -46,6 +51,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
         return nil;
 
     _waylandConnection = (CGSConnectionWayland *) connection;
+    _creationStamp = ++sOrderCounter;
     _frame = CGRectMake(0, 0, 1, 1);
     if (region != NULL)
         CGSRegionToRect(region, &_frame);
@@ -67,6 +73,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
         [self release];
         return nil;
     }
+    [[_waylandConnection renderManager] observeSurface: _surface];
 
     // The role (and with it the initial commit) is made by -ensureRole once the level and style
     // are known.
@@ -93,7 +100,35 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
         _representationSurface = [color newRepresentationSurfaceForSurface: _surface];
 }
 
+- (void) renderManagerAvailable {
+    if (_surface != NULL)
+        [[_waylandConnection renderManager] observeSurface: _surface];
+}
+
+- (CGPoint) toplevelContentOffset {
+    return _uiContentOffset;
+}
+
+// The window's input method state is what the connection's text input sends to the compositor while this window has
+// the text input focus (see CGSInputMethod.h).
+- (void) inputMethodEnabledChanged {
+    [_waylandConnection inputMethodWindowChanged: self];
+}
+
+- (void) inputMethodCursorRectChanged {
+    [_waylandConnection inputMethodWindowChanged: self];
+}
+
+- (void) inputMethodSurroundingTextChanged {
+    [_waylandConnection inputMethodWindowChanged: self];
+}
+
+- (void) inputMethodContentTypeChanged {
+    [_waylandConnection inputMethodWindowChanged: self];
+}
+
 - (void) dealloc {
+    [_waylandConnection inputMethodWindowDestroyed: [self windowId]];
     // The surface's wl_egl_window references our wl_surface, so it has to go
     // first; -[CGSWindow dealloc] would only release _surfaces after this body.
     @synchronized (_surfaces) {
@@ -109,6 +144,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
     _representationSurface = NULL;
     [self destroyRole];
     destroyProxy(&_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_DESTROY);
+    [[_waylandConnection renderManager] destroySurface: _surface];
     if (_surface != NULL)
         WaylandMarshal(_surface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
                        (union wl_argument[1]) {{.o = NULL}});
@@ -359,7 +395,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 // front of that window; any other window has no parent. The compositor drops the relation when the
 // parent is unmapped, so it is made again whenever a window is shown.
 - (void) updateLevelParent {
-    if (_toplevel == NULL)
+    // A toplevel window of the UI layer is related to the window the UI layer names (-setToplevelParent:).
+    if (_ui || _toplevel == NULL)
         return;
     CGSWindowWayland *parent = [self isFloating] ? [self windowToAttachTo: NO] : nil;
     if (parent != nil && parent->_toplevel == NULL)
@@ -551,6 +588,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         }
         if (activated != _activated) {
             _activated = activated;
+            if (activated)
+                [self bumpOrder];
             _CGSPostWindowEvent(activated ? kCGSWindowEventActivated : kCGSWindowEventDeactivated,
                                 self.windowId, CGRectNull);
         }
@@ -917,6 +956,9 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     if (_toplevel == NULL)
         return;
     _role = CGSWaylandRoleToplevel;
+    // A new toplevel starts as the compositor makes it: windowed, not minimized.
+    _uiFullscreenRequested = _uiFullscreen = _uiFullscreenSettling = NO;
+    _uiSuspended = _uiActivated = NO;
     union wl_argument title[1] = {{.s = _title != nil ? [_title UTF8String] : ""}};
     WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_TITLE, NULL, 0, title);
     union wl_argument appID[1] = {{.s = [[[NSProcessInfo processInfo] processName] UTF8String]}};
@@ -963,11 +1005,21 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 // destroyed and created again when the window is shown. The wl_surface stays: what the UI layer attached to it keeps
 // its place.
 - (CGError) hideToplevel {
+    [_waylandConnection inputMethodWindowUnmapped: self];
     _shown = NO;
     _uiConfigured = NO;
     if (_role == CGSWaylandRoleNone)
         return kCGSErrorSuccess;
+    // The toplevel is gone, and so is what the compositor did to it.
+    [self endMinimized];
+    _uiActivated = _uiSuspended = NO;
+    _uiFullscreenRequested = _uiFullscreen = _uiFullscreenSettling = NO;
     [self destroyRole];
+    NSArray *windows = [_waylandConnection copyAllWindows];
+    for (CGSWindow *window in windows)
+        if ([window isKindOfClass: [CGSWindowWayland class]])
+            [(CGSWindowWayland *) window relatedToplevelHidden: self];
+    [windows release];
     union wl_argument attach[3] = {{.o = NULL}, {.i = 0}, {.i = 0}};
     union wl_argument none[1] = {{.o = NULL}};
     WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, attach);
@@ -1071,9 +1123,268 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     BOOL first = !_uiConfigured;
     _uiConfigured = YES;
     [self postToplevelEvent: &event];
+    [self applyConfiguredState];
     // What the window drew while it waited for the configure is shown now.
     if (first && [self withContents: ^(const void *bytes, size_t rowBytes, CGSize size) {}])
         [self presentRect: CGRectMake(0, 0, _frame.size.width, _frame.size.height)];
+}
+
+
+#pragma mark - Order, relation, focus, minimizing and fullscreen
+
+// The window's place in the order the process knows of its windows: the window that was activated or ordered to the front
+// last comes first, then the windows that never were, the older one in front (xdg-shell tells a client nothing of the
+// stacking, so this is the order that follows what the compositor told).
+- (uint64_t) orderRank {
+    const uint64_t base = UINT64_C(1) << 62;
+    return _orderStamp != 0 ? base + _orderStamp : base - _creationStamp;
+}
+
+- (void) bumpOrder {
+    _orderStamp = ++sOrderCounter;
+}
+
+- (BOOL) isOrderedIn {
+    return _shown || _uiHeldBack;
+}
+
+- (BOOL) isUIToplevel {
+    return _ui;
+}
+
+- (BOOL) isMinimizedByRequest {
+    return _uiMinimized;
+}
+
+- (void) postStateEvent: (CGSToplevelEventKind) kind state: (BOOL) state {
+    CGSToplevelEvent event = {.kind = kind, .rect = CGRectNull, .state = state};
+    [self postToplevelEvent: &event];
+}
+
+// What the end of a configure sequence says of the window, as the changes of its state: the keyboard focus, being covered,
+// being fullscreen, and an answer to a request for fullscreen. The window is shown again when it is activated.
+- (void) applyConfiguredState {
+    BOOL toplevel = _role == CGSWaylandRoleToplevel;
+    BOOL activated = toplevel && _uiPending.activated;
+    BOOL suspended = toplevel && _uiPending.suspended;
+    BOOL fullscreen = toplevel && _uiPending.fullscreen;
+    if (activated != _uiActivated) {
+        _uiActivated = activated;
+        if (activated) {
+            [self bumpOrder];
+            // Only the change to activated shows a restore: a configure that repeats the state of a window that was active
+            // when it was minimized may already be on its way.
+            [self endMinimized];
+        }
+        [self postStateEvent: activated ? kCGSToplevelEventFocusGained : kCGSToplevelEventFocusLost state: activated];
+    }
+    if (suspended != _uiSuspended) {
+        _uiSuspended = suspended;
+        [self postStateEvent: kCGSToplevelEventOcclusionChanged state: suspended];
+    }
+    if (fullscreen != _uiFullscreen) {
+        _uiFullscreen = fullscreen;
+        [self postStateEvent: kCGSToplevelEventFullscreenChanged state: fullscreen];
+    }
+    if (_uiFullscreenSettling && fullscreen == _uiFullscreenRequested) {
+        _uiFullscreenSettling = NO;
+        ++_uiSettleToken;
+        [self postStateEvent: kCGSToplevelEventFullscreenSettled state: fullscreen];
+    }
+}
+
+- (CGError) setToplevelLevel: (int) level {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    // xdg-shell can relate windows but not stack them by level: what the level means is the UI layer's decision, which it
+    // makes known with -setToplevelParent:.
+    _uiLevel = level;
+    return kCGSErrorSuccess;
+}
+
+- (CGError) setToplevelStacksByLevel: (BOOL) stacks {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiStacksByLevel = stacks;
+    return kCGSErrorSuccess;
+}
+
+- (CGError) restackToplevelForLevels {
+    return _ui ? kCGSErrorSuccess : kCGErrorNotImplemented;
+}
+
+// The compositor stacks the windows of a client as it likes; the only thing a client knows is the order it activated or
+// asked for them in. Ordering in front of another window, or to the back, cannot be asked for.
+- (CGError) orderToplevelAbove: (CGSWindow *) sibling {
+    if (!_ui || sibling != nil)
+        return kCGErrorNotImplemented;
+    [self bumpOrder];
+    return kCGSErrorSuccess;
+}
+
+- (CGError) orderToplevelBelow: (CGSWindow *) sibling {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelHeldBack: (BOOL) heldBack {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiHeldBack = heldBack;
+    return kCGSErrorSuccess;
+}
+
+- (BOOL) toplevelHoldsKeyboardFocus {
+    return _ui && _shown && _uiActivated;
+}
+
+- (BOOL) toplevelIsOccluded {
+    return _ui && _shown && _uiSuspended;
+}
+
+#pragma mark Parent
+
+- (CGSWindow *) toplevelParent {
+    return _ui ? _levelParent : nil;
+}
+
+- (CGError) setToplevelParent: (CGSWindow *) parentWindow {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    if (_toplevel == NULL)
+        return kCGErrorFailure;
+    CGSWindowWayland *parent = (CGSWindowWayland *) parentWindow;
+    if (parent != nil) {
+        if (![parent isKindOfClass: [CGSWindowWayland class]] || parent == self || parent->_toplevel == NULL)
+            return kCGErrorIllegalArgument;
+        // A window must not be its own ancestor: that is a protocol error.
+        int depth = 0;
+        for (CGSWindowWayland *up = parent->_levelParent; up != nil && depth < 16; up = up->_levelParent, depth++)
+            if (up == self)
+                return kCGErrorIllegalArgument;
+    }
+    if (parent == _levelParent)
+        return kCGSErrorSuccess;
+    _levelParent = parent;
+    WaylandToplevelSetParent(_toplevel, parent != nil ? parent->_toplevel : NULL);
+    [_waylandConnection flush];
+    return kCGSErrorSuccess;
+}
+
+// The compositor reparents the windows that were children of the hidden one itself.
+- (void) relatedToplevelHidden: (CGSWindowWayland *) hidden {
+    if (!_ui || _levelParent != hidden)
+        return;
+    _levelParent = nil;
+    [self postStateEvent: kCGSToplevelEventParentLost state: NO];
+}
+
+#pragma mark Fullscreen
+
+- (CGError) setToplevelFullscreen: (BOOL) fullscreen force: (BOOL) force {
+    return [self setToplevelFullscreen: fullscreen onOutput: NULL force: force];
+}
+
+- (CGError) setToplevelFullscreen: (BOOL) fullscreen onOutput: (struct wl_proxy *) output force: (BOOL) force {
+    if (!_ui || _toplevel == NULL)
+        return kCGErrorNotImplemented;
+    if (fullscreen == _uiFullscreenRequested && !force)
+        return kCGSErrorSuccess;
+    _uiFullscreenRequested = fullscreen;
+    if (fullscreen)
+        WaylandToplevelSetFullscreen(_toplevel, output);
+    else
+        WaylandToplevelUnsetFullscreen(_toplevel);
+    if (_uiConfigured)
+        [self beginFullscreenSettle];
+    [_waylandConnection flush];
+    return kCGSErrorSuccess;
+}
+
+// After set_fullscreen or unset_fullscreen the client waits for the configure that answers it before it commits again:
+// the compositor decides the size. A commit sent before the answer arrives has the size the window gets from the
+// application's own side of the change (the title bar goes away, for instance), and a compositor that lets a client's size
+// count for a floating window (sway) then sends one more configure with that size and the fullscreen state, which wins over
+// the real fullscreen size. The wait ends with a configure that brings the requested state, or after a second when the
+// compositor answers nothing.
+- (void) beginFullscreenSettle {
+    _uiFullscreenSettling = YES;
+    NSUInteger token = ++_uiSettleToken;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        if (self->_uiSettleToken != token || !self->_uiFullscreenSettling)
+            return;
+        self->_uiFullscreenSettling = NO;
+        [self postStateEvent: kCGSToplevelEventFullscreenSettled state: self->_uiFullscreen];
+    });
+}
+
+- (BOOL) toplevelFullscreenRequested {
+    return _ui && _uiFullscreenRequested;
+}
+
+- (BOOL) toplevelIsFullscreen {
+    return _ui && _shown && _uiFullscreen;
+}
+
+- (BOOL) toplevelFullscreenSettling {
+    return _ui && _uiFullscreenSettling;
+}
+
+#pragma mark Minimizing
+
+// xdg-shell has no request to undo set_minimized and no event that says a toplevel is minimized, so the window keeps the
+// state itself. GUESS: the compositor minimizes the window when asked (it may ignore the request, and then the window is
+// reported miniaturized until it is shown again). The state is kept only when something can bring the window back
+// (xdg-activation) and the compositor advertised that it minimizes (a compositor that did not ignores the request, so the
+// window would be reported miniaturized while it stays on screen). Otherwise the request is sent as before and the window
+// keeps being reported as not miniaturized. GUESS: a compositor that predates the capabilities event (xdg_toplevel before
+// version 5) minimizes.
+- (BOOL) compositorMinimizes {
+    return WL.wl_proxy_get_version(_toplevel) < 5 || _uiMinimizeAdvertised;
+}
+
+- (CGError) miniaturizeToplevel {
+    if (!_ui || _toplevel == NULL)
+        return kCGErrorNotImplemented;
+    if (_uiMinimized)
+        return kCGSErrorSuccess;
+    WaylandToplevelSetMinimized(_toplevel);
+    [_waylandConnection flush];
+    if (_waylandConnection->_activation == NULL || ![self compositorMinimizes])
+        return kCGSErrorSuccess;
+    _uiMinimized = YES;
+    [_waylandConnection performAfterDispatch: ^{
+        if (self->_uiMinimized)
+            [self postStateEvent: kCGSToplevelEventMiniaturized state: YES];
+    }];
+    return kCGSErrorSuccess;
+}
+
+// The only client-side way to bring a minimized toplevel back is to ask for its activation (xdg-activation-v1); the
+// compositor decides, and may only mark the window as wanting attention. The window counts as shown again from the
+// request on. If no request could be made (one is waiting for its token) the state stays, and asking again later works. A
+// restore the compositor does itself (its task bar) ends the state when a configure changes the window to activated (see
+// -applyConfiguredState); a compositor that never reports the window deactivated cannot be told.
+- (CGError) deminiaturizeToplevel {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    if (_uiMinimized && [_waylandConnection requestActivationOfWindow: self])
+        [self endMinimized];
+    return kCGSErrorSuccess;
+}
+
+- (BOOL) toplevelIsMiniaturized {
+    return _ui && _uiMinimized;
+}
+
+// The window is shown again (activated by the compositor, or mapped anew): tells the UI layer.
+- (void) endMinimized {
+    if (!_uiMinimized)
+        return;
+    _uiMinimized = NO;
+    [_waylandConnection performAfterDispatch: ^{
+        if (!self->_uiMinimized)
+            [self postStateEvent: kCGSToplevelEventDeminiaturized state: NO];
+    }];
 }
 
 #pragma mark - CGSWindow
@@ -1126,6 +1437,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 
     switch (place) {
     case kCGSOrderOut: {
+        [_waylandConnection inputMethodWindowUnmapped: self];
         _shown = NO;
         // The pointer lock held for an overlay that goes away is made on a window again.
         if (_displayOverlay)
@@ -1184,7 +1496,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         if ([self isDocumentLike]) {
             NSArray *windows = [_waylandConnection copyAllWindows];
             for (CGSWindowWayland *window in windows)
-                if (window != self && window->_role == CGSWaylandRoleToplevel)
+                if (window != self && !window->_ui && window->_role == CGSWaylandRoleToplevel)
                     [window updateLevelParent];
             [windows release];
         }
@@ -1355,6 +1667,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 - (void) bufferReleased: (struct wl_proxy *) buffer opcode: (uint32_t) opcode {
     if (opcode != WP_BUFFER_EV_RELEASE)
         return;
+    [[_waylandConnection renderManager] bufferDestroyed: buffer];
     WaylandMarshal(buffer, WP_BUFFER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
                    (union wl_argument[1]) {{.o = NULL}});
     [_waylandConnection flush];
@@ -1421,6 +1734,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, attach);
         union wl_argument damage[4] = {{.i = 0}, {.i = 0}, {.i = width}, {.i = height}};
         WaylandMarshal(_surface, WP_SURFACE_DAMAGE, NULL, 0, damage);
+        // The fifo barrier must be set before the commit that presents the frame.
+        [[_waylandConnection renderManager] beginFrameForSurface: _surface buffer: buffer];
         union wl_argument none[1] = {{.o = NULL}};
         WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
         [_waylandConnection flush];

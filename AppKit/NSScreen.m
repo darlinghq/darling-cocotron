@@ -30,6 +30,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 NSNotificationName const NSScreenColorSpaceDidChangeNotification = @"NSScreenColorSpaceDidChangeNotification";
 
+// Shared with the Wayland window backend; kept out of AppKit's public header.
+@interface NSScreen (WaylandColorDescription)
++ (NSColorSpace *) _colorSpaceFromDisplayColorInfo: (NSDictionary *) info;
+@end
+
 // The color description CoreGraphics read from the window system, as an autoreleased NSDictionary.
 static NSDictionary *screenColorInfo(NSScreen *screen) {
     CFDictionaryRef info = _CGSDisplayCopyColorInfo([screen cgDirectDisplayID]);
@@ -55,13 +60,74 @@ static CGFloat screenColorLuminance(NSDictionary *info, CFStringRef key, CGFloat
     return value != nil ? [value doubleValue] : fallback;
 }
 
+// The chromaticity array of a parametric description, or NULL when it did not report one. The
+// compositor sends each CIE 1931 xy coordinate multiplied by one million.
+static NSArray *screenColorChromaticity(NSDictionary *info, CFStringRef key) {
+    NSArray *values = [info objectForKey: (id) key];
+    if (![values isKindOfClass: [NSArray class]] || [values count] != 8)
+        return nil;
+    for (id value in values)
+        if (![value isKindOfClass: [NSNumber class]])
+            return nil;
+    return values;
+}
+
+static BOOL screenColorChromaticityIs(NSDictionary *info, CFStringRef key,
+                                      const int32_t *expected, int32_t tolerance) {
+    NSArray *values = screenColorChromaticity(info, key);
+    if (values == nil)
+        return NO;
+    for (size_t i = 0; i < 8; i++)
+        if (ABS([[values objectAtIndex: i] intValue] - expected[i]) > tolerance)
+            return NO;
+    return YES;
+}
+
+// A named space is preferred when the compositor said which one the output uses. A parametric
+// description with no name is matched against the chromaticities of the spaces CoreGraphics knows;
+// the matching is deliberately approximate because the protocol's fixed-point values are rounded.
+static uint32_t screenColorPrimaries(NSDictionary *info) {
+    uint32_t named = screenColorEnum(info, kCGSDisplayColorPrimariesKey, 0);
+    if (named != 0)
+        return named;
+
+    static const int32_t sRGB[8] = {640000, 330000, 300000, 600000, 150000, 60000, 312700, 329000};
+    static const int32_t displayP3[8] = {680000, 320000, 265000, 690000, 150000, 60000, 312700, 329000};
+    static const int32_t dciP3[8] = {680000, 320000, 265000, 690000, 150000, 60000, 314000, 351000};
+    static const int32_t bt2020[8] = {708000, 292000, 170000, 797000, 131000, 46000, 312700, 329000};
+    static const int32_t adobeRGB[8] = {640000, 330000, 210000, 710000, 150000, 60000, 312700, 329000};
+
+    if (screenColorChromaticityIs(info, kCGSDisplayColorPrimariesChromaticityKey, sRGB, 5000))
+        return kCGSDisplayColorPrimariesSRGB;
+    if (screenColorChromaticityIs(info, kCGSDisplayColorPrimariesChromaticityKey, displayP3, 5000))
+        return kCGSDisplayColorPrimariesDisplayP3;
+    if (screenColorChromaticityIs(info, kCGSDisplayColorPrimariesChromaticityKey, dciP3, 5000))
+        return kCGSDisplayColorPrimariesDCIP3;
+    if (screenColorChromaticityIs(info, kCGSDisplayColorPrimariesChromaticityKey, bt2020, 5000))
+        return kCGSDisplayColorPrimariesBT2020;
+    if (screenColorChromaticityIs(info, kCGSDisplayColorPrimariesChromaticityKey, adobeRGB, 5000))
+        return kCGSDisplayColorPrimariesAdobeRGB;
+    return kCGSDisplayColorPrimariesSRGB;
+}
+
+static uint32_t screenColorTransfer(NSDictionary *info) {
+    uint32_t named = screenColorEnum(info, kCGSDisplayColorTransferFunctionKey, 0);
+    if (named != 0)
+        return named;
+
+    uint32_t power = screenColorEnum(info, kCGSDisplayColorTransferFunctionPowerKey, 0);
+    if (power >= 21500 && power <= 22500)
+        return kCGSDisplayColorTransferFunctionGamma22;
+    if (power >= 23500 && power <= 24500)
+        return kCGSDisplayColorTransferFunctionCompoundPower24;
+    return kCGSDisplayColorTransferFunctionSRGB;
+}
+
 // The named CoreGraphics space that describes the output's primaries and transfer function, or
 // NULL when the pair has no name CoreGraphics knows. An ICC profile is preferred by -colorSpace.
 static CGColorSpaceRef screenColorSpaceForDescription(NSDictionary *info) {
-    uint32_t primaries = screenColorEnum(info, kCGSDisplayColorPrimariesKey,
-                                         kCGSDisplayColorPrimariesSRGB);
-    uint32_t transfer = screenColorEnum(info, kCGSDisplayColorTransferFunctionKey,
-                                        kCGSDisplayColorTransferFunctionSRGB);
+    uint32_t primaries = screenColorPrimaries(info);
+    uint32_t transfer = screenColorTransfer(info);
     CFStringRef name = NULL;
 
     switch (primaries) {
@@ -190,9 +256,7 @@ static NSString *monitorNameFromEDID(NSData *edid) {
         return YES;
     if (displayGamut != NSDisplayGamutP3)
         return NO;
-    uint32_t primaries = screenColorEnum(screenColorInfo(self),
-                                         kCGSDisplayColorPrimariesKey,
-                                         kCGSDisplayColorPrimariesSRGB);
+    uint32_t primaries = screenColorPrimaries(screenColorInfo(self));
     return primaries == kCGSDisplayColorPrimariesDisplayP3 ||
            primaries == kCGSDisplayColorPrimariesDCIP3 ||
            primaries == kCGSDisplayColorPrimariesAdobeRGB ||
@@ -227,19 +291,8 @@ static NSString *monitorNameFromEDID(NSData *edid) {
 // otherwise the reported primaries and transfer function name a color space. The sRGB space is the
 // fallback for a display the compositor does not describe.
 - (NSColorSpace *) colorSpace {
-    NSDictionary *info = screenColorInfo(self);
-    NSData *icc = [info objectForKey: (id) kCGSDisplayColorICCProfileKey];
-    if ([icc isKindOfClass: [NSData class]]) {
-        NSColorSpace *profile = [[[NSColorSpace alloc] initWithICCProfileData: icc] autorelease];
-        if (profile != nil)
-            return profile;
-    }
-    CGColorSpaceRef space = screenColorSpaceForDescription(info);
-    if (space == NULL)
-        return [NSColorSpace sRGBColorSpace];
-    NSColorSpace *result = [[[NSColorSpace alloc] initWithCGColorSpace: space] autorelease];
-    CGColorSpaceRelease(space);
-    return result != nil ? result : [NSColorSpace sRGBColorSpace];
+    NSColorSpace *space = [NSScreen _colorSpaceFromDisplayColorInfo: screenColorInfo(self)];
+    return space != nil ? space : [NSColorSpace sRGBColorSpace];
 }
 
 // The name the monitor reports in its EDID when the display has one. Without an EDID the name the window
@@ -269,6 +322,8 @@ static NSString *monitorNameFromEDID(NSData *edid) {
 }
 
 - (CGFloat) maximumPotentialExtendedDynamicRangeColorComponentValue {
+    // The target luminance is the headroom available with a different reference white; the
+    // primary-volume maximum is what the display reaches at its current reference white.
     NSDictionary *info = screenColorInfo(self);
     CGFloat reference = screenColorLuminance(info, kCGSDisplayColorReferenceLuminanceKey, 0);
     CGFloat maximum = screenColorLuminance(info, kCGSDisplayColorTargetMaxLuminanceKey, 0);
@@ -368,6 +423,21 @@ static NSString *monitorNameFromEDID(NSData *edid) {
 @end
 
 @implementation NSScreen (Darling)
++ (NSColorSpace *) _colorSpaceFromDisplayColorInfo: (NSDictionary *) info {
+    NSData *icc = [info objectForKey: (id) kCGSDisplayColorICCProfileKey];
+    if ([icc isKindOfClass: [NSData class]]) {
+        NSColorSpace *profile = [[[NSColorSpace alloc] initWithICCProfileData: icc] autorelease];
+        if (profile != nil)
+            return profile;
+    }
+    CGColorSpaceRef space = screenColorSpaceForDescription(info);
+    if (space == NULL)
+        return nil;
+    NSColorSpace *result = [[[NSColorSpace alloc] initWithCGColorSpace: space] autorelease];
+    CGColorSpaceRelease(space);
+    return result;
+}
+
 - (NSData *) edid {
     return NS_EXTRA(NSScreen, self)->_edid;
 }

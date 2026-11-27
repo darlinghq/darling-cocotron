@@ -35,7 +35,7 @@ set(WAYLAND_PROTOCOL_FILES
 	"${WAYLAND_PROTOCOLS_DIR}/staging/xdg-activation/xdg-activation-v1.xml"
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-output/xdg-output-unstable-v1.xml"
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/xdg-decoration/xdg-decoration-unstable-v1.xml"
-	"${WAYLAND_PROTOCOLS_DIR}/unstable/pointer-gestures/pointer-gestures-unstable-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/pointer-gestures-unstable-v1.xml"
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/relative-pointer/relative-pointer-unstable-v1.xml"
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml"
 	"${WAYLAND_PROTOCOLS_DIR}/unstable/text-input/text-input-unstable-v3.xml"
@@ -63,7 +63,17 @@ set(WAYLAND_PROTOCOL_FILES
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-system-bell-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/alpha-modifier-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-toplevel-tag-v1.xml"
-	"${CMAKE_CURRENT_LIST_DIR}/protocols/idle-inhibit-unstable-v1.xml")
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/idle-inhibit-unstable-v1.xml"
+	# Render protocols: DMA-BUF buffer negotiation, explicit synchronization and the
+	# refresh-cycle barrier. Kept here so older wayland-protocols releases still build.
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/linux-dmabuf-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/linux-drm-syncobj-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/fifo-v1.xml"
+	# The following protocols are vendored so that the backends build on systems with older
+	# wayland-protocols releases. See protocols/README.md.
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/content-type-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/input-timestamps-unstable-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/keyboard-shortcuts-inhibit-unstable-v1.xml")
 
 set(WAYLAND_PROTOCOLS_USABLE TRUE)
 foreach (protocol ${WAYLAND_PROTOCOL_FILES})

@@ -10,17 +10,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Real compositor fixture: leave views static after their first display so a
-// later output scale change must itself cause reshape and presentation.
+// Real compositor fixture for windows and GL views on outputs of different scales, driven by
+// fractional-independent-run.sh (see there for the compositor setup: one output at 1.25, one at 2.25).
+// Whole scale factors are what AppKit reports: 2 on the 1.25 output and 3 on the 2.25 one. The window
+// holds two GL views that are left static after their first display, so a change of scale must itself
+// cause the reshape and the redraw. The script moves the window between the outputs (and across the
+// border between them), and swaps the outputs' scales while the window or a view is hidden. Every phase
+// the program checks, for the window and for each view, the scale of the output it is on, the drawable
+// size (the logical size times that whole scale), the redraw of a view whose scale changed, and the
+// pixel in the drawable's last corner; the script checks the buffers and the pixels the compositor shows.
+// Usage: fractional-independent (FRACTIONAL_CONTROL names the file the script writes the stage into)
 static unsigned checks, failures;
 static void expectResult(BOOL pass, const char *label) {
     ++checks; if (!pass) ++failures;
     printf("CHECK %s %s\n", pass ? "PASS" : "FAIL", label); fflush(stdout);
 }
-@interface FlatView : NSView { @public BOOL blue; } @end
+@interface FlatView : NSView @end
 @implementation FlatView
 - (void)drawRect:(NSRect)rect {
-    [(blue ? [NSColor blueColor] : [NSColor redColor]) setFill]; NSRectFill([self bounds]);
+    [[NSColor redColor] setFill]; NSRectFill([self bounds]);
 }
 @end
 @interface FractionalGLView : NSOpenGLView {
@@ -47,25 +55,21 @@ static void expectResult(BOOL pass, const char *label) {
     error = glGetError(); [[self openGLContext] flushBuffer];
 }
 @end
-@interface ContextSwitchGLView : FractionalGLView { BOOL observedMissingContext; } @end
-@implementation ContextSwitchGLView
-- (void)prepareOpenGL { CGLSetCurrentContext(NULL); }
-- (void)drawRect:(NSRect)rect {
-    if (!observedMissingContext) {
-        observedMissingContext = YES;
-        expectResult(CGLGetCurrentContext() == NULL && reshapes == 0,
-                     "prepareOpenGL raw context change defers reshape");
-        [self performSelector:@selector(redisplay:) withObject:nil afterDelay:.1];
-        return;
-    }
-    [super drawRect:rect];
-}
-- (void)redisplay:(id)sender { [self display]; }
-@end
 
 static NSWindow *window;
 static FractionalGLView *leftView, *rightView;
 static unsigned oldDraws[2], oldReshapes[2];
+static int oldScale[2];
+
+// The whole scale of the output each part is on, per phase (see the script for the moves):
+// 0 the window on the 1.25 output, 1 on the 2.25 output, 2 across the border (left view on the
+// 1.25 output, right view on the 2.25 one), 3 back on the 1.25 output, 4 mapped again after the
+// outputs swapped their scales (so on the 2.25 output), 5 the scales swapped back with the left view
+// hidden meanwhile. The window's own scale across the border is the compositor's choice of the two.
+static const int leftScales[6] = {2, 3, 2, 2, 3, 2};
+static const int rightScales[6] = {2, 3, 3, 2, 3, 2};
+static const int windowScales[6] = {2, 3, 0, 2, 3, 2};
+
 @interface IndependentDriver : NSObject @end
 @implementation IndependentDriver
 - (void)inspect:(NSTimer *)timer {
@@ -76,37 +80,40 @@ static unsigned oldDraws[2], oldReshapes[2];
     FILE *control = fopen(getenv("FRACTIONAL_CONTROL"), "r");
     if (control) { if (fscanf(control,"%d",&requested)!=1) requested=-1; fclose(control); }
     if (requested != (int)stage) return;
-    if (stage == 5) {
+    if (stage == 8) {
         [timer invalidate]; [window close];
         printf("RESULT checks=%u failures=%u\n",checks,failures);fflush(stdout);exit(failures?1:0);
     }
-    if (stage == 1) {
+    if (stage == 4) {
         [window orderOut:nil]; stage++; puts("PARENT_HIDDEN");fflush(stdout);return;
     }
-    if (stage == 3) {
+    if (stage == 6) {
         [leftView setHidden:YES];stage++;puts("CHILD_HIDDEN");fflush(stdout);return;
     }
     if (!transition) {
         transition=YES;
-        if(stage==2)[window makeKeyAndOrderFront:nil];
-        if(stage==4)[leftView setHidden:NO];
+        if(stage==5)[window makeKeyAndOrderFront:nil];
+        if(stage==7)[leftView setHidden:NO];
         settleUntil=[NSDate timeIntervalSinceReferenceDate]+1;
         return;
     }
     if([NSDate timeIntervalSinceReferenceDate]<settleUntil)return;
-    unsigned phase=stage/2;
-    const double parentScales[]={1.75,1.5,1.75};
-    const int sizes[3][2][2]={{{126,64},{177,89}},{{152,77},{126,64}},{{177,89},{126,64}}};
-    expectResult(fabs([window backingScaleFactor]-parentScales[phase])<1e-9,"parent maximum scale");
+    // stages 0-3 are phases 0-3, stage 5 is phase 4, stage 7 is phase 5
+    unsigned phase = stage < 4 ? stage : (stage == 5 ? 4 : 5);
+    CGFloat parentScale = [window backingScaleFactor];
+    expectResult(windowScales[phase] ? parentScale == windowScales[phase] : (parentScale == 2 || parentScale == 3),
+                 "window takes the whole scale of its output");
     FractionalGLView *views[]={leftView,rightView};
+    const int *scales[2]={leftScales,rightScales};
     for(unsigned i=0;i<2;i++) {
         FractionalGLView *view=views[i];
-        expectResult(view->lastPixels.width==sizes[phase][i][0] && view->lastPixels.height==sizes[phase][i][1],"independent child allocation");
-        BOOL changed=!(phase==2 && i==1);
-        expectResult(!changed || (view->draws>oldDraws[i] && view->reshapes>oldReshapes[i]),"changed child redraw after remap");
-        expectResult(view->error==GL_NO_ERROR && view->edge[0]==(i?0:255) && view->edge[1]==(i?255:0) && view->edge[2]==255 && view->edge[3]==255,"independent GL rendered edge");
+        int scale=scales[i][phase];
+        expectResult(view->lastPixels.width==101*scale && view->lastPixels.height==51*scale,"child drawable is the logical size at the whole scale of its own output");
+        BOOL changed=scale!=oldScale[i];
+        expectResult(!changed || (view->draws>oldDraws[i] && view->reshapes>oldReshapes[i]),"child whose output scale changed redraws and reshapes");
+        expectResult(view->error==GL_NO_ERROR && view->edge[0]==(i?0:255) && view->edge[1]==(i?255:0) && view->edge[2]==255 && view->edge[3]==255,"child GL rendered edge");
         printf("INDEPENDENT phase=%u view=%u size=%.0fx%.0f draws=%u reshapes=%u\n",phase,i,view->lastPixels.width,view->lastPixels.height,view->draws,view->reshapes);
-        oldDraws[i]=view->draws;oldReshapes[i]=view->reshapes;
+        oldDraws[i]=view->draws;oldReshapes[i]=view->reshapes;oldScale[i]=scale;
     }
     printf("CAPTURE %u\n",phase);fflush(stdout);stage++;transition=NO;
 }

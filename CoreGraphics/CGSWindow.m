@@ -50,6 +50,7 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     CGContextRelease(_contents);
     [_surfaces release];
     [_dragDestination release];
+    [_inputMethodSurroundingText release];
     [super dealloc];
 }
 
@@ -95,6 +96,48 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 }
 
 - (void) inputMethodCursorRectChanged {
+}
+
+- (void) setInputMethodSurroundingText: (NSString *) text selection: (CFRange) selection {
+    if ((text == _inputMethodSurroundingText || [text isEqualToString: _inputMethodSurroundingText]) &&
+        selection.location == _inputMethodSurroundingSelection.location &&
+        selection.length == _inputMethodSurroundingSelection.length)
+        return;
+    NSString *old = _inputMethodSurroundingText;
+    _inputMethodSurroundingText = [text copy];
+    [old release];
+    _inputMethodSurroundingSelection = selection;
+    [self inputMethodSurroundingTextChanged];
+}
+
+- (NSString *) inputMethodSurroundingText {
+    return _inputMethodSurroundingText;
+}
+
+- (CFRange) inputMethodSurroundingSelection {
+    return _inputMethodSurroundingSelection;
+}
+
+- (void) setInputMethodContentHint: (uint32_t) hint purpose: (uint32_t) purpose {
+    if (hint == _inputMethodContentHint && purpose == _inputMethodContentPurpose)
+        return;
+    _inputMethodContentHint = hint;
+    _inputMethodContentPurpose = purpose;
+    [self inputMethodContentTypeChanged];
+}
+
+- (uint32_t) inputMethodContentHint {
+    return _inputMethodContentHint;
+}
+
+- (uint32_t) inputMethodContentPurpose {
+    return _inputMethodContentPurpose;
+}
+
+- (void) inputMethodSurroundingTextChanged {
+}
+
+- (void) inputMethodContentTypeChanged {
 }
 
 - (CGSSurface *) surfaceForId: (CGSSurfaceID) surfaceId {
@@ -301,6 +344,22 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 }
 
 - (void) cancelToplevelKeyboardFocusRequest {
+}
+
+- (CGError) setToplevelParent: (CGSWindow *) parent {
+    return kCGErrorNotImplemented;
+}
+
+- (CGSWindow *) toplevelParent {
+    return nil;
+}
+
+- (CGError) setToplevelHeldBack: (BOOL) heldBack {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelFullscreenSettling {
+    return NO;
 }
 
 - (CGSSurface *) createSurface {

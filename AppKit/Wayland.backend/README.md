@@ -41,8 +41,12 @@ to, such a window is an ordinary toplevel.
   The windows are CoreGraphics toplevel windows (`CGSWindow.h`, the SPI the X11 backend uses too): CoreGraphics makes the
   wl_surface and, while a window is shown, its xdg-shell, xdg-decoration and layer-shell objects, and tells the backend
   the compositor's configure sequences, close requests and dismissed pop-ups; a window's number is its CoreGraphics
-  window's id. The backend draws into the surface and adds what the protocol needs beyond that (fullscreen, parent,
-  minimizing, activation, session, scale).
+  window's id. CoreGraphics also relates a window to the window the backend names as its parent (`xdg_toplevel.set_parent`),
+  asks for fullscreen and minimizing, keeps the state xdg-shell does not tell (minimized, covered, holding the focus),
+  asks for activation (xdg-activation, also for another process' request, see `_CGSActivateProcess()`) and keeps the order
+  of the windows (`_CGSOrderedToplevelWindowIDs()`: the one activated last first). The backend draws into the surface
+  and decides what a window level, a window's presentation or its size mean for those requests, and adds what the
+  protocol needs beyond that (session, scale, tags).
 - The main menu in Plasma's global menu, or in the windows: see below.
 - Input: pointer with click grouping and scroll frames, keyboard through xkbcommon with the compositor's
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
@@ -123,11 +127,21 @@ together with viewporter, the preferred scale in 120ths with the buffer cropped 
 surface (CoreGraphics') and drag icons use the same scale; a compositor without viewporter gets an integer scale only. Swaps are paced to the
 refresh rate of the window's output (`refreshMillihertz`).
 
+EDR color descriptions and HDR metadata are applied per surface: the toplevel, the OpenGL
+subwindow and each Metal layer's own surface get their own color-management objects and follow
+their own preferred-description changes. The dma-buf path can negotiate either 8-bit ARGB8888
+buffers for CPU-rendered content or half-float ARGB/XRGB16161616F buffers for producers whose
+IOSurface pixels are actually half floats. It never converts an 8-bit surface into a floating-point
+one, so an ordinary window buffer keeps the shm/8-bit fallback. A Metal layer with a float drawable
+uses its Vulkan swapchain format and relies on the compositor's color description for HDR; the
+render manager's float-format negotiation is available to native IOSurface producers.
+
 ## Fullscreen and pointer lock
 
 A window is fullscreen when it has the fullscreen style bit, or is an untitled window that can become key and has
 the size of one output (`DarlingFullscreenPolicy.h`, the rule the X11 backend uses too); it then sends
-`xdg_toplevel.set_fullscreen`, naming the output it is on when that is unambiguous. The size to return to is kept
+`xdg_toplevel.set_fullscreen` (made by the CoreGraphics window, which holds the drawing back until the compositor has
+answered), naming the output it is on when that is unambiguous. The size to return to is kept
 across leaving fullscreen, hiding and showing, and a `setFrame:` made while fullscreen wins over what the compositor
 remembers. The decision is re-made when the outputs change.
 
@@ -157,4 +171,8 @@ wayland-protocols XML and `wayland-scanner`; the backend is skipped when any of 
 needs a compositor and checks screens, scale and window frames through the API.
 `../../tests/appkit-wayland-window-chrome.sh` checks which windows get a frame, on headless sway. The programs in `tests/` here
 are manual fixtures that exercise one feature each against a real or private test compositor; their file
-names say what they cover.
+names say what they cover. `tests/wayland-surface-color.sh` needs no guest: it checks that a compositor
+preference change reaches three independent surfaces (a toplevel, an OpenGL surface and a Metal layer
+surface), each sending its own color description and HDR metadata. `tests/wayland-render-formats.sh`
+also needs no guest: it checks that dma-buf feedback can advertise 8-bit and half-float formats with
+the 16-byte table entries required by the protocol.

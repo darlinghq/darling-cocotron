@@ -56,12 +56,27 @@
                              selection: NSMakeRange(event->textRange.location, event->textRange.length)];
         return YES;
     }
-    case kCGSToplevelEventInputMethodCommit:
-        [[self textInputContext] commitComposition: (NSString *) event->text];
+    case kCGSToplevelEventInputMethodCommit: {
+        NSTextInputContext *context = [self textInputContext];
+
+        // The commit replaces the composition.
+        [context cancelComposition];
+        [context commitComposition: (NSString *) event->text];
+        return YES;
+    }
+    case kCGSToplevelEventInputMethodDeleteSurrounding:
+        // No surrounding text is told to the input method (see -candidateRectChanged), so there is nothing to delete.
         return YES;
     default:
         return NO;
     }
+}
+
+// The first responder changed: the input method is for the windows whose first responder takes text, and is given the
+// rectangle of its caret.
+- (void) firstResponderChanged {
+    [self setEnabled: [self textInputContext] != nil];
+    [self candidateRectChanged];
 }
 
 // Gives the input method the rectangle of the client's caret, in the window's points from its top left corner.
