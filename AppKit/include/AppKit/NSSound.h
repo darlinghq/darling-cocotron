@@ -20,9 +20,14 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSBundle.h>
 #import <AppKit/AppKitIvarLayout.h>
 
+@protocol NSSoundDelegate;
+
 @interface NSSound : NSObject {
     NS_LEGACY_IVAR_PAD(_NSSoundReserved, 36)
 }
+
+// The delegate is notified when playback finishes. It is not retained.
+@property(nonatomic, assign) id<NSSoundDelegate> delegate;
 
 + (NSArray *) soundUnfilteredFileTypes;
 
@@ -46,6 +51,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @protocol NSSoundDelegate <NSObject>
 
-// TODO
+@optional
+- (void) sound: (NSSound *) sound didFinishPlaying: (BOOL) successfully;
 
 @end

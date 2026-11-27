@@ -1391,6 +1391,23 @@ CGError CGSRemoveSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid)
 	return kCGSErrorSuccess;
 }
 
+// Shows or hides a surface of a window. The surface is in the window's drawing, above what the window has drawn,
+// when its mode is above (1) or in (2), and out of it when the mode is 0. Below (-1) is not available, as for
+// windows, and the surface to order against is not used: a window has no other surfaces than the one OpenGL draws
+// to.
+CGError CGSOrderSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid, int place, int relativeTo)
+{
+	CGSSurface* surface;
+
+	CGError err = getSurface(cid, wid, sid, &surface);
+	if (err != kCGSErrorSuccess)
+		return err;
+	if (place < 0 || place > 2)
+		return kCGErrorNotImplemented;
+
+	return [surface setVisible: place != 0];
+}
+
 CGError CGSSetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid, CGRect rect)
 {
 	CGSSurface* surface;

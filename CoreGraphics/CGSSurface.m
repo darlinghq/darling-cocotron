@@ -47,6 +47,11 @@
     _bounds = rect;
 }
 
+- (CGError) setVisible: (BOOL) visible {
+    // A surface that is the window's own drawing is shown with the window
+    return kCGSErrorSuccess;
+}
+
 - (void *) nativeWindow {
     NSInvalidAbstractInvocation();
 }

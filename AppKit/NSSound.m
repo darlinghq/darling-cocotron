@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSound.h>
+#import <objc/runtime.h>
 #import <Foundation/NSArray.h>
 #import <Foundation/NSEnumerator.h>
 #import <Foundation/NSMutableDictionary.h>
@@ -28,7 +29,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 static NSMutableDictionary *sSounds = nil;
 
+static char NSSoundDelegateAssociationKey;
+
 @implementation NSSound
+
+// The delegate is stored out of line: NSSound's ivar layout is part of the
+// legacy AppKit ABI and must not change.
+- (id<NSSoundDelegate>) delegate {
+    return objc_getAssociatedObject(self, &NSSoundDelegateAssociationKey);
+}
+
+- (void) setDelegate: (id<NSSoundDelegate>) delegate {
+    objc_setAssociatedObject(self, &NSSoundDelegateAssociationKey, delegate,
+                             OBJC_ASSOCIATION_ASSIGN);
+}
 
 + (NSArray *) soundUnfilteredFileTypes {
     // _soundUnfilteredFileTypes is implemented in a category in the platform
