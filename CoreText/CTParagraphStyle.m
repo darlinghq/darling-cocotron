@@ -158,8 +158,9 @@ void CTParagraphStyleSetCompositionLanguage(CTParagraphStyleRef style, CTComposi
 }
 
 uint8_t CTParagraphStyleGetCompositionLanguageForLanguage(CFStringRef language) {
+    // macOS 26.7.3 maps NULL and every language other than Japanese and Chinese to 1.
     if (language == NULL)
-        return 0; /* kCTCompositionLanguageUnset */
+        return 1; /* kCTCompositionLanguageNone */
     if (CFStringHasPrefix(language, CFSTR("ja")))
         return 2; /* kCTCompositionLanguageJapanese */
     if (CFStringHasPrefix(language, CFSTR("zh-Hans")) ||

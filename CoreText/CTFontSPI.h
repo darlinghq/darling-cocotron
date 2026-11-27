@@ -239,3 +239,28 @@ CORETEXT_EXPORT bool CTFontGetClippingMetrics(CTFontRef font, CGFloat *ascent, C
 CORETEXT_EXPORT CGFloat CTFontDescriptorGetWeight(CTFontDescriptorRef descriptor);
 
 CORETEXT_EXPORT uint8_t CTParagraphStyleGetCompositionLanguageForLanguage(CFStringRef language);
+
+// Private font attributes and the extra designs, text styles and content size categories of the system UI font.
+CORETEXT_EXPORT const CFStringRef kCTFontLegibilityWeightAttribute;
+CORETEXT_EXPORT const CFStringRef kCTFontLanguageAwareLineHeightRatioAttribute;
+CORETEXT_EXPORT const CFStringRef kCTTextScaleRatioAttributeName;
+
+CORETEXT_EXPORT const CFStringRef kCTFontUIFontDesignCompact;
+CORETEXT_EXPORT const CFStringRef kCTFontUIFontDesignCompactRounded;
+CORETEXT_EXPORT const CFStringRef kCTFontUIFontDesignSoft;
+CORETEXT_EXPORT const CFStringRef kCTFontUIFontDesignCompactSoft;
+
+CORETEXT_EXPORT const CFStringRef kCTUIFontTextStyleCallout;
+CORETEXT_EXPORT const CFStringRef kCTUIFontTextStyleFootnote2;
+
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryXS;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryS;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryM;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryXXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryXXXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityM;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityXXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityXXXL;

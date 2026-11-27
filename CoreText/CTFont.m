@@ -1557,17 +1557,20 @@ CGFloat CTFontGetWeight(CTFontRef font)
     return weight;
 }
 
+// Not computed: the set is empty, i.e. no character is treated as needing extra line height.
 CFCharacterSetRef CTFontCopySystemUIFontExcessiveLineHeightCharacterSet(void)
 {
     return CFCharacterSetCreateWithCharactersInRange(kCFAllocatorDefault, CFRangeMake(0, 0));
 }
 
+// Not computed: no string has a language that needs the taller text style.
 CFStringRef CTFontCopyTallestTextStyleLanguageForString(CFStringRef string)
 {
     (void) string;
     return NULL;
 }
 
+// Not computed: reports no outsets and returns false.
 bool CTFontGetLanguageAwareOutsets(CTFontRef font, CGFloat *left, CGFloat *top, CGFloat *right, CGFloat *bottom)
 {
     (void) font;
@@ -1590,5 +1593,6 @@ bool CTFontGetClippingMetrics(CTFontRef font, CGFloat *ascent, CGFloat *descent)
         *ascent = CTFontGetAscent(font);
     if (descent != NULL)
         *descent = CTFontGetDescent(font);
-    return false;
+    // macOS 26.7.3 returns true with the ascent and descent of the font for a system UI font.
+    return true;
 }

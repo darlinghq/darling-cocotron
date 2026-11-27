@@ -130,9 +130,10 @@ const CGFloat kCTFontWidthSemiExpanded = 0.1;
 const CGFloat kCTFontWidthExpanded = 0.2;
 const CGFloat kCTFontWidthExtraExpanded = 0.3;
 
-const CFStringRef kCTFontLegibilityWeightAttribute = CFSTR("NSCTFontLegibilityWeightAttribute");
+// The string values of these constants are the ones macOS 26.7.3 has (black-box: dlsym and printing them).
+const CFStringRef kCTFontLegibilityWeightAttribute = CFSTR("CTFontLegibilityWeightAttribute");
 const CFStringRef kCTFontLanguageAwareLineHeightRatioAttribute = CFSTR("CTFontLanguageAwareLineHeightRatioAttribute");
-const CFStringRef kCTTextScaleRatioAttributeName = CFSTR("CTTextScaleRatio");
+const CFStringRef kCTTextScaleRatioAttributeName = CFSTR("NSTextScaleRatio");
 
 const CFStringRef kCTFontUIFontDesignCompact = CFSTR("NSCTFontUIFontDesignCompact");
 const CFStringRef kCTFontUIFontDesignCompactRounded = CFSTR("NSCTFontUIFontDesignCompactRounded");
@@ -141,9 +142,6 @@ const CFStringRef kCTFontUIFontDesignCompactSoft = CFSTR("NSCTFontUIFontDesignCo
 
 const CFStringRef kCTUIFontTextStyleCallout = CFSTR("UICTFontTextStyleCallout");
 const CFStringRef kCTUIFontTextStyleFootnote2 = CFSTR("UICTFontTextStyleFootnote2");
-const CFStringRef kCTUIFontTextStyleCaption3 = CFSTR("UICTFontTextStyleCaption3");
-const CFStringRef kCTUIFontTextStyleExtraLargeTitle = CFSTR("UICTFontTextStyleExtraLargeTitle");
-const CFStringRef kCTUIFontTextStyleExtraLargeTitle2 = CFSTR("UICTFontTextStyleExtraLargeTitle2");
 
 const CFStringRef kCTFontContentSizeCategoryXS = CFSTR("UICTContentSizeCategoryXS");
 const CFStringRef kCTFontContentSizeCategoryS = CFSTR("UICTContentSizeCategoryS");
