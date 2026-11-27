@@ -61,6 +61,10 @@ typedef enum {
 - (void) nativeConnectionFocusMovedToAnotherClient;
 // The compositor's color management or color representation global arrived after the windows were made.
 - (void) nativeConnectionColorManagerAvailable;
+// The compositor's preferred image description for a surface changed. The pointer identifies the
+// wp_color_management_surface_feedback_v1 proxy CoreGraphics made for that surface; the framework
+// above reads the new description with WaylandColorManager's -preferredInfoForFeedback:.
+- (void) nativeConnectionSurfaceColorPreferenceChanged: (void *) feedback;
 // The process took or dropped its last power assertion that keeps the display awake.
 - (void) nativeConnectionDisplaySleepPreventionChanged;
 // The keyboard focus moved to a window system object of the process (the wl_surface on Wayland), or

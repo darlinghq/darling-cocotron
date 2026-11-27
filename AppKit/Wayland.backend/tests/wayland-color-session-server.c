@@ -3,23 +3,26 @@
 
   Licensed under the MIT license, the same as the rest of this project.
 */
-// A private compositor for the color-management, color-representation and session protocols. It
-// advertises an sRGB/P3 display with HDR headroom, a parametric image-description creator,
-// premultiplied electrical alpha and one persistent session. It renders nothing and prints:
-//   OUTPUT_INFO primaries=<n> tf=<n> max=<n> reference=<n> target=<n>
-//   SURFACE_COLOR <title> primaries=<n> tf=<n>
-//   SURFACE_ALPHA <title> mode=<n>
-//   SESSION reason=<n> id=<string> op=add|restore name=<string> before_commit=<0|1>
-// Run it through wayland-color-session.sh.
+// A private compositor for color management, sessions and the Linux render protocols. It
+// advertises an sRGB/P3 display with HDR headroom, parametric descriptions with v3 surface
+// feedback, premultiplied electrical alpha, a linear ARGB8888 dma-buf, explicit sync and fifo.
+// It renders nothing and prints the protocol activity used by wayland-color-session.sh.
 #define _GNU_SOURCE
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
+#include <unistd.h>
 #include <wayland-server.h>
 #include "color-management-v1-server-protocol.h"
 #include "color-representation-v1-server-protocol.h"
 #include "xdg-shell-server-protocol.h"
 #include "xdg-session-management-v1-server-protocol.h"
+#include "linux-dmabuf-v1-server-protocol.h"
+#include "linux-drm-syncobj-v1-server-protocol.h"
+#include "fifo-v1-server-protocol.h"
 
 static struct wl_display *display;
 static const char *session_id = "test-session-1";
@@ -234,10 +237,12 @@ static void send_description_info(struct wl_resource *info, struct description *
                                                 150000, 600000, 312700, 329000);
     wp_image_description_info_v1_send_primaries_named(info, description->primaries);
     wp_image_description_info_v1_send_tf_named(info, description->tf);
-    wp_image_description_info_v1_send_luminances(info, 1000, 400, 203);
+    wp_image_description_info_v1_send_luminances(info, 1, 400, 203);
     wp_image_description_info_v1_send_target_primaries(info, 640000, 330000, 300000, 600000,
                                                        150000, 600000, 312700, 329000);
     wp_image_description_info_v1_send_target_luminance(info, 1000, 1000);
+    wp_image_description_info_v1_send_target_max_cll(info, 1000);
+    wp_image_description_info_v1_send_target_max_fall(info, 400);
     printf("OUTPUT_INFO primaries=%u tf=%u max=%u reference=%u target=%u\n",
            description->primaries, description->tf, 400, 203, 1000);
     fflush(stdout);
@@ -333,6 +338,39 @@ static void manager_get_surface(struct wl_client *c, struct wl_resource *r, uint
                                    wl_resource_get_user_data(surface), color_surface_gone);
 }
 
+static void feedback_destroy(struct wl_client *c, struct wl_resource *r) {
+    wl_resource_destroy(r);
+}
+
+static void feedback_get_preferred(struct wl_client *c, struct wl_resource *r, uint32_t id) {
+    printf("COLOR_FEEDBACK get_preferred identity=1\n");
+    fflush(stdout);
+    new_description(c, id, 9 /* display_p3 */, 9 /* srgb */);
+}
+
+static void feedback_get_preferred_parametric(struct wl_client *c, struct wl_resource *r,
+                                              uint32_t id) {
+    printf("COLOR_FEEDBACK get_preferred_parametric identity=1\n");
+    fflush(stdout);
+    new_description(c, id, 9 /* display_p3 */, 9 /* srgb */);
+}
+
+static const struct wp_color_management_surface_feedback_v1_interface feedback_impl = {
+    .destroy = feedback_destroy,
+    .get_preferred = feedback_get_preferred,
+    .get_preferred_parametric = feedback_get_preferred_parametric,
+};
+
+static void feedback_gone(struct wl_resource *r) {}
+
+static void manager_get_surface_feedback(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                         struct wl_resource *surface) {
+    struct wl_resource *feedback =
+            wl_resource_create(c, &wp_color_management_surface_feedback_v1_interface, 3, id);
+    wl_resource_set_implementation(feedback, &feedback_impl,
+                                   wl_resource_get_user_data(surface), feedback_gone);
+}
+
 static void creator_gone(struct wl_resource *r) {
     free(wl_resource_get_user_data(r));
 }
@@ -345,6 +383,22 @@ static void creator_set_primaries_named(struct wl_client *c, struct wl_resource 
     ((struct creator *) wl_resource_get_user_data(r))->primaries = primaries;
 }
 
+static void creator_set_luminances(struct wl_client *c, struct wl_resource *r,
+                                   uint32_t min, uint32_t max, uint32_t reference) {
+    printf("HDR_LUMINANCES min=%u max=%u reference=%u\n", min, max, reference);
+    fflush(stdout);
+}
+
+static void creator_set_max_cll(struct wl_client *c, struct wl_resource *r, uint32_t value) {
+    printf("HDR_MAX_CLL %u\n", value);
+    fflush(stdout);
+}
+
+static void creator_set_max_fall(struct wl_client *c, struct wl_resource *r, uint32_t value) {
+    printf("HDR_MAX_FALL %u\n", value);
+    fflush(stdout);
+}
+
 static void params_create(struct wl_client *c, struct wl_resource *r, uint32_t id) {
     struct creator *creator = wl_resource_get_user_data(r);
     new_description(c, id, creator->primaries, creator->tf);
@@ -355,6 +409,9 @@ static const struct wp_image_description_creator_params_v1_interface params_impl
     .create = params_create,
     .set_tf_named = creator_set_tf_named,
     .set_primaries_named = creator_set_primaries_named,
+    .set_luminances = creator_set_luminances,
+    .set_max_cll = creator_set_max_cll,
+    .set_max_fall = creator_set_max_fall,
 };
 
 static void manager_create_params(struct wl_client *c, struct wl_resource *r, uint32_t id) {
@@ -371,6 +428,7 @@ static const struct wp_color_manager_v1_interface color_manager_impl = {
     .destroy = manager_destroy,
     .get_output = manager_get_output,
     .get_surface = manager_get_surface,
+    .get_surface_feedback = manager_get_surface_feedback,
     .create_parametric_creator = manager_create_params,
 };
 
@@ -379,6 +437,7 @@ static void bind_color_manager(struct wl_client *c, void *data, uint32_t version
     wl_resource_set_implementation(r, &color_manager_impl, NULL, NULL);
     wp_color_manager_v1_send_supported_intent(r, 0 /* perceptual */);
     wp_color_manager_v1_send_supported_feature(r, 1 /* parametric */);
+    wp_color_manager_v1_send_supported_feature(r, 4 /* set_luminances */);
     wp_color_manager_v1_send_supported_primaries_named(r, 9 /* display_p3 */);
     wp_color_manager_v1_send_supported_tf_named(r, 9 /* srgb */);
     wp_color_manager_v1_send_done(r);
@@ -501,6 +560,223 @@ static void bind_session_manager(struct wl_client *c, void *data, uint32_t versi
     wl_resource_set_implementation(r, &session_manager_impl, NULL, NULL);
 }
 
+// ---- zwp_linux_dmabuf_v1
+
+static void buffer_destroy(struct wl_client *c, struct wl_resource *r) {
+    wl_resource_destroy(r);
+}
+
+static const struct wl_buffer_interface buffer_impl = {
+    .destroy = buffer_destroy,
+};
+
+static void buffer_gone(struct wl_resource *r) {}
+
+static struct wl_resource *new_buffer(struct wl_client *c, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(c, &wl_buffer_interface, 1, id);
+    wl_resource_set_implementation(r, &buffer_impl, NULL, buffer_gone);
+    return r;
+}
+
+static void params_destroy(struct wl_client *c, struct wl_resource *r) {
+    wl_resource_destroy(r);
+}
+
+static void params_add(struct wl_client *c, struct wl_resource *r, int fd, uint32_t plane,
+                       uint32_t offset, uint32_t stride, uint32_t hi, uint32_t lo) {
+    (void) plane;
+    (void) offset;
+    (void) stride;
+    (void) hi;
+    (void) lo;
+    if (fd >= 0)
+        close(fd);
+}
+
+static void dmabuf_params_create(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                 int32_t width, int32_t height, uint32_t format, uint32_t flags) {
+    new_buffer(c, id);
+    printf("DMABUF_BUFFER %dx%d format=%u flags=%u\n", width, height, format, flags);
+    fflush(stdout);
+    wl_resource_destroy(r);
+}
+
+static void dmabuf_params_create_immed(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                       int32_t width, int32_t height, uint32_t format,
+                                       uint32_t flags) {
+    new_buffer(c, id);
+    printf("DMABUF_BUFFER %dx%d format=%u flags=%u\n", width, height, format, flags);
+    fflush(stdout);
+    // Keep the params resource alive: our client leaves it around in case the compositor reports a
+    // failed import, and sends destroy when it is done with the buffer.
+}
+
+static const struct zwp_linux_buffer_params_v1_interface dmabuf_params_impl = {
+    .destroy = params_destroy,
+    .add = params_add,
+    .create = dmabuf_params_create,
+    .create_immed = dmabuf_params_create_immed,
+};
+
+static void params_gone(struct wl_resource *r) {}
+
+static void dmabuf_create_params(struct wl_client *c, struct wl_resource *r, uint32_t id) {
+    struct wl_resource *params = wl_resource_create(c, &zwp_linux_buffer_params_v1_interface, 4, id);
+    wl_resource_set_implementation(params, &dmabuf_params_impl, NULL, params_gone);
+}
+
+static void dmabuf_feedback_destroy(struct wl_client *c, struct wl_resource *r) {
+    wl_resource_destroy(r);
+}
+
+static const struct zwp_linux_dmabuf_feedback_v1_interface dmabuf_feedback_impl = {
+    .destroy = dmabuf_feedback_destroy,
+};
+
+static void send_dmabuf_feedback(struct wl_resource *feedback, int surface) {
+    printf("DMABUF_FEEDBACK surface=%d entries=1\n", surface);
+    fflush(stdout);
+
+    // One packed table entry: DRM_FORMAT_ARGB8888 ('AR24') with the linear modifier.
+    const uint8_t entry[12] = {'A', 'R', '2', '4', 0, 0, 0, 0, 0, 0, 0, 0};
+    int fd = memfd_create("darling-dmabuf-feedback", MFD_CLOEXEC);
+    if (fd >= 0 && write(fd, entry, sizeof(entry)) == sizeof(entry) && lseek(fd, 0, SEEK_SET) == 0) {
+        zwp_linux_dmabuf_feedback_v1_send_format_table(feedback, fd, sizeof(entry));
+        struct wl_array indices;
+        wl_array_init(&indices);
+        uint16_t zero = 0;
+        memcpy(wl_array_add(&indices, sizeof(zero)), &zero, sizeof(zero));
+        zwp_linux_dmabuf_feedback_v1_send_tranche_formats(feedback, &indices);
+        wl_array_release(&indices);
+        zwp_linux_dmabuf_feedback_v1_send_tranche_done(feedback);
+    }
+    if (fd >= 0)
+        close(fd);
+    zwp_linux_dmabuf_feedback_v1_send_done(feedback);
+}
+
+static void dmabuf_get_default_feedback(struct wl_client *c, struct wl_resource *r, uint32_t id) {
+    struct wl_resource *feedback =
+            wl_resource_create(c, &zwp_linux_dmabuf_feedback_v1_interface, 1, id);
+    wl_resource_set_implementation(feedback, &dmabuf_feedback_impl, NULL, NULL);
+    send_dmabuf_feedback(feedback, 0);
+}
+
+static void dmabuf_get_surface_feedback(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                        struct wl_resource *surface) {
+    struct wl_resource *feedback =
+            wl_resource_create(c, &zwp_linux_dmabuf_feedback_v1_interface, 1, id);
+    wl_resource_set_implementation(feedback, &dmabuf_feedback_impl, NULL, NULL);
+    send_dmabuf_feedback(feedback, 1);
+}
+
+static const struct zwp_linux_dmabuf_v1_interface dmabuf_impl = {
+    .destroy = manager_destroy,
+    .create_params = dmabuf_create_params,
+    .get_default_feedback = dmabuf_get_default_feedback,
+    .get_surface_feedback = dmabuf_get_surface_feedback,
+};
+
+static void bind_dmabuf(struct wl_client *c, void *data, uint32_t version, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(c, &zwp_linux_dmabuf_v1_interface, version, id);
+    wl_resource_set_implementation(r, &dmabuf_impl, NULL, NULL);
+    zwp_linux_dmabuf_v1_send_format(r, 0x34325241 /* DRM_FORMAT_ARGB8888 */);
+    zwp_linux_dmabuf_v1_send_modifier(r, 0x34325241, 0, 0);
+}
+
+// ---- wp_linux_drm_syncobj_manager_v1
+
+static void syncobj_surface_destroy(struct wl_client *c, struct wl_resource *r) {
+    wl_resource_destroy(r);
+}
+
+static void syncobj_set_acquire_point(struct wl_client *c, struct wl_resource *r,
+                                      struct wl_resource *timeline, uint32_t hi, uint32_t lo) {
+    printf("SYNCOBJ_ACQUIRE point=%u\n", lo);
+    fflush(stdout);
+}
+
+static void syncobj_set_release_point(struct wl_client *c, struct wl_resource *r,
+                                      struct wl_resource *timeline, uint32_t hi, uint32_t lo) {
+    printf("SYNCOBJ_RELEASE point=%u\n", lo);
+    fflush(stdout);
+}
+
+static const struct wp_linux_drm_syncobj_surface_v1_interface syncobj_surface_impl = {
+    .destroy = syncobj_surface_destroy,
+    .set_acquire_point = syncobj_set_acquire_point,
+    .set_release_point = syncobj_set_release_point,
+};
+
+static void syncobj_surface_gone(struct wl_resource *r) {}
+
+static void syncobj_get_surface(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                struct wl_resource *surface) {
+    struct wl_resource *client = wl_resource_create(c, &wp_linux_drm_syncobj_surface_v1_interface, 1, id);
+    wl_resource_set_implementation(client, &syncobj_surface_impl, NULL, syncobj_surface_gone);
+}
+
+static void syncobj_import_timeline(struct wl_client *c, struct wl_resource *r, uint32_t id, int fd) {
+    struct wl_resource *timeline =
+            wl_resource_create(c, &wp_linux_drm_syncobj_timeline_v1_interface, 1, id);
+    wl_resource_set_implementation(timeline, NULL, NULL, NULL);
+    printf("SYNCOBJ_TIMELINE fd=%d\n", fd >= 0 ? 1 : 0);
+    fflush(stdout);
+    if (fd >= 0)
+        close(fd);
+}
+
+static const struct wp_linux_drm_syncobj_manager_v1_interface syncobj_manager_impl = {
+    .destroy = manager_destroy,
+    .get_surface = syncobj_get_surface,
+    .import_timeline = syncobj_import_timeline,
+};
+
+static void bind_syncobj(struct wl_client *c, void *data, uint32_t version, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(c, &wp_linux_drm_syncobj_manager_v1_interface, version, id);
+    wl_resource_set_implementation(r, &syncobj_manager_impl, NULL, NULL);
+}
+
+// ---- wp_fifo_manager_v1
+
+static void fifo_set_barrier(struct wl_client *c, struct wl_resource *r) {
+    printf("FIFO_BARRIER set\n");
+    fflush(stdout);
+}
+
+static void fifo_wait_barrier(struct wl_client *c, struct wl_resource *r) {
+    printf("FIFO_BARRIER wait\n");
+    fflush(stdout);
+}
+
+static void fifo_destroy_request(struct wl_client *c, struct wl_resource *r) {
+    wl_resource_destroy(r);
+}
+
+static const struct wp_fifo_v1_interface fifo_impl = {
+    .set_barrier = fifo_set_barrier,
+    .wait_barrier = fifo_wait_barrier,
+    .destroy = fifo_destroy_request,
+};
+
+static void fifo_gone(struct wl_resource *r) {}
+
+static void fifo_get_fifo(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                          struct wl_resource *surface) {
+    struct wl_resource *fifo = wl_resource_create(c, &wp_fifo_v1_interface, 1, id);
+    wl_resource_set_implementation(fifo, &fifo_impl, NULL, fifo_gone);
+}
+
+static const struct wp_fifo_manager_v1_interface fifo_manager_impl = {
+    .destroy = manager_destroy,
+    .get_fifo = fifo_get_fifo,
+};
+
+static void bind_fifo(struct wl_client *c, void *data, uint32_t version, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(c, &wp_fifo_manager_v1_interface, version, id);
+    wl_resource_set_implementation(r, &fifo_manager_impl, NULL, NULL);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: wayland-color-session-server <socket name>\n");
@@ -515,6 +791,9 @@ int main(int argc, char **argv) {
     wl_global_create(display, &wp_color_representation_manager_v1_interface, 1, NULL,
                      bind_representation_manager);
     wl_global_create(display, &xdg_session_manager_v1_interface, 1, NULL, bind_session_manager);
+    wl_global_create(display, &zwp_linux_dmabuf_v1_interface, 4, NULL, bind_dmabuf);
+    wl_global_create(display, &wp_linux_drm_syncobj_manager_v1_interface, 1, NULL, bind_syncobj);
+    wl_global_create(display, &wp_fifo_manager_v1_interface, 1, NULL, bind_fifo);
     if (wl_display_add_socket(display, argv[1]) < 0) {
         fprintf(stderr, "cannot create socket %s\n", argv[1]);
         return 2;

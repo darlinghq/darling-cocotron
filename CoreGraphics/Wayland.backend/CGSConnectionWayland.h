@@ -49,6 +49,7 @@ struct wl_proxy;
 
 @class CGSWindowWayland;
 @class WaylandColorManager;
+@class WaylandRenderManager;
 
 // Identifies the object a dispatched event belongs to, the way AppKit's backend
 // does: libwayland listener structs are unusable across the Darwin/Linux
@@ -112,6 +113,8 @@ typedef enum {
     NSMutableArray *_outputs;
     // Color management and representation, when the compositor offers them (WaylandColorManager).
     id _color;
+    // dma-buf, explicit synchronization and fifo, when the compositor offers them (WaylandRenderManager).
+    id _render;
     struct wl_proxy *_logicalOutputManager, *_legacyLogicalOutputManager;
     uint32_t _logicalOutputManagerName;
     id _outputManager;
@@ -176,8 +179,12 @@ typedef enum {
 // The shared color manager, or nil when the compositor offers neither color protocol.
 - (WaylandColorManager *) colorManager;
 - (id) waylandColorManager;
+// The shared render-protocol manager, used by this connection's windows.
+- (WaylandRenderManager *) renderManager;
 // Tells the windows that a color global arrived after they were created.
 - (void) notifyWindowsColorManagerAvailable;
+// Tells the windows that a render global arrived after they were created.
+- (void) notifyWindowsRenderManagerAvailable;
 
 // Runs the block after the events the connection has read are dispatched: not inside a listener of the
 // compositor's events, where a request that waits for the compositor would nest in the dispatch. Blocks queued by

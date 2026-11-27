@@ -778,6 +778,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			# Client glue shared with the CoreGraphics Wayland backend, which sits below AppKit (and
 			# has the one WaylandColorManager).
 			../CoreGraphics/WaylandSupport/WaylandLibrary.m
+			../CoreGraphics/WaylandSupport/WaylandRender.m
 			Wayland.backend/WaylandDropSession.m
 			Wayland.backend/WaylandDraggingManager.m
 			Wayland.backend/WaylandDragIcon.m
@@ -796,6 +797,7 @@ if (WAYLAND_PROTOCOLS_USABLE)
 			AppKit
 			Onyx2D
 			CoreGraphics
+			IOSurface
 			OpenGL
 	)
 	target_include_directories(Wayland_backend PRIVATE

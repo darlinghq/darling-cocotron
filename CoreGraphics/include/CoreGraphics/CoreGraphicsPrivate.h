@@ -278,6 +278,15 @@ extern const CFStringRef kCGSDisplayColorReferenceLuminanceKey;
 extern const CFStringRef kCGSDisplayColorTargetMinLuminanceKey;
 extern const CFStringRef kCGSDisplayColorTargetMaxLuminanceKey;
 extern const CFStringRef kCGSDisplayColorICCProfileKey;
+// The remaining keys carry the optional parts of a version 3 parametric description. The
+// chromaticity keys hold an array of eight CFNumbers in r, g, b, white x/y order. The MaxCLL
+// and MaxFALL keys are the values defined by CTA-861-H, in cd/m^2. The transfer-function power
+// key is the exponent multiplied by 10000. An absent key means the compositor did not report it.
+extern const CFStringRef kCGSDisplayColorPrimariesChromaticityKey;
+extern const CFStringRef kCGSDisplayColorTargetPrimariesChromaticityKey;
+extern const CFStringRef kCGSDisplayColorTransferFunctionPowerKey;
+extern const CFStringRef kCGSDisplayColorTargetMaxCLLKey;
+extern const CFStringRef kCGSDisplayColorTargetMaxFALLKey;
 
 // Values of the primaries and transfer-function keys. The numbers are the window system's
 // color-management enum values; the names give the frameworks above CoreGraphics a stable

@@ -140,6 +140,36 @@ and the licence.
 - Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
   generates the interface tables from it at build time.
 
+## linux-dmabuf-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/linux-dmabuf-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`stable/linux-dmabuf/linux-dmabuf-v1.xml`, wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2014, 2015 Collabora, Ltd.
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## linux-drm-syncobj-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/linux-drm-syncobj-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml`, wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2016 The Chromium Authors, 2017 Intel Corporation, 2018 Collabora, Ltd, 2021 Simon Ser
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## fifo-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/fifo-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/fifo/fifo-v1.xml`, wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2023 Valve Corporation
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
 ## DejaVuSans.ttf
 
 - Location: `tests/fixtures/fonts/DejaVuSans.ttf`, licence text in `tests/fixtures/fonts/DejaVu-LICENSE.txt`

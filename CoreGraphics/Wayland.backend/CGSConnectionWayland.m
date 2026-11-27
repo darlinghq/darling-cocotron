@@ -33,6 +33,7 @@
 #import <IOKit/pwr_mgt/IOPMLibPrivate.h>
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import "WaylandRender.h"
 #import <CoreGraphics/CGSNativeConnection.h>
 #import <CoreGraphics/CGWindow.h>
 #import <CoreGraphics/CGWindowLevel.h>
@@ -100,12 +101,22 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
     // An exception can't unwind through libwayland's native frames.
     @autoreleasepool {
         @try {
-            if (objectKind >= WaylandColorObjectManager &&
-                objectKind <= WaylandColorObjectLast) {
+            WaylandColorObjectKind colorKind = (WaylandColorObjectKind) objectKind;
+            if (colorKind >= WaylandColorObjectManager &&
+                colorKind <= WaylandColorObjectLast) {
                 [(WaylandColorManager *) object handleEvent: opcode
-                                                       kind: (WaylandColorObjectKind) objectKind
+                                                       kind: colorKind
                                                       proxy: (struct wl_proxy *) proxy
                                                   arguments: args];
+                return 0;
+            }
+            WaylandRenderObjectKind renderKind = (WaylandRenderObjectKind) objectKind;
+            if (renderKind >= WaylandRenderObjectManager &&
+                renderKind <= WaylandRenderObjectLast) {
+                [(WaylandRenderManager *) object handleEvent: opcode
+                                                        kind: renderKind
+                                                       proxy: (struct wl_proxy *) proxy
+                                                   arguments: args];
                 return 0;
             }
             switch (objectKind) {
@@ -250,6 +261,7 @@ static const CGEventFlags kHotKeyModifierMask =
     // Before the first event: the seat gives the pointer, and with it work to do after the dispatch, during the setup.
     _afterDispatch = [NSMutableArray new];
     _color = [[WaylandColorManager alloc] initWithDispatcher: CGSWaylandDispatch owner: self];
+    _render = [[WaylandRenderManager alloc] initWithDispatcher: CGSWaylandDispatch];
     // The keyboard layout is described from the system default until the compositor's keymap arrives.
     _keymap = [[CGSWaylandKeymap alloc] init];
     if (_keymap != nil)
@@ -376,6 +388,8 @@ static const CGEventFlags kHotKeyModifierMask =
     [_outputManager release];
     [(WaylandColorManager *) _color shutdown];
     [_color release];
+    WaylandRenderManager *render = (WaylandRenderManager *) _render;
+    [render shutdown];
     [self releaseKeyboard];
     [_keyboardDecoder release];
     [(CGSWaylandPointer *) _pointerDecoder stop];
@@ -399,6 +413,15 @@ static const CGEventFlags kHotKeyModifierMask =
         WL.wl_proxy_destroy(output->_proxy);
     }
     [_outputs release];
+
+    if (render->_dmabuf != NULL)
+        WL.wl_proxy_destroy(render->_dmabuf);
+    if (render->_syncobjManager != NULL)
+        WL.wl_proxy_destroy(render->_syncobjManager);
+    if (render->_fifoManager != NULL)
+        WL.wl_proxy_destroy(render->_fifoManager);
+    [render release];
+    _render = nil;
 
     if (_wlDisplay != NULL) {
         WL.wl_display_disconnect(_wlDisplay);
@@ -481,6 +504,20 @@ static const CGEventFlags kHotKeyModifierMask =
                 [(CGSWindowWayland *) window colorManagerAvailable];
         }
     }
+}
+
+- (void) notifyWindowsRenderManagerAvailable {
+    @synchronized (_windows) {
+        for (NSNumber *key in _windows) {
+            CGSWindow *window = [_windows objectForKey: key];
+            if ([window isKindOfClass: [CGSWindowWayland class]])
+                [(CGSWindowWayland *) window renderManagerAvailable];
+        }
+    }
+}
+
+- (WaylandRenderManager *) renderManager {
+    return (WaylandRenderManager *) _render;
 }
 
 - (void) connectionFailed {
@@ -643,6 +680,31 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                                            object: _color];
         [(WaylandColorManager *) _color bindRepresentationManager: proxy version: 1 name: name];
         [self notifyWindowsColorManagerAvailable];
+    } else if (strcmp(interface, "zwp_linux_dmabuf_v1") == 0 &&
+               ((WaylandRenderManager *) _render)->_dmabuf == NULL) {
+        uint32_t renderVersion = MIN(version, (uint32_t) zwp_linux_dmabuf_v1_interface.version);
+        struct wl_proxy *proxy = [self bindGlobal: name
+                                         interface: &zwp_linux_dmabuf_v1_interface
+                                          version: renderVersion
+                                             kind: CGSWaylandObjectNone object: nil];
+        [(WaylandRenderManager *) _render bindDMABuf: proxy version: renderVersion name: name];
+        [self notifyWindowsRenderManagerAvailable];
+    } else if (strcmp(interface, "wp_linux_drm_syncobj_manager_v1") == 0 &&
+               ((WaylandRenderManager *) _render)->_syncobjManager == NULL) {
+        struct wl_proxy *proxy = [self bindGlobal: name
+                                         interface: &wp_linux_drm_syncobj_manager_v1_interface
+                                          version: 1
+                                             kind: CGSWaylandObjectNone object: nil];
+        [(WaylandRenderManager *) _render bindSyncobjManager: proxy name: name];
+        [self notifyWindowsRenderManagerAvailable];
+    } else if (strcmp(interface, "wp_fifo_manager_v1") == 0 &&
+               ((WaylandRenderManager *) _render)->_fifoManager == NULL) {
+        struct wl_proxy *proxy = [self bindGlobal: name
+                                         interface: &wp_fifo_manager_v1_interface
+                                          version: 1
+                                             kind: CGSWaylandObjectNone object: nil];
+        [(WaylandRenderManager *) _render bindFifoManager: proxy name: name];
+        [self notifyWindowsRenderManagerAvailable];
     } else if (strcmp(interface, "wl_seat") == 0 && _seat == NULL) {
         // Version 4 adds wl_keyboard.repeat_info, 5 wl_pointer.frame and 8 wl_pointer.axis_value120. A
         // protocol table older than that offers less.
@@ -765,6 +827,17 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
 }
 
 - (void) registryGlobalRemove: (uint32_t) name {
+    WaylandRenderManager *render = (WaylandRenderManager *) _render;
+    struct wl_proxy *renderManagerProxy = NULL;
+    if (name != 0)
+        renderManagerProxy =
+            name == render->_dmabufName ? render->_dmabuf :
+            name == render->_syncobjManagerName ? render->_syncobjManager :
+            name == render->_fifoManagerName ? render->_fifoManager : NULL;
+    [render globalRemoved: name];
+    if (renderManagerProxy != NULL)
+        WL.wl_proxy_destroy(renderManagerProxy);
+
     [(WaylandColorManager *) _color globalRemoved: name];
     if ((_pointerConstraints != NULL && name == _pointerConstraintsName) ||
         (_relativePointerManager != NULL && name == _relativePointerManagerName)) {
@@ -874,6 +947,17 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
 // the same way as when an output's description changes.
 - (void) waylandColorManagerDidLoseGlobal: (WaylandColorManager *) manager {
     [self waylandColorManagerOutputInfoChanged: manager];
+}
+
+// A window's preferred content description changed. CoreGraphics owns the feedback proxy, but only
+// the framework above knows which window it belongs to, so hand the change to its observer.
+- (void) waylandColorManagerPreferredInfoChanged: (WaylandColorManager *) manager
+                                     forFeedback: (struct wl_proxy *) feedback
+{
+    (void) manager;
+    id observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionSurfaceColorPreferenceChanged:)])
+        [observer nativeConnectionSurfaceColorPreferenceChanged: feedback];
 }
 
 // What changed in the outputs is a change of the displays, for the callbacks once the setup is over.

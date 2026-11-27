@@ -148,6 +148,7 @@ typedef enum {
 - (void) bufferReleased: (struct wl_proxy *) buffer opcode: (uint32_t) opcode;
 // A color global arrived after the window was made: create its per-surface objects now.
 - (void) colorManagerAvailable;
+- (void) renderManagerAvailable;
 // Where the window is, as far as the connection knows (the rect that was asked for).
 - (CGPoint) frameOrigin;
 

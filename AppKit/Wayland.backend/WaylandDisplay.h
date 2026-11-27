@@ -42,7 +42,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager;
+@class WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager, WaylandRenderManager;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -198,6 +198,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // The pointer is over a window decoration, where the arrow is shown whatever cursor the application selected.
     BOOL _cursorOverDecoration;
     WaylandDataDevice *_dataDevice;
+    // Shared dma-buf, explicit-sync and fifo client (WaylandRenderManager), bound with this
+    // display's registry. The CoreGraphics connection binds its own set on its own connection.
+    id _render;
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
@@ -208,6 +211,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) flush;
 // The shared color manager, or nil when the compositor offers neither protocol.
 - (WaylandColorManager *) colorManager;
+// The render-protocol manager used to attach buffers and queue frames.
+- (WaylandRenderManager *) renderManager;
+// Called when one of the render globals arrives, so surfaces made earlier can observe it.
+- (void) renderGlobalsAvailable;
 // Start a window-system session before any restored window is mapped. These implement the
 // NSDisplay (NSSessionRestoration) hooks declared in NSWindow-Private.h.
 - (void) beginWindowSessionWithReason: (NSUInteger) reason identifier: (NSString *) identifier;
