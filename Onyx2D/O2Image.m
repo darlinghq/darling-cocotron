@@ -94,6 +94,8 @@ ONYX2D_STATIC BOOL initFunctionsForMonochrome(O2Image *self,
     return NO;
 }
 
+static O2argb8u *readBGRA8888Unpremultiplied(O2Image *self, int x, int y, O2argb8u *span, int length);
+
 ONYX2D_STATIC BOOL initFunctionsForRGBColorSpace(O2Image *self,
                                                  size_t bitsPerComponent,
                                                  size_t bitsPerPixel,
@@ -165,11 +167,14 @@ ONYX2D_STATIC BOOL initFunctionsForRGBColorSpace(O2Image *self,
                 }
                 break;
 
+            case kO2ImageAlphaFirst:
             case kO2ImageAlphaPremultipliedFirst:
                 switch (bitmapInfo & kO2BitmapByteOrderMask) {
                 case kO2BitmapByteOrder16Little:
                 case kO2BitmapByteOrder32Little:
-                    self->_read_argb8u = O2ImageRead_BGRA8888_to_argb8u;
+                    self->_read_argb8u = (bitmapInfo & kO2BitmapAlphaInfoMask) == kO2ImageAlphaFirst
+                                                 ? readBGRA8888Unpremultiplied
+                                                 : O2ImageRead_BGRA8888_to_argb8u;
                     return YES;
 
                 case kO2BitmapByteOrder16Big:
@@ -178,9 +183,6 @@ ONYX2D_STATIC BOOL initFunctionsForRGBColorSpace(O2Image *self,
                     self->_read_argb8u = O2ImageRead_XRGB8888_to_argb8u;
                     return YES;
                 }
-                break;
-
-            case kO2ImageAlphaFirst:
                 break;
 
             case kO2ImageAlphaNoneSkipLast:
@@ -1146,6 +1148,30 @@ O2argb8u *O2ImageRead_BGRA8888_to_argb8u(O2Image *self, int x, int y,
     return NULL;
 }
 
+// Pixels with the alpha channel first and not premultiplied (kO2ImageAlphaFirst), in little endian words.
+static O2argb8u *readBGRA8888Unpremultiplied(O2Image *self, int x, int y, O2argb8u *span, int length) {
+    const uint8_t *scanline = scanlineAtY(self, y);
+    int i;
+
+    if (scanline == NULL)
+        return NULL;
+
+    scanline += x * 4;
+    for (i = 0; i < length; i++) {
+        O2argb8u result;
+
+        result.b = *scanline++;
+        result.g = *scanline++;
+        result.r = *scanline++;
+        result.a = *scanline++;
+        result.r = (result.r * result.a + 127) / 255;
+        result.g = (result.g * result.a + 127) / 255;
+        result.b = (result.b * result.a + 127) / 255;
+        *span++ = result;
+    }
+    return NULL;
+}
+
 O2argb8u *O2ImageRead_RGB888_to_argb8u(O2Image *self, int x, int y,
                                        O2argb8u *span, int length)
 {
@@ -1213,6 +1239,11 @@ O2argb8u *O2ImageRead_XRGB8888_to_argb8u(O2Image *self, int x, int y,
         result.r = *scanline++;
         result.g = *scanline++;
         result.b = *scanline++;
+        if ((self->_bitmapInfo & kO2BitmapAlphaInfoMask) == kO2ImageAlphaFirst) {
+            result.r = (result.r * result.a + 127) / 255;
+            result.g = (result.g * result.a + 127) / 255;
+            result.b = (result.b * result.a + 127) / 255;
+        }
         *span++ = result;
     }
     return NULL;

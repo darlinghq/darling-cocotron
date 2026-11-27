@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSEvent_periodic.h>
 #import <AppKit/NSWindow.h>
 #import <CoreGraphics/CGEventSource.h>
+#import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <Foundation/NSDate.h>
 #import <Foundation/NSException.h>
 #import "../private-include/AppKit/NSEventTime.h"
@@ -208,6 +209,11 @@ NSEvent *NSEventApplyLocalMonitors(NSEvent *event) {
             buttons |= (NSUInteger) 1 << button;
     }
     return buttons;
+}
+
+// The user's double-click interval, which CoreGraphics reads from the global preferences.
++ (NSTimeInterval) doubleClickInterval {
+    return _CGSDoubleClickInterval();
 }
 
 - (instancetype) initWithType: (NSEventType) type
