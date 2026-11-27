@@ -1394,15 +1394,19 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 }
 
 - (CGSSurface *) createSurface {
-    if (_surfaceObject != nil) {
+    // The surfaces of a toplevel window are subsurfaces (any number); the surface of any other window is the
+    // window's own, and there is one
+    BOOL sub = _role == CGSWaylandRoleToplevel && _waylandConnection->_subcompositor != NULL;
+    if (!sub && _surfaceObject != nil) {
         NSLog(@"CoreGraphics Wayland backend: window %d already has a surface; "
-              @"more than one surface per window would need subsurfaces, which "
-              @"are not implemented", (int) self.windowId);
+              @"more than one surface per window needs subsurfaces, which a toplevel window has",
+              (int) self.windowId);
         return nil;
     }
 
     if (![self ensureRole])
         return nil;
+    sub = _role == CGSWaylandRoleToplevel && _waylandConnection->_subcompositor != NULL;
     CGSSurfaceID surfaceID = _nextSurfaceId++;
     CGSSurfaceWayland *surface =
             [[CGSSurfaceWayland alloc] initWithWindow: self surfaceID: surfaceID];
@@ -1413,7 +1417,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         [_surfaces setObject: surface
                       forKey: [NSNumber numberWithInt: surfaceID]];
     }
-    _surfaceObject = surface;
+    if (!sub)
+        _surfaceObject = surface;
     [surface release];
     return surface;
 }

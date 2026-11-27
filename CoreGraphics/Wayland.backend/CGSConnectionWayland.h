@@ -103,6 +103,7 @@ typedef enum {
 @public
     struct wl_display *_wlDisplay;
     struct wl_proxy *_compositor;
+    struct wl_proxy *_subcompositor; // wl_subcompositor, for the surfaces that draw GL next to a window's contents
     struct wl_proxy *_shm; // wl_shm, for the pixels of the windows that are drawn into
     struct wl_proxy *_wmBase;
     // What places and frames the windows beyond xdg-shell, NULL when the compositor offers none:

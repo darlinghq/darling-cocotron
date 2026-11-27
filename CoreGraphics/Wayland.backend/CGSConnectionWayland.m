@@ -830,6 +830,10 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         _compositor = [self bindGlobal: name interface: &wl_compositor_interface
                                version: MIN(version, 4u)
                                    kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "wl_subcompositor") == 0 && _subcompositor == NULL) {
+        _subcompositor = [self bindGlobal: name interface: &wl_subcompositor_interface
+                                  version: 1
+                                     kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "wl_shm") == 0 && _shm == NULL) {
         _shm = [self bindGlobal: name interface: &wl_shm_interface
                         version: 1
