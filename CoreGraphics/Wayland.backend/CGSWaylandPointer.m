@@ -234,6 +234,7 @@ static unsigned maskForCode(uint32_t code) {
         _focus = NULL;
         _enterSerial = 0;
         _pressed = 0;
+        _dragSerial = 0;
         [self setPressedNumbers: 0];
         _located = NO;
         [_downClickState removeAllObjects];
@@ -402,6 +403,7 @@ static unsigned maskForCode(uint32_t code) {
     case WP_POINTER_EV_LEAVE:
         [self cancelFingerScroll];
         _pressed = 0;
+        _dragSerial = 0;
         [self setPressedNumbers: 0];
         [_downClickState removeAllObjects];
         if ([observer respondsToSelector: @selector(nativeConnectionPointerLeft)])
@@ -569,6 +571,10 @@ static unsigned maskForCode(uint32_t code) {
         clickState = held != nil ? [held longLongValue] : 1;
         [_downClickState removeObjectForKey: key];
     }
+    if (pressed && _focus != NULL)
+        _dragSerial = serial;
+    else if (!pressed && _pressed == 0)
+        _dragSerial = 0;
     if (_focus == NULL)
         return;
 
@@ -812,6 +818,14 @@ static const double kNothing = 0;
 
 - (uint32_t) enterSerial {
     return _enterSerial;
+}
+
+- (uint32_t) dragSerial {
+    return _dragSerial;
+}
+
+- (void) consumeDragSerial {
+    _dragSerial = 0;
 }
 
 #pragma mark - Scroll

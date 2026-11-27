@@ -1658,6 +1658,13 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     return kCGErrorNotImplemented;
 }
 
+- (BOOL) toplevelContentContainsSurfacePoint: (CGPoint) point {
+    if (!_ui || (_uiContentOffset.x == 0 && _uiContentOffset.y == 0))
+        return YES;
+    return point.x >= _uiContentOffset.x && point.y >= _uiContentOffset.y &&
+           point.x < _uiContentOffset.x + _uiFrame.size.width && point.y < _uiContentOffset.y + _uiFrame.size.height;
+}
+
 - (CGPoint) frameOrigin {
     return _frame.origin;
 }

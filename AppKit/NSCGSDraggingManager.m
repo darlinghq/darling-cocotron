@@ -203,8 +203,14 @@ static NSCGSDraggingManager *sharedManager;
         NSPoint pointer = [event locationInWindow];
         description.imageOffset = CGPointMake(location.x - pointer.x,
                                               pointer.y - location.y - ceil([image size].height));
-        cgImage = [image CGImageForProposedRect: NULL context: nil hints: nil];
+        // The image is drawn for the sharpest screen: the window system scales it down to the others.
+        CGFloat scale = 1;
+        for (NSScreen *screen in [NSScreen screens])
+            scale = MAX(scale, [screen backingScaleFactor]);
+        NSRect proposed = NSMakeRect(0, 0, [image size].width * scale, [image size].height * scale);
+        cgImage = [image CGImageForProposedRect: &proposed context: nil hints: nil];
         description.image = cgImage;
+        description.imageScale = scale;
     }
 
     // The source is told where the image's corner is on the screen: where it started, moved with the mouse

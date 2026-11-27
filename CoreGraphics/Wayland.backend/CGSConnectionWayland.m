@@ -27,6 +27,7 @@
 #import "CGSWaylandTablet.h"
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandClipboard.h"
+#import "CGSWaylandDrag.h"
 #import "CGSWaylandPortalShortcuts.h"
 #import "CGSWaylandOutputManager.h"
 #import "CGSWindowWayland.h"
@@ -202,6 +203,9 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectRelativePointer:
             case CGSWaylandObjectWarpLock:
                 [(CGSWaylandPointer *) object lockEvent: opcode kind: objectKind proxy: (struct wl_proxy *) proxy arguments: args];
+                break;
+            case CGSWaylandObjectDragSource:
+                [(CGSWaylandDrag *) _drag sourceEvent: opcode proxy: (struct wl_proxy *) proxy arguments: args];
                 break;
             case CGSWaylandObjectDataDevice:
             case CGSWaylandObjectDataOffer:
@@ -385,8 +389,11 @@ static const CGEventFlags kHotKeyModifierMask =
     // first pasteboard, which is why the connection does it, not the framework with the windows.
     if (_dataDeviceManager != NULL && _seat != NULL) {
         _clipboard = [[CGSWaylandClipboard alloc] initWithConnection: self manager: _dataDeviceManager seat: _seat];
-        if (_clipboard != nil)
+        if (_clipboard != nil) {
             _CGSHostClipboardStart(_clipboard);
+            _drag = [[CGSWaylandDrag alloc] initWithConnection: self clipboard: (CGSWaylandClipboard *) _clipboard];
+            [(CGSWaylandClipboard *) _clipboard setDrag: _drag];
+        }
     }
     [self observeDisplaySleepAssertions];
 
@@ -403,6 +410,8 @@ static const CGEventFlags kHotKeyModifierMask =
         [_windows removeAllObjects];
     }
 
+    [(CGSWaylandDrag *) _drag invalidate];
+    [_drag release];
     [_clipboard invalidate];
     [_clipboard release];
     [(CGSWaylandPortalShortcuts *) _portalShortcuts invalidate];
@@ -1429,6 +1438,8 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
 
 - (void) inputMethodWindowUnmapped: (CGSWindow *) window {
     [(CGSWaylandInputMethod *) _inputMethodDecoder windowUnmapped: window];
+    // The same two places tell a drag that started in the window that it is gone.
+    [(CGSWaylandDrag *) _drag windowUnmapped: [window windowId]];
 }
 
 - (void) inputMethodWindowDestroyed: (uint32_t) windowID {
