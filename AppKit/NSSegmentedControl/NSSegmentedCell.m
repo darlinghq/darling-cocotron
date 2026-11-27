@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSGraphicsStyle.h>
 #import <AppKit/NSPopUpWindow.h>
 #import <AppKit/NSGraphics.h>
+#import <AppKit/NSAppearance.h>
 #import <AppKit/NSWindow.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSSegmentedCell.h>
@@ -537,6 +538,9 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     CGContextRestoreGState(context);
 
     // the labels and images, centred on the bezel without the point below it
+    BOOL darkLook = [[[NSAppearance currentDrawingAppearance]
+        bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]]
+        isEqualToString: NSAppearanceNameDarkAqua];
     NSRect body = art;
     body.size.height -= 1;
     if (!flipped)
@@ -550,11 +554,12 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
         NSColor *color;
 
         if (selected && tracking == NSSegmentSwitchTrackingSelectOne)
-            color = [NSColor colorWithCalibratedWhite: 1 alpha: enabled ? 1 : 0.6];
+            // the selected segment of the dark look is a light bezel, with dark text
+            color = [NSColor colorWithCalibratedWhite: darkLook ? 0 : 1 alpha: darkLook ? (enabled ? 0.75 : 0.35) : (enabled ? 1 : 0.6)];
         else if (selected && tracking == NSSegmentSwitchTrackingSelectAny && enabled)
             color = [NSColor controlAccentColor];
         else
-            color = [NSColor colorWithCalibratedWhite: 0 alpha: enabled ? 0.65 : 0.25];
+            color = [NSColor colorWithCalibratedWhite: darkLook ? 1 : 0 alpha: enabled ? 0.65 : 0.25];
 
         NSButtonCell *cell = [self _cellForSegment: i];
         NSString *label = [segment label];
