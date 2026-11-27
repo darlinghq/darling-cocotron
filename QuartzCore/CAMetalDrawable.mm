@@ -237,7 +237,12 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 
 	imgInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imgInfo.imageType = VK_IMAGE_TYPE_2D;
-	imgInfo.format = Indium::pixelFormatToVkFormat(_pixelFormat);
+	// an extended-range pixel format has no Vulkan format; the image holds the values the shader sees (see Indium's
+	// extended-range.private.hpp), and the copy into the internal image below shows them as an 8-bit surface does
+	imgInfo.format = _device->textureVkFormat(_pixelFormat);
+	if (imgInfo.format == VK_FORMAT_UNDEFINED) {
+		throw std::runtime_error("The device cannot hold a drawable of this pixel format");
+	}
 	imgInfo.extent.width = _size.width;
 	imgInfo.extent.height = _size.height;
 	imgInfo.extent.depth = 1;
@@ -258,6 +263,12 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 
 	// now create the internal image (with exportable memory)
 	imgInfo.format = VK_FORMAT_R8G8B8A8_UNORM;
+	if (Indium::pixelFormatIsExtendedRange(_pixelFormat) && Indium::ExtendedRange::isSRGB(_pixelFormat)) {
+		// The values of these formats are linear, and the copy into the image applies the sRGB curve to them when
+		// it is an sRGB image. OpenGL still reads the encoded bytes as RGBA8. Such an image cannot be a storage image.
+		imgInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
+		imgInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	}
 
 	// see glAcceptsLinearTiling(); the GL texture below uses the same tiling
 	const bool linearTiling = glAcceptsLinearTiling();
@@ -431,7 +442,7 @@ CAMetalDrawableTexture::CAMetalDrawableTexture(CGSize size, Indium::PixelFormat 
 	imgViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	imgViewInfo.image = _image;
 	imgViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	imgViewInfo.format = Indium::pixelFormatToVkFormat(_pixelFormat);
+	imgViewInfo.format = _device->textureVkFormat(_pixelFormat);
 	imgViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
 	imgViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
 	imgViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
