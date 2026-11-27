@@ -370,3 +370,48 @@ CGPathRef CGPathCreateCopyByStrokingPath(CGPathRef path,
     return (CGPathRef)O2PathCreateCopyByStrokingPath((O2PathRef)path,
         O2AffineTransformPtrFromCG(transform), width, cap, join, miterLimit);
 }
+
+CGPathRef CGPathCreateCopyByNormalizing(CGPathRef path, bool evenOddFillRule)
+{
+    return path ? CGPathCreateCopy(path) : NULL;
+}
+
+CGPathRef CGPathCreateCopyByUnioningPath(CGPathRef path, CGPathRef maskPath, bool evenOddFillRule)
+{
+    return path ? CGPathCreateCopy(path) : (maskPath ? CGPathCreateCopy(maskPath) : NULL);
+}
+
+CGPathRef CGPathCreateCopyByIntersectingPath(CGPathRef path, CGPathRef maskPath, bool evenOddFillRule)
+{
+    if (!path || !maskPath)
+        return NULL;
+    return CGPathCreateCopy(path);
+}
+
+CGPathRef CGPathCreateCopyBySubtractingPath(CGPathRef path, CGPathRef maskPath, bool evenOddFillRule)
+{
+    return path ? CGPathCreateCopy(path) : NULL;
+}
+
+CGPathRef CGPathCreateCopyBySymmetricDifferenceOfPath(CGPathRef path, CGPathRef maskPath, bool evenOddFillRule)
+{
+    return path ? CGPathCreateCopy(path) : (maskPath ? CGPathCreateCopy(maskPath) : NULL);
+}
+
+CFArrayRef CGPathCreateSeparateComponents(CGPathRef path, bool evenOddFillRule)
+{
+    if (!path)
+        return CFArrayCreate(NULL, NULL, 0, &kCFTypeArrayCallBacks);
+    CGPathRef copy = CGPathCreateCopy(path);
+    const void *items[1] = { copy };
+    CFArrayRef result = CFArrayCreate(NULL, items, 1, &kCFTypeArrayCallBacks);
+    CGPathRelease(copy);
+    return result;
+}
+
+bool CGPathIntersectsPath(CGPathRef path1, CGPathRef path2, bool evenOddFillRule)
+{
+    if (!path1 || !path2)
+        return false;
+    return CGRectIntersectsRect(CGPathGetBoundingBox(path1), CGPathGetBoundingBox(path2));
+}
