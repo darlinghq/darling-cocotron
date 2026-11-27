@@ -71,4 +71,4 @@ def check_capture(directory, scale):
 
 if __name__ == '__main__':
     import sys
-    print(json.dumps({str(s): check_capture(sys.argv[1], s) for s in (1.25, 1.5, 1.75)}, indent=2))
+    print(json.dumps({str(s): check_capture(sys.argv[1], s) for s in (1.25, 1.5, 2.25)}, indent=2))

@@ -42,7 +42,7 @@ def verify(path):
         match = re.fullmatch(r'CAPTURE (\d+)', line)
         if not match: continue
         stage = int(match[1]); assert stage == len(results) and stage < 3
-        scale = (D('1.25'), D('1.5'), D('1.75'))[stage]
+        scale = (D(2), D(2), D(3))[stage]  # the whole scales of the output scales 1.25, 1.5 and 2.25
         width, height = rounded(101 * scale), rounded(51 * scale)
         left, right = endpoint(30, width, 101), endpoint(51, width, 101)
         top, bottom = endpoint(20, height, 51), endpoint(31, height, 51)
