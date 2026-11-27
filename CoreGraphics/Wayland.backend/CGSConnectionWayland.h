@@ -81,6 +81,7 @@ typedef enum {
     CGSWaylandObjectDataOffer,
     CGSWaylandObjectDataSource,
     CGSWaylandObjectCursorScale,
+    CGSWaylandObjectDecoration,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -99,6 +100,9 @@ typedef enum {
     // (a position for a toplevel), xdg-decoration (the frame is the compositor's).
     struct wl_proxy *_layerShell, *_plasmaShell, *_decorationManager;
     uint32_t _plasmaShellVersion;
+    // alpha-modifier-v1, when the compositor offers it: the opacity of a window's surface (-[CGSWindow setToplevelAlpha:]).
+    struct wl_proxy *_alphaModifierManager;
+    uint32_t _alphaModifierManagerName;
 
 @protected
     struct wl_proxy *_registry;
@@ -187,6 +191,8 @@ typedef enum {
 // removed a few milliseconds after it), 0 otherwise.
 - (uint32_t) clipboardSerial;
 
+// The seat, NULL until the compositor has described it.
+- (struct wl_proxy *) seat;
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;
 // The pointer constraints and the relative pointer manager, NULL when the compositor offers none.

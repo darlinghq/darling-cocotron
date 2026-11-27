@@ -66,7 +66,33 @@ typedef enum {
 	kCGSToplevelEventInputMethodPreedit,
 	// The input method's final text (text), which replaces the composition if there is one.
 	kCGSToplevelEventInputMethodCommit,
+	// The window system configured the window: it chose a size and told the window's state (see CGSToplevelConfigure).
+	// Posted by window systems whose manager decides the size and state of a window and waits for the client to
+	// acknowledge it (Wayland). The window system's answers the UI layer needs to apply together arrive in one event.
+	kCGSToplevelEventConfigured,
+	// The window system took the window away from the screen on its own: a pop-up it dismissed (the user clicked
+	// elsewhere), or a surface of the desktop whose output is gone. Not a request to close the window: the window
+	// stays, but is not shown any more, and the UI layer orders it out.
+	kCGSToplevelEventDismissed,
+	// The window system's objects for the window were made and the window is about to be shown, before anything of it
+	// is on the screen. Posted from inside -orderWindow:relativeTo: with kCGSOrderIn, once per showing, for a UI layer that
+	// has to give the window system more about the window before its first frame (Wayland: before the first commit).
+	kCGSToplevelEventWillShow,
 } CGSToplevelEventKind;
+
+// What kCGSToplevelEventConfigured carries.
+typedef struct {
+	// The size the window system chose, in points; 0 in an extent leaves it to the client.
+	int32_t width, height;
+	// A pop-up's position in its parent window, in points from the parent's top left corner.
+	int32_t popupX, popupY;
+	bool activated, maximized, fullscreen, suspended;
+	// Whether the window system minimizes windows when asked.
+	bool minimizeAdvertised;
+	// Whether the window system told who draws the window's frame (decorationReported), and that it is the client
+	// (clientDecorated).
+	bool decorationReported, clientDecorated;
+} CGSToplevelConfigure;
 
 typedef struct {
 	CGSToplevelEventKind kind;
@@ -76,6 +102,7 @@ typedef struct {
 	bool state;        // kCGSToplevelEventOcclusionChanged, kCGSToplevelEventFullscreenChanged
 	CFStringRef text;  // kCGSToplevelEventInputMethodPreedit and ...Commit; valid during the call only
 	CFRange textRange; // kCGSToplevelEventInputMethodPreedit
+	CGSToplevelConfigure configure; // kCGSToplevelEventConfigured
 } CGSToplevelEvent;
 
 // Called on the thread that runs the main run loop.

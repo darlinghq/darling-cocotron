@@ -6,11 +6,11 @@
 // Layering of an AppKit window and its CoreGraphics window, entered from both sides. On macOS an
 // NSWindow's windowNumber is its window server id: CGWindowListCopyWindowInfo() lists the window
 // under it, and the window server calls (CGSGetWindowBounds, CGSMoveWindow, ...) take it. Here the
-// X11 backend of AppKit makes its windows through CoreGraphics, so what AppKit does to a window
+// backends of AppKit make their windows through CoreGraphics, so what AppKit does to a window
 // (placing, sizing, titling, fading, showing, hiding, closing) must be seen through CoreGraphics, and what
-// CoreGraphics does to it (moving it) must be seen by AppKit. The Wayland backend does not make its
-// windows through CoreGraphics yet: the test skips there. Needs an X server; a window manager is only
-// needed for the titled window. Destroying the window is the CoreGraphics side's own test
+// CoreGraphics does to it (moving it) must be seen by AppKit. A Wayland compositor places the windows itself,
+// so on the Wayland backend CoreGraphics cannot move a window: that part is skipped there. Needs an X server (a window manager is only needed for
+// the titled window) or a Wayland compositor. Destroying the window is the CoreGraphics side's own test
 // (coregraphics-x11-toplevel-window): AppKit keeps its windows alive after they are closed.
 #import <AppKit/AppKit.h>
 #include <CoreGraphics/CoreGraphics.h>
@@ -71,8 +71,9 @@ int main(void) {
         [NSApplication sharedApplication];
         // Both backends' classes can be loaded; the display in use says which one the windows are made by.
         id display = [NSClassFromString(@"NSDisplay") performSelector: NSSelectorFromString(@"currentDisplay")];
-        if (![NSStringFromClass([display class]) isEqualToString: @"X11Display"]) {
-            printf("SKIP: not the X11 backend\n");
+        BOOL wayland = [NSStringFromClass([display class]) isEqualToString: @"WaylandDisplay"];
+        if (!wayland && ![NSStringFromClass([display class]) isEqualToString: @"X11Display"]) {
+            printf("SKIP: neither the X11 nor the Wayland backend\n");
             return 0;
         }
 
@@ -146,14 +147,18 @@ int main(void) {
         alpha = [[listing(number) objectForKey: (NSString *) kCGWindowAlpha] doubleValue];
         CHECK(fabs(alpha - 1.0) < 0.01, "full alpha is listed as 1");
 
-        // CoreGraphics -> AppKit
-        CGPoint target = CGPointMake(260, 150);
-        CHECK(moveWindow(cid, number, &target) == kCGErrorSuccess, "CGSMoveWindow() accepts the window number");
-        NSRect expected = NSMakeRect(260, CGDisplayBounds(CGMainDisplayID()).size.height - 150 - 220, 360, 220);
-        WAIT_FOR(NSEqualRects([window frame], expected));
-        CHECK(NSEqualRects([window frame], expected), "a move through CoreGraphics is the window's AppKit frame");
-        CHECK(CGRectEqualToRect(boundsOf(listing(number)), CGRectMake(260, 150, 360, 220)),
-              "and the listing agrees with it");
+        if (!wayland) {
+            // CoreGraphics -> AppKit
+            CGPoint target = CGPointMake(260, 150);
+            CHECK(moveWindow(cid, number, &target) == kCGErrorSuccess, "CGSMoveWindow() accepts the window number");
+            NSRect expected = NSMakeRect(260, CGDisplayBounds(CGMainDisplayID()).size.height - 150 - 220, 360, 220);
+            WAIT_FOR(NSEqualRects([window frame], expected));
+            CHECK(NSEqualRects([window frame], expected), "a move through CoreGraphics is the window's AppKit frame");
+            CHECK(CGRectEqualToRect(boundsOf(listing(number)), CGRectMake(260, 150, 360, 220)),
+                  "and the listing agrees with it");
+        } else {
+            printf("SKIP: a Wayland compositor places the windows itself\n");
+        }
 
         // showing and hiding
         [window orderOut: nil];

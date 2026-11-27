@@ -27,10 +27,13 @@
 #import <CoreGraphics/CGSSurface.h>
 #import <Foundation/NSDictionary.h>
 #import <Foundation/NSNumber.h>
+#import <Foundation/NSProcessInfo.h>
 #import <Foundation/NSString.h>
 #import <sys/mman.h>
 #include <unistd.h>
 #include <string.h>
+
+static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
 
 @implementation CGSWindowWayland
 
@@ -105,6 +108,7 @@
     _colorSurface = NULL;
     _representationSurface = NULL;
     [self destroyRole];
+    destroyProxy(&_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_DESTROY);
     if (_surface != NULL)
         WaylandMarshal(_surface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
                        (union wl_argument[1]) {{.o = NULL}});
@@ -298,6 +302,9 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     @synchronized (self) {
         if (_role != CGSWaylandRoleNone)
             return YES;
+        // The role of a window of the UI layer is made when the UI layer shows it.
+        if (_ui)
+            return NO;
 
         switch ([self wantedRole]) {
         case CGSWaylandRoleLayer:
@@ -489,6 +496,10 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
                 kind: (CGSWaylandObjectKind) kind
            arguments: (union wl_argument *) args
 {
+    if (_ui) {
+        [self handleToplevelEvent: opcode kind: kind arguments: args];
+        return;
+    }
     if (kind == CGSWaylandObjectXdgSurface) {
         if (opcode == WP_XDG_SURFACE_EV_CONFIGURE)
             [self acknowledgeConfigure: args[0].u];
@@ -548,6 +559,523 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     }
 }
 
+
+#pragma mark - Toplevel windows of the UI layer
+
+- (instancetype) initToplevelWithAttributes: (const CGSToplevelAttributes *) attributes
+                                 connection: (CGSConnection *) connection
+                                   windowID: (CGSWindowID) windowID
+{
+    self = [self initWithRegion: NULL connection: connection windowID: windowID];
+    if (self == nil)
+        return nil;
+    _ui = YES;
+    _uiFrame = attributes->frame;
+    return self;
+}
+
+- (struct wl_proxy *) xdgSurfaceProxy { return _xdgSurface; }
+- (struct wl_proxy *) toplevelProxy { return _toplevel; }
+- (struct wl_proxy *) popupProxy { return _popup; }
+- (struct wl_proxy *) layerSurfaceProxy { return _layerSurface; }
+- (void) setToplevelPopupGrabSerial: (uint32_t) serial { _uiPopupGrabSerial = serial; }
+- (void) setToplevelContentOffset: (CGPoint) offset { _uiContentOffset = offset; }
+- (void) noteToplevelFrame: (CGRect) frame { _uiFrame = frame; }
+- (CGRect) toplevelFrame { return _ui ? _uiFrame : CGRectNull; }
+
+- (CGError) setToplevelHints: (const CGSToplevelHints *) hints {
+    if (!_ui || hints == NULL)
+        return kCGErrorNotImplemented;
+    _uiHints = *hints;
+    return kCGSErrorSuccess;
+}
+
+- (CGError) reserveToplevelDockStrip {
+    // The strip of a window shown as a layer surface is reserved with the surface.
+    return _ui ? kCGSErrorSuccess : kCGErrorNotImplemented;
+}
+
+// The window's frame, whose origin is the one the UI layer asked for: a popup is placed relative to its parent and a
+// layer surface along the output's top edge, so the origin matters to those only.
+- (CGError) setToplevelFrame: (CGRect) frame {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    BOOL moved = !CGPointEqualToPoint(frame.origin, _uiFrame.origin);
+    BOOL sized = !CGSizeEqualToSize(frame.size, _uiFrame.size);
+    _uiFrame = frame;
+    if (_role == CGSWaylandRolePopup && (moved || sized) && WL.wl_proxy_get_version(_popup) >= 3) {
+        struct wl_proxy *positioner = [self newUIPopupPositioner];
+        union wl_argument args[2] = {{.o = (struct wl_object *) positioner}, {.u = ++_uiRepositionToken}};
+        WaylandMarshal(_popup, WP_POPUP_REPOSITION, NULL, 0, args);
+        WaylandMarshal(positioner, WP_POSITIONER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                       (union wl_argument[1]) {{.o = NULL}});
+        [_waylandConnection flush];
+    } else if (_role == CGSWaylandRoleLayer && sized) {
+        [self updateUILayerSize];
+    }
+    return kCGSErrorSuccess;
+}
+
+// The size limits as the window's geometry in the surface, in points (the UI layer adds what its own frame needs). A
+// layer surface has its height from its frame instead.
+- (CGError) setToplevelMinimumSize: (CGSize) minimum maximumSize: (CGSize) maximum {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiMinimumSize = minimum;
+    _uiMaximumSize = maximum;
+    _uiLimitsSet = YES;
+    [self applyUIToplevelLimits];
+    return kCGSErrorSuccess;
+}
+
+- (void) applyUIToplevelLimits {
+    if (_toplevel == NULL || !_uiLimitsSet)
+        return;
+    union wl_argument min[2] = {{.i = (int32_t) _uiMinimumSize.width}, {.i = (int32_t) _uiMinimumSize.height}};
+    union wl_argument max[2] = {{.i = (int32_t) _uiMaximumSize.width}, {.i = (int32_t) _uiMaximumSize.height}};
+    // Double buffered: the compositor sees them with the surface's next commit.
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MIN_SIZE, NULL, 0, min);
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_MAX_SIZE, NULL, 0, max);
+}
+
+// alpha-modifier-v1 multiplies the surface's per-pixel alpha. The protocol's factor is 0 for fully transparent and
+// UINT32_MAX for fully opaque. Without the protocol the opacity is not applied (the compositor composites the window as
+// it is); the UI layer decides what to do with a window that must be invisible (see -toplevelWindowSystemComposites).
+- (CGError) setToplevelAlpha: (CGFloat) alpha {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiAlpha = alpha > 0 ? (alpha < 1 ? alpha : 1) : 0;
+    [self applyUIAlpha];
+    return kCGSErrorSuccess;
+}
+
+- (CGFloat) listedAlpha {
+    return _ui && _uiAlphaSet ? _uiAlpha : 1;
+}
+
+- (void) alphaModifierAvailable {
+    if (_ui && _uiAlphaSet)
+        [self applyUIAlpha];
+}
+
+- (void) applyUIAlpha {
+    _uiAlphaSet = YES;
+    if (_surface == NULL || _waylandConnection->_alphaModifierManager == NULL)
+        return;
+    if (_alphaModifier == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+        _alphaModifier = [_waylandConnection createObject: _waylandConnection->_alphaModifierManager
+                                                   opcode: WP_ALPHA_MODIFIER_GET_SURFACE
+                                                interface: &wp_alpha_modifier_surface_v1_interface
+                                                arguments: args
+                                                     kind: CGSWaylandObjectNone
+                                                   object: nil];
+        if (_alphaModifier == NULL)
+            return;
+    }
+    union wl_argument value[1] = {{.u = (uint32_t) ((double) _uiAlpha * (double) UINT32_MAX)}};
+    WaylandMarshal(_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_SET_MULTIPLIER, NULL, 0, value);
+    // The multiplier is double-buffered: a surface that shows content takes it with its next commit.
+    if (_uiConfigured) {
+        union wl_argument none[1] = {{.o = NULL}};
+        WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
+        [_waylandConnection flush];
+    }
+}
+
+- (CGError) setToplevelDecorated: (BOOL) decorated {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiDecorationRequest = decorated ? 1 : 2;
+    [self applyUIDecoration];
+    return kCGSErrorSuccess;
+}
+
+- (void) unsetToplevelDecoration {
+    _uiDecorationRequest = 3;
+    [self applyUIDecoration];
+}
+
+// Tells the compositor which side draws the frame. Compositors differ on the default for a window that says nothing, so a
+// window whose frame is its own says so.
+- (void) applyUIDecoration {
+    if (_toplevel == NULL || _waylandConnection->_decorationManager == NULL || _uiDecorationRequest == 0)
+        return;
+    if (_uiDecorationRequest == 3) {
+        if (_decoration != NULL) {
+            union wl_argument none[1] = {{.o = NULL}};
+            WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_UNSET_MODE, NULL, 0, none);
+        }
+        return;
+    }
+    if (_decoration == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _toplevel}};
+        _decoration = [_waylandConnection createObject: _waylandConnection->_decorationManager
+                                                opcode: WP_DECORATION_MANAGER_GET_TOPLEVEL_DECORATION
+                                             interface: &zxdg_toplevel_decoration_v1_interface
+                                             arguments: args
+                                                  kind: CGSWaylandObjectDecoration
+                                                object: self];
+        if (_decoration == NULL)
+            return;
+    }
+    union wl_argument mode[1] = {{.u = _uiDecorationRequest == 1 ? WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE
+                                                                 : WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE}};
+    WaylandMarshal(_decoration, WP_TOPLEVEL_DECORATION_SET_MODE, NULL, 0, mode);
+}
+
+// An empty input region lets pointer input reach the surfaces below; no region restores the default.
+- (CGError) setToplevelIgnoresMouseEvents: (BOOL) ignores {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiIgnoresMouse = ignores;
+    struct wl_proxy *region = NULL;
+    if (ignores) {
+        union wl_argument regionArgs[1] = {{.o = NULL}};
+        region = [_waylandConnection createObject: _waylandConnection->_compositor
+                                           opcode: WP_COMPOSITOR_CREATE_REGION
+                                        interface: &wl_region_interface
+                                        arguments: regionArgs
+                                             kind: CGSWaylandObjectNone
+                                           object: nil];
+    }
+    union wl_argument inputArgs[1] = {{.o = (struct wl_object *) region}};
+    WaylandMarshal(_surface, WP_SURFACE_SET_INPUT_REGION, NULL, 0, inputArgs);
+    if (region != NULL)
+        WaylandMarshal(region, WP_REGION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                       (union wl_argument[1]) {{.o = NULL}});
+    return kCGSErrorSuccess;
+}
+
+// A new native window with the surface's role gone: the wl_surface keeps its role for its lifetime, so a window that is
+// shown with another role needs a new one. Whatever the UI layer made of the old surface (subsurfaces, extensions) is
+// destroyed before this is called. The role has to be hidden.
+- (CGError) recreateToplevelWithAttributes: (const CGSToplevelAttributes *) attributes {
+    if (!_ui || attributes == NULL)
+        return kCGErrorNotImplemented;
+    if (_role != CGSWaylandRoleNone)
+        return kCGErrorFailure;
+    destroyProxy(&_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_DESTROY);
+    if (_surface != NULL)
+        WaylandMarshal(_surface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                       (union wl_argument[1]) {{.o = NULL}});
+    union wl_argument args[2] = {{.o = NULL}};
+    _surface = [_waylandConnection createObject: _waylandConnection->_compositor
+                                         opcode: WP_COMPOSITOR_CREATE_SURFACE
+                                      interface: &wl_surface_interface
+                                      arguments: args
+                                           kind: CGSWaylandObjectNone
+                                         object: nil];
+    if (_surface == NULL)
+        return kCGErrorFailure;
+    _uiFrame = attributes->frame;
+    _uiIgnoresMouse = NO;
+    [_waylandConnection flush];
+    return kCGSErrorSuccess;
+}
+
+- (CGSWaylandRole) wantedUIRole {
+    if (_uiHints.kind == kCGSToplevelKindDock && _waylandConnection->_layerShell != NULL)
+        return CGSWaylandRoleLayer;
+    BOOL popupKind = _uiHints.kind == kCGSToplevelKindDropdownMenu || _uiHints.kind == kCGSToplevelKindPopupMenu ||
+                     _uiHints.kind == kCGSToplevelKindTooltip;
+    CGSWindowWayland *parent = (CGSWindowWayland *) _uiHints.transientFor;
+    if (popupKind && parent != nil && (parent->_xdgSurface != NULL || parent->_layerSurface != NULL))
+        return CGSWaylandRolePopup;
+    return CGSWaylandRoleToplevel;
+}
+
+// The bar is anchored to the top, left and right edges, as tall as the window is, and keeps that strip free of other
+// windows (the exclusive zone).
+- (void) updateUILayerSize {
+    int32_t height = MAX(1, (int32_t) ceil(_uiFrame.size.height));
+    union wl_argument size[2] = {{.u = 0}, {.u = (uint32_t) height}};
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_SIZE, NULL, 0, size);
+    union wl_argument zone[1] = {{.i = height}};
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_EXCLUSIVE_ZONE, NULL, 0, zone);
+}
+
+- (void) createUILayerRole {
+    union wl_argument args[5] = {{.o = NULL}, {.o = (struct wl_object *) _surface}, {.o = NULL},
+                                 {.u = WP_LAYER_TOP}, {.s = "menubar"}};
+    _layerSurface = [_waylandConnection createObject: _waylandConnection->_layerShell
+                                              opcode: WP_LAYER_SHELL_GET_LAYER_SURFACE
+                                           interface: &zwlr_layer_surface_v1_interface
+                                           arguments: args
+                                                kind: CGSWaylandObjectLayerSurface
+                                              object: self];
+    if (_layerSurface == NULL)
+        return;
+    _role = CGSWaylandRoleLayer;
+    union wl_argument anchor[1] = {{.u = WP_LAYER_ANCHOR_TOP | WP_LAYER_ANCHOR_LEFT | WP_LAYER_ANCHOR_RIGHT}};
+    WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_SET_ANCHOR, NULL, 0, anchor);
+    [self updateUILayerSize];
+    // The bar never takes the keyboard focus (the protocol default): a compositor that gives an on-demand surface the focus
+    // when the pointer is over it would take it from the application's window, which then looks like the application losing
+    // the focus, so the bar would hide, and show again once the focus came back, in a loop. The menus the bar opens grab
+    // the keyboard themselves.
+}
+
+// The positioner of the pop-up: where the window's frame is relative to its parent's content. The frames are in the space
+// of -setToplevelFrame: (y up), the pop-up's position in the parent's surface (y down); the parent's own frame, when it
+// has one, starts at its content offset.
+- (struct wl_proxy *) newUIPopupPositioner {
+    CGSWindowWayland *parent = _popupParent;
+    union wl_argument args[4] = {{.o = NULL}};
+    struct wl_proxy *positioner = [_waylandConnection createObject: _waylandConnection->_wmBase
+                                                            opcode: WP_WM_BASE_CREATE_POSITIONER
+                                                         interface: &xdg_positioner_interface
+                                                         arguments: args
+                                                              kind: CGSWaylandObjectNone
+                                                            object: nil];
+    args[0].i = MAX(1, (int32_t) ceil(_uiFrame.size.width));
+    args[1].i = MAX(1, (int32_t) ceil(_uiFrame.size.height));
+    WaylandMarshal(positioner, WP_POSITIONER_SET_SIZE, NULL, 0, args);
+    CGRect parentFrame = parent->_uiFrame;
+    CGPoint offset = parent->_uiContentOffset;
+    int32_t x = (int32_t) floor(_uiFrame.origin.x - parentFrame.origin.x + offset.x);
+    int32_t y = (int32_t) floor(CGRectGetMaxY(parentFrame) - CGRectGetMaxY(_uiFrame) + offset.y);
+    // A submenu can start beyond its parent edge. Keep the anchor inside the parent geometry, expressing the remaining
+    // displacement as an offset.
+    int32_t anchorX = MAX(0, MIN(x, (int32_t) ceil(parentFrame.size.width + 2 * offset.x) - 1));
+    int32_t anchorY = MAX(0, MIN(y, (int32_t) ceil(parentFrame.size.height + offset.x + offset.y) - 1));
+    args[0].i = anchorX;
+    args[1].i = anchorY;
+    args[2].i = args[3].i = 1;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_ANCHOR_RECT, NULL, 0, args);
+    args[0].i = x - anchorX;
+    args[1].i = y - anchorY;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_OFFSET, NULL, 0, args);
+    args[0].u = WP_POSITIONER_ANCHOR_TOP_LEFT;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_ANCHOR, NULL, 0, args);
+    args[0].u = WP_POSITIONER_GRAVITY_BOTTOM_RIGHT;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_GRAVITY, NULL, 0, args);
+    args[0].u = WP_POSITIONER_SLIDE_X | WP_POSITIONER_SLIDE_Y | WP_POSITIONER_FLIP_X | WP_POSITIONER_FLIP_Y;
+    WaylandMarshal(positioner, WP_POSITIONER_SET_CONSTRAINT_ADJUSTMENT, NULL, 0, args);
+    return positioner;
+}
+
+// A pop-up of the window the UI layer named. A pop-up that the UI layer gave a grab serial is grabbed, one that it
+// gave none is not (a tool tip, a pop-up window of the application: they end when the UI layer hides them).
+- (void) createUIPopupRole {
+    CGSWindowWayland *parent = (CGSWindowWayland *) _uiHints.transientFor;
+    _popupParent = [parent retain];
+    union wl_argument args[3] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
+                                            opcode: WP_WM_BASE_GET_XDG_SURFACE
+                                         interface: &xdg_surface_interface
+                                         arguments: args
+                                              kind: CGSWaylandObjectXdgSurface
+                                            object: self];
+    if (_xdgSurface == NULL)
+        return;
+    struct wl_proxy *positioner = [self newUIPopupPositioner];
+    // A popup of a layer surface has no xdg parent; the layer surface adopts it.
+    BOOL layerParent = parent->_layerSurface != NULL;
+    args[0].o = NULL;
+    args[1].o = layerParent ? NULL : (struct wl_object *) parent->_xdgSurface;
+    args[2].o = (struct wl_object *) positioner;
+    _popup = [_waylandConnection createObject: _xdgSurface
+                                       opcode: WP_XDG_SURFACE_GET_POPUP
+                                    interface: &xdg_popup_interface
+                                    arguments: args
+                                         kind: CGSWaylandObjectPopup
+                                       object: self];
+    if (_popup != NULL && layerParent) {
+        args[0].o = (struct wl_object *) _popup;
+        WaylandMarshal(parent->_layerSurface, WP_LAYER_SURFACE_GET_POPUP, NULL, 0, args);
+    }
+    WaylandMarshal(positioner, WP_POSITIONER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
+                   (union wl_argument[1]) {{.o = NULL}});
+    if (_popup == NULL)
+        return;
+    _role = CGSWaylandRolePopup;
+    if (_uiPopupGrabSerial != 0 && [_waylandConnection seat] != NULL) {
+        args[0].o = (struct wl_object *) [_waylandConnection seat];
+        args[1].u = _uiPopupGrabSerial;
+        WaylandMarshal(_popup, WP_POPUP_GRAB, NULL, 0, args);
+    }
+}
+
+- (void) createUIToplevelRole {
+    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
+                                            opcode: WP_WM_BASE_GET_XDG_SURFACE
+                                         interface: &xdg_surface_interface
+                                         arguments: args
+                                              kind: CGSWaylandObjectXdgSurface
+                                            object: self];
+    if (_xdgSurface == NULL)
+        return;
+    args[0].o = NULL;
+    _toplevel = [_waylandConnection createObject: _xdgSurface
+                                          opcode: WP_XDG_SURFACE_GET_TOPLEVEL
+                                       interface: &xdg_toplevel_interface
+                                       arguments: args
+                                            kind: CGSWaylandObjectToplevel
+                                          object: self];
+    if (_toplevel == NULL)
+        return;
+    _role = CGSWaylandRoleToplevel;
+    union wl_argument title[1] = {{.s = _title != nil ? [_title UTF8String] : ""}};
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_TITLE, NULL, 0, title);
+    union wl_argument appID[1] = {{.s = [[[NSProcessInfo processInfo] processName] UTF8String]}};
+    if (appID[0].s != NULL)
+        WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, appID);
+    [self applyUIToplevelLimits];
+    [self applyUIDecoration];
+}
+
+- (CGError) showToplevel {
+    if (_role != CGSWaylandRoleNone) {
+        _shown = YES;
+        return kCGSErrorSuccess;
+    }
+    _uiMinimizeAdvertised = NO;
+    _uiDecorationReported = NO;
+    memset(&_uiPending, 0, sizeof(_uiPending));
+    switch ([self wantedUIRole]) {
+    case CGSWaylandRoleLayer:
+        [self createUILayerRole];
+        break;
+    case CGSWaylandRolePopup:
+        [self createUIPopupRole];
+        break;
+    default:
+        [self createUIToplevelRole];
+        break;
+    }
+    if (_role == CGSWaylandRoleNone) {
+        [self destroyRole];
+        return kCGErrorFailure;
+    }
+    _shown = YES;
+    CGSToplevelEvent event = {.kind = kCGSToplevelEventWillShow, .rect = CGRectNull};
+    [self postToplevelEvent: &event];
+    // The initial commit has no buffer: content follows the first configure.
+    union wl_argument none[1] = {{.o = NULL}};
+    WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
+    [_waylandConnection flush];
+    return kCGSErrorSuccess;
+}
+
+// Unmapping an xdg surface requires a new configure sequence before it can be shown again, so the role objects are
+// destroyed and created again when the window is shown. The wl_surface stays: what the UI layer attached to it keeps
+// its place.
+- (CGError) hideToplevel {
+    _shown = NO;
+    _uiConfigured = NO;
+    if (_role == CGSWaylandRoleNone)
+        return kCGSErrorSuccess;
+    [self destroyRole];
+    union wl_argument attach[3] = {{.o = NULL}, {.i = 0}, {.i = 0}};
+    union wl_argument none[1] = {{.o = NULL}};
+    WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, attach);
+    WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
+    _uiPending.popupX = _uiPending.popupY = 0;
+    [_waylandConnection flush];
+    return kCGSErrorSuccess;
+}
+
+// What the compositor sends the window's objects is told to the UI layer: the pieces of a configure sequence are
+// gathered, and the sequence's end (xdg_surface.configure) is acknowledged and reported with all of them.
+- (void) handleToplevelEvent: (uint32_t) opcode
+                        kind: (CGSWaylandObjectKind) kind
+                   arguments: (union wl_argument *) args
+{
+    switch (kind) {
+    case CGSWaylandObjectXdgSurface:
+        if (opcode == WP_XDG_SURFACE_EV_CONFIGURE) {
+            union wl_argument ack[1] = {{.u = args[0].u}};
+            WaylandMarshal(_xdgSurface, WP_XDG_SURFACE_ACK_CONFIGURE, NULL, 0, ack);
+            [self postConfigured];
+        }
+        break;
+
+    case CGSWaylandObjectLayerSurface:
+        if (opcode == WP_LAYER_SURFACE_EV_CONFIGURE) {
+            union wl_argument ack[1] = {{.u = args[0].u}};
+            WaylandMarshal(_layerSurface, WP_LAYER_SURFACE_ACK_CONFIGURE, NULL, 0, ack);
+            // A zero size leaves the choice to the client.
+            memset(&_uiPending, 0, sizeof(_uiPending));
+            _uiPending.width = (int32_t) args[1].u;
+            _uiPending.height = (int32_t) args[2].u;
+            [self postConfigured];
+        } else if (opcode == WP_LAYER_SURFACE_EV_CLOSED) {
+            CGSToplevelEvent event = {.kind = kCGSToplevelEventDismissed, .rect = CGRectNull};
+            [self postToplevelEvent: &event];
+        }
+        break;
+
+    case CGSWaylandObjectToplevel:
+        if (opcode == WP_TOPLEVEL_EV_CONFIGURE) {
+            _uiPending.width = args[0].i;
+            _uiPending.height = args[1].i;
+            struct wl_array *states = args[2].a;
+            _uiPending.activated = _uiPending.maximized = _uiPending.fullscreen = _uiPending.suspended = false;
+            const uint32_t *state;
+            if (states != NULL)
+                wl_array_for_each(state, states) {
+                    switch (*state) {
+                    case WP_TOPLEVEL_STATE_ACTIVATED: _uiPending.activated = true; break;
+                    case WP_TOPLEVEL_STATE_MAXIMIZED: _uiPending.maximized = true; break;
+                    case WP_TOPLEVEL_STATE_FULLSCREEN: _uiPending.fullscreen = true; break;
+                    case WP_TOPLEVEL_STATE_SUSPENDED: _uiPending.suspended = true; break;
+                    }
+                }
+        } else if (opcode == WP_TOPLEVEL_EV_CLOSE) {
+            CGSToplevelEvent event = {.kind = kCGSToplevelEventCloseRequested, .rect = CGRectNull};
+            [self postToplevelEvent: &event];
+        } else if (opcode == WP_TOPLEVEL_EV_WM_CAPABILITIES) {
+            // Applies with the configure that follows it.
+            _uiPending.minimizeAdvertised = false;
+            const uint32_t *capability;
+            if (args[0].a != NULL)
+                wl_array_for_each(capability, args[0].a)
+                    if (*capability == WP_TOPLEVEL_CAPABILITY_MINIMIZE)
+                        _uiPending.minimizeAdvertised = true;
+            _uiMinimizeAdvertised = _uiPending.minimizeAdvertised;
+        }
+        break;
+
+    case CGSWaylandObjectDecoration:
+        if (opcode == WP_TOPLEVEL_DECORATION_EV_CONFIGURE) {
+            _uiDecorationReported = YES;
+            _uiClientDecorated = args[0].u != WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE;
+        }
+        break;
+
+    case CGSWaylandObjectPopup:
+        if (opcode == WP_POPUP_EV_CONFIGURE) {
+            _uiPending.popupX = args[0].i;
+            _uiPending.popupY = args[1].i;
+            _uiPending.width = args[2].i;
+            _uiPending.height = args[3].i;
+        } else if (opcode == WP_POPUP_EV_DONE) {
+            CGSToplevelEvent event = {.kind = kCGSToplevelEventDismissed, .rect = CGRectNull};
+            [self postToplevelEvent: &event];
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+- (void) postConfigured {
+    CGSToplevelEvent event = {.kind = kCGSToplevelEventConfigured, .rect = CGRectNull};
+    event.configure = _uiPending;
+    event.configure.minimizeAdvertised = _uiMinimizeAdvertised;
+    event.configure.decorationReported = _uiDecorationReported;
+    event.configure.clientDecorated = _uiClientDecorated;
+    BOOL first = !_uiConfigured;
+    _uiConfigured = YES;
+    [self postToplevelEvent: &event];
+    // What the window drew while it waited for the configure is shown now.
+    if (first && [self withContents: ^(const void *bytes, size_t rowBytes, CGSize size) {}])
+        [self presentRect: CGRectMake(0, 0, _frame.size.width, _frame.size.height)];
+}
+
 #pragma mark - CGSWindow
 
 - (void *) nativeWindow {
@@ -582,6 +1110,13 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 - (CGError) orderWindow: (CGSWindowOrderingMode) place
              relativeTo: (CGSWindow *) window
 {
+    if (_ui) {
+        if (place == kCGSOrderOut)
+            return [self hideToplevel];
+        if (place == kCGSOrderIn || place == kCGSOrderAbove)
+            return [self showToplevel];
+        return kCGErrorNotImplemented;
+    }
     if (window != nil) {
         // Wayland gives a client no say in how its toplevels stack.
         NSLog(@"CoreGraphics Wayland backend: relative window ordering is not "
@@ -765,6 +1300,13 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 - (CGError) getRect: (CGRect *) outRect {
     if (outRect == NULL)
         return kCGErrorIllegalArgument;
+    if (_ui) {
+        // The UI layer's frame (y up) as the list of windows has it: y down from the top of the main display.
+        CGFloat top = CGDisplayBounds(CGMainDisplayID()).size.height;
+        *outRect = CGRectMake(_uiFrame.origin.x, top - CGRectGetMaxY(_uiFrame), _uiFrame.size.width,
+                              _uiFrame.size.height);
+        return kCGSErrorSuccess;
+    }
     // The size is the compositor's; the origin is the one that was requested,
     // because Wayland never tells a client where its toplevel ended up.
     *outRect = _frame;
@@ -824,6 +1366,9 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 // destroyed once the compositor has released it.
 - (void) presentRect: (CGRect) rect {
     if (_waylandConnection->_shm == NULL || _surface == NULL || ![self ensureRole])
+        return;
+    // A buffer follows the configure that answers the initial commit.
+    if (_ui && !_uiConfigured)
         return;
 
     [self withContents: ^(const void *bytes, size_t rowBytes, CGSize size) {
@@ -911,6 +1456,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 }
 
 - (CGError) setStyle: (uint32_t) styleFlags {
+    if (_ui)
+        return kCGErrorNotImplemented;
     uint32_t changed = _styleFlags ^ styleFlags;
     _usesContents = YES;
     [super setStyle: styleFlags];
@@ -947,6 +1494,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 }
 
 - (CGError) setLevel: (CGWindowLevel) level {
+    if (_ui)
+        return kCGErrorNotImplemented;
     CGWindowLevel previous = _level;
     [super setLevel: level];
     if (_role == CGSWaylandRoleNone || level == previous)

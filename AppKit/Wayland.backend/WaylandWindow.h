@@ -20,6 +20,7 @@
 #import <Onyx2D/O2Geometry.h>
 #include <wayland-util.h>
 
+#import <CoreGraphics/CGSWindow.h>
 #import "WaylandDisplay.h"
 #import "WaylandFullscreen.h"
 
@@ -46,6 +47,10 @@ typedef enum {
 // copied into wl_shm buffers.
 @interface WaylandWindow : CGWindow {
     NSWindow *_delegate;
+    // The window system's window: it owns the wl_surface and the xdg-shell and layer-shell objects of the window (the
+    // role), which it makes when the window is shown, and tells what the compositor says of them. _surface and the
+    // other proxies below are its objects, which this window draws into and extends.
+    CGSWindow *_cgsWindow;
     WaylandDisplay *_display;
     BOOL _invalidated;
     NSMutableArray *_subwindows; // nonretained pointers; children retain their parent
@@ -79,12 +84,9 @@ typedef enum {
     uint32_t _popupGrabSerial;
     uint32_t _repositionToken;
     int32_t _pendingPopupX, _pendingPopupY;
-    struct wl_proxy *_decoration;
     struct wl_proxy *_frameCallback;
     // Per-surface color objects and the compositor session this toplevel belongs to.
     struct wl_proxy *_colorSurface, *_representationSurface, *_toplevelSession;
-    // alpha-modifier-v1: how much of the surface alpha the compositor keeps (NSWindow.alphaValue).
-    struct wl_proxy *_alphaModifier;
     // xdg-dialog-v1: the dialog role of a sheet or modal panel, and its current modal hint.
     struct wl_proxy *_dialog;
     BOOL _dialogModal;
@@ -210,6 +212,8 @@ typedef enum {
 - (NSPoint) transformPoint: (CGPoint) surfacePoint;
 - (void) setLastKnownCursorPosition: (CGPoint) point;
 
+// What the window system window says of the window (see CGSToplevelEvent).
+- (void) toplevelEvent: (const CGSToplevelEvent *) event;
 - (void) handleEvent: (uint32_t) opcode
                 kind: (WaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy
@@ -230,8 +234,6 @@ typedef enum {
 - (void) sessionManagerAvailable;
 // Called when the dialog manager arrives later than the window.
 - (void) dialogManagerAvailable;
-// Applies NSWindow.alphaValue to the surface when alpha-modifier-v1 is available.
-- (void) alphaModifierAvailable;
 // Sends the toplevel's stable tag and localized description when xdg-toplevel-tag-v1 is available.
 - (void) updateToplevelTags;
 // Creates or destroys the idle inhibitor as this toplevel becomes visible or occluded.
