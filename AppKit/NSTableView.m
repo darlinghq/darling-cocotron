@@ -1931,6 +1931,24 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     }
 }
 
+static BOOL tableColorIsOpaque(NSColor *color) {
+    if (color == nil)
+        return NO;
+    NSColor *resolved = [(id)color _resolvedColor];
+    return resolved != nil && [resolved type] != NSColorTypePattern &&
+           [resolved alphaComponent] >= 1.0;
+}
+
+static void fillBackgroundRect(NSColor *color, NSRect rect) {
+    if (NSIsEmptyRect(rect))
+        return;
+    [color setFill];
+    if (tableColorIsOpaque(color))
+        NSRectFill(rect);
+    else
+        NSRectFillUsingOperation(rect, NSCompositeSourceOver);
+}
+
 - (void) drawBackgroundInClipRect: (NSRect) clipRect {
     NSArray *rowColors = [NSColor controlAlternatingRowBackgroundColors];
     NSInteger colorCount = [rowColors count];
@@ -1941,8 +1959,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             NSRectFillUsingOperation(clipRect, NSCompositeSourceOver);
         }
     } else if (colorCount == 1) {
-        [(NSColor *) [rowColors objectAtIndex: 0] setFill];
-        NSRectFill(clipRect);
+        fillBackgroundRect([rowColors objectAtIndex: 0], clipRect);
     } else {
         NSInteger numberOfRows = [self numberOfRows];
         NSRange rangeOfRows = [self rowsInRect: clipRect];
@@ -1953,8 +1970,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
             rectToFill.origin.x = clipRect.origin.x;
             rectToFill.size.width = clipRect.size.width;
-            [(NSColor *) [rowColors objectAtIndex: i % colorCount] setFill];
-            NSRectFill(NSIntersectionRect(rectToFill, clipRect));
+            fillBackgroundRect([rowColors objectAtIndex: i % colorCount],
+                               NSIntersectionRect(rectToFill, clipRect));
         }
 
         // The stripes carry on below the last row at the height of a row, the colors
@@ -1973,8 +1990,8 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
             for (; y < NSMaxY(clipRect); y += pitch, index++) {
                 NSRect rectToFill = NSMakeRect(clipRect.origin.x, y, clipRect.size.width, pitch);
 
-                [(NSColor *) [rowColors objectAtIndex: index % colorCount] setFill];
-                NSRectFill(NSIntersectionRect(rectToFill, clipRect));
+                fillBackgroundRect([rowColors objectAtIndex: index % colorCount],
+                                   NSIntersectionRect(rectToFill, clipRect));
             }
         }
     }
@@ -2193,6 +2210,28 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 
 - (BOOL) isFlipped {
     return YES;
+}
+
+- (BOOL) isOpaque {
+    if (NS_EXTRA(NSTableView, self)->_alternatingRowBackground) {
+        NSArray *rowColors = [NSColor controlAlternatingRowBackgroundColors];
+        NSUInteger count = [rowColors count];
+        if (count > 0) {
+            if (count > 1) {
+                NSInteger numberOfRows = [self numberOfRows];
+                CGFloat pitch = numberOfRows > 0 ? [self rectOfRow: 0].size.height
+                                                 : [self _effectiveRowHeight] + _intercellSpacing.height;
+                if (pitch <= 0.)
+                    return NO;
+            }
+            for (NSColor *color in rowColors) {
+                if (!tableColorIsOpaque(color))
+                    return NO;
+            }
+            return YES;
+        }
+    }
+    return tableColorIsOpaque(_backgroundColor);
 }
 
 - (BOOL) delegateShouldSelectTableColumn: (NSTableColumn *) tableColumn {
