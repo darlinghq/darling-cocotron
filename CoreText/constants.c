@@ -130,7 +130,8 @@ const CGFloat kCTFontWidthSemiExpanded = 0.1;
 const CGFloat kCTFontWidthExpanded = 0.2;
 const CGFloat kCTFontWidthExtraExpanded = 0.3;
 
-// The string values of these constants are the ones macOS 26.7.3 has (black-box: dlsym and printing them).
+// QUIRK: the string values of these private constants are the ones macOS 26.7.3 has (black-box: dlsym and
+// printing them, tier 2); they are not documented. Test: tests/coretext-swiftui-font-spis.m
 const CFStringRef kCTFontLegibilityWeightAttribute = CFSTR("CTFontLegibilityWeightAttribute");
 const CFStringRef kCTFontLanguageAwareLineHeightRatioAttribute = CFSTR("CTFontLanguageAwareLineHeightRatioAttribute");
 const CFStringRef kCTTextScaleRatioAttributeName = CFSTR("NSTextScaleRatio");

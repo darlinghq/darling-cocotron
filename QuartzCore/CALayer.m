@@ -648,7 +648,9 @@ static BOOL contentsUnchanged(CALayer *layer, id value) {
     NS_EXTRA(CALayer, self)->_animations = [[NSMutableDictionary alloc] init];
     NS_EXTRA(CALayer, self)->_speed = 1;
     NS_EXTRA(CALayer, self)->_fillMode = [kCAFillModeRemoved copy];
-    // macOS 26.7.3 (black-box): a new layer has swizzle "RGBA", scaling "stretch" and a white multiply colour.
+    // QUIRK: a new layer has contentsSwizzle "RGBA", contentsScaling "stretch" and a white
+    // contentsMultiplyColor. These SPI properties are not documented. Evidence: black-box observation on
+    // macOS 26.7.3 (tier 2). Test: tests/quartzcore-swiftui-layer-spis.m
     NS_EXTRA(CALayer, self)->_contentsSwizzle = [kCALayerContentsSwizzleRGBA copy];
     NS_EXTRA(CALayer, self)->_contentsScaling = [kCAContentsScalingStretch copy];
     NS_EXTRA(CALayer, self)->_contentsMultiplyColor = CGColorCreateGenericRGB(1, 1, 1, 1);

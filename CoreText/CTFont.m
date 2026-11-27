@@ -1593,6 +1593,7 @@ bool CTFontGetClippingMetrics(CTFontRef font, CGFloat *ascent, CGFloat *descent)
         *ascent = CTFontGetAscent(font);
     if (descent != NULL)
         *descent = CTFontGetDescent(font);
-    // macOS 26.7.3 returns true with the ascent and descent of the font for a system UI font.
+    // QUIRK: returns true with the ascent and descent of the font. Not documented (SPI). Evidence: black-box
+    // observation on macOS 26.7.3 for a system UI font (tier 2). Test: tests/coretext-swiftui-font-spis.m
     return true;
 }

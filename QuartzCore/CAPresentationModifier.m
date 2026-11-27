@@ -34,7 +34,8 @@
     self = [super init];
     if (self != nil) {
         _capacity = capacity;
-        // macOS 26.7.3 (black-box): a new group updates asynchronously.
+        // QUIRK: a new group updates asynchronously. Not documented (SPI). Evidence: black-box observation on
+        // macOS 26.7.3 (tier 2). Test: tests/quartzcore-swiftui-layer-spis.m
         _updatesAsynchronously = YES;
     }
     return self;

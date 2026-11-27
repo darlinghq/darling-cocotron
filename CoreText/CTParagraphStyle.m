@@ -158,7 +158,8 @@ void CTParagraphStyleSetCompositionLanguage(CTParagraphStyleRef style, CTComposi
 }
 
 uint8_t CTParagraphStyleGetCompositionLanguageForLanguage(CFStringRef language) {
-    // macOS 26.7.3 maps NULL and every language other than Japanese and Chinese to 1.
+    // QUIRK: NULL and every language other than Japanese and Chinese map to 1. Not documented (SPI).
+    // Evidence: black-box observation on macOS 26.7.3 (tier 2). Test: tests/coretext-swiftui-font-spis.m
     if (language == NULL)
         return 1; /* kCTCompositionLanguageNone */
     if (CFStringHasPrefix(language, CFSTR("ja")))
