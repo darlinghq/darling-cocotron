@@ -1306,67 +1306,96 @@ CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display) {
     return CGColorSpaceCreateDeviceRGB();
 }
 
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+// One captured frame, converted into the caller's pixels by the stream's frame callback.
+typedef struct {
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
+    uint8_t *pixels;
+    size_t width, height, bytesPerRow;
+    CGRect captureRect, bounds;
+    int done, converted;
+} CGDisplayImageGrab;
+
+static void CGDisplayImageGrabFrame(const struct darling_screen_capture_frame *frame, void *userData) {
+    CGDisplayImageGrab *grab = userData;
+
+    pthread_mutex_lock(&grab->lock);
+    if (!grab->done) {
+        grab->converted = darling_screen_capture_convert_bgra_rect(frame, grab->pixels, (uint32_t) grab->bytesPerRow,
+            (uint32_t) grab->width, (uint32_t) grab->height,
+            (int32_t) (grab->captureRect.origin.x - grab->bounds.origin.x),
+            (int32_t) (grab->captureRect.origin.y - grab->bounds.origin.y),
+            (uint32_t) grab->captureRect.size.width, (uint32_t) grab->captureRect.size.height,
+            0, 0, (uint32_t) grab->width, (uint32_t) grab->height) == 0;
+        grab->done = 1;
+        pthread_cond_signal(&grab->cond);
+    }
+    pthread_mutex_unlock(&grab->lock);
+}
+#endif
+
 CGImageRef CGDisplayCreateImageForRect(CGDirectDisplayID display, CGRect rect) {
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
     CGRect bounds = CGDisplayBounds(display);
     CGRect captureRect = CGRectIntersection(rect, bounds);
     struct darling_screen_capture_stream *stream = NULL;
-    uint8_t *pixels = NULL;
+    CGDisplayImageGrab grab;
     CGColorSpaceRef space = NULL;
     CGContextRef context = NULL;
     CGImageRef image = NULL;
-    size_t width, height, bytesPerRow;
     int result;
 
     if (CGRectIsNull(captureRect) || CGRectIsEmpty(captureRect))
         return NULL;
-    width = (size_t) captureRect.size.width;
-    height = (size_t) captureRect.size.height;
-    bytesPerRow = width * 4;
+    memset(&grab, 0, sizeof(grab));
+    grab.width = (size_t) captureRect.size.width;
+    grab.height = (size_t) captureRect.size.height;
+    grab.bytesPerRow = grab.width * 4;
+    grab.captureRect = captureRect;
+    grab.bounds = bounds;
+    grab.pixels = calloc(1, grab.bytesPerRow * grab.height);
+    if (grab.pixels == NULL)
+        return NULL;
+    pthread_mutex_init(&grab.lock, NULL);
+    pthread_cond_init(&grab.cond, NULL);
 
     {
         struct darling_screen_capture_callbacks callbacks;
         memset(&callbacks, 0, sizeof(callbacks));
+        callbacks.frame = CGDisplayImageGrabFrame;
         result = darling_screen_capture_open((int32_t) bounds.origin.x, (int32_t) bounds.origin.y,
             (uint32_t) bounds.size.width, (uint32_t) bounds.size.height, 1,
-            darling_screen_capture_supports_hdr() ? 1 : 0, &callbacks, NULL, &stream);
+            darling_screen_capture_supports_hdr() ? 1 : 0, &callbacks, &grab, &stream);
     }
-    if (result != 0 || stream == NULL)
-        return NULL;
-    if (darling_screen_capture_start(stream, 1) == 0 && darling_screen_capture_wait(stream, 5000) == 0) {
-        struct darling_pw_buffer buffer;
-        struct darling_pw_format format;
-        void *cookie = NULL;
-        memset(&buffer, 0, sizeof(buffer));
-        if (darling_pw_stream_dequeue(darling_screen_capture_pipe(stream), &buffer, &cookie) > 0
-                && darling_pw_stream_get_format(darling_screen_capture_pipe(stream), &format) == 0) {
-            struct darling_screen_capture_frame frame;
-            uint32_t i;
-            memset(&frame, 0, sizeof(frame));
-            frame.pts_ns = buffer.pts_ns; frame.flags = buffer.flags;
-            frame.format = format.video_format; frame.width = format.width; frame.height = format.height;
-            for (i = 0; i < 4; i++) { frame.planes[i] = buffer.planes[i]; frame.strides[i] = buffer.plane_strides[i]; frame.sizes[i] = buffer.plane_sizes[i]; }
-            pixels = calloc(1, bytesPerRow * height);
-            if (pixels != NULL && darling_screen_capture_convert_bgra_rect(&frame, pixels, (uint32_t) bytesPerRow,
-                    (uint32_t) width, (uint32_t) height,
-                    (int32_t) (captureRect.origin.x - bounds.origin.x),
-                    (int32_t) (captureRect.origin.y - bounds.origin.y),
-                    (uint32_t) captureRect.size.width, (uint32_t) captureRect.size.height,
-                    0, 0, (uint32_t) width, (uint32_t) height) == 0) {
-                space = CGColorSpaceCreateDeviceRGB();
-                context = CGBitmapContextCreate(pixels, width, height, 8, bytesPerRow, space,
-                    kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
-                if (context != NULL)
-                    image = CGBitmapContextCreateImage(context);
-            }
-            darling_pw_stream_queue(darling_screen_capture_pipe(stream), cookie, 0);
+    if (result == 0 && stream != NULL) {
+        if (darling_screen_capture_start(stream, 1) == 0 && darling_screen_capture_wait(stream, 5000) == 0) {
+            // The stream is streaming before its first frame arrives; give the compositor a few seconds.
+            struct timespec deadline;
+            clock_gettime(CLOCK_REALTIME, &deadline);
+            deadline.tv_sec += 3;
+            pthread_mutex_lock(&grab.lock);
+            while (!grab.done && pthread_cond_timedwait(&grab.cond, &grab.lock, &deadline) == 0)
+                ;
+            pthread_mutex_unlock(&grab.lock);
         }
+        // Stopping the stream waits for a running frame callback, so grab is not touched afterwards.
+        darling_screen_capture_start(stream, 0);
+        darling_screen_capture_close(stream);
+    }
+
+    if (grab.done && grab.converted) {
+        space = CGColorSpaceCreateDeviceRGB();
+        context = CGBitmapContextCreate(grab.pixels, grab.width, grab.height, 8, grab.bytesPerRow, space,
+            kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+        if (context != NULL)
+            image = CGBitmapContextCreateImage(context);
     }
     if (context != NULL) CGContextRelease(context);
     if (space != NULL) CGColorSpaceRelease(space);
-    free(pixels);
-    darling_screen_capture_start(stream, 0);
-    darling_screen_capture_close(stream);
+    free(grab.pixels);
+    pthread_cond_destroy(&grab.cond);
+    pthread_mutex_destroy(&grab.lock);
     return image;
 #else
     return NULL;
