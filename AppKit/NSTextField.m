@@ -19,7 +19,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import "NSKeyValueBinding/NSObject+BindingSupport.h"
 #import "NSKeyValueBinding/NSTextFieldBinder.h"
 #import <AppKit/NSApplication.h>
-#import <AppKit/NSColor.h>
 #import <AppKit/NSCursor.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSParagraphStyle.h>
@@ -284,20 +283,18 @@ NS_EXTRA_DEALLOC(NSTextField)
     NS_EXTRA(NSTextField, self)->_automaticTextCompletionEnabled = value;
 }
 
+// A text field does not claim to cover its frame whatever it draws: a bezel with transparent corners or a
+// clear background leaves part of it to the views behind (observed on macOS 26.7.3 for every combination of
+// bezel, background drawing and background colour; test: appkit-text-field-opaque).
 - (BOOL) isOpaque {
-    if ([_cell isBezeled])
-        return [_cell bezelStyle] == NSTextFieldSquareBezel;
-    if ([_cell drawsBackground]) {
-        NSColor *bg = [_cell backgroundColor];
-        return bg == nil || [bg alphaComponent] >= 1.0;
-    }
     return NO;
 }
 
-// See the QUIRK in NSControl: a text field follows the view rule, so a
-// label lets clicks through and a bezeled, editable field does not.
+// See the QUIRK in NSControl: a label lets a mouse down move the window and a bezeled, editable field
+// does not (a field that draws its background or a bezel counts as editable here, as it always did;
+// this is not derived from -isOpaque, which is NO for every field).
 - (BOOL) mouseDownCanMoveWindow {
-    return ![self isOpaque];
+    return ![_cell drawsBackground] && ![_cell isBezeled];
 }
 
 - (void) resetCursorRects {
@@ -738,16 +735,6 @@ NS_EXTRA_DEALLOC(NSTextField)
 }
 - (void) _setFontFamilyName: (NSString *) familyName {
     [(NSTextFieldCell *) _cell _setFontFamilyName: familyName];
-}
-
-@end
-
-@implementation NSTextField (NonVibrantAppearance)
-
-// Name observed as an unrecognized selector sent by a guest application's text field subclass from its nib's -awakeFromNib
-// (rung 4 of the escalation ladder; the application's behaviour supplies only the name). GUESS: a flag asking for text drawn
-// without vibrancy. Cocotron draws no vibrancy, so there is nothing to switch and the flag is not kept.
-- (void) _setUsesNonVibrantAppearance: (BOOL) usesNonVibrantAppearance {
 }
 
 @end

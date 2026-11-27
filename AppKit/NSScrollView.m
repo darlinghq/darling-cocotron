@@ -637,7 +637,7 @@ static Class _rulerViewClass = nil;
 }
 
 - (BOOL) isOpaque {
-    return NS_EXTRA(NSScrollView, self)->_drawsBackground && [[self backgroundColor] alphaComponent] >= 1.0;
+    return NS_EXTRA(NSScrollView, self)->_drawsBackground;
 }
 
 - (BOOL) isFlipped {
@@ -1267,11 +1267,8 @@ static CGFloat clampMagnification(NSScrollView *self, CGFloat value) {
 - (void) drawRect: (NSRect) rect {
 
     if (NS_EXTRA(NSScrollView, self)->_drawsBackground) {
-        NSColor *bg = [self backgroundColor];
-        if (bg != nil) {
-            [bg setFill];
-            NSRectFillUsingOperation(rect, NSCompositeSourceOver);
-        }
+        [[self backgroundColor] setFill];
+        NSRectFill(rect);
     }
 
     // The square between a vertical and a horizontal legacy scroller is drawn like their tracks.
