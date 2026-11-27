@@ -19,12 +19,7 @@
 
 #import <Foundation/NSCoder.h>
 #import <Foundation/NSData.h>
-#import <QuartzCore/CAEDRMetadata.h>
-
-enum {
-    CAEDRTransferHDR10 = 1,
-    CAEDRTransferHLG = 2,
-};
+#import "CAEDRMetadataInternal.h"
 
 @implementation CAEDRMetadata
 
@@ -38,7 +33,7 @@ enum {
 {
     CAEDRMetadata *metadata = [[[self alloc] init] autorelease];
 
-    metadata->_transfer = CAEDRTransferHDR10;
+    metadata->_transfer = kCAEDRTransferHDR10;
     metadata->_displayInfo = [displayData copy];
     metadata->_contentInfo = [contentData copy];
     metadata->_opticalOutputScale = scale;
@@ -51,7 +46,7 @@ enum {
 {
     CAEDRMetadata *metadata = [[[self alloc] init] autorelease];
 
-    metadata->_transfer = CAEDRTransferHDR10;
+    metadata->_transfer = kCAEDRTransferHDR10;
     metadata->_minLuminance = minNits;
     metadata->_maxLuminance = maxNits;
     metadata->_opticalOutputScale = scale;
@@ -65,7 +60,7 @@ enum {
 + (CAEDRMetadata *) HLGMetadataWithAmbientViewingEnvironment: (NSData *) data {
     CAEDRMetadata *metadata = [[[self alloc] init] autorelease];
 
-    metadata->_transfer = CAEDRTransferHLG;
+    metadata->_transfer = kCAEDRTransferHLG;
     metadata->_ambientViewingEnvironment = [data copy];
     return metadata;
 }
@@ -135,6 +130,36 @@ static BOOL sameData(NSData *a, NSData *b) {
 
 - (NSUInteger) hash {
     return (NSUInteger) _transfer ^ [_displayInfo hash] ^ [_contentInfo hash];
+}
+
+#pragma mark - DARLING_INTERNAL
+
+- (int)_darlingTransferFunction {
+    return _transfer;
+}
+
+- (NSData *)_darlingDisplayInfo {
+    return _displayInfo;
+}
+
+- (NSData *)_darlingContentInfo {
+    return _contentInfo;
+}
+
+- (NSData *)_darlingAmbientViewingEnvironment {
+    return _ambientViewingEnvironment;
+}
+
+- (float)_darlingMinLuminance {
+    return _minLuminance;
+}
+
+- (float)_darlingMaxLuminance {
+    return _maxLuminance;
+}
+
+- (float)_darlingOpticalOutputScale {
+    return _opticalOutputScale;
 }
 
 @end
