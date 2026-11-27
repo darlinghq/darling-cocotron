@@ -55,9 +55,11 @@ enum {
     CompressionNone = 0,
     CompressionRunLength = 1,
     CompressionLZFSE = 4,
+    CompressionDeepmap2 = 11,
     PixelFormatARGB = 0x41524742,
     PixelFormatGA8 = 0x47413820,
     PixelFormatPDF = 0x50444620,
+    PixelFormatJPEG = 0x4a504547,
     MaxImageSide = 16384,
     RenditionHeaderSize = 184,
     MaxTreeDepth = 32,
@@ -464,6 +466,19 @@ static NSData *decodeBitmapPixels(Span rendition, size_t *strideOut) {
             else if (!appendLZFSE(pixels, stream, bound))
                 return nil;
         }
+    } else if (compression == CompressionDeepmap2) {
+        // MLEC(16) + subheader(16) + "dmp2"(16) + LZFSE/bvx2 stream
+        Span dmp2;
+        if (spanWithin(body, 16, body.length - 16, &dmp2) && dmp2.length >= 16 && memcmp(dmp2.bytes, "dmp2", 4) == 0) {
+            uint32_t clen = le32(dmp2.bytes + 12);
+            Span stream;
+            if (spanWithin(dmp2, 16, MIN((size_t) clen, dmp2.length - 16), &stream) &&
+                stream.length >= 4 && memcmp(stream.bytes, "bvx", 3) == 0) {
+                pixels = [NSMutableData data];
+                if (!appendLZFSE(pixels, stream, bound))
+                    pixels = nil;
+            }
+        }
     }
     if (pixels == nil || [pixels length] % height != 0 || [pixels length] / height < (size_t) width * pixelSize)
         return nil;
@@ -600,8 +615,11 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
         decoded = [NSArray arrayWithObjects: pixels, [NSNumber numberWithUnsignedLong: stride], nil];
         [_packedImages setObject: decoded forKey: cacheKey];
     }
+    uint32_t packedHeight = le32(packed->value.bytes + 16);
+    if (y + height > packedHeight)
+        return nil;
     return bitmapFromPixels([decoded objectAtIndex: 0], [[decoded objectAtIndex: 1] unsignedLongValue],
-                            le32(packed->value.bytes + 24), x, y, width, height, scale);
+                            le32(packed->value.bytes + 24), x, packedHeight - y - height, width, height, scale);
 }
 
 - (NSImageRep *) _representation: (NSAssetCatalogRendition *) rendition format: (const KeyFormat *) format {
@@ -612,14 +630,23 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
     if (scale <= 0)
         scale = 1;
 
-    if (pixelFormat == PixelFormatPDF) {
+    if (pixelFormat == PixelFormatPDF || pixelFormat == PixelFormatJPEG) {
         Span data;
         if (!renditionData(value, &data) || data.length < 12 || memcmp(data.bytes, "DWAR", 4) != 0)
             return nil;
-        Span pdf;
-        if (!spanWithin(data, 12, le32(data.bytes + 8), &pdf))
+        Span raw;
+        if (!spanWithin(data, 12, le32(data.bytes + 8), &raw))
             return nil;
-        return [NSPDFImageRep imageRepWithData: [NSData dataWithBytes: pdf.bytes length: pdf.length]];
+        NSData *nsdata = [NSData dataWithBytes: raw.bytes length: raw.length];
+        if (pixelFormat == PixelFormatPDF) {
+            NSPDFImageRep *pdf = [NSPDFImageRep imageRepWithData: nsdata];
+            NSSize sz = [pdf size];
+            return (sz.width > 0 && sz.height > 0) ? pdf : nil;
+        }
+        NSBitmapImageRep *rep = [NSBitmapImageRep imageRepWithData: nsdata];
+        if (rep != nil && scale > 1)
+            [rep setSize: NSMakeSize([rep pixelsWide] / scale, [rep pixelsHigh] / scale)];
+        return rep;
     }
     if (layout == RenditionLayoutInternalLink)
         return [self _linkedBitmap: value format: format scale: scale];
@@ -646,7 +673,8 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
         for (NSAssetCatalogRendition *rendition in renditions) {
             uint32_t pixelFormat = le32(rendition->value.bytes + 24);
             uint16_t layout = le16(rendition->value.bytes + 36);
-            if (layout == RenditionLayoutColor || (bytesPerPixel(pixelFormat) == 0 && pixelFormat != PixelFormatPDF))
+            if (layout == RenditionLayoutColor ||
+                (bytesPerPixel(pixelFormat) == 0 && pixelFormat != PixelFormatPDF && pixelFormat != PixelFormatJPEG))
                 continue;
             NSMutableData *variant = [NSMutableData dataWithBytes: rendition->key.bytes length: rendition->key.length];
             uint16_t zero = 0;
