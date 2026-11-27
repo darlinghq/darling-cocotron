@@ -380,6 +380,96 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     }
 }
 
+- (CGFloat) _fittedSegmentWidthsForWidth: (CGFloat) availableWidth into: (CGFloat *) widths {
+    NSInteger count = [self segmentCount];
+    if ([_segmentComputedWidths count] != count)
+        [self _recomputeSegmentWidths];
+
+    CGFloat total = 0;
+    for (NSInteger i = 0; i < count; i++) {
+        widths[i] = [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+        total += widths[i];
+    }
+    if (count == 0 || availableWidth <= 0 || total <= availableWidth)
+        return total;
+
+    CGFloat deficit = total - availableWidth;
+    NSDictionary *attrs = [NSDictionary dictionaryWithObject: [self _aquaFont] forKey: NSFontAttributeName];
+    CGFloat stackSlack[32];
+    CGFloat *slack = count <= 32 ? stackSlack : malloc(sizeof(CGFloat) * count);
+    CGFloat totalSlack = 0;
+    for (NSInteger i = 0; i < count; i++) {
+        NSSegmentItem *seg = [_segments objectAtIndex: i];
+        CGFloat minW = 6.0;
+        if ([[seg label] length] > 0)
+            minW += ceil([[seg label] sizeWithAttributes: attrs].width);
+        if ([seg image] != nil)
+            minW += [[seg image] size].width;
+        slack[i] = MAX(0.0, widths[i] - minW);
+        totalSlack += slack[i];
+    }
+
+    if (totalSlack > 0) {
+        CGFloat take = MIN(deficit, totalSlack);
+        CGFloat taken = 0;
+        for (NSInteger i = 0; i < count; i++) {
+            CGFloat d = floor(slack[i] * (take / totalSlack));
+            widths[i] -= d;
+            slack[i] -= d;
+            taken += d;
+        }
+        NSInteger remSlack = (NSInteger) floor(take - taken);
+        for (NSInteger i = 0; i < count && remSlack > 0; i++) {
+            if (slack[i] >= 1.0 && widths[i] > 1.0) {
+                widths[i] -= 1.0;
+                slack[i] -= 1.0;
+                taken += 1.0;
+                remSlack--;
+            }
+        }
+        total -= taken;
+    }
+    if (slack != stackSlack)
+        free(slack);
+
+    if (total > availableWidth && total > 0) {
+        CGFloat scale = availableWidth / total;
+        CGFloat used = 0;
+        for (NSInteger i = 0; i < count; i++) {
+            widths[i] = floor(widths[i] * scale);
+            used += widths[i];
+        }
+        NSInteger rem = (NSInteger) floor(availableWidth - used);
+        for (NSInteger i = 0; i < count && rem > 0; i++, rem--)
+            widths[i] += 1.0;
+    }
+    return availableWidth;
+}
+
+- (NSRect) rectForSegment: (NSInteger) segment inFrame: (NSRect) frame {
+    NSInteger count = [self segmentCount];
+    if (segment < 0 || segment >= count)
+        return NSZeroRect;
+
+    CGFloat stackWidths[32];
+    CGFloat *widths = count <= 32 ? stackWidths : malloc(sizeof(CGFloat) * count);
+    [self _fittedSegmentWidthsForWidth: NSWidth(frame) into: widths];
+
+    CGFloat x = NSMinX(frame);
+    for (NSInteger i = 0; i < segment; i++)
+        x += widths[i];
+    CGFloat w = widths[segment];
+    if (widths != stackWidths)
+        free(widths);
+
+    if (_style == NSSegmentStyleAutomatic || _style == NSSegmentStyleRounded) {
+        static const CGFloat heights[3] = {20, 17, 14};
+        int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
+        return NSMakeRect(x, floor(NSMidY(frame) - heights[index] / 2.0), w, heights[index]);
+    }
+    return NSMakeRect(x, NSMinY(frame), w, NSHeight(frame));
+}
+
 - (void) drawSegment: (NSInteger) idx
              inFrame: (NSRect) frame
             withView: (NSView *) view
@@ -400,12 +490,13 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     static const CGFloat heights[3] = {20, 17, 14};
     int index = [self controlSize] == NSSmallControlSize ? 1 : ([self controlSize] == NSMiniControlSize ? 2 : 0);
     int i, count = [self segmentCount];
-    CGFloat total = 0;
+    if (count == 0)
+        return;
+    CGFloat stackWidths[32];
+    CGFloat *widths = count <= 32 ? stackWidths : malloc(sizeof(CGFloat) * count);
+    CGFloat total = [self _fittedSegmentWidthsForWidth: NSWidth(cellFrame) into: widths];
     NSGraphicsStyle *style = [controlView graphicsStyle];
     BOOL active = [[controlView window] isKeyWindow] && [self isEnabled];
-
-    for (i = 0; i < count; i++)
-        total += [[_segmentComputedWidths objectAtIndex: i] doubleValue];
 
     NSRect strip = NSMakeRect(NSMinX(cellFrame), floor(NSMidY(cellFrame) - heights[index] / 2), total, heights[index]);
     CGFloat x = NSMinX(strip);
@@ -413,8 +504,7 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
 
     [style drawTabStripInRect: strip];
     for (i = 0; i < count; i++) {
-        NSRect segmentFrame = NSMakeRect(x, NSMinY(strip), [[_segmentComputedWidths objectAtIndex: i] doubleValue],
-                                         NSHeight(strip));
+        NSRect segmentFrame = NSMakeRect(x, NSMinY(strip), widths[i], NSHeight(strip));
 
         if ([self isSelectedForSegment: i]) {
             selected = i;
@@ -424,8 +514,7 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     }
     x = NSMinX(strip);
     for (i = 0; i < count; i++) {
-        NSRect segmentFrame = NSMakeRect(x, NSMinY(strip), [[_segmentComputedWidths objectAtIndex: i] doubleValue],
-                                         NSHeight(strip));
+        NSRect segmentFrame = NSMakeRect(x, NSMinY(strip), widths[i], NSHeight(strip));
 
         if (i > 0 && i != selected && i - 1 != selected)
             [style drawTabDividerInRect: NSMakeRect(NSMinX(segmentFrame), NSMinY(segmentFrame) + 1, 1,
@@ -457,11 +546,14 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
         [cell setBordered: NO];
         [cell setControlView: controlView];
         [NSGraphicsContext saveGraphicsState];
-        NSRectClip(segmentFrame);
-        [cell drawInteriorWithFrame: segmentFrame inView: controlView];
+        NSRect interior = ([label length] > 0 && NSWidth(segmentFrame) > 4.0) ? NSInsetRect(segmentFrame, 2, 0) : segmentFrame;
+        NSRectClip(interior);
+        [cell drawInteriorWithFrame: interior inView: controlView];
         [NSGraphicsContext restoreGraphicsState];
         x += NSWidth(segmentFrame);
     }
+    if (widths != stackWidths)
+        free(widths);
 }
 
 - (BOOL) _isTextured {
@@ -494,10 +586,11 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     NSGraphicsStyle *style = [controlView graphicsStyle];
     CGContextRef context = [[NSGraphicsContext currentContext] graphicsPort];
     int i, count = [self segmentCount];
-    CGFloat total = 0;
-
-    for (i = 0; i < count; i++)
-        total += [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+    if (count == 0)
+        return;
+    CGFloat stackWidths[32];
+    CGFloat *widths = count <= 32 ? stackWidths : malloc(sizeof(CGFloat) * count);
+    CGFloat total = [self _fittedSegmentWidthsForWidth: NSWidth(cellFrame) into: widths];
 
     NSRect art = NSMakeRect(NSMinX(cellFrame), NSMinY(cellFrame), total, NSHeight(cellFrame));
     if (!square) {
@@ -517,7 +610,7 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
         CGContextScaleCTM(context, 1, -1);
     }
     for (i = 0; i < count; i++) {
-        CGFloat width = [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+        CGFloat width = widths[i];
         BOOL dark = tracking == NSSegmentSwitchTrackingSelectOne && [self isSelectedForSegment: i];
 
         CGContextSaveGState(context);
@@ -544,8 +637,7 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     x = NSMinX(art);
     for (i = 0; i < count; i++) {
         NSSegmentItem *segment = [_segments objectAtIndex: i];
-        NSRect segmentFrame = NSMakeRect(x, NSMinY(body), [[_segmentComputedWidths objectAtIndex: i] doubleValue],
-                                         NSHeight(body));
+        NSRect segmentFrame = NSMakeRect(x, NSMinY(body), widths[i], NSHeight(body));
         BOOL selected = [self isSelectedForSegment: i];
         NSColor *color;
 
@@ -578,16 +670,21 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
         [cell setEnabled: YES];
         [cell setControlView: controlView];
         [NSGraphicsContext saveGraphicsState];
-        NSRectClip(segmentFrame);
-        [cell drawInteriorWithFrame: segmentFrame inView: controlView];
+        NSRect interior = ([label length] > 0 && NSWidth(segmentFrame) > 4.0) ? NSInsetRect(segmentFrame, 2, 0) : segmentFrame;
+        NSRectClip(interior);
+        [cell drawInteriorWithFrame: interior inView: controlView];
         [NSGraphicsContext restoreGraphicsState];
         x += NSWidth(segmentFrame);
     }
+    if (widths != stackWidths)
+        free(widths);
 }
 
 - (void) drawWithFrame: (NSRect) cellFrame inView: (NSView *) controlView {
 
     int i = 0, count = [self segmentCount];
+    if (count == 0)
+        return;
     NSRect segmentFrame = cellFrame;
 
     if ([_segmentComputedWidths count] != count)
@@ -604,9 +701,12 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
         return;
     }
 
+    CGFloat stackWidths[32];
+    CGFloat *widths = count <= 32 ? stackWidths : malloc(sizeof(CGFloat) * count);
+    [self _fittedSegmentWidthsForWidth: NSWidth(cellFrame) into: widths];
+
     for (i = 0; i < count; i++) {
-        segmentFrame.size.width =
-                [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+        segmentFrame.size.width = widths[i];
         [NSGraphicsContext saveGraphicsState];
         // Make sure that segment drawing is not allowed to spill out into other
         // segments
@@ -617,6 +717,8 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
         [NSGraphicsContext restoreGraphicsState];
         segmentFrame.origin.x += segmentFrame.size.width;
     }
+    if (widths != stackWidths)
+        free(widths);
 
     _lastDrawRect = cellFrame;
 }
@@ -660,24 +762,28 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
 
 - (NSInteger) _segmentForPoint: (NSPoint) point {
     int i = 0, count = [self segmentCount];
+    if (count == 0)
+        return NSNotFound;
     NSRect segmentFrame = _lastDrawRect;
     if (segmentFrame.size.height <= 0.0)
         segmentFrame.size.height = 100;
 
-    if ([_segmentComputedWidths count] != count)
-        [self _recomputeSegmentWidths];
+    CGFloat stackWidths[32];
+    CGFloat *widths = count <= 32 ? stackWidths : malloc(sizeof(CGFloat) * count);
+    [self _fittedSegmentWidthsForWidth: NSWidth(segmentFrame) into: widths];
 
+    NSInteger hit = NSNotFound;
     for (i = 0; i < count; i++) {
-        NSSegmentItem *item = [_segments objectAtIndex: i];
-
-        segmentFrame.size.width =
-                [[_segmentComputedWidths objectAtIndex: i] doubleValue];
+        segmentFrame.size.width = widths[i];
         if (NSPointInRect(point, segmentFrame)) {
-            return i;
+            hit = i;
+            break;
         }
         segmentFrame.origin.x += segmentFrame.size.width;
     }
-    return NSNotFound;
+    if (widths != stackWidths)
+        free(widths);
+    return hit;
 }
 
 - (BOOL) startTrackingAt: (NSPoint) startPoint inView: (NSView *) controlView {
