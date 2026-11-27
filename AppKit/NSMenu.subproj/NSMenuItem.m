@@ -233,7 +233,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 
 - (void) setToolTip: (NSString *) toolTip {
     if (toolTip != NS_EXTRA(NSMenuItem, self)->_toolTip) {
-        [NS_EXTRA(NSMenuItem, self)->_toolTip release];
+        [NS_EXTRA(NSMenuItem, self)->_toolTip autorelease];
         NS_EXTRA(NSMenuItem, self)->_toolTip = [toolTip copy];
         [_menu itemChanged: self];
     }
@@ -366,21 +366,21 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 
 - (void) setTitle: (NSString *) title {
     title = [title copy];
-    [_title release];
+    [_title autorelease];
     _title = title;
     [_menu itemChanged: self];
 }
 
 - (void) setAttributedTitle: (NSAttributedString *) title {
     title = [title copy];
-    [NS_EXTRA(NSMenuItem, self)->_atitle release];
+    [NS_EXTRA(NSMenuItem, self)->_atitle autorelease];
     NS_EXTRA(NSMenuItem, self)->_atitle = title;
     [self setTitle: [title string]];
 }
 
 - (void) setTitleWithMnemonic: (NSString *) mnemonic {
     mnemonic = [mnemonic copy];
-    [NS_EXTRA(NSMenuItem, self)->_mnemonic release];
+    [NS_EXTRA(NSMenuItem, self)->_mnemonic autorelease];
     NS_EXTRA(NSMenuItem, self)->_mnemonic = mnemonic;
 }
 
@@ -412,7 +412,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 
 - (void) setKeyEquivalent: (NSString *) keyEquivalent {
     keyEquivalent = [keyEquivalent copy];
-    [NS_EXTRA(NSMenuItem, self)->_keyEquivalent release];
+    [NS_EXTRA(NSMenuItem, self)->_keyEquivalent autorelease];
     NS_EXTRA(NSMenuItem, self)->_keyEquivalent = keyEquivalent;
     [_menu itemChanged: self];
 }
@@ -455,8 +455,9 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenuItem, badge, _badge, NSMenuItemBadge *, badge, 
 }
 
 - (void) setRepresentedObject: (id) object {
+    [object retain];
     [NS_EXTRA(NSMenuItem, self)->_representedObject release];
-    NS_EXTRA(NSMenuItem, self)->_representedObject = [object retain];
+    NS_EXTRA(NSMenuItem, self)->_representedObject = object;
 }
 
 - (void) setSubmenu: (NSMenu *) submenu {

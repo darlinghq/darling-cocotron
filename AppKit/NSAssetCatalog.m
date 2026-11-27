@@ -61,6 +61,7 @@ enum {
     PixelFormatGA8 = 0x47413820,
     PixelFormatPDF = 0x50444620,
     PixelFormatSVG = 0x53564720,
+    PixelFormatJPEG = 0x4a504547,
     MaxImageSide = 16384,
     RenditionHeaderSize = 184,
     MaxTreeDepth = 32,
@@ -665,7 +666,7 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
     if (scale <= 0)
         scale = 1;
 
-    if (pixelFormat == PixelFormatPDF || pixelFormat == PixelFormatSVG) {
+    if (pixelFormat == PixelFormatPDF || pixelFormat == PixelFormatSVG || pixelFormat == PixelFormatJPEG) {
         Span data;
         if (!renditionData(value, &data) || data.length < 12 || memcmp(data.bytes, "DWAR", 4) != 0)
             return nil;
@@ -674,6 +675,14 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
             return nil;
         if (pixelFormat == PixelFormatPDF)
             return [NSPDFImageRep imageRepWithData: [NSData dataWithBytes: payload.bytes length: payload.length]];
+        if (pixelFormat == PixelFormatJPEG) {
+            // The payload is the JPEG file as it was given to actool, with the same wrapper as a PDF.
+            NSBitmapImageRep *jpeg = [NSBitmapImageRep imageRepWithData: [NSData dataWithBytes: payload.bytes
+                                                                                         length: payload.length]];
+            if (jpeg != nil && scale > 1)
+                [jpeg setSize: NSMakeSize([jpeg pixelsWide] / scale, [jpeg pixelsHigh] / scale)];
+            return jpeg;
+        }
 
         NSData *svgData = nil;
         if (payload.length >= 4 && memcmp(payload.bytes, "bvx", 3) == 0) {
@@ -719,7 +728,8 @@ static NSBitmapImageRep *bitmapFromPixels(NSData *pixels, size_t stride, uint32_
             uint32_t pixelFormat = le32(rendition->value.bytes + 24);
             uint16_t layout = le16(rendition->value.bytes + 36);
             if (layout == RenditionLayoutColor ||
-                (bytesPerPixel(pixelFormat) == 0 && pixelFormat != PixelFormatPDF && pixelFormat != PixelFormatSVG))
+                (bytesPerPixel(pixelFormat) == 0 && pixelFormat != PixelFormatPDF && pixelFormat != PixelFormatSVG &&
+                 pixelFormat != PixelFormatJPEG))
                 continue;
             NSMutableData *variant = [NSMutableData dataWithBytes: rendition->key.bytes length: rendition->key.length];
             uint16_t zero = 0;

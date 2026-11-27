@@ -76,6 +76,7 @@ set(QuartzCore_sources
 	CAMetalDrawable.mm
 	CASpringAnimation.m
 	CATransformLayer.m
+	CAChameleonLayer.m
 )
 
 #set_source_files_properties(${QuartzCore_sources} LANGUAGE C)

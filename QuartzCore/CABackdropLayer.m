@@ -22,6 +22,9 @@
 @implementation CABackdropLayer
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(CABackdropLayer, windowServerAware, _windowServerAware, BOOL, windowServerAware, setWindowServerAware:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CABackdropLayer, scale, _scale, CGFloat, scale, setScale:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(CABackdropLayer, allowsInPlaceFiltering, _allowsInPlaceFiltering, BOOL, allowsInPlaceFiltering, setAllowsInPlaceFiltering:)
+NS_EXTRA_SYNTHESIZE_COPY(CABackdropLayer, groupName, _groupName, NSString *, groupName, setGroupName:)
 
 // windowServerAware starts as NO, and initWithLayer: does not take it from
 // the layer copied: observed on macOS 26.7.3 and 10.14.4 (black-box, through
@@ -29,16 +32,33 @@ NS_EXTRA_SYNTHESIZE_ASSIGN(CABackdropLayer, windowServerAware, _windowServerAwar
 // zeroed. Test: tests/quartzcore-backdrop-layer-presentation-modifier.m
 - init {
     self = [super init];
-    if (self != nil)
+    if (self != nil) {
         NS_EXTRA(CABackdropLayer, self)->_windowServerAware = NO;
+        NS_EXTRA(CABackdropLayer, self)->_scale = 1.0;
+        NS_EXTRA(CABackdropLayer, self)->_allowsInPlaceFiltering = NO;
+        NS_EXTRA(CABackdropLayer, self)->_groupName = nil;
+    }
     return self;
 }
 
 - initWithLayer: (id) layer {
     self = [super initWithLayer: layer];
-    if (self != nil)
+    if (self != nil) {
+        // Like -[CALayer initWithLayer:], the copy starts in the default state.
         NS_EXTRA(CABackdropLayer, self)->_windowServerAware = NO;
+        NS_EXTRA(CABackdropLayer, self)->_scale = 1.0;
+        NS_EXTRA(CABackdropLayer, self)->_allowsInPlaceFiltering = NO;
+        NS_EXTRA(CABackdropLayer, self)->_groupName = nil;
+    }
     return self;
+}
+
+- (void) dealloc {
+    if (NS_EXTRA_ALLOCATED(CABackdropLayer, self)) {
+        [NS_EXTRA(CABackdropLayer, self)->_groupName release];
+    }
+    NS_EXTRA_FREE(CABackdropLayer, self);
+    [super dealloc];
 }
 
 @end

@@ -1547,3 +1547,53 @@ CGSize CTFontShapeGlyphs(CTFontRef font, CGGlyph glyphs[], CGSize advances[],
     }
     return CGSizeZero;
 }
+
+CGFloat CTFontGetWeight(CTFontRef font)
+{
+    if (ktFont(font) == nil)
+        return 0.0;
+    CGFloat weight = 0.0, width = 0.0, slant = 0.0;
+    fontTraits(font, &weight, &width, &slant);
+    return weight;
+}
+
+// Not computed: the set is empty, i.e. no character is treated as needing extra line height.
+CFCharacterSetRef CTFontCopySystemUIFontExcessiveLineHeightCharacterSet(void)
+{
+    return CFCharacterSetCreateWithCharactersInRange(kCFAllocatorDefault, CFRangeMake(0, 0));
+}
+
+// Not computed: no string has a language that needs the taller text style.
+CFStringRef CTFontCopyTallestTextStyleLanguageForString(CFStringRef string)
+{
+    (void) string;
+    return NULL;
+}
+
+// Not computed: reports no outsets and returns false.
+bool CTFontGetLanguageAwareOutsets(CTFontRef font, CGFloat *left, CGFloat *top, CGFloat *right, CGFloat *bottom)
+{
+    (void) font;
+    if (left != NULL)
+        *left = 0.0;
+    if (top != NULL)
+        *top = 0.0;
+    if (right != NULL)
+        *right = 0.0;
+    if (bottom != NULL)
+        *bottom = 0.0;
+    return false;
+}
+
+bool CTFontGetClippingMetrics(CTFontRef font, CGFloat *ascent, CGFloat *descent)
+{
+    if (ktFont(font) == nil)
+        return false;
+    if (ascent != NULL)
+        *ascent = CTFontGetAscent(font);
+    if (descent != NULL)
+        *descent = CTFontGetDescent(font);
+    // QUIRK: returns true with the ascent and descent of the font. Not documented (SPI). Evidence: black-box
+    // observation on macOS 26.7.3 for a system UI font (tier 2). Test: tests/coretext-swiftui-font-spis.m
+    return true;
+}
