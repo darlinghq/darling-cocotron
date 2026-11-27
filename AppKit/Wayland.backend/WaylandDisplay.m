@@ -541,6 +541,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
             [window preferredColorInfoChanged];
             break;
         }
+        // Metal layers and OpenGL subwindows can have surface feedback of their own.
+        if ([window preferredSubwindowColorInfoChangedForFeedback: (struct wl_proxy *) feedback])
+            break;
     }
 }
 

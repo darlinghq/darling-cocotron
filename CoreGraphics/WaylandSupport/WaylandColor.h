@@ -64,6 +64,10 @@ typedef struct {
     uint32_t maxFALL; // cd/m^2
 } WaylandColorHDRMetadata;
 
+// Static HDR metadata a backend can derive from a compositor's preferred image description. The
+// keys of `info` are the kCGSDisplayColor* keys; values of an unrecognized type are ignored.
+WaylandColorHDRMetadata WaylandHDRMetadataFromColorInfo(NSDictionary *info, CGColorSpaceRef space);
+
 // Owned by a backend's display/connection. The backend binds the globals with its own
 // -bindGlobal:, installing the backend's dispatcher (and passing this manager as the object),
 // and passes the proxies here. The manager installs that dispatcher on the child objects it creates.
@@ -108,6 +112,8 @@ typedef struct {
 // Whether the compositor offers color management or color representation. The framework above uses
 // this instead of the instance variables, as the class lives in another image.
 - (BOOL) hasColorGlobals;
+// Whether any output reports a maximum luminance above its reference white.
+- (BOOL) hasExtendedDynamicRange;
 - (void) observeOutput: (struct wl_proxy *) output;
 - (NSDictionary *) infoForOutput: (struct wl_proxy *) output;
 

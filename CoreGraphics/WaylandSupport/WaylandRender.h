@@ -42,6 +42,14 @@ typedef struct {
     uint64_t modifier;
 } WaylandRenderFormat;
 
+// The memory layout of the IOSurface behind a buffer. The caller must request the format that
+// matches its pixels; a compositor that does not advertise it is handled by the caller's shm or
+// OpenGL fallback. Negotiating a wide format does not convert 8-bit content to HDR.
+typedef NS_ENUM(NSUInteger, WaylandRenderPixelFormat) {
+    WaylandRenderPixelFormat8Bit = 0,
+    WaylandRenderPixelFormatFloat16 = 1,
+};
+
 // Owned by a backend's display/connection and shared by every surface on it. The backend binds
 // the three globals with its own -bindGlobal: and passes the proxies here.
 @interface WaylandRenderManager : NSObject {
@@ -78,11 +86,12 @@ typedef struct {
 // feedback arrives, the legacy format events (or the implicit modifier) are used.
 - (BOOL) supportsFormat: (uint32_t) format modifier: (uint64_t) modifier
               forSurface: (struct wl_proxy *) surface;
-// The preferred pair for CPU-rendered RGBA content, or NO when no pair was advertised. When
+// The preferred pair for RGBA content of `pixelFormat`, or NO when no pair was advertised. When
 // needsAlpha is YES, only a format with an alpha channel can be used.
 - (BOOL) preferredFormat: (uint32_t *) format modifier: (uint64_t *) modifier
               forSurface: (struct wl_proxy *) surface
-              needsAlpha: (BOOL) needsAlpha;
+              needsAlpha: (BOOL) needsAlpha
+              pixelFormat: (WaylandRenderPixelFormat) pixelFormat;
 
 // Creates a wl_buffer from one plane of an IOSurface. The surface must stay alive at least until
 // the compositor releases the buffer. Returns NULL when the host cannot export the surface or the

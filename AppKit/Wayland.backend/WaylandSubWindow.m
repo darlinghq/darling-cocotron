@@ -20,7 +20,11 @@
 #import "WaylandWindow.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import "WaylandColor.h"
+#import <AppKit/NSColorSpace.h>
+#import <QuartzCore/CALayer.h>
 #include <math.h>
+#include <string.h>
 #import "WaylandScale.h"
 
 static void request(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags) {
@@ -50,10 +54,99 @@ static BOOL validFrame(CGRect frame) {
     return validFrameOrEmpty(frame) && frame.size.width > 0 && frame.size.height > 0;
 }
 
+static void CreateColorObjects(WaylandColorManager *color, struct wl_proxy *surface,
+                               struct wl_proxy **colorSurface,
+                               struct wl_proxy **representationSurface,
+                               struct wl_proxy **feedback) {
+    if (color == NULL || surface == NULL)
+        return;
+    if (*colorSurface == NULL)
+        *colorSurface = [color newColorSurfaceForSurface: surface];
+    if (*representationSurface == NULL)
+        *representationSurface = [color newRepresentationSurfaceForSurface: surface];
+    if (*feedback == NULL)
+        *feedback = [color newSurfaceFeedbackForSurface: surface];
+}
+
+static void DestroyColorObjects(WaylandColorManager *color, struct wl_proxy **colorSurface,
+                                struct wl_proxy **representationSurface,
+                                struct wl_proxy **feedback) {
+    [color destroyColorSurface: *colorSurface];
+    [color destroyRepresentationSurface: *representationSurface];
+    [color destroySurfaceFeedback: *feedback];
+    *colorSurface = NULL;
+    *representationSurface = NULL;
+    *feedback = NULL;
+}
+
+// Extended transfer functions carry values above the reference white, which is
+// what a layer asking for EDR draws. Named PQ and HLG spaces already carry it.
+static CGColorSpaceRef ExtendedSpaceForEDR(CGColorSpaceRef space, BOOL wantsEDR) {
+    if (space == NULL)
+        return NULL;
+    if (!wantsEDR)
+        return CGColorSpaceRetain(space);
+    CFStringRef name = CGColorSpaceGetName(space);
+    CFStringRef extended = NULL;
+    if (name != NULL) {
+        if (CFEqual(name, kCGColorSpaceSRGB) || CFEqual(name, kCGColorSpaceGenericRGB))
+            extended = kCGColorSpaceExtendedSRGB;
+        else if (CFEqual(name, kCGColorSpaceLinearSRGB))
+            extended = kCGColorSpaceExtendedLinearSRGB;
+        else if (CFEqual(name, kCGColorSpaceDisplayP3))
+            extended = kCGColorSpaceExtendedDisplayP3;
+        else if (CFEqual(name, kCGColorSpaceLinearDisplayP3))
+            extended = kCGColorSpaceExtendedLinearDisplayP3;
+        else if (CFEqual(name, kCGColorSpaceITUR_2020))
+            extended = kCGColorSpaceExtendedITUR_2020;
+        else if (CFEqual(name, kCGColorSpaceLinearITUR_2020))
+            extended = kCGColorSpaceExtendedLinearITUR_2020;
+    }
+    CGColorSpaceRef result = extended != NULL ? CGColorSpaceCreateWithName(extended) : NULL;
+    return result != NULL ? result : CGColorSpaceRetain(space);
+}
+
+// Values supplied by the layer take precedence over the compositor's preferred
+// description; fields the layer did not set keep the compositor's values.
+static WaylandColorHDRMetadata MergeHDRMetadata(WaylandColorHDRMetadata base,
+                                                const CAEDRSurfaceColorDescription *description) {
+    if (description->hasMasteringDisplayPrimaries) {
+        memcpy(base.masteringDisplayPrimaries, description->masteringDisplayPrimaries,
+               sizeof base.masteringDisplayPrimaries);
+        base.hasMasteringDisplayPrimaries = YES;
+    }
+    if (description->hasMasteringLuminance) {
+        base.masteringMinLuminance = description->masteringMinLuminance;
+        base.masteringMaxLuminance = description->masteringMaxLuminance;
+        base.hasMasteringLuminance = YES;
+    }
+    if (description->hasMaxCLL) {
+        base.maxCLL = description->maxCLL;
+        base.hasMaxCLL = YES;
+    }
+    if (description->hasMaxFALL) {
+        base.maxFALL = description->maxFALL;
+        base.hasMaxFALL = YES;
+    }
+    // The optical output scale is the luminance of linear 1.0, i.e. the reference white
+    // of EDR content. It refines the reference of a range the compositor reported; without
+    // such a range there is no minimum or maximum to send alongside it.
+    if (isfinite(description->opticalOutputScale) && description->opticalOutputScale > 0 &&
+        base.hasPrimaryVolumeLuminance) {
+        uint32_t reference = (uint32_t) (description->opticalOutputScale + 0.5f);
+        if (reference > base.primaryVolumeMinLuminance)
+            base.primaryVolumeReferenceLuminance = reference;
+    }
+    return base;
+}
+
 // The Wayland objects of one Metal layer's surface.
 @interface WaylandMetalSurface : NSObject {
 @public
     struct wl_proxy *surface, *subsurface, *viewport;
+    struct wl_proxy *colorSurface, *representationSurface, *feedback;
+    CAEDRSurfaceColorDescription description;
+    BOOL descriptionKnown;
     CAMetalLayer *layer; // not retained
     CGRect frame;
     NSUInteger sequence; // creation order, for layers that are not in one tree
@@ -89,6 +182,7 @@ static BOOL validFrame(CGRect frame) {
     _eglWindow = WL.wl_egl_window_create((struct wl_surface *) _surface, 1, 1);
     if (!_eglWindow) { [self release]; return nil; }
     _drawablePixelSize = CGSizeMake(1, 1);
+    [self ensureColorObjects];
     [parent addSubwindow: self];
     [self updateGeometry];
     return self;
@@ -103,6 +197,8 @@ static BOOL validFrame(CGRect frame) {
     for (CAMetalLayer *layer in [[_metalSurfaces keyEnumerator] allObjects])
         [self destroyMetalSurfaceForLayer: layer];
     [_metalSurfaces release];
+    [_edrLayers release];
+    [self destroyColorObjects];
     [_parent removeSubwindow: self];
     if (_eglWindow) WL.wl_egl_window_destroy(_eglWindow);
     [self removeRole];
@@ -199,6 +295,117 @@ static BOOL validFrame(CGRect frame) {
 }
 - (BOOL) requiresMainThreadPresentation { return NO; }
 - (uint32_t) refreshMillihertz { return [_parent refreshMillihertz]; }
+
+#pragma mark - Color management
+
+- (void) ensureColorObjects {
+    WaylandColorManager *color = [[_parent waylandDisplay] colorManager];
+    CreateColorObjects(color, _surface, &_colorSurface, &_representationSurface, &_surfaceFeedback);
+}
+
+- (void) destroyColorObjects {
+    WaylandColorManager *color = [[_parent waylandDisplay] colorManager];
+    DestroyColorObjects(color, &_colorSurface, &_representationSurface, &_surfaceFeedback);
+}
+
+// A feedback of our own identifies our EGL surface; one of a Metal surface
+// identifies it through the layer that owns it.
+- (NSDictionary *) colorInfoForFeedback: (struct wl_proxy *) feedback {
+    WaylandColorManager *color = [[_parent waylandDisplay] colorManager];
+    NSDictionary *info = feedback != NULL ? [color preferredInfoForFeedback: feedback] : nil;
+    if (info == nil)
+        info = [color preferredInfoForFeedback: [_parent surfaceFeedback]];
+    return info;
+}
+
+- (void) updateSurfaceColor {
+    WaylandColorManager *color = [[_parent waylandDisplay] colorManager];
+    if (color == NULL || _colorSurface == NULL || _surface == NULL)
+        return;
+    CGColorSpaceRef space = ExtendedSpaceForEDR([[_parent contentColorSpace] CGColorSpace],
+                                                [_edrLayers count] > 0);
+    if (space == NULL)
+        return;
+    NSDictionary *info = [self colorInfoForFeedback: _surfaceFeedback];
+    WaylandColorHDRMetadata metadata = WaylandHDRMetadataFromColorInfo(info, space);
+    [color setColorSpace: space
+         renderingIntent: WP_COLOR_RENDER_INTENT_PERCEPTUAL
+              hdrMetadata: &metadata
+                onSurface: _colorSurface];
+    CGColorSpaceRelease(space);
+}
+
+- (void) updateColorForMetalSurface: (WaylandMetalSurface *) metal {
+    WaylandColorManager *color = [[_parent waylandDisplay] colorManager];
+    if (color == NULL || metal->colorSurface == NULL)
+        return;
+    const CAEDRSurfaceColorDescription *description =
+            metal->descriptionKnown ? &metal->description : NULL;
+    CGColorSpaceRef base = NULL;
+    if (description != NULL && description->colorSpace != NULL)
+        base = CGColorSpaceRetain(description->colorSpace);
+    else if (description != NULL && description->hasHDRMetadata && description->transfer == 1)
+        base = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_PQ);
+    else if (description != NULL && description->hasHDRMetadata && description->transfer == 2)
+        base = CGColorSpaceCreateWithName(kCGColorSpaceITUR_2100_HLG);
+    if (base == NULL)
+        base = CGColorSpaceRetain([[_parent contentColorSpace] CGColorSpace]);
+    BOOL wantsEDR = description != NULL &&
+                    (description->wantsExtendedDynamicRange || description->hasHDRMetadata);
+    CGColorSpaceRef space = ExtendedSpaceForEDR(base, wantsEDR);
+    CGColorSpaceRelease(base);
+    if (space == NULL)
+        return;
+    WaylandColorHDRMetadata metadata =
+            WaylandHDRMetadataFromColorInfo([self colorInfoForFeedback: metal->feedback], space);
+    if (description != NULL)
+        metadata = MergeHDRMetadata(metadata, description);
+    [color setColorSpace: space
+         renderingIntent: WP_COLOR_RENDER_INTENT_PERCEPTUAL
+              hdrMetadata: &metadata
+                onSurface: metal->colorSurface];
+    CGColorSpaceRelease(space);
+}
+
+- (BOOL) preferredColorInfoChangedForFeedback: (struct wl_proxy *) feedback {
+    if (feedback != NULL && feedback == _surfaceFeedback) {
+        [self updateSurfaceColor];
+        return YES;
+    }
+    for (CAMetalLayer *layer in [[_metalSurfaces keyEnumerator] allObjects]) {
+        WaylandMetalSurface *metal = [_metalSurfaces objectForKey: layer];
+        if (feedback != NULL && feedback == metal->feedback) {
+            [self updateColorForMetalSurface: metal];
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (void) colorManagerAvailable {
+    [self ensureColorObjects];
+    [self updateSurfaceColor];
+    for (CAMetalLayer *layer in [[_metalSurfaces keyEnumerator] allObjects]) {
+        WaylandMetalSurface *metal = [_metalSurfaces objectForKey: layer];
+        CreateColorObjects([[_parent waylandDisplay] colorManager], metal->surface,
+                           &metal->colorSurface, &metal->representationSurface, &metal->feedback);
+        [self updateColorForMetalSurface: metal];
+    }
+}
+
+- (void) setWantsExtendedDynamicRangeContent: (BOOL) wants forLayer: (id) layer {
+    if (layer == nil)
+        return;
+    if (_edrLayers == nil)
+        _edrLayers = [[NSHashTable weakObjectsHashTable] retain];
+    if (wants)
+        [_edrLayers addObject: layer];
+    else
+        [_edrLayers removeObject: layer];
+    [self updateSurfaceColor];
+    [[_parent waylandDisplay] flush];
+}
+
 // Rendering and swapping the EGL surface may happen on any thread, as on the other
 // backends: the EGL platform has its own event queue for the surface, and the
 // wl_egl_window is only resized by updateGeometry (main thread), which EGL picks up at the
@@ -450,6 +657,7 @@ static NSComparisonResult compareLayerOrder(WaylandMetalSurface *a, WaylandMetal
         [self attachSubsurfaceOfMetalSurface: metal];
 
     [_metalSurfaces setObject: metal forKey: layer];
+    [self colorManagerAvailable];
     [self placeMetalSurface: metal frame: frame];
     [self describeMetalSurface: metal frame: frame surface: surface];
     return YES;
@@ -471,6 +679,8 @@ static NSComparisonResult compareLayerOrder(WaylandMetalSurface *a, WaylandMetal
     if (metal == nil)
         return;
     [_metalSurfaces removeObjectForKey: layer];
+    WaylandColorManager *color = [[_parent waylandDisplay] colorManager];
+    DestroyColorObjects(color, &metal->colorSurface, &metal->representationSurface, &metal->feedback);
     if (metal->viewport) request(metal->viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (metal->subsurface) request(metal->subsurface, WP_SUBSURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     request(metal->surface, WP_SURFACE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
@@ -479,6 +689,22 @@ static NSComparisonResult compareLayerOrder(WaylandMetalSurface *a, WaylandMetal
         request(parentSurface, WP_SURFACE_COMMIT, 0);
     [[_parent waylandDisplay] flush];
     [metal release];
+}
+
+- (void) updateMetalSurfaceColorForLayer: (CAMetalLayer *) layer
+                              description: (const CAEDRSurfaceColorDescription *) description {
+    WaylandMetalSurface *metal = [_metalSurfaces objectForKey: layer];
+    if (metal == nil)
+        return;
+    if (description != NULL) {
+        metal->description = *description;
+        metal->descriptionKnown = YES;
+    } else {
+        memset(&metal->description, 0, sizeof metal->description);
+        metal->descriptionKnown = NO;
+    }
+    [self updateColorForMetalSurface: metal];
+    [[_parent waylandDisplay] flush];
 }
 
 @end

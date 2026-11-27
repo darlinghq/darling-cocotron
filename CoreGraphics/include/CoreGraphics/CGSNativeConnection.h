@@ -181,6 +181,9 @@ extern bool _CGSSetCursorHiddenUntilMouseMoves(bool flag);
 extern bool _CGSNativeConnectionPointerLocked(void);
 // The color manager of a Wayland connection (see WaylandColor.h), nil without one.
 extern id _CGSNativeConnectionWaylandColorManager(void);
+// Whether any connected output reports luminance headroom above its reference white. False on a
+// connection without color management; CAEDRMetadata.isAvailable asks this.
+extern bool _CGSExtendedDynamicRangeAvailable(void);
 // This process holds a power assertion that keeps the display awake; false without a backend that tracks it.
 extern bool _CGSNativeConnectionDisplaySleepPrevented(void);
 // The surface the lock should be made on may be another one (a window was mapped, unmapped or activated).

@@ -742,6 +742,10 @@ enum {
     WP_DRM_FORMAT_XRGB8888 = 0x34325258,
     WP_DRM_FORMAT_ABGR8888 = 0x34324241,
     WP_DRM_FORMAT_XBGR8888 = 0x34324258,
+    // Half-float versions of the same little-endian RGBA/XRGB byte order. They carry
+    // EDR values above the reference white when the backing IOSurface stores half floats.
+    WP_DRM_FORMAT_ARGB16161616F = 0x48345241,
+    WP_DRM_FORMAT_XRGB16161616F = 0x48345258,
     WP_DRM_FORMAT_MOD_LINEAR = 0,
     WP_DRM_FORMAT_MOD_INVALID = 0x00ffffffffffffffULL,
 };

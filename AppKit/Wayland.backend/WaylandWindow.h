@@ -228,6 +228,8 @@ typedef enum {
 // Gives the toplevel the application icon (xdg-toplevel-icon), when the compositor has the protocol.
 - (void) updateToplevelIcon;
 
+// The color space of the window's content, or sRGB when neither the window nor a screen reports one.
+- (NSColorSpace *) contentColorSpace;
 // Describes the surface's content color to the compositor, when it supports color management.
 - (void) updateSurfaceColor;
 // Creates the color objects once a surface exists and the manager has been bound.
@@ -238,6 +240,8 @@ typedef enum {
 // Callbacks from the display when the color manager or session manager arrives later than the window.
 - (void) colorManagerAvailable;
 - (void) preferredColorInfoChanged;
+// Routes a preferred-description change to a subwindow or one of its Metal surfaces.
+- (BOOL) preferredSubwindowColorInfoChangedForFeedback: (struct wl_proxy *) feedback;
 // A dma-buf, syncobj or fifo global arrived after this surface was made.
 - (void) renderGlobalsAvailable;
 - (void) sessionManagerAvailable;

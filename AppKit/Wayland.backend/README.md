@@ -123,6 +123,15 @@ together with viewporter, the preferred scale in 120ths with the buffer cropped 
 surface (CoreGraphics') and drag icons use the same scale; a compositor without viewporter gets an integer scale only. Swaps are paced to the
 refresh rate of the window's output (`refreshMillihertz`).
 
+EDR color descriptions and HDR metadata are applied per surface: the toplevel, the OpenGL
+subwindow and each Metal layer's own surface get their own color-management objects and follow
+their own preferred-description changes. The dma-buf path can negotiate either 8-bit ARGB8888
+buffers for CPU-rendered content or half-float ARGB/XRGB16161616F buffers for producers whose
+IOSurface pixels are actually half floats. It never converts an 8-bit surface into a floating-point
+one, so an ordinary window buffer keeps the shm/8-bit fallback. A Metal layer with a float drawable
+uses its Vulkan swapchain format and relies on the compositor's color description for HDR; the
+render manager's float-format negotiation is available to native IOSurface producers.
+
 ## Fullscreen and pointer lock
 
 A window is fullscreen when it has the fullscreen style bit, or is an untitled window that can become key and has
@@ -157,4 +166,8 @@ wayland-protocols XML and `wayland-scanner`; the backend is skipped when any of 
 needs a compositor and checks screens, scale and window frames through the API.
 `../../tests/appkit-wayland-window-chrome.sh` checks which windows get a frame, on headless sway. The programs in `tests/` here
 are manual fixtures that exercise one feature each against a real or private test compositor; their file
-names say what they cover.
+names say what they cover. `tests/wayland-surface-color.sh` needs no guest: it checks that a compositor
+preference change reaches three independent surfaces (a toplevel, an OpenGL surface and a Metal layer
+surface), each sending its own color description and HDR metadata. `tests/wayland-render-formats.sh`
+also needs no guest: it checks that dma-buf feedback can advertise 8-bit and half-float formats with
+the 16-byte table entries required by the protocol.

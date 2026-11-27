@@ -33,6 +33,7 @@
 #ifdef __OBJC__
 
 #import <CoreGraphics/CGGeometry.h>
+#import <CoreGraphics/CGColorSpace.h>
 #import <Foundation/Foundation.h>
 
 @class CAMetalLayer;
@@ -55,6 +56,28 @@ typedef struct CANativeSurface {
     CGSize pixelSize;
 } CANativeSurface;
 
+// The color description a layer wants its native surface to carry. This is the
+// layer's own state, in window-system color-description units; a backend
+// translates it to its own protocol requests when it applies it. No object in
+// the struct is owned by the provider.
+typedef struct CAEDRSurfaceColorDescription {
+    CGColorSpaceRef colorSpace; // may be NULL: use the surface's preferred description
+    BOOL wantsExtendedDynamicRange;
+    BOOL hasHDRMetadata;
+    int transfer; // HDR10 = 1, HLG = 2
+    BOOL hasMasteringDisplayPrimaries;
+    // CIE 1931 xy times one million, in r, g, b, white x/y order.
+    int32_t masteringDisplayPrimaries[8];
+    BOOL hasMasteringLuminance;
+    uint32_t masteringMinLuminance; // cd/m^2 * 10000
+    uint32_t masteringMaxLuminance; // cd/m^2
+    BOOL hasMaxCLL;
+    uint32_t maxCLL; // cd/m^2
+    BOOL hasMaxFALL;
+    uint32_t maxFALL; // cd/m^2
+    float opticalOutputScale; // nits corresponding to a linear value of 1
+} CAEDRSurfaceColorDescription;
+
 @protocol CAMetalLayerSurfaceProvider <NSObject>
 
 // The size in device pixels that a surface covering `frame` (same coordinates as below) has.
@@ -75,6 +98,13 @@ typedef struct CANativeSurface {
 // The layer is done with its surface; the provider destroys it. Called on the
 // thread that created it, only after the swapchain on it is gone.
 - (void) destroyMetalSurfaceForLayer: (CAMetalLayer *) layer;
+
+@optional
+// The layer's EDR state, static HDR metadata, or color space changed. The
+// provider may apply it to the native surface; a backend without color
+// management does not implement this.
+- (void) updateMetalSurfaceColorForLayer: (CAMetalLayer *) layer
+                             description: (const CAEDRSurfaceColorDescription *) description;
 
 @end
 

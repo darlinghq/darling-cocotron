@@ -22,8 +22,8 @@
 
 @class NSData;
 
-// Describes the HDR content of a CAMetalLayer. The values are kept as given:
-// Darling composites in standard dynamic range and does not tone map.
+// Describes the HDR content of a CAMetalLayer. The values are kept as given; a
+// window system that understands them applies them to the layer's surface.
 @interface CAEDRMetadata : NSObject <NSCopying, NSSecureCoding> {
     int _transfer;
     NSData *_displayInfo;
@@ -34,8 +34,9 @@
     float _opticalOutputScale;
 }
 
-// HDR10 (SMPTE ST 2084) metadata from mastering display color volume and
-// content light level data, either of which may be nil.
+// HDR10 (SMPTE ST 2084) metadata from the big-endian mastering display color
+// volume and content light level SEI payloads (SMPTE ST 2086 and CTA-861.3),
+// either of which may be nil.
 + (CAEDRMetadata *) HDR10MetadataWithDisplayInfo: (NSData *) displayData
                                      contentInfo: (NSData *) contentData
                               opticalOutputScale: (float) scale;
@@ -49,5 +50,8 @@
 @property(class, readonly, retain) CAEDRMetadata *HLGMetadata;
 
 + (CAEDRMetadata *) HLGMetadataWithAmbientViewingEnvironment: (NSData *) data;
+
+// Whether the current display connection can present extended-range content.
++ (BOOL) isAvailable;
 
 @end

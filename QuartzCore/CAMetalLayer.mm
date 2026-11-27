@@ -20,6 +20,7 @@
 #define GL_GLEXT_PROTOTYPES 1
 #import "CAMetalLayerInternal.h"
 #import "CAMetalDrawableInternal.h"
+#import "CAEDRMetadataInternal.h"
 #import <objc/runtime.h>
 #import <Foundation/NSRaise.h>
 #import <Metal/MTLDeviceInternal.h>
@@ -35,6 +36,7 @@
 #endif
 
 #include <algorithm>
+#include <string.h>
 
 #import "CALayerInternal.h"
 
@@ -364,6 +366,56 @@ static BOOL forcesOpenGLPresentation(void) {
 @synthesize wantsExtendedDynamicRangeContent = _wantsExtendedDynamicRangeContent;
 @synthesize EDRMetadata = _EDRMetadata;
 @synthesize allowsNextDrawableTimeout = _allowsNextDrawableTimeout;
+
+// Gives the surface provider the layer's own color state. The provider may apply it to a
+// window-system surface of its own; the values are snapshots, so the provider must not retain
+// the color space or metadata from the description.
+- (void) notifySurfaceColorChanged
+{
+	id<CAMetalLayerSurfaceProvider> provider = nil;
+	CAEDRMetadata *metadata = nil;
+	CGColorSpaceRef space = NULL;
+	BOOL wantsEDR = NO;
+
+	@synchronized(self) {
+		provider = [_surfaceProvider retain];
+		metadata = [_EDRMetadata retain];
+		space = _colorspace != NULL ? CGColorSpaceRetain(_colorspace) : NULL;
+		wantsEDR = _wantsExtendedDynamicRangeContent;
+	}
+	if (![provider respondsToSelector: @selector(updateMetalSurfaceColorForLayer:description:)]) {
+		[provider release];
+		[metadata release];
+		if (space != NULL) CGColorSpaceRelease(space);
+		return;
+	}
+
+	CAEDRSurfaceColorDescription description = {};
+	description.colorSpace = space;
+	description.wantsExtendedDynamicRange = wantsEDR;
+	if (metadata != nil) {
+		CAEDRHDRDescription hdr = {};
+		[metadata copyHDRDescription: &hdr];
+		description.hasHDRMetadata = YES;
+		description.transfer = hdr.transfer;
+		description.hasMasteringDisplayPrimaries = hdr.hasMasteringDisplayPrimaries;
+		memcpy(description.masteringDisplayPrimaries, hdr.masteringDisplayPrimaries,
+		       sizeof description.masteringDisplayPrimaries);
+		description.hasMasteringLuminance = hdr.hasMasteringLuminance;
+		description.masteringMinLuminance = hdr.masteringMinLuminance;
+		description.masteringMaxLuminance = hdr.masteringMaxLuminance;
+		description.hasMaxCLL = hdr.hasMaxCLL;
+		description.maxCLL = hdr.maxCLL;
+		description.hasMaxFALL = hdr.hasMaxFALL;
+		description.maxFALL = hdr.maxFALL;
+		description.opticalOutputScale = hdr.opticalOutputScale;
+	}
+	[provider updateMetalSurfaceColorForLayer: self description: &description];
+
+	[provider release];
+	[metadata release];
+	if (space != NULL) CGColorSpaceRelease(space);
+}
 @synthesize developerHUDProperties = _developerHUDProperties;
 
 // TODO: use CGL here instead of direct OpenGL calls
@@ -449,11 +501,42 @@ static BOOL forcesOpenGLPresentation(void) {
 
 - (void)setColorspace: (CGColorSpaceRef)colorspace
 {
-	CGColorSpaceRef old = _colorspace;
-	_colorspace = CGColorSpaceRetain(colorspace);
-	if (old) {
-		CGColorSpaceRelease(old);
+	BOOL changed = NO;
+	@synchronized(self) {
+		BOOL equal = _colorspace == colorspace ||
+		             (_colorspace != NULL && colorspace != NULL && CFEqual(_colorspace, colorspace));
+		if (!equal) {
+			CGColorSpaceRef old = _colorspace;
+			_colorspace = CGColorSpaceRetain(colorspace);
+			if (old) CGColorSpaceRelease(old);
+			changed = YES;
+		}
 	}
+	if (changed) [self notifySurfaceColorChanged];
+}
+
+- (void)setWantsExtendedDynamicRangeContent: (BOOL)wants
+{
+	BOOL changed = NO;
+	@synchronized(self) {
+		if (_wantsExtendedDynamicRangeContent != wants) {
+			_wantsExtendedDynamicRangeContent = wants;
+			changed = YES;
+		}
+	}
+	if (changed) [self notifySurfaceColorChanged];
+}
+
+- (void)setEDRMetadata: (CAEDRMetadata *)metadata
+{
+	CAEDRMetadata *old;
+	@synchronized(self) {
+		old = [_EDRMetadata retain];
+		_EDRMetadata = [metadata retain];
+	}
+	BOOL changed = old != metadata && ![old isEqual: metadata];
+	[old release];
+	if (changed) [self notifySurfaceColorChanged];
 }
 
 - (BOOL)framebufferOnly
@@ -799,6 +882,10 @@ static BOOL forcesOpenGLPresentation(void) {
 		_surfaceFrame = frame;
 		_nativeSurface = surface;
 	}
+
+	// A newly created surface starts with the layer's current color state; later
+	// changes arrive through the property setters.
+	[self notifySurfaceColorChanged];
 
 	return YES;
 }

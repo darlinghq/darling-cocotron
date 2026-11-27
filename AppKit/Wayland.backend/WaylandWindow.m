@@ -89,105 +89,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     WaylandMarshal(proxy, opcode, NULL, flags, args);
 }
 
-static NSNumber *WaylandColorInfoNumber(NSDictionary *info, CFStringRef key) {
-    id value = info != nil ? [info objectForKey: (id) key] : nil;
-    return [value isKindOfClass: [NSNumber class]] ? value : nil;
-}
-
-// The CIE 1931 xy primaries of the named spaces, in the 1/1000000 units the color protocol uses.
-static const int32_t *ColorSpaceMasteringPrimaries(CGColorSpaceRef space) {
-    static const int32_t sRGB[8] = {640000, 330000, 300000, 600000, 150000, 60000, 312700, 329000};
-    static const int32_t displayP3[8] = {680000, 320000, 265000, 690000, 150000, 60000, 312700, 329000};
-    static const int32_t dciP3[8] = {680000, 320000, 265000, 690000, 150000, 60000, 314000, 351000};
-    static const int32_t bt2020[8] = {708000, 292000, 170000, 797000, 131000, 46000, 312700, 329000};
-    static const int32_t adobeRGB[8] = {640000, 330000, 210000, 710000, 150000, 60000, 312700, 329000};
-
-    if (space == NULL)
-        return NULL;
-    CFStringRef name = CGColorSpaceGetName(space);
-    if (name == NULL)
-        return NULL;
-    if (CFEqual(name, kCGColorSpaceSRGB) || CFEqual(name, kCGColorSpaceExtendedSRGB) ||
-        CFEqual(name, kCGColorSpaceLinearSRGB) || CFEqual(name, kCGColorSpaceExtendedLinearSRGB) ||
-        CFEqual(name, kCGColorSpaceGenericRGB) || CFEqual(name, kCGColorSpaceGenericGray))
-        return sRGB;
-    if (CFEqual(name, kCGColorSpaceDisplayP3) || CFEqual(name, kCGColorSpaceExtendedDisplayP3) ||
-        CFEqual(name, kCGColorSpaceLinearDisplayP3) || CFEqual(name, kCGColorSpaceExtendedLinearDisplayP3))
-        return displayP3;
-    if (CFEqual(name, kCGColorSpaceDCIP3))
-        return dciP3;
-    if (CFEqual(name, kCGColorSpaceITUR_2020) || CFEqual(name, kCGColorSpaceExtendedITUR_2020) ||
-        CFEqual(name, kCGColorSpaceLinearITUR_2020) || CFEqual(name, kCGColorSpaceExtendedLinearITUR_2020) ||
-        CFEqual(name, kCGColorSpaceITUR_2100_PQ) || CFEqual(name, kCGColorSpaceITUR_2100_HLG))
-        return bt2020;
-    if (CFEqual(name, kCGColorSpaceAdobeRGB1998))
-        return adobeRGB;
-    return NULL;
-}
-
-// Static HDR metadata for the surface's content. The compositor's preferred description supplies
-// the primaries, luminances and CLL/FALL values when it has them; otherwise the content color space
-// supplies the mastering primaries. Values neither source reports are left unset so the compositor's
-// defaults apply.
-static WaylandColorHDRMetadata ColorSpaceHDRMetadata(NSDictionary *info, CGColorSpaceRef space) {
-    WaylandColorHDRMetadata metadata = {0};
-    const int32_t *xy = ColorSpaceMasteringPrimaries(space);
-
-    NSArray *reported = [info objectForKey: (id) kCGSDisplayColorPrimariesChromaticityKey];
-    BOOL reportedPrimariesValid = NO;
-    if ([reported isKindOfClass: [NSArray class]] && [reported count] == 8) {
-        reportedPrimariesValid = YES;
-        for (size_t i = 0; i < 8; i++) {
-            id value = [reported objectAtIndex: i];
-            if (![value isKindOfClass: [NSNumber class]]) {
-                reportedPrimariesValid = NO;
-                break;
-            }
-            metadata.masteringDisplayPrimaries[i] = [value intValue];
-        }
-    }
-    if (reportedPrimariesValid) {
-        metadata.hasMasteringDisplayPrimaries = YES;
-    } else if (xy != NULL) {
-        memcpy(metadata.masteringDisplayPrimaries, xy, sizeof(metadata.masteringDisplayPrimaries));
-        metadata.hasMasteringDisplayPrimaries = YES;
-    }
-
-    NSNumber *minimum = WaylandColorInfoNumber(info, kCGSDisplayColorMinLuminanceKey);
-    NSNumber *primaryMaximum = WaylandColorInfoNumber(info, kCGSDisplayColorMaxLuminanceKey);
-    NSNumber *reference = WaylandColorInfoNumber(info, kCGSDisplayColorReferenceLuminanceKey);
-    if (minimum != nil && primaryMaximum != nil &&
-        [primaryMaximum unsignedIntValue] > [minimum unsignedIntValue]) {
-        metadata.primaryVolumeMinLuminance = [minimum unsignedIntValue];
-        metadata.primaryVolumeMaxLuminance = [primaryMaximum unsignedIntValue];
-        metadata.primaryVolumeReferenceLuminance = reference != nil
-                ? [reference unsignedIntValue] : [primaryMaximum unsignedIntValue];
-        if (metadata.primaryVolumeReferenceLuminance > [minimum unsignedIntValue])
-            metadata.hasPrimaryVolumeLuminance = YES;
-    }
-
-    NSNumber *maximum = WaylandColorInfoNumber(info, kCGSDisplayColorTargetMaxLuminanceKey);
-    if (maximum == nil)
-        maximum = primaryMaximum;
-    if (minimum != nil && maximum != nil && [maximum unsignedIntValue] > [minimum unsignedIntValue]) {
-        metadata.masteringMinLuminance = [minimum unsignedIntValue];
-        metadata.masteringMaxLuminance = [maximum unsignedIntValue];
-        metadata.hasMasteringLuminance = YES;
-    }
-
-    NSNumber *cll = WaylandColorInfoNumber(info, kCGSDisplayColorTargetMaxCLLKey);
-    if (cll != nil) {
-        metadata.maxCLL = [cll unsignedIntValue];
-        metadata.hasMaxCLL = YES;
-    }
-    NSNumber *fall = WaylandColorInfoNumber(info, kCGSDisplayColorTargetMaxFALLKey);
-    if (fall != nil) {
-        metadata.maxFALL = [fall unsignedIntValue];
-        metadata.hasMaxFALL = YES;
-    }
-    return metadata;
-}
-
 - (instancetype) initWithDelegate: (NSWindow *) delegate {
     if ((self = [super init]) == nil)
         return nil;
@@ -336,7 +237,7 @@ static WaylandColorHDRMetadata ColorSpaceHDRMetadata(NSDictionary *info, CGColor
         return;
     NSDictionary *preferred = _surfaceFeedback != NULL
                               ? [color preferredInfoForFeedback: _surfaceFeedback] : nil;
-    WaylandColorHDRMetadata metadata = ColorSpaceHDRMetadata(preferred, space);
+    WaylandColorHDRMetadata metadata = WaylandHDRMetadataFromColorInfo(preferred, space);
     [color setColorSpace: space
          renderingIntent: WP_COLOR_RENDER_INTENT_PERCEPTUAL
               hdrMetadata: &metadata
@@ -355,7 +256,19 @@ static WaylandColorHDRMetadata ColorSpaceHDRMetadata(NSDictionary *info, CGColor
     [_preferredColorSpace release];
     _preferredColorSpace = [preferred retain];
     [self updateSurfaceColor];
+    // The subwindows use the parent's preference when their own feedback has none.
+    for (NSValue *value in _subwindows)
+        [(WaylandSubWindow *) [value pointerValue] colorManagerAvailable];
     [_display flush];
+}
+
+- (BOOL) preferredSubwindowColorInfoChangedForFeedback: (struct wl_proxy *) feedback {
+    for (NSValue *value in _subwindows) {
+        WaylandSubWindow *child = (WaylandSubWindow *) [value pointerValue];
+        if ([child preferredColorInfoChangedForFeedback: feedback])
+            return YES;
+    }
+    return NO;
 }
 
 - (void) updateSurfaceColorIfNeeded {
@@ -377,6 +290,8 @@ static WaylandColorHDRMetadata ColorSpaceHDRMetadata(NSDictionary *info, CGColor
         _surfaceFeedback = [color newSurfaceFeedbackForSurface: _surface];
     }
     [self updateSurfaceColorIfNeeded];
+    for (NSValue *value in _subwindows)
+        [(WaylandSubWindow *) [value pointerValue] colorManagerAvailable];
 }
 
 - (void) renderGlobalsAvailable {
@@ -1714,8 +1629,11 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
     uint32_t drmFormat = 0;
     uint64_t modifier = 0;
     BOOL needsAlpha = format == WP_SHM_FORMAT_ARGB8888;
+    // Onyx2D produces premultiplied 8-bit ARGB pixels. Request a wide format only when the
+    // producer supplies half-float pixels; a plain window buffer must stay 8-bit.
     if ([render preferredFormat: &drmFormat modifier: &modifier forSurface: _surface
-                      needsAlpha: needsAlpha]) {
+                      needsAlpha: needsAlpha
+                     pixelFormat: WaylandRenderPixelFormat8Bit]) {
         size_t pageSize = (size_t) getpagesize();
         size_t allocSize = (size_t) ((size + pageSize - 1) / pageSize) * pageSize;
         if (allocSize >= size) {

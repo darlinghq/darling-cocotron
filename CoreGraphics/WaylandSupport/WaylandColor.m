@@ -25,6 +25,7 @@
 #import <Foundation/NSData.h>
 
 #include <errno.h>
+#include <string.h>
 #include <unistd.h>
 
 static NSValue *Key(struct wl_proxy *proxy) {
@@ -173,6 +174,101 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
         return YES;
     }
     return NO;
+}
+
+static NSNumber *ColorInfoNumber(NSDictionary *info, CFStringRef key) {
+    id value = info != nil ? [info objectForKey: (id) key] : nil;
+    return [value isKindOfClass: [NSNumber class]] ? value : nil;
+}
+
+// CIE 1931 xy chromaticities of the named spaces, in the 1/1000000 units the protocol uses.
+static const int32_t *ColorSpaceMasteringPrimaries(CGColorSpaceRef space) {
+    static const int32_t sRGB[8] = {640000, 330000, 300000, 600000, 150000, 60000, 312700, 329000};
+    static const int32_t displayP3[8] = {680000, 320000, 265000, 690000, 150000, 60000, 312700, 329000};
+    static const int32_t dciP3[8] = {680000, 320000, 265000, 690000, 150000, 60000, 314000, 351000};
+    static const int32_t bt2020[8] = {708000, 292000, 170000, 797000, 131000, 46000, 312700, 329000};
+    static const int32_t adobeRGB[8] = {640000, 330000, 210000, 710000, 150000, 60000, 312700, 329000};
+
+    if (space == NULL)
+        return NULL;
+    CFStringRef name = CGColorSpaceGetName(space);
+    if (name == NULL)
+        return NULL;
+    if (CFEqual(name, kCGColorSpaceSRGB) || CFEqual(name, kCGColorSpaceExtendedSRGB) ||
+        CFEqual(name, kCGColorSpaceLinearSRGB) || CFEqual(name, kCGColorSpaceExtendedLinearSRGB) ||
+        CFEqual(name, kCGColorSpaceGenericRGB) || CFEqual(name, kCGColorSpaceGenericGray))
+        return sRGB;
+    if (CFEqual(name, kCGColorSpaceDisplayP3) || CFEqual(name, kCGColorSpaceExtendedDisplayP3) ||
+        CFEqual(name, kCGColorSpaceLinearDisplayP3) || CFEqual(name, kCGColorSpaceExtendedLinearDisplayP3))
+        return displayP3;
+    if (CFEqual(name, kCGColorSpaceDCIP3))
+        return dciP3;
+    if (CFEqual(name, kCGColorSpaceITUR_2020) || CFEqual(name, kCGColorSpaceExtendedITUR_2020) ||
+        CFEqual(name, kCGColorSpaceLinearITUR_2020) || CFEqual(name, kCGColorSpaceExtendedLinearITUR_2020) ||
+        CFEqual(name, kCGColorSpaceITUR_2100_PQ) || CFEqual(name, kCGColorSpaceITUR_2100_HLG))
+        return bt2020;
+    if (CFEqual(name, kCGColorSpaceAdobeRGB1998))
+        return adobeRGB;
+    return NULL;
+}
+
+WaylandColorHDRMetadata WaylandHDRMetadataFromColorInfo(NSDictionary *info, CGColorSpaceRef space) {
+    WaylandColorHDRMetadata metadata = {0};
+    const int32_t *xy = ColorSpaceMasteringPrimaries(space);
+
+    NSArray *reported = [info objectForKey: (id) kCGSDisplayColorPrimariesChromaticityKey];
+    BOOL reportedPrimariesValid = NO;
+    if ([reported isKindOfClass: [NSArray class]] && [reported count] == 8) {
+        reportedPrimariesValid = YES;
+        for (size_t i = 0; i < 8; i++) {
+            id value = [reported objectAtIndex: i];
+            if (![value isKindOfClass: [NSNumber class]]) {
+                reportedPrimariesValid = NO;
+                break;
+            }
+            metadata.masteringDisplayPrimaries[i] = [value intValue];
+        }
+    }
+    if (reportedPrimariesValid) {
+        metadata.hasMasteringDisplayPrimaries = YES;
+    } else if (xy != NULL) {
+        memcpy(metadata.masteringDisplayPrimaries, xy, sizeof(metadata.masteringDisplayPrimaries));
+        metadata.hasMasteringDisplayPrimaries = YES;
+    }
+
+    NSNumber *minimum = ColorInfoNumber(info, kCGSDisplayColorMinLuminanceKey);
+    NSNumber *primaryMaximum = ColorInfoNumber(info, kCGSDisplayColorMaxLuminanceKey);
+    NSNumber *reference = ColorInfoNumber(info, kCGSDisplayColorReferenceLuminanceKey);
+    if (minimum != nil && primaryMaximum != nil &&
+        [primaryMaximum unsignedIntValue] > [minimum unsignedIntValue]) {
+        metadata.primaryVolumeMinLuminance = [minimum unsignedIntValue];
+        metadata.primaryVolumeMaxLuminance = [primaryMaximum unsignedIntValue];
+        metadata.primaryVolumeReferenceLuminance = reference != nil
+                ? [reference unsignedIntValue] : [primaryMaximum unsignedIntValue];
+        if (metadata.primaryVolumeReferenceLuminance > [minimum unsignedIntValue])
+            metadata.hasPrimaryVolumeLuminance = YES;
+    }
+
+    NSNumber *maximum = ColorInfoNumber(info, kCGSDisplayColorTargetMaxLuminanceKey);
+    if (maximum == nil)
+        maximum = primaryMaximum;
+    if (minimum != nil && maximum != nil && [maximum unsignedIntValue] > [minimum unsignedIntValue]) {
+        metadata.masteringMinLuminance = [minimum unsignedIntValue];
+        metadata.masteringMaxLuminance = [maximum unsignedIntValue];
+        metadata.hasMasteringLuminance = YES;
+    }
+
+    NSNumber *cll = ColorInfoNumber(info, kCGSDisplayColorTargetMaxCLLKey);
+    if (cll != nil) {
+        metadata.maxCLL = [cll unsignedIntValue];
+        metadata.hasMaxCLL = YES;
+    }
+    NSNumber *fall = ColorInfoNumber(info, kCGSDisplayColorTargetMaxFALLKey);
+    if (fall != nil) {
+        metadata.maxFALL = [fall unsignedIntValue];
+        metadata.hasMaxFALL = YES;
+    }
+    return metadata;
 }
 
 @implementation WaylandColorManager
@@ -407,6 +503,19 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
 
 - (BOOL) hasColorGlobals {
     return _colorManager != NULL || _representationManager != NULL;
+}
+
+- (BOOL) hasExtendedDynamicRange {
+    for (NSDictionary *info in [_outputInfos allValues]) {
+        NSNumber *reference = ColorInfoNumber(info, kCGSDisplayColorReferenceLuminanceKey);
+        NSNumber *maximum = ColorInfoNumber(info, kCGSDisplayColorTargetMaxLuminanceKey);
+        if (maximum == nil)
+            maximum = ColorInfoNumber(info, kCGSDisplayColorMaxLuminanceKey);
+        if (reference != nil && maximum != nil && [reference unsignedIntValue] > 0 &&
+            [maximum unsignedIntValue] > [reference unsignedIntValue])
+            return YES;
+    }
+    return NO;
 }
 
 - (NSDictionary *) infoForOutput: (struct wl_proxy *) output {

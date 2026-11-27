@@ -88,9 +88,48 @@ static NSValue *SurfaceKey(struct wl_proxy *surface) {
     return Key(surface);
 }
 
-// A format table entry, packed as the protocol defines it: 32-bit DRM format, 64-bit modifier.
+// The caller declares the layout of the IOSurface it will attach. Only the formats whose byte
+// order matches that layout are offered; an advertised format in the other order would display
+// its channels swapped.
+static BOOL WaylandRenderFormatUsable(uint32_t candidate, BOOL needsAlpha,
+                                      WaylandRenderPixelFormat pixelFormat) {
+    if (pixelFormat == WaylandRenderPixelFormatFloat16) {
+        if (needsAlpha)
+            return candidate == WP_DRM_FORMAT_ARGB16161616F;
+        return candidate == WP_DRM_FORMAT_XRGB16161616F ||
+               candidate == WP_DRM_FORMAT_ARGB16161616F;
+    }
+    if (needsAlpha)
+        return candidate == WP_DRM_FORMAT_ARGB8888;
+    return candidate == WP_DRM_FORMAT_XRGB8888 || candidate == WP_DRM_FORMAT_ARGB8888;
+}
+
+static size_t WaylandRenderCandidates(BOOL needsAlpha, WaylandRenderPixelFormat pixelFormat,
+                                      uint32_t candidates[2]) {
+    size_t count = 0;
+    if (pixelFormat == WaylandRenderPixelFormatFloat16) {
+        if (needsAlpha)
+            candidates[count++] = WP_DRM_FORMAT_ARGB16161616F;
+        else {
+            candidates[count++] = WP_DRM_FORMAT_XRGB16161616F;
+            candidates[count++] = WP_DRM_FORMAT_ARGB16161616F;
+        }
+    } else {
+        if (needsAlpha)
+            candidates[count++] = WP_DRM_FORMAT_ARGB8888;
+        else {
+            candidates[count++] = WP_DRM_FORMAT_XRGB8888;
+            candidates[count++] = WP_DRM_FORMAT_ARGB8888;
+        }
+    }
+    return count;
+}
+
+// A format table entry, packed as the protocol defines it: 32-bit DRM format, 32 bits of
+// padding, then a 64-bit modifier. The padding is part of the 16-byte entry.
 typedef struct __attribute__((packed)) {
     uint32_t format;
+    uint32_t padding;
     uint64_t modifier;
 } WaylandRenderTableEntry;
 
@@ -533,18 +572,14 @@ static BOOL CreateTimeline(int *deviceFD, int *timelineFD, uint32_t *handle) {
 - (BOOL) preferredFormat: (uint32_t *) format modifier: (uint64_t *) modifier
               forSurface: (struct wl_proxy *) surface
               needsAlpha: (BOOL) needsAlpha
+             pixelFormat: (WaylandRenderPixelFormat) pixelFormat
 {
-    BOOL (^usable)(uint32_t) = ^BOOL(uint32_t candidate) {
-        if (needsAlpha)
-            return candidate == WP_DRM_FORMAT_ARGB8888;
-        return candidate == WP_DRM_FORMAT_XRGB8888 || candidate == WP_DRM_FORMAT_ARGB8888;
-    };
     WaylandRenderFeedback *feedback = [self completedFeedbackForSurface: surface];
     if (feedback != nil) {
         for (NSArray *tranche in feedback->_tranches) {
             for (NSNumber *index in tranche) {
                 WaylandRenderFormat pair = [feedback entryAtIndex: [index unsignedShortValue]];
-                if (usable(pair.format) &&
+                if (WaylandRenderFormatUsable(pair.format, needsAlpha, pixelFormat) &&
                     (pair.modifier == WP_DRM_FORMAT_MOD_LINEAR ||
                      pair.modifier == WP_DRM_FORMAT_MOD_INVALID)) {
                     *format = pair.format;
@@ -556,15 +591,9 @@ static BOOL CreateTimeline(int *deviceFD, int *timelineFD, uint32_t *handle) {
         return NO;
     }
     uint32_t candidates[2];
-    size_t count = 0;
-    if (needsAlpha)
-        candidates[count++] = WP_DRM_FORMAT_ARGB8888;
-    else {
-        candidates[count++] = WP_DRM_FORMAT_XRGB8888;
-        candidates[count++] = WP_DRM_FORMAT_ARGB8888;
-    }
+    size_t count = WaylandRenderCandidates(needsAlpha, pixelFormat, candidates);
     for (size_t i = 0; i < count; i++)
-        if (usable(candidates[i]) &&
+        if (WaylandRenderFormatUsable(candidates[i], needsAlpha, pixelFormat) &&
             [self supportsFormat: candidates[i] modifier: WP_DRM_FORMAT_MOD_LINEAR
                       forSurface: surface]) {
             *format = candidates[i];

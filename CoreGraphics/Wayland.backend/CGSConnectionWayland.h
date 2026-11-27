@@ -179,6 +179,7 @@ typedef enum {
 // The shared color manager, or nil when the compositor offers neither color protocol.
 - (WaylandColorManager *) colorManager;
 - (id) waylandColorManager;
+- (BOOL) extendedDynamicRangeAvailable;
 // The shared render-protocol manager, used by this connection's windows.
 - (WaylandRenderManager *) renderManager;
 // Tells the windows that a color global arrived after they were created.

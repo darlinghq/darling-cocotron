@@ -492,6 +492,10 @@ static const CGEventFlags kHotKeyModifierMask =
     return _color;
 }
 
+- (BOOL) extendedDynamicRangeAvailable {
+    return [[self colorManager] hasExtendedDynamicRange];
+}
+
 - (void) notifyWindowsColorManagerAvailable {
     // The windows of the framework above share this manager (see -waylandColorManager).
     id observer = [CGSConnection nativeObserver];
