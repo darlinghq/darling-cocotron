@@ -139,6 +139,25 @@ float CGImageCalculateContentHeadroom(CGImageRef image) {
     return CGImageGetContentHeadroom(image);
 }
 
+bool CGImageGetHeadroom(CGImageRef image, float *headroom) {
+    if (image == NULL) {
+        if (headroom != NULL)
+            *headroom = 0.0f;
+        return false;
+    }
+
+    float h = O2ImageGetContentHeadroom((O2ImageRef)image);
+    if (h > 0.0f) {
+        if (headroom != NULL)
+            *headroom = h;
+        return true;
+    }
+
+    if (headroom != NULL)
+        *headroom = 0.0f;
+    return false;
+}
+
 CGImageRef
 CGImageCreateWithJPEGDataProvider(CGDataProviderRef jpegProvider,
                                   const CGFloat *decode, bool interpolate,
