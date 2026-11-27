@@ -9,23 +9,11 @@
 // window through the process's own connection.
 #include <CoreGraphics/CoreGraphics.h>
 #include <CoreGraphics/CGSServerSPI.h>
+#include <CoreGraphics/CoreGraphicsPrivate.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
-typedef CFTypeRef RegionRef;
-extern CGError CGSNewRegionWithRect(const CGRect *rect, RegionRef *newRegion);
-extern void CGSRegionRelease(RegionRef region);
-extern CGError CGSNewWindow(CGSConnectionID cid, CFIndex flags, float x, float y, const RegionRef region,
-                            CGSWindowID *windowID);
-extern CGError CGSReleaseWindow(CGSConnectionID cid, CGSWindowID wid);
-extern OSStatus CGSOrderWindow(CGSConnectionID cid, CGSWindowID wid, int place, CGSWindowID relativeTo);
-extern CGError CGSAddSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID *sid);
-extern CGError CGSRemoveSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid);
-extern CGError CGSSetSurfaceBounds(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid, CGRect rect);
-extern CGError CGSOrderSurface(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid, int a, int b);
-extern void *_CGSNativeWindowForSurfaceID(CGSConnectionID cid, CGSWindowID wid, CGSSurfaceID sid);
-extern void *_CGSNativeDisplay(CGSConnectionID cid);
 
 #ifdef __LP64__
 // The part of XWindowAttributes up to the map state (Xlib.h, on a 64-bit system); the rest is padding
@@ -61,7 +49,7 @@ int main(void)
         return 0;
     }
     CGRect frame = CGRectMake(100, 120, 200, 150);
-    RegionRef region = NULL;
+    CGSRegionRef region = NULL;
     CGSWindowID wid = 0;
     CGSSurfaceID sid = 0;
     CGSNewRegionWithRect(&frame, &region);
