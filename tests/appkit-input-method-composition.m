@@ -8,9 +8,10 @@
 //
 // Part 1 uses only public API and also runs on macOS: a real NSTextView with marked text.
 // Part 2 (Darling's X11 backend) feeds the XIM preedit callbacks of the window's input context
-// the structures Xlib passes them and checks what a client sees. There is no input method on the
-// test host to produce those, so the callbacks are called directly; it prints SKIP for the part
-// that does not apply when the backend is not X11 or on macOS.
+// (CoreGraphics', behind the window system's input method interface, CGSInputMethod.h) the structures
+// Xlib passes them and checks what a client sees. There is no input method on the test host to
+// produce those (appkit-x11-input-method runs one), so the callbacks are called directly; it prints
+// SKIP for the part that does not apply when the backend is not X11 or on macOS.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 #include <stdio.h>
@@ -103,6 +104,13 @@ static void moveCaret(MirrorXIMCallback *cb, int position, int direction) {
     ((PreeditProc) cb[3].callback)(NULL, cb[3].client_data, &c);
 }
 
+// The value of an instance variable that holds an object (nil when the object or the variable does not exist).
+static id objectIvar(id object, const char *name) {
+    Ivar ivar = object != nil ? class_getInstanceVariable([object class], name) : NULL;
+
+    return ivar != NULL ? object_getIvar(object, ivar) : nil;
+}
+
 static void markedTextOfNSTextView(NSWindow *window) {
     NSTextView *view = [[NSTextView alloc] initWithFrame: NSMakeRect(0, 0, 300, 100)];
     [[window contentView] addSubview: view];
@@ -150,7 +158,9 @@ int main(void) {
         [window makeFirstResponder: client];
 
         id platformWindow = [window respondsToSelector: @selector(platformWindow)] ? [window performSelector: @selector(platformWindow)] : nil;
-        Ivar callbacksIvar = platformWindow ? class_getInstanceVariable([platformWindow class], "_preeditCallbacks") : NULL;
+        // The X11 window's CoreGraphics window holds the input context, which holds the callbacks.
+        id inputContext = objectIvar(objectIvar(platformWindow, "_cgsWindow"), "_inputContext");
+        Ivar callbacksIvar = inputContext != nil ? class_getInstanceVariable([inputContext class], "_callbacks") : NULL;
         if (platformWindow != nil && strcmp(class_getName([platformWindow class]), "X11Window") == 0 &&
             (callbacksIvar == NULL || ![NSTextInputContext respondsToSelector: @selector(inputContextForWindow:)])) {
             printf("FAIL: the X11 window has no preedit callbacks for the input method\n");
@@ -161,9 +171,9 @@ int main(void) {
             printf(failures ? "FAIL\n" : "PASS\n");
             return failures != 0;
         }
-        MirrorXIMCallback *cb = (MirrorXIMCallback *) ((char *) platformWindow + ivar_getOffset(callbacksIvar));
+        MirrorXIMCallback *cb = (MirrorXIMCallback *) ((char *) (__bridge void *) inputContext + ivar_getOffset(callbacksIvar));
         CHECK(cb[0].callback && cb[1].callback && cb[2].callback && cb[3].callback);
-        CHECK(cb[2].client_data == (__bridge void *) platformWindow);
+        CHECK(cb[2].client_data == (__bridge void *) inputContext);
 
         // The preedit start callback allows a composition of any length.
         CHECK(((StartProc) cb[0].callback)(NULL, cb[0].client_data, NULL) == -1);
