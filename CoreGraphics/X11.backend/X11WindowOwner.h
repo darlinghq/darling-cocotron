@@ -138,4 +138,36 @@ static inline pid_t X11WindowOwnerPID(Display *display, Window window) {
     return pid;
 }
 
+/* Names the CoreGraphics window id of a window (the number its owner lists the window under), so that other Darling
+ * processes listing the windows of the display give the window the same number as its owner does. */
+static inline void X11WindowOwnerPublishWindowID(Display *display, Window window, unsigned windowID) {
+    long value = windowID;
+    XChangeProperty(display, window,
+                    XInternAtom(display, "_DARLING_CGS_WINDOW_ID", False),
+                    XA_CARDINAL, 32, PropModeReplace, (unsigned char *) &value,
+                    1);
+}
+
+/* The CoreGraphics window id a Darling process published for a window, or 0. */
+static inline unsigned X11WindowOwnerWindowID(Display *display, Window window) {
+    Atom idAtom = XInternAtom(display, "_DARLING_CGS_WINDOW_ID", True);
+    if (idAtom == None)
+        return 0;
+
+    Atom type;
+    int format;
+    unsigned long count, remaining;
+    unsigned char *data = NULL;
+    unsigned result = 0;
+
+    if (XGetWindowProperty(display, window, idAtom, 0, 1, False, XA_CARDINAL,
+                           &type, &format, &count, &remaining,
+                           &data) == Success &&
+        data != NULL && type == XA_CARDINAL && format == 32 && count == 1)
+        result = (unsigned) *(long *) data;
+    if (data != NULL)
+        XFree(data);
+    return result;
+}
+
 #endif

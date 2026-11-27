@@ -581,10 +581,11 @@ static double windowOpacity(Display* display, Window window)
 		CFDictionaryRef boundsDictionary = CGRectCreateDictionaryRepresentation(bounds);
 		BOOL own = owner == self_pid;
 
-		// A toplevel window of the UI layer is listed under its CGS window id, which is the number the UI layer
-		// gives the window.
+		// A window of a Darling process is listed under its CGS window id, which is the number its owner gives the
+		// window (the UI layer's window number too): the owner published it on the window. A window that does not
+		// say (one of the UI layer's that is not a CGS window, or of another program) has the id of its X window.
 		CGSWindowX11* toplevel = own ? [self _cgsWindowForNativeWindow: client] : nil;
-		NSInteger number = [toplevel isToplevel] ? (NSInteger) toplevel.windowId : 0;
+		NSInteger number = toplevel != nil ? (NSInteger) toplevel.windowId : (NSInteger) X11WindowOwnerWindowID(_display, client);
 		if (number == 0 && own)
 			number = [CGWindow windowNumberForPlatformWindowID: client];
 		if (number == 0)
@@ -2174,7 +2175,7 @@ static BOOL windowBelongsToProcess(Display* display, Window window, int depth)
 
 -(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes
 {
-	CGSWindowID windowID = _nextWindowId++;
+	CGSWindowID windowID = [self _allocateWindowID];
 	CGSWindowX11* window = [[CGSWindowX11 alloc] initToplevelWithAttributes: attributes
 		connection: self
 		windowID: windowID];
@@ -2197,7 +2198,7 @@ static BOOL windowBelongsToProcess(Display* display, Window window, int depth)
 
 -(CGSWindow*) newWindow:(CGSRegionRef)region
 {
-	CGSWindowID windowID = _nextWindowId++;
+	CGSWindowID windowID = [self _allocateWindowID];
 	CGSWindowX11* window = [[CGSWindowX11 alloc] initWithRegion: region
 		connection: self
 		windowID: windowID];
