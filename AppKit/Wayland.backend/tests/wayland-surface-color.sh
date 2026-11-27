@@ -26,6 +26,7 @@ done
 protocols=$(pkg-config --variable=pkgdatadir wayland-protocols)
 for pair in \
     "$protocols/stable/xdg-shell/xdg-shell.xml:xdg-shell" \
+    "$protocols/unstable/tablet/tablet-unstable-v2.xml:tablet-unstable-v2" \
     "$protocols_dir/color-management-v1.xml:color-management-v1" \
     "$protocols_dir/color-representation-v1.xml:color-representation-v1" \
     "$protocols_dir/xdg-session-management-v1.xml:xdg-session-management-v1" \
@@ -41,7 +42,7 @@ wayland-scanner client-header "$protocols_dir/color-management-v1.xml" \
     "$work/color-management-v1-client-protocol.h" || exit 2
 
 cc -Wall -Wno-incompatible-pointer-types -I"$work" -o "$work/server" \
-    "$here/wayland-color-session-server.c" "$work/xdg-shell.c" \
+    "$here/wayland-color-session-server.c" "$work/xdg-shell.c" "$work/tablet-unstable-v2.c" \
     "$work/color-management-v1.c" "$work/color-representation-v1.c" \
     "$work/xdg-session-management-v1.c" "$work/linux-dmabuf-v1.c" \
     "$work/linux-drm-syncobj-v1.c" "$work/fifo-v1.c" \
