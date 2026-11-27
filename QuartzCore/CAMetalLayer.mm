@@ -573,6 +573,20 @@ static BOOL forcesOpenGLPresentation(void) {
 	}
 }
 
+- (BOOL)wantsExtendedDynamicRangeContent
+{
+	@synchronized(self) {
+		return _wantsExtendedDynamicRangeContent;
+	}
+}
+
+- (CAEDRMetadata *)EDRMetadata
+{
+	@synchronized(self) {
+		return [[_EDRMetadata retain] autorelease];
+	}
+}
+
 - (void)setWantsExtendedDynamicRangeContent: (BOOL)wants
 {
 	BOOL changed = NO;
