@@ -1892,10 +1892,15 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
     NSImage *image = [self image];
 
     if (image == nil) {
+        // QUIRK: a help button without an image is 25 x 25 points regular, 18 x 19 small and 16 x 17 mini.
+        // Not documented. Evidence: black-box observation on macOS 10.14.4 (tier 2) of -cellSize of a
+        // NSBezelStyleHelpButton button at the three control sizes; 26.7.3 gives 24, 20 and 16 square and is
+        // not followed. Test: tests/appkit-dark-appearance-drawing.m
         if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSBezelStyleHelpButton) {
-            static const CGFloat helpSize[3] = {25, 22, 18};
-            size->width = helpSize[index];
-            size->height = helpSize[index];
+            static const CGFloat helpWidth[3] = {25, 18, 16};
+            static const CGFloat helpHeight[3] = {25, 19, 17};
+            size->width = helpWidth[index];
+            size->height = helpHeight[index];
             return;
         }
         static const CGFloat pushPadding[3] = {28, 16, 22};
