@@ -97,13 +97,20 @@ static void holdEnd(int cancelled) {
     drain();
 }
 
-@interface GestureView : NSView
+@interface GestureView : NSView {
+    // Declared and synthesized here: the i386 slice has the legacy Objective-C ABI, which has no automatic synthesis.
+    NSInteger _magnifications, _rotations;
+    CGFloat _totalMagnification;
+    float _totalRotation;
+}
 @property NSInteger magnifications, rotations;
 @property CGFloat totalMagnification;
 @property float totalRotation;
 @end
 
 @implementation GestureView
+@synthesize magnifications = _magnifications, rotations = _rotations;
+@synthesize totalMagnification = _totalMagnification, totalRotation = _totalRotation;
 - (void) magnifyWithEvent: (NSEvent *) event {
     self.magnifications++;
     self.totalMagnification += [event magnification];
