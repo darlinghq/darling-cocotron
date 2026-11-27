@@ -705,3 +705,19 @@ CTFontDescriptorRef CTFontDescriptorCreateLastResort(void)
     // where any font is installed.
     return createDescriptorForResolvedName(kCTFontCSSFamilySansSerif, 0);
 }
+
+CGFloat CTFontDescriptorGetWeight(CTFontDescriptorRef descriptor)
+{
+    if (descriptor == NULL)
+        return 0.0;
+    NSDictionary *attributes = [descriptorObject(descriptor) attributes];
+    NSDictionary *traits = [attributes objectForKey: (NSString *) kCTFontTraitsAttribute];
+    if ([traits isKindOfClass: [NSDictionary class]]) {
+        NSNumber *weight = [traits objectForKey: (NSString *) kCTFontWeightTrait];
+        if ([weight isKindOfClass: [NSNumber class]])
+            return (CGFloat) [weight doubleValue];
+    }
+    if (CTFontDescriptorGetSymbolicTraits(descriptor) & kCTFontTraitBold)
+        return kCTFontWeightBold;
+    return kCTFontWeightRegular;
+}

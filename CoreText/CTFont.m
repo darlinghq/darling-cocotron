@@ -1547,3 +1547,48 @@ CGSize CTFontShapeGlyphs(CTFontRef font, CGGlyph glyphs[], CGSize advances[],
     }
     return CGSizeZero;
 }
+
+CGFloat CTFontGetWeight(CTFontRef font)
+{
+    if (ktFont(font) == nil)
+        return 0.0;
+    CGFloat weight = 0.0, width = 0.0, slant = 0.0;
+    fontTraits(font, &weight, &width, &slant);
+    return weight;
+}
+
+CFCharacterSetRef CTFontCopySystemUIFontExcessiveLineHeightCharacterSet(void)
+{
+    return CFCharacterSetCreateWithCharactersInRange(kCFAllocatorDefault, CFRangeMake(0, 0));
+}
+
+CFStringRef CTFontCopyTallestTextStyleLanguageForString(CFStringRef string)
+{
+    (void) string;
+    return NULL;
+}
+
+bool CTFontGetLanguageAwareOutsets(CTFontRef font, CGFloat *left, CGFloat *top, CGFloat *right, CGFloat *bottom)
+{
+    (void) font;
+    if (left != NULL)
+        *left = 0.0;
+    if (top != NULL)
+        *top = 0.0;
+    if (right != NULL)
+        *right = 0.0;
+    if (bottom != NULL)
+        *bottom = 0.0;
+    return false;
+}
+
+bool CTFontGetClippingMetrics(CTFontRef font, CGFloat *ascent, CGFloat *descent)
+{
+    if (ktFont(font) == nil)
+        return false;
+    if (ascent != NULL)
+        *ascent = CTFontGetAscent(font);
+    if (descent != NULL)
+        *descent = CTFontGetDescent(font);
+    return false;
+}

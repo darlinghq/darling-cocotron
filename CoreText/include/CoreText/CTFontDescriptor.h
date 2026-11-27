@@ -32,6 +32,30 @@ CORETEXT_EXPORT const CFStringRef kCTFontDownloadedAttribute;
 CORETEXT_EXPORT const CFStringRef kCTFontDescriptorLanguageAttribute;
 // CFNumber (the optical size in points) or the CFString "auto" or "none"
 CORETEXT_EXPORT const CFStringRef kCTFontOpticalSizeAttribute;
+CORETEXT_EXPORT const CFStringRef kCTFontLegibilityWeightAttribute;
+
+CORETEXT_EXPORT const CFStringRef kCTFontUIFontDesignCompact;
+CORETEXT_EXPORT const CFStringRef kCTFontUIFontDesignCompactRounded;
+CORETEXT_EXPORT const CFStringRef kCTFontUIFontDesignSoft;
+CORETEXT_EXPORT const CFStringRef kCTFontUIFontDesignCompactSoft;
+
+CORETEXT_EXPORT const CFStringRef kCTUIFontTextStyleCallout;
+CORETEXT_EXPORT const CFStringRef kCTUIFontTextStyleFootnote2;
+CORETEXT_EXPORT const CFStringRef kCTUIFontTextStyleCaption3;
+CORETEXT_EXPORT const CFStringRef kCTUIFontTextStyleExtraLargeTitle;
+CORETEXT_EXPORT const CFStringRef kCTUIFontTextStyleExtraLargeTitle2;
+
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryXS;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryS;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryM;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryXXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryXXXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityM;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityXXL;
+CORETEXT_EXPORT const CFStringRef kCTFontContentSizeCategoryAccessibilityXXXL;
 
 CF_IMPLICIT_BRIDGING_ENABLED
 

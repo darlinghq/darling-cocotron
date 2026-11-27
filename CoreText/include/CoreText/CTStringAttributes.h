@@ -17,3 +17,5 @@ CORETEXT_EXPORT const CFStringRef kCTStrokeWidthAttributeName;
 // CFBoolean: whether the text uses vertical glyph forms
 CORETEXT_EXPORT const CFStringRef kCTVerticalFormsAttributeName;
 CORETEXT_EXPORT const CFStringRef kCTLanguageAttributeName;
+CORETEXT_EXPORT const CFStringRef kCTFontLanguageAwareLineHeightRatioAttribute;
+CORETEXT_EXPORT const CFStringRef kCTTextScaleRatioAttributeName;

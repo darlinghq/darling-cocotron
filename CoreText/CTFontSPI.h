@@ -229,3 +229,13 @@ CORETEXT_EXPORT CGSize CTFontShapeGlyphs(CTFontRef font, CGGlyph glyphs[], CGSiz
                                          CGPoint origins[], CFIndex indexes[], const UniChar chars[],
                                          CFIndex count, CTFontShapeOptions options, CFStringRef language,
                                          void (^handler)(CFRange, CGGlyph **, CGSize **, CGPoint **, CFIndex **));
+
+CORETEXT_EXPORT CGFloat CTFontGetWeight(CTFontRef font);
+CORETEXT_EXPORT CFCharacterSetRef CTFontCopySystemUIFontExcessiveLineHeightCharacterSet(void);
+CORETEXT_EXPORT CFStringRef CTFontCopyTallestTextStyleLanguageForString(CFStringRef string);
+CORETEXT_EXPORT bool CTFontGetLanguageAwareOutsets(CTFontRef font, CGFloat *left, CGFloat *top, CGFloat *right, CGFloat *bottom);
+CORETEXT_EXPORT bool CTFontGetClippingMetrics(CTFontRef font, CGFloat *ascent, CGFloat *descent);
+
+CORETEXT_EXPORT CGFloat CTFontDescriptorGetWeight(CTFontDescriptorRef descriptor);
+
+CORETEXT_EXPORT uint8_t CTParagraphStyleGetCompositionLanguageForLanguage(CFStringRef language);
