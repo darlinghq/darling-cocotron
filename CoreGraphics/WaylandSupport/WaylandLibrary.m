@@ -23,6 +23,7 @@
 #import <Foundation/NSString.h>
 #include <elfcalls.h>
 #include <errno.h>
+#include <sys/mman.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -592,4 +593,34 @@ int WaylandCreateAnonymousFile(size_t size) {
         return -1;
     }
     return fd;
+}
+
+struct wl_proxy *WaylandCreateARGBBuffer(struct wl_proxy *shm, const void *pixels, size_t length,
+                                         int32_t width, int32_t height) {
+    if (shm == NULL || pixels == NULL || width < 1 || height < 1 || width > INT32_MAX / 4 ||
+        height > INT32_MAX / (width * 4) || length != (size_t) width * (size_t) height * 4)
+        return NULL;
+    int fd = WaylandCreateAnonymousFile(length);
+    if (fd < 0)
+        return NULL;
+    void *data = mmap(NULL, length, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (data == MAP_FAILED) {
+        close(fd);
+        return NULL;
+    }
+    memcpy(data, pixels, length);
+    // Immutable storage: the queued request owns a duplicate of fd and the compositor keeps its mapping. The
+    // pixels of a buffer in use are never rewritten.
+    munmap(data, length);
+    union wl_argument poolArgs[3] = {{.o = NULL}, {.h = fd}, {.i = (int32_t) length}};
+    struct wl_proxy *pool = WaylandMarshal(shm, WP_SHM_CREATE_POOL, &wl_shm_pool_interface, 0, poolArgs);
+    close(fd);
+    if (pool == NULL)
+        return NULL;
+    union wl_argument bufferArgs[6] = {{.o = NULL}, {.i = 0}, {.i = width}, {.i = height},
+                                       {.i = width * 4}, {.u = WP_SHM_FORMAT_ARGB8888}};
+    struct wl_proxy *buffer = WaylandMarshal(pool, WP_SHM_POOL_CREATE_BUFFER, &wl_buffer_interface, 0, bufferArgs);
+    union wl_argument none[1] = {{.o = NULL}};
+    WaylandMarshal(pool, WP_SHM_POOL_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, none);
+    return buffer;
 }
