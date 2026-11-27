@@ -27,6 +27,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <Foundation/NSKeyedArchiver.h>
 
+@interface NSView (NSClipViewInvalidRects)
+- (BOOL) _hasOnlyPartialInvalidRects;
+- (void) _clipInvalidRectsToRect: (NSRect) clipRect;
+@end
+
 @implementation NSClipView
 
 - (void) encodeWithCoder: (NSCoder *) coder {
@@ -439,10 +444,11 @@ static BOOL hasOverlappingSiblingAbove(NSView *view) {
         NSRect overlap = NSIntersectionRect(oldVisible, newVisible);
         BOOL didCopy = NO;
 
+        BOOL canReusePartial = ![self needsDisplay] || ([self isOpaque] && [self _hasOnlyPartialInvalidRects]);
         if (NS_EXTRA(NSClipView, self)->_copiesOnScroll &&
             _layer == nil &&
             !NSIsEmptyRect(overlap) &&
-            ![self needsDisplay] &&
+            canReusePartial &&
             dx == floor(dx) && dy == floor(dy) &&
             NSEqualSizes(oldBounds.size, _frame.size) &&
             ([self isOpaque] || ([[self documentView] isOpaque] && NSContainsRect([_docView frame], overlap))) &&
@@ -455,6 +461,8 @@ static BOOL hasOverlappingSiblingAbove(NSView *view) {
         [self setBoundsOrigin: point];
 
         if (didCopy) {
+            if ([self needsDisplay])
+                [self _clipInvalidRectsToRect: newVisible];
             if (point.y > oldBounds.origin.y) {
                 NSRect strip = NSMakeRect(newVisible.origin.x, NSMaxY(oldVisible),
                                           newVisible.size.width, point.y - oldBounds.origin.y);
