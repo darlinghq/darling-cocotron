@@ -150,13 +150,13 @@ static BOOL sameData(NSData *a, NSData *b) {
     return (NSUInteger) _transfer ^ [_displayInfo hash] ^ [_contentInfo hash];
 }
 
-// The display data is the 20-byte mastering display colour volume SEI payload
-// of SMPTE ST 2086, and the content data the 4-byte content light level
-// information payload of CTA-861.3. Both are big-endian. The SEI stores the
-// primaries in green, blue, red, white order and the maximum luminance in whole
-// nits; the presentation path wants red, green, blue, white and a scaled
-// minimum. Malformed or zero fields are left unset so the display's defaults
-// apply.
+// The display data is the 24-byte mastering display colour volume payload of SMPTE ST 2086, as carried
+// by the HEVC SEI message and CTA-861.3, and the content data the 4-byte content light level payload.
+// Both are big-endian. The payload holds the primaries in green, blue, red order, then the white
+// point, each as 16-bit x and y in units of 0.00002, then the maximum and minimum luminance as 32-bit
+// values in units of 0.0001 cd/m^2. The presentation path wants red, green, blue, white order, xy times
+// a million, the maximum in whole nits and the minimum in units of 0.0001 cd/m^2. Malformed or zero
+// fields are left unset so the display's defaults apply.
 - (void) copyHDRDescription: (CAEDRHDRDescription *) description {
     description->transfer = (CAEDRTransfer) _transfer;
     description->hasMasteringDisplayPrimaries = NO;
@@ -175,31 +175,36 @@ static BOOL sameData(NSData *a, NSData *b) {
         description->hasMasteringLuminance = YES;
     }
 
-    uint16_t values[10] = {0};
-    BOOL complete = YES;
-    for (NSUInteger i = 0; i < 10; i++) {
-        if (!readBigEndian16(_displayInfo, i * 2, &values[i])) {
-            complete = NO;
-            break;
-        }
-    }
+    uint16_t values[8] = {0};
+    uint32_t maxLuminance = 0, minLuminance = 0;
+    BOOL complete = [_displayInfo length] >= 24;
+    for (NSUInteger i = 0; complete && i < 8; i++)
+        complete = readBigEndian16(_displayInfo, i * 2, &values[i]);
+    uint16_t high, low;
+    if (complete && readBigEndian16(_displayInfo, 16, &high) && readBigEndian16(_displayInfo, 18, &low))
+        maxLuminance = ((uint32_t) high << 16) | low;
+    else
+        complete = NO;
+    if (complete && readBigEndian16(_displayInfo, 20, &high) && readBigEndian16(_displayInfo, 22, &low))
+        minLuminance = ((uint32_t) high << 16) | low;
+    else
+        complete = NO;
     if (complete) {
         BOOL valid = YES;
         for (NSUInteger i = 0; i < 8; i++) {
-            // The standard bounds x to 0.7400 and y to 0.8400, with four decimals.
-            if (values[i] == 0 || values[i] > (i % 2 == 0 ? 7400 : 8400)) {
+            // The standard bounds x to 0.7400 and y to 0.8400; the unit is 0.00002.
+            if (values[i] == 0 || values[i] > (i % 2 == 0 ? 37000 : 42000)) {
                 valid = NO;
                 break;
             }
         }
-        uint16_t maxLuminance = values[8], minLuminance = values[9];
-        if (valid && minLuminance > 0 && maxLuminance > minLuminance) {
+        if (valid && maxLuminance > minLuminance) {
             static const NSUInteger order[8] = {4, 5, 0, 1, 2, 3, 6, 7};
             for (NSUInteger i = 0; i < 8; i++)
-                // ST 2086 carries four decimals; the color protocol carries six.
-                description->masteringDisplayPrimaries[i] = (int32_t) values[order[i]] * 100;
+                // 0.00002 units to the color protocol's 0.000001.
+                description->masteringDisplayPrimaries[i] = (int32_t) values[order[i]] * 20;
             description->hasMasteringDisplayPrimaries = YES;
-            description->masteringMaxLuminance = maxLuminance;
+            description->masteringMaxLuminance = (maxLuminance + 5000) / 10000;
             description->masteringMinLuminance = minLuminance;
             description->hasMasteringLuminance = YES;
         }

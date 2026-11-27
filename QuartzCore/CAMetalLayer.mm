@@ -25,6 +25,7 @@
 #import <Foundation/NSRaise.h>
 #import <Metal/MTLDeviceInternal.h>
 #import <QuartzCore/CALayerContext.h>
+#import <CoreGraphics/CGColorSpace.h>
 #import <Metal/stubs.h>
 
 #import <Metal/MTLDeviceInternal.h>
@@ -335,6 +336,62 @@ static Indium::PixelFormat indiumPixelFormat(MTLPixelFormat pixelFormat) {
 	}
 };
 
+static IndiumKit::HdrTransferFunction hdrTransferFunctionForColorSpace(CGColorSpaceRef space) {
+	if (space == nullptr) {
+		return IndiumKit::HdrTransferFunction::None;
+	}
+	if (CGColorSpaceIsHLGBased(space)) {
+		return IndiumKit::HdrTransferFunction::HLG;
+	}
+	if (CGColorSpaceUsesITUR_2100TF(space)) {
+		return IndiumKit::HdrTransferFunction::PQ;
+	}
+	return IndiumKit::HdrTransferFunction::None;
+}
+
+// The swapchain takes chromaticities as CIE xy and luminances in nits; CAEDRMetadata hands them over in
+// the units of CAEDRHDRDescription (xy times a million, minimum luminance times ten thousand).
+static IndiumKit::HdrMetadata indiumHdrMetadata(CAEDRMetadata* edrMetadata, CGColorSpaceRef colorspace) {
+	IndiumKit::HdrMetadata metadata;
+
+	if (edrMetadata == nil) {
+		// An HDR colorspace without EDR metadata still describes the transfer function of the pixels;
+		// the unknown metadata values are left as zero, which Vulkan treats as unknown as well.
+		metadata.transfer = hdrTransferFunctionForColorSpace(colorspace);
+		return metadata;
+	}
+
+	CAEDRHDRDescription hdr = {};
+	[edrMetadata copyHDRDescription: &hdr];
+	if (hdr.transfer == CAEDRTransferHDR10) {
+		metadata.transfer = IndiumKit::HdrTransferFunction::PQ;
+	} else if (hdr.transfer == CAEDRTransferHLG) {
+		// Vulkan's HdrMetadataEXT has no ambient viewing environment fields; the transfer function
+		// carried by the swapchain's color space is what matters for HLG presentation.
+		metadata.transfer = IndiumKit::HdrTransferFunction::HLG;
+	} else {
+		metadata.transfer = hdrTransferFunctionForColorSpace(colorspace);
+	}
+	if (hdr.hasMasteringDisplayPrimaries) {
+		const int32_t* p = hdr.masteringDisplayPrimaries;
+		metadata.displayPrimaryRed = { p[0] / 1e6f, p[1] / 1e6f };
+		metadata.displayPrimaryGreen = { p[2] / 1e6f, p[3] / 1e6f };
+		metadata.displayPrimaryBlue = { p[4] / 1e6f, p[5] / 1e6f };
+		metadata.whitePoint = { p[6] / 1e6f, p[7] / 1e6f };
+	}
+	if (hdr.hasMasteringLuminance) {
+		metadata.maxLuminance = float(hdr.masteringMaxLuminance);
+		metadata.minLuminance = hdr.masteringMinLuminance / 10000.0f;
+	}
+	if (hdr.hasMaxCLL) {
+		metadata.maxContentLightLevel = float(hdr.maxCLL);
+	}
+	if (hdr.hasMaxFALL) {
+		metadata.maxFrameAverageLightLevel = float(hdr.maxFALL);
+	}
+	return metadata;
+}
+
 // CAMetalLayerForceOpenGL makes every Metal layer present through the layer context's OpenGL
 // rendering even where it could present through a swapchain on its own native window. The
 // application's own value wins; otherwise the user's org.darlinghq.QuartzCore domain decides, so
@@ -363,8 +420,6 @@ static BOOL forcesOpenGLPresentation(void) {
 
 @synthesize presentsWithTransaction = _presentsWithTransaction;
 @synthesize displaySyncEnabled = _displaySyncEnabled;
-@synthesize wantsExtendedDynamicRangeContent = _wantsExtendedDynamicRangeContent;
-@synthesize EDRMetadata = _EDRMetadata;
 @synthesize allowsNextDrawableTimeout = _allowsNextDrawableTimeout;
 
 // Gives the surface provider the layer's own color state. The provider may apply it to a
@@ -512,7 +567,10 @@ static BOOL forcesOpenGLPresentation(void) {
 			changed = YES;
 		}
 	}
-	if (changed) [self notifySurfaceColorChanged];
+	if (changed) {
+		[self notifySurfaceColorChanged];
+		[self recreateDrawables];
+	}
 }
 
 - (void)setWantsExtendedDynamicRangeContent: (BOOL)wants
@@ -524,7 +582,10 @@ static BOOL forcesOpenGLPresentation(void) {
 			changed = YES;
 		}
 	}
-	if (changed) [self notifySurfaceColorChanged];
+	if (changed) {
+		[self notifySurfaceColorChanged];
+		[self recreateDrawables];
+	}
 }
 
 - (void)setEDRMetadata: (CAEDRMetadata *)metadata
@@ -536,7 +597,10 @@ static BOOL forcesOpenGLPresentation(void) {
 	}
 	BOOL changed = old != metadata && ![old isEqual: metadata];
 	[old release];
-	if (changed) [self notifySurfaceColorChanged];
+	if (changed) {
+		[self notifySurfaceColorChanged];
+		[self recreateDrawables];
+	}
 }
 
 - (BOOL)framebufferOnly
@@ -782,6 +846,10 @@ static BOOL forcesOpenGLPresentation(void) {
 	                _drawableSize.width >= 1 && _drawableSize.height >= 1 &&
 	                [subwindow conformsToProtocol: @protocol(CAMetalLayerSurfaceProvider)];
 	Indium::PixelFormat pixelFormat = indiumPixelFormat(_pixelFormat);
+	IndiumKit::HdrMetadata hdrMetadata;
+	if (_wantsExtendedDynamicRangeContent) {
+		hdrMetadata = indiumHdrMetadata(_EDRMetadata, _colorspace);
+	}
 
 	if (possible && (pixelFormat == Indium::PixelFormat::Invalid || (subwindow == _refusedSubwindow && _device == _refusedDevice))) {
 		possible = NO;
@@ -854,6 +922,12 @@ static BOOL forcesOpenGLPresentation(void) {
 			}
 		}
 
+		// Set the transfer function before the format: a surface may only offer an HDR pixel format
+		// together with its HDR color space.
+		if (swapchain) {
+			swapchain->setHdrMetadata(hdrMetadata);
+		}
+
 		if (swapchain && !swapchain->setPixelFormat(pixelFormat)) {
 			swapchain.reset();
 		}
@@ -877,6 +951,8 @@ static BOOL forcesOpenGLPresentation(void) {
 	swapchain->setImageCount(_maximumDrawableCount);
 	swapchain->setFramebufferOnly(_framebufferOnly);
 	swapchain->setDisplaySyncEnabled(_displaySyncEnabled);
+	// Also covers a metadata-only change on a swapchain that was not recreated here.
+	swapchain->setHdrMetadata(hdrMetadata);
 
 	@synchronized(self) {
 		_surfaceFrame = frame;

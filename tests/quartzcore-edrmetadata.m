@@ -28,6 +28,19 @@ static NSData *BigEndian16(const uint16_t *values, NSUInteger count) {
     return data;
 }
 
+// The 24-byte ST 2086 payload: eight 16-bit coordinates (green, blue, red, white; units of 0.00002),
+// then the 32-bit maximum and minimum luminance in units of 0.0001 cd/m^2.
+static NSData *DisplayInfo(const uint16_t coordinates[8], uint32_t maxLuminance, uint32_t minLuminance) {
+    NSMutableData *data = [NSMutableData dataWithData: BigEndian16(coordinates, 8)];
+    uint8_t luminance[8] = {
+            (uint8_t) (maxLuminance >> 24), (uint8_t) (maxLuminance >> 16),
+            (uint8_t) (maxLuminance >> 8), (uint8_t) maxLuminance,
+            (uint8_t) (minLuminance >> 24), (uint8_t) (minLuminance >> 16),
+            (uint8_t) (minLuminance >> 8), (uint8_t) minLuminance};
+    [data appendBytes: luminance length: sizeof(luminance)];
+    return data;
+}
+
 static CAEDRHDRDescription Decode(CAEDRMetadata *metadata) {
     CAEDRHDRDescription description = {};
     [metadata copyHDRDescription: &description];
@@ -45,13 +58,13 @@ static void checkPrimaries(const CAEDRHDRDescription *description) {
 int main(void) {
     NSAutoreleasePool *pool = [NSAutoreleasePool new];
 
-    // BT.2020 primaries and D65 white, in the ST 2086 order: green, blue, red,
-    // white. ST 2086 carries four decimals (0.1700 is 1700); the Wayland color
-    // protocol carries six, so the decoded values are multiplied by 100.
-    static const uint16_t display[10] = {
-            1700, 7970, 1310, 460, 7080, 2920, 3127, 3290, 1000, 1};
+    // BT.2020 primaries and D65 white, in the ST 2086 order: green, blue, red, white. The unit is
+    // 0.00002 (0.1700 is 8500); the Wayland color protocol carries six decimals, so the decoded
+    // values are multiplied by 20. The luminances are 1000 cd/m^2 and 0.0001 cd/m^2.
+    static const uint16_t coordinates[8] = {8500, 39850, 6550, 2300, 35400, 14600, 15635, 16450};
+    NSData *displayData = DisplayInfo(coordinates, 10000000, 1);
     static const uint16_t content[2] = {1000, 400};
-    CAEDRMetadata *hdr10 = [CAEDRMetadata HDR10MetadataWithDisplayInfo: BigEndian16(display, 10)
+    CAEDRMetadata *hdr10 = [CAEDRMetadata HDR10MetadataWithDisplayInfo: displayData
                                                            contentInfo: BigEndian16(content, 2)
                                                     opticalOutputScale: 100.0f];
     CAEDRHDRDescription decoded = Decode(hdr10);
@@ -83,10 +96,10 @@ int main(void) {
 
     // Short or zero-valued payloads leave the corresponding fields unset so the
     // compositor's defaults apply.
-    static const uint16_t zeroDisplay[10] = {0};
+    static const uint16_t zeroDisplay[8] = {0};
     static const uint16_t zeroContent[2] = {0};
     CAEDRMetadata *empty = [CAEDRMetadata HDR10MetadataWithDisplayInfo:
-                                    BigEndian16(zeroDisplay, 10)
+                                    DisplayInfo(zeroDisplay, 0, 0)
                                                            contentInfo: BigEndian16(zeroContent, 2)
                                                     opticalOutputScale: 0.0f];
     decoded = Decode(empty);
@@ -94,7 +107,7 @@ int main(void) {
     CHECK(!decoded.hasMaxCLL && !decoded.hasMaxFALL);
     CHECK(decoded.opticalOutputScale == 0);
 
-    NSData *shortData = BigEndian16(display, 9);
+    NSData *shortData = [displayData subdataWithRange: NSMakeRange(0, 23)];
     CAEDRMetadata *shortMetadata = [CAEDRMetadata HDR10MetadataWithDisplayInfo: shortData
                                                                    contentInfo: nil
                                                             opticalOutputScale: 100.0f];
