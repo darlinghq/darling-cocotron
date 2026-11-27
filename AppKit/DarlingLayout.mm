@@ -379,16 +379,13 @@ private:
         generatedOwner = nil;
         for (NSLayoutConstraint *constraint in constraints) {
             if (![constraint isActive]) continue;
-            id first = [constraint firstItem], second = [constraint secondItem];
-            if (!seen.count(first) || (second && !seen.count(second)))
-                continue;
             double priority = [constraint priority];
             if (!std::isfinite(priority) || priority <= 0 || priority > NSLayoutPriorityRequired)
                 [NSException raise:NSInvalidArgumentException format:@"Invalid layout priority: %@", constraint];
             double strength = priority == NSLayoutPriorityRequired ? kiwi::strength::required : priority;
-            kiwi::Expression expression = attribute(first, [constraint firstAttribute]);
-            if (second)
-                expression = expression - attribute(second, [constraint secondAttribute]) * [constraint multiplier];
+            kiwi::Expression expression = attribute([constraint firstItem], [constraint firstAttribute]);
+            if ([constraint secondItem])
+                expression = expression - attribute([constraint secondItem], [constraint secondAttribute]) * [constraint multiplier];
             expression = expression - [constraint constant];
             switch ([constraint relation]) {
             case NSLayoutRelationEqual: add((expression == 0.0) | strength, constraint); break;
