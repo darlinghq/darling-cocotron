@@ -175,6 +175,12 @@ CA_EXPORT CAToneMapMode const CAToneMapModeIfSupported;
         BOOL _autoreverses;
         NSString *_fillMode;
         BOOL _contentsOpaque;
+        NSString *_contentsSwizzle;
+        NSString *_contentsScaling;
+        CGColorRef _contentsMultiplyColor;
+        BOOL _layerWantsExtendedDynamicRangeContent;
+        CGFloat _contentsMaximumDesiredEDR;
+        NSMutableArray *_presentationModifiers;
     NS_EXTRA_IVARS_END(CALayer)
 }
 

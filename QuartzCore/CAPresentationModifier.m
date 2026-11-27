@@ -19,6 +19,11 @@
 
 #import "CAPresentationModifier.h"
 
+@interface CAPresentationModifierGroup (Internal)
+- (void) _incrementCount;
+- (void) _decrementCount;
+@end
+
 @implementation CAPresentationModifierGroup
 
 + (instancetype) groupWithCapacity: (NSUInteger) capacity {
@@ -27,13 +32,38 @@
 
 - (instancetype) initWithCapacity: (NSUInteger) capacity {
     self = [super init];
-    if (self != nil)
+    if (self != nil) {
         _capacity = capacity;
+        // QUIRK: a new group updates asynchronously. Not documented (SPI). Evidence: black-box observation on
+        // macOS 26.7.3 (tier 2). Test: tests/quartzcore-swiftui-layer-spis.m
+        _updatesAsynchronously = YES;
+    }
     return self;
+}
+
+- (NSUInteger) count {
+    return _count;
 }
 
 - (NSUInteger) capacity {
     return _capacity;
+}
+
+- (BOOL) updatesAsynchronously {
+    return _updatesAsynchronously;
+}
+
+- (void) setUpdatesAsynchronously: (BOOL) updatesAsynchronously {
+    _updatesAsynchronously = updatesAsynchronously;
+}
+
+- (void) _incrementCount {
+    _count++;
+}
+
+- (void) _decrementCount {
+    if (_count > 0)
+        _count--;
 }
 
 // No layer consumes modifiers yet (see the header), so there is nothing to
@@ -41,7 +71,19 @@
 - (void) flush {
 }
 
+- (void) flushWithTargetTime: (double) targetTime {
+}
+
+- (void) flushLocally {
+}
+
+- (void) flushLocallyWithTargetTime: (double) targetTime {
+}
+
 - (void) flushWithTransaction {
+}
+
+- (void) flushWithTransactionAndTargetTime: (double) targetTime {
 }
 
 @end
@@ -51,14 +93,44 @@
 - (instancetype) initWithKeyPath: (NSString *) keyPath
                     initialValue: (id) value
                         additive: (BOOL) additive
+{
+    return [self initWithKeyPath: keyPath
+                    initialValue: value
+                 initialVelocity: nil
+                        additive: additive
+  preferredFrameRateRangeMaximum: 0
+                           group: nil];
+}
+
+- (instancetype) initWithKeyPath: (NSString *) keyPath
+                    initialValue: (id) value
+                        additive: (BOOL) additive
+                           group: (CAPresentationModifierGroup *) group
+{
+    return [self initWithKeyPath: keyPath
+                    initialValue: value
+                 initialVelocity: nil
+                        additive: additive
+  preferredFrameRateRangeMaximum: 0
+                           group: group];
+}
+
+- (instancetype) initWithKeyPath: (NSString *) keyPath
+                    initialValue: (id) initialValue
+                 initialVelocity: (id) initialVelocity
+                        additive: (BOOL) additive
+  preferredFrameRateRangeMaximum: (NSInteger) preferredFrameRateRangeMaximum
                            group: (CAPresentationModifierGroup *) group
 {
     self = [super init];
     if (self != nil) {
         _keyPath = [keyPath copy];
-        _value = [value retain];
+        _value = [initialValue retain];
+        _velocity = [initialVelocity retain];
         _additive = additive;
+        _enabled = YES;
         _group = [group retain];
+        [group _incrementCount];
     }
     return self;
 }
@@ -66,8 +138,18 @@
 - (void) dealloc {
     [_keyPath release];
     [_value release];
+    [_velocity release];
+    [_group _decrementCount];
     [_group release];
     [super dealloc];
+}
+
+- (BOOL) isEnabled {
+    return _enabled;
+}
+
+- (void) setEnabled: (BOOL) enabled {
+    _enabled = enabled;
 }
 
 - (NSString *) keyPath {
@@ -92,13 +174,22 @@
 }
 
 - (void) setValue: (id) value {
-    id old;
+    [self setValue: value velocity: nil];
+}
+
+- (void) setValue: (id) value velocity: (id) velocity {
+    id oldValue;
+    id oldVelocity;
     [value retain];
+    [velocity retain];
     @synchronized(self) {
-        old = _value;
+        oldValue = _value;
         _value = value;
+        oldVelocity = _velocity;
+        _velocity = velocity;
     }
-    [old release];
+    [oldValue release];
+    [oldVelocity release];
 }
 
 @end
