@@ -44,17 +44,11 @@ NS_EXTRA_SYNTHESIZE_COPY(CABackdropLayer, groupName, _groupName, NSString *, gro
 - initWithLayer: (id) layer {
     self = [super initWithLayer: layer];
     if (self != nil) {
+        // Like -[CALayer initWithLayer:], the copy starts in the default state.
         NS_EXTRA(CABackdropLayer, self)->_windowServerAware = NO;
-        if ([layer isKindOfClass: [CABackdropLayer class]]) {
-            CABackdropLayer *other = (CABackdropLayer *) layer;
-            NS_EXTRA(CABackdropLayer, self)->_scale = NS_EXTRA(CABackdropLayer, other)->_scale;
-            NS_EXTRA(CABackdropLayer, self)->_allowsInPlaceFiltering = NS_EXTRA(CABackdropLayer, other)->_allowsInPlaceFiltering;
-            NS_EXTRA(CABackdropLayer, self)->_groupName = [NS_EXTRA(CABackdropLayer, other)->_groupName copy];
-        } else {
-            NS_EXTRA(CABackdropLayer, self)->_scale = 1.0;
-            NS_EXTRA(CABackdropLayer, self)->_allowsInPlaceFiltering = NO;
-            NS_EXTRA(CABackdropLayer, self)->_groupName = nil;
-        }
+        NS_EXTRA(CABackdropLayer, self)->_scale = 1.0;
+        NS_EXTRA(CABackdropLayer, self)->_allowsInPlaceFiltering = NO;
+        NS_EXTRA(CABackdropLayer, self)->_groupName = nil;
     }
     return self;
 }

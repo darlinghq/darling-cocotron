@@ -32,8 +32,11 @@
 
 - (instancetype) initWithCapacity: (NSUInteger) capacity {
     self = [super init];
-    if (self != nil)
+    if (self != nil) {
         _capacity = capacity;
+        // macOS 26.7.3 (black-box): a new group updates asynchronously.
+        _updatesAsynchronously = YES;
+    }
     return self;
 }
 

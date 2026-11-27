@@ -77,7 +77,6 @@ set(QuartzCore_sources
 	CASpringAnimation.m
 	CATransformLayer.m
 	CAChameleonLayer.m
-	CATransactionCompletionItem.m
 )
 
 #set_source_files_properties(${QuartzCore_sources} LANGUAGE C)

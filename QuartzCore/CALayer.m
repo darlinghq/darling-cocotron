@@ -648,6 +648,10 @@ static BOOL contentsUnchanged(CALayer *layer, id value) {
     NS_EXTRA(CALayer, self)->_animations = [[NSMutableDictionary alloc] init];
     NS_EXTRA(CALayer, self)->_speed = 1;
     NS_EXTRA(CALayer, self)->_fillMode = [kCAFillModeRemoved copy];
+    // macOS 26.7.3 (black-box): a new layer has swizzle "RGBA", scaling "stretch" and a white multiply colour.
+    NS_EXTRA(CALayer, self)->_contentsSwizzle = [kCALayerContentsSwizzleRGBA copy];
+    NS_EXTRA(CALayer, self)->_contentsScaling = [kCAContentsScalingStretch copy];
+    NS_EXTRA(CALayer, self)->_contentsMultiplyColor = CGColorCreateGenericRGB(1, 1, 1, 1);
 }
 
 - init {
