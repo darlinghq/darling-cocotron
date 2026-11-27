@@ -18,32 +18,23 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE. */
 
-#import "X11DropSession.h"
+#import "NSCGSDropSession.h"
 #import <AppKit/NSDraggingManager.h>
-#import <CoreGraphics/DarlingFileURIList.h>
-#import "NSPasteboardAliases.h"
-#import "X11Window.h"
-#import "X11Display.h"
 #import <AppKit/NSWindow-Drag.h>
 #import <AppKit/NSWindow.h>
+#import "NSPasteboardAliases.h"
 
-@implementation X11DropSession
+@implementation NSCGSDropSession
 
-- (id) initWithSource: (Window) source
-      selectionName: (NSString *) selection
-             target: (X11Window *) target
-               types: (NSArray *) types
-    sourceOperations: (NSDragOperation) operations
-{
-    if ((self = [super initWithName: selection])) {
-        _xdpy = [(X11Display *) [NSDisplay currentDisplay] display];
-        _targetWindow = [target retain];
-        _destination = [[target delegate] retain];
-        _source = source;
-        _types = [NSPasteboardCanonicalTypes(types) copy];
-        _sourceOperations = operations;
+- (id) initWithSession: (id<CGSDropSession>) session window: (NSWindow *) window localSource: (id) source {
+    if ((self = [super init])) {
+        _session = [session retain];
+        _destination = [window retain];
+        _types = [NSPasteboardCanonicalTypes([session types]) copy];
+        _sourceOperations = [session sourceOperations];
         static int nextSequence = 0;
         _sequence = ++nextSequence;
+        _localSource = [source retain];
         _validItems = -1;
         _animatesToDestination = NO;
     }
@@ -51,7 +42,7 @@
 }
 
 - (void) dealloc {
-    [_targetWindow release];
+    [_session release];
     [_destination release];
     [_receiver release];
     [_types release];
@@ -59,44 +50,19 @@
     [super dealloc];
 }
 
-- (void) setLocalSource: (id) source {
-    [source retain];
-    [_localSource release];
-    _localSource = source;
+- (id<CGSDropSession>) dropSession {
+    return _session;
 }
 
-- (BOOL) matchesSource: (Window) source {
-    // XDND requires a target to ignore every message that is not part of the
-    // drag it is currently holding.
-    return !_invalidated && source != None && source == _source;
-}
-
-- (NSDragOperation) updateAtRootX: (int) rootX
-                           rootY: (int) rootY
-                 requestedActions: (NSDragOperation) actions
-{
+- (NSDragOperation) updateAtPoint: (CGPoint) point {
     if (_invalidated)
         return NSDragOperationNone;
 
-    int windowX = 0, windowY = 0;
-    Window child;
-    // XDND positions are root-relative device pixels, while the receiver is
-    // addressed in window coordinates. A reparenting window manager inserts
-    // frames between the root and this window, so translate rather than subtract.
-    if (!XTranslateCoordinates(_xdpy, DefaultRootWindow(_xdpy),
-                               [_targetWindow windowHandle], rootX, rootY, &windowX,
-                               &windowY, &child))
-        return NSDragOperationNone;
-    _point = [_targetWindow logicalPoint: NSMakePoint(windowX, windowY)];
+    // The window system reports positions from the window's top left corner, while the receiver is addressed in
+    // window coordinates, y up.
+    _point = NSMakePoint(point.x, [_destination frame].size.height - point.y);
 
-    // A drop already being performed owns the outcome; the source keeps sending
-    // positions while the receiver reads the selection, and those must not
-    // renegotiate it.
-    if (_dropAnnounced)
-        return NSDragOperationNone;
-
-    id receiver = [_targetWindow isMapped] ? [_destination _receiverForDragSession: self]
-                                     : nil;
+    id receiver = [_destination isVisible] ? [_destination _receiverForDragSession: self] : nil;
     NSDragOperation operation = NSDragOperationNone;
     if (receiver != _receiver) {
         _acceptedOperations = NSDragOperationNone;
@@ -114,51 +80,30 @@
     if (_invalidated)
         return NSDragOperationNone;
 
-    // A source that leaves the action field empty is not refusing, it is just
-    // older than the action negotiation, so fall back to everything it offers.
-    if (actions == NSDragOperationNone)
-        actions = _sourceOperations;
-
-    // The receiver chooses from the mask it was offered (NSDraggingInfo), which is
-    // the source's action list narrowed by the modifier keys; the action the source
-    // requested is the one taken when the receiver allows several.
-    NSDragOperation accepted = operation & [self draggingSourceOperationMask];
-    // One operation for the whole drag: the source draws its cursor from
-    // XdndStatus and later reports one action in XdndFinished, so narrowing to a
-    // single bit keeps the three in step.
-    if (accepted & actions & (NSDragOperationCopy | NSDragOperationMove | NSDragOperationLink))
-        accepted &= actions;
-    if (accepted & NSDragOperationCopy)
-        accepted = NSDragOperationCopy;
-    else if (accepted & NSDragOperationMove)
-        accepted = NSDragOperationMove;
-    else if (accepted & NSDragOperationLink)
-        accepted = NSDragOperationLink;
-    else
-        accepted = NSDragOperationNone;
-    _acceptedOperations = accepted;
-    return accepted;
+    // The receiver chooses from the mask it was offered (NSDraggingInfo), which is the source's action list
+    // narrowed by the modifier keys. The window system narrows what is said to the source to one operation.
+    return operation & [self draggingSourceOperationMask];
 }
 
-- (NSDragOperation) performDrop {
+- (NSDragOperation) performDropWithOperation: (NSDragOperation) operation {
     _dropAnnounced = YES;
+    _acceptedOperations = operation;
 
     NSDragOperation performed = NSDragOperationNone;
-    if (!_invalidated && _acceptedOperations != NSDragOperationNone &&
-        [_targetWindow isMapped] &&
+    if (!_invalidated && _acceptedOperations != NSDragOperationNone && [_destination isVisible] &&
         [_destination _receiverForDragSession: self] == _receiver) {
-        // Each step re-checks the receiver: reading the selection pumps the X
-        // connection, and a callback can move the drag somewhere else entirely.
+        // Each step re-checks the receiver: reading the selection pumps the window system's connection, and a
+        // callback can move the drag somewhere else entirely.
         BOOL prepared = ![_receiver respondsToSelector: @selector(prepareForDragOperation:)] ||
                         [_receiver prepareForDragOperation: self];
-        if (prepared && [_targetWindow isMapped] &&
+        if (prepared && [_destination isVisible] &&
             [_destination _receiverForDragSession: self] == _receiver &&
             [_receiver performDragOperation: self] && !_transferFailed)
             performed = _acceptedOperations;
     }
     if (performed != NSDragOperationNone)
         [_receiver concludeDragOperation: self];
-    [self invalidate];
+    _invalidated = YES;
     // Whether or not it was performed, the drop ends the drag for its destination
     if ([_receiver respondsToSelector: @selector(draggingEnded:)])
         [_receiver draggingEnded: self];
@@ -166,21 +111,11 @@
 }
 
 - (void) leave {
-    // A source may send XdndLeave as soon as it sees XdndDrop, while the
-    // transfer this session owns is still running.
-    if (_dropAnnounced)
-        return;
-    [self invalidate];
+    _invalidated = YES;
     [_receiver draggingExited: self];
 }
 
-- (void) invalidate {
-    _invalidated = YES;
-}
-
-// A drag pasteboard is read-only, so there is nothing to clear. Inheriting the
-// pasteboard's own -clearContents would also make -dealloc take ownership of the
-// drag selection on an already destroyed helper window.
+// A drag pasteboard is read-only, so there is nothing to clear.
 - (NSInteger) clearContents {
     return _sequence;
 }
@@ -207,45 +142,34 @@
     type = NSPasteboardCanonicalType(type);
     if (!_invalidated && ![_types containsObject: type])
         return NSPasteboardDerivedDataForType(self, type);
-    // A source that never offered a type has not failed to send one, so this
-    // must not be counted as a broken transfer.
+    // A source that never offered a type has not failed to send one, so this must not be counted as a broken
+    // transfer.
     if (_invalidated)
         return nil;
-    // NSFilenamesPboardType is an AppKit type with no X counterpart; file
-    // managers publish their files as text/uri-list.
-    NSData *data = [super dataForType: [type isEqual: NSFilenamesPboardType]
-                                          ? @"text/uri-list"
-                                          : type];
-    if (!data) {
+    // The session reads NSFilenamesPboardType from the file lists that file managers publish.
+    NSData *data = [_session dataForType: type];
+    if (data == nil && ![type isEqual: NSFilenamesPboardType])
+        data = NSPasteboardDerivedDataForType(self, type);
+    if (data == nil) {
         _transferFailed = YES;
         return nil;
     }
-    if (![type isEqual: NSFilenamesPboardType])
-        return data;
-    NSArray *files = DarlingFilenamesFromURIList(data);
-    if (!files) {
-        _transferFailed = YES;
-        return nil;
-    }
-    return [NSPropertyListSerialization dataFromPropertyList: files
-                                                     format: NSPropertyListXMLFormat_v1_0
-                                           errorDescription: NULL];
+    return data;
 }
 
 #pragma mark NSDraggingInfo
 
 - (NSPasteboard *) draggingPasteboard {
-    // A dragging session of this application is read where its source wrote it,
-    // the drag pasteboard, item by item, as on macOS. What the older
-    // -dragImage:... offers is read as the drag offers it.
+    // A dragging session of this application is read where its source wrote it, the drag pasteboard, item by item,
+    // as on macOS. What the older -dragImage:... offers is read as the drag offers it.
     if ([_localSource isKindOfClass: [NSDraggingSession class]])
         return [NSPasteboard pasteboardWithName: NSPasteboardNameDrag];
     return self;
 }
 
 - (NSDragOperation) draggingSourceOperationMask {
-    // Once dropped, report the operation this target chose; NSDraggingInfo has no
-    // separate accessor for the selected operation.
+    // Once dropped, report the operation this target chose; NSDraggingInfo has no separate accessor for the
+    // selected operation.
     if (_dropAnnounced)
         return _acceptedOperations;
     return [NSDraggingSession _operationMask: _sourceOperations narrowedForSource: _localSource];

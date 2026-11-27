@@ -7,7 +7,7 @@
 // names. This test plays that with real connections: client A creates a window and exits with the property set;
 // the application (B) reads the property at startup, watches that id, creates its window (the same id), and later
 // moves the watch to the window of another client (C). B's window must keep receiving its events.
-#include "../AppKit/X11.backend/X11Occlusion.h"
+#include "../CoreGraphics/X11.backend/X11Occlusion.h"
 #include <stdio.h>
 #include <unistd.h>
 

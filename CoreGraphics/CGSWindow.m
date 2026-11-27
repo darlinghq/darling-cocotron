@@ -44,7 +44,24 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 - (void) dealloc {
     CGContextRelease(_contents);
     [_surfaces release];
+    [_dragDestination release];
     [super dealloc];
+}
+
+- (void) setDragDestination: (id<CGSDragDestination>) destination {
+    if (destination == _dragDestination)
+        return;
+    id<CGSDragDestination> old = _dragDestination;
+    _dragDestination = [destination retain];
+    [old release];
+    [self dragDestinationChanged];
+}
+
+- (id<CGSDragDestination>) dragDestination {
+    return _dragDestination;
+}
+
+- (void) dragDestinationChanged {
 }
 
 - (CGSSurface *) surfaceForId: (CGSSurfaceID) surfaceId {
@@ -188,6 +205,69 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 
 - (CGError) reserveToplevelDockStrip {
     return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelLevel: (int) level {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelStacksByLevel: (BOOL) stacks {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) orderToplevelAbove: (CGSWindow *) sibling {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) orderToplevelBelow: (CGSWindow *) sibling {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) restackToplevelForLevels {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) requestToplevelKeyboardFocus {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelHoldsKeyboardFocus {
+    return NO;
+}
+
+- (CGError) miniaturizeToplevel {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) deminiaturizeToplevel {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelIsMiniaturized {
+    return NO;
+}
+
+- (BOOL) toplevelFrameCoversDisplay: (CGRect) frame {
+    return NO;
+}
+
+- (CGError) setToplevelFullscreen: (BOOL) fullscreen force: (BOOL) force {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelFullscreenRequested {
+    return NO;
+}
+
+- (BOOL) toplevelIsFullscreen {
+    return NO;
+}
+
+- (BOOL) toplevelIsOccluded {
+    return NO;
+}
+
+- (void) cancelToplevelKeyboardFocusRequest {
 }
 
 - (CGSSurface *) createSurface {

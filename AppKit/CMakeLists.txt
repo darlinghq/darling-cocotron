@@ -355,6 +355,8 @@ set(AppKit_sources
 	NSTreeNode.m
 	NSLevelIndicator.m
 	NSDraggingManager.m
+	NSCGSDraggingManager.m
+	NSCGSDropSession.m
 	NSImage.m
 	NSImageSymbolGlyphs.m
 	NSImageDrawingCache.m
@@ -733,9 +735,6 @@ add_backend(X11
 		X11.backend/X11Window.m
 		X11.backend/X11SubWindow.m
 		X11.backend/X11Event.m
-		X11.backend/X11Pasteboard.m
-		X11.backend/X11DropSession.m
-		X11.backend/X11DraggingManager.m
 	INFO_PLIST
 		X11.backend/Info.plist
 	DEPENDENCIES

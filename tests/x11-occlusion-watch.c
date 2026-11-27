@@ -1,7 +1,7 @@
 // Host test for X11OcclusionStopWatching() in AppKit/X11.backend/X11Occlusion.h: a window of this process that
 // carries the id of the window being watched keeps its event selection. Needs an X server; use
 // tests/x11-occlusion-watch.sh, which runs it on its own Xvfb. Build: cc x11-occlusion-watch.c -lX11 -lXrandr
-#include "../AppKit/X11.backend/X11Occlusion.h"
+#include "../CoreGraphics/X11.backend/X11Occlusion.h"
 #include <stdio.h>
 
 static int failures, checks;

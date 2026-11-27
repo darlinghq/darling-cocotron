@@ -1,7 +1,8 @@
-// Host test for AppKit/X11.backend/X11Fullscreen.h: the decision table, the monitor test against real RandR
+// Host test for CoreGraphics/X11.backend/X11Fullscreen.h: the decision table, the monitor test against real RandR
 // geometry, and the EWMH fullscreen request as a window manager receives it. Needs an X server; use
 // tests/x11-fullscreen.sh, which runs it on its own Xvfb. Build: cc x11-fullscreen.c -lX11 -lXrandr -ldl
-#include "../AppKit/X11.backend/X11Fullscreen.h"
+#include "../CoreGraphics/X11.backend/X11Fullscreen.h"
+#include "../AppKit/X11.backend/X11FullscreenPolicy.h"
 #include "../CoreGraphics/X11.backend/X11Monitors.h"
 #include <dlfcn.h>
 #include <stdio.h>
