@@ -8,8 +8,10 @@
  *   BGRA10_XR, BGRA10_XR_sRGB, BGR10_XR, BGR10_XR_sRGB  kCGColorSpaceExtendedSRGB
  *   RGBA16Float                                          kCGColorSpaceExtendedLinearSRGB
  *   BGRA8Unorm                                           kCGColorSpaceSRGB
- * and the texture of nextDrawable has the layer's pixelFormat. That an assigned colorspace survives a later pixelFormat change was not
- * observed; this implementation keeps it.
+ * and the texture of nextDrawable has the layer's pixelFormat. Also observed there (probes layer-assign and layer-reformat): an unassigned layer takes the
+ * default of every format it changes to (RGB10A2Unorm gets sRGB); a non-nil colorspace the application assigned, even one equal to a default, is
+ * kept by every later pixelFormat, assigned before or after the first one; assigning nil reads nil at once and the next pixelFormat applies
+ * the default again.
  * Needs no display. The drawable checks need a Metal device; they print SKIP without one.
  */
 #import <Foundation/Foundation.h>
@@ -88,14 +90,55 @@ int main(void) {
 			}
 		}
 
-		// not observed on macOS: an assigned colorspace is kept (this implementation's choice)
-		CAMetalLayer *assigned = [CAMetalLayer layer];
-		CGColorSpaceRef chosen = CGColorSpaceCreateWithName(kCGColorSpaceDisplayP3);
-		assigned.colorspace = chosen;
-		assigned.pixelFormat = MTLPixelFormatBGRA10_XR;
-		expect(isNamed(assigned.colorspace, kCGColorSpaceDisplayP3), "an assigned colorspace survives a later pixelFormat (not observed on macOS)", assigned.colorspace);
-		if (chosen != NULL)
-			CGColorSpaceRelease(chosen);
+		// RGB10A2Unorm gets sRGB
+		CAMetalLayer *ten = [CAMetalLayer layer];
+		ten.pixelFormat = MTLPixelFormatRGB10A2Unorm;
+		expect(isNamed(ten.colorspace, kCGColorSpaceSRGB), "RGB10A2Unorm sets sRGB", ten.colorspace);
+
+		// an unassigned layer takes the default of every format it is changed to
+		const struct { MTLPixelFormat from, to; CFStringRef space; } changes[] = {
+			{ MTLPixelFormatBGRA10_XR, MTLPixelFormatRGBA16Float, kCGColorSpaceExtendedLinearSRGB },
+			{ MTLPixelFormatBGRA10_XR, MTLPixelFormatBGRA8Unorm, kCGColorSpaceSRGB },
+			{ MTLPixelFormatRGBA16Float, MTLPixelFormatBGRA10_XR, kCGColorSpaceExtendedSRGB },
+			{ MTLPixelFormatBGRA8Unorm, MTLPixelFormatRGBA16Float, kCGColorSpaceExtendedLinearSRGB },
+			{ MTLPixelFormatRGB10A2Unorm, MTLPixelFormatBGRA10_XR, kCGColorSpaceExtendedSRGB },
+		};
+		for (size_t i = 0; i < sizeof changes / sizeof changes[0]; i++) {
+			CAMetalLayer *layer = [CAMetalLayer layer];
+			layer.pixelFormat = changes[i].from;
+			layer.pixelFormat = changes[i].to;
+			expect(isNamed(layer.colorspace, changes[i].space), "an unassigned layer takes the default of the format it changes to", layer.colorspace);
+		}
+
+		// an assigned colorspace is kept by every later pixelFormat, assigned before or after the first one, even when it equals a default
+		CGColorSpaceRef p3 = CGColorSpaceCreateWithName(kCGColorSpaceDisplayP3);
+		CGColorSpaceRef extended = CGColorSpaceCreateWithName(kCGColorSpaceExtendedSRGB);
+		CAMetalLayer *before = [CAMetalLayer layer];
+		before.colorspace = p3;
+		before.pixelFormat = MTLPixelFormatBGRA10_XR;
+		expect(isNamed(before.colorspace, kCGColorSpaceDisplayP3), "an assigned colorspace is kept by the first pixelFormat", before.colorspace);
+		before.pixelFormat = MTLPixelFormatRGBA16Float;
+		expect(isNamed(before.colorspace, kCGColorSpaceDisplayP3), "and by a later one", before.colorspace);
+		CAMetalLayer *after = [CAMetalLayer layer];
+		after.pixelFormat = MTLPixelFormatBGRA8Unorm;
+		after.colorspace = p3;
+		after.pixelFormat = MTLPixelFormatBGRA10_XR;
+		expect(isNamed(after.colorspace, kCGColorSpaceDisplayP3), "a colorspace assigned after the first pixelFormat is kept", after.colorspace);
+		CAMetalLayer *same = [CAMetalLayer layer];
+		same.pixelFormat = MTLPixelFormatBGRA10_XR;
+		same.colorspace = extended;
+		same.pixelFormat = MTLPixelFormatBGRA8Unorm;
+		expect(isNamed(same.colorspace, kCGColorSpaceExtendedSRGB), "an assigned colorspace equal to a default is kept too", same.colorspace);
+
+		// assigning nil reads nil at once, and the next pixelFormat applies the default again
+		before.colorspace = NULL;
+		expect(before.colorspace == NULL, "assigning nil reads nil", before.colorspace);
+		before.pixelFormat = MTLPixelFormatBGRA10_XR;
+		expect(isNamed(before.colorspace, kCGColorSpaceExtendedSRGB), "the next pixelFormat applies the default again", before.colorspace);
+		before.pixelFormat = MTLPixelFormatBGRA8Unorm;
+		expect(isNamed(before.colorspace, kCGColorSpaceSRGB), "and it is unassigned again", before.colorspace);
+		CGColorSpaceRelease(p3);
+		CGColorSpaceRelease(extended);
 	}
 	if (failures) {
 		printf("FAILED: %d\n", failures);

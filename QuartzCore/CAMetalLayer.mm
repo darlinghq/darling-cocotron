@@ -504,6 +504,7 @@ static CFStringRef defaultColorspaceName(MTLPixelFormat pixelFormat)
 		case MTLPixelFormatRGBA16Float:
 			return kCGColorSpaceExtendedLinearSRGB;
 		case MTLPixelFormatBGRA8Unorm:
+		case MTLPixelFormatRGB10A2Unorm:
 			return kCGColorSpaceSRGB;
 		default:
 			return NULL;
@@ -513,10 +514,12 @@ static CFStringRef defaultColorspaceName(MTLPixelFormat pixelFormat)
 - (void)setPixelFormat: (MTLPixelFormat)pixelFormat
 {
 	_pixelFormat = pixelFormat;
-	// OBSERVED (macOS 27.0.1, arm64; test: quartzcore-metal-layer-colorspace): a new layer has no colorspace, and setting its pixelFormat
-	// sets one: ExtendedSRGB for the four extended-range formats, ExtendedLinearSRGB for RGBA16Float and SRGB for BGRA8Unorm, whatever
-	// wantsExtendedDynamicRangeContent is (which never changes it, before or after). Not observed (inference): a colorspace the
-	// application assigned itself is kept, and the other formats set none.
+	// QUIRK: setting pixelFormat sets the layer's colorspace to the default of that format (ExtendedSRGB for the four extended-range
+	// formats, ExtendedLinearSRGB for RGBA16Float, SRGB for BGRA8Unorm and RGB10A2Unorm), also when it changes from one format to another,
+	// unless the application assigned a non-nil colorspace (even one equal to a default), which every later pixelFormat keeps, whether it
+	// was assigned before or after the first pixelFormat; assigning nil reads nil at once and the next pixelFormat applies the default
+	// again. A new layer has none, and wantsExtendedDynamicRangeContent never changes it. Not documented. Evidence: black-box
+	// observation on macOS 27.0.1 arm64 (tier 2). Test: tests/quartzcore-metal-layer-colorspace.m
 	CFStringRef name = defaultColorspaceName(pixelFormat);
 	@synchronized(self) {
 		if (name != NULL && !_colorspaceAssigned) {
