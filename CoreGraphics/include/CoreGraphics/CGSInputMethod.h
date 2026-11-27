@@ -53,7 +53,7 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 // _CGSInputMethodAvailable() NO, and the other functions do nothing.
 
 // Whether the backend runs an input method for windows (X11: yes, when the window system has one it can talk
-// to or Xlib's built-in one; a backend without: no).
+// to or Xlib's built-in one; Wayland: yes, when the compositor has text-input-v3; a backend without: no).
 COREGRAPHICS_EXPORT BOOL _CGSInputMethodAvailable(void);
 
 // Lets the window use the input method (or, with NO, stops it: what was composed is dropped, and the window's
@@ -71,17 +71,61 @@ COREGRAPHICS_EXPORT void _CGSInputMethodSetEnabled(CGSWindowID window, BOOL enab
 // method do not take it (X11: the ones that draw the composition themselves); then it is ignored.
 COREGRAPHICS_EXPORT void _CGSInputMethodSetCursorRect(CGSWindowID window, CGRect rect);
 
-// What the Wayland half (text-input-v3) needs of this interface, so that it implements it without changing
-// what is above:
-//  - Enabling is the text input's enable and disable for the surface (the UI layer enables a window whose first
-//    responder takes text, and disables it otherwise); every state it sends (the cursor rectangle) is followed
-//    by the protocol's commit request, and the events of one "done" are posted in the protocol's order: the
-//    surrounding text that is deleted, the commit, then the preedit.
-//  - The cursor rectangle maps to set_cursor_rectangle with the surface-local rectangle as it is.
-//  - preedit_string is kCGSToplevelEventInputMethodPreedit with its cursor_begin/cursor_end converted from
-//    bytes of UTF-8 to UTF-16 units; commit_string is kCGSToplevelEventInputMethodCommit.
-//  - Additions that do not touch the above: the surrounding text and the content type of the client
-//    (_CGSInputMethodSetSurroundingText, _CGSInputMethodSetContentType) and a toplevel event for
-//    delete_surrounding_text. X11 ignores the first two and never posts the third.
+// The text around the caret, for an input method that wants it (Wayland's text input: to offer text that depends
+// on what is there and to delete text next to the caret). text is the text of the window's text input client that
+// surrounds the caret, selection the caret (length 0) or the selected part in it, in UTF-16 units of text. Said
+// again when it changes; NULL text says there is none. Remembered like the cursor rectangle. A backend whose input
+// method does not take it (X11) ignores it. What the input method deletes comes back as
+// kCGSToplevelEventInputMethodDeleteSurrounding, in UTF-16 units of the text said last; without any, the deletion is
+// not reported (there is nothing to say it is about).
+COREGRAPHICS_EXPORT void _CGSInputMethodSetSurroundingText(CGSWindowID window, CFStringRef text, CFRange selection);
+
+// What kind of text the window takes, for an input method that adapts to it (a number pad for digits, no learning
+// for a password). The values are those of Wayland's text input (zwp_text_input_v3), and 0 for both is plain text. A backend whose input method does not take it (X11) ignores it.
+enum {
+	kCGSInputMethodHintCompletion = 0x1,
+	kCGSInputMethodHintSpellcheck = 0x2,
+	kCGSInputMethodHintAutoCapitalization = 0x4,
+	kCGSInputMethodHintLowercase = 0x8,
+	kCGSInputMethodHintUppercase = 0x10,
+	kCGSInputMethodHintTitlecase = 0x20,
+	kCGSInputMethodHintHiddenText = 0x40,
+	kCGSInputMethodHintSensitiveData = 0x80,
+	kCGSInputMethodHintLatin = 0x100,
+	kCGSInputMethodHintMultiline = 0x200,
+};
+enum {
+	kCGSInputMethodPurposeNormal = 0,
+	kCGSInputMethodPurposeAlpha = 1,
+	kCGSInputMethodPurposeDigits = 2,
+	kCGSInputMethodPurposeNumber = 3,
+	kCGSInputMethodPurposePhone = 4,
+	kCGSInputMethodPurposeUrl = 5,
+	kCGSInputMethodPurposeEmail = 6,
+	kCGSInputMethodPurposeName = 7,
+	kCGSInputMethodPurposePassword = 8,
+	kCGSInputMethodPurposePin = 9,
+	kCGSInputMethodPurposeDate = 10,
+	kCGSInputMethodPurposeTime = 11,
+	kCGSInputMethodPurposeDatetime = 12,
+	kCGSInputMethodPurposeTerminal = 13,
+};
+COREGRAPHICS_EXPORT void _CGSInputMethodSetContentType(CGSWindowID window, uint32_t hint, uint32_t purpose);
+
+// How Wayland's text input (zwp_text_input_v3) shows through this interface: _CGSInputMethodSetEnabled is the
+// text input's enable and disable for the window's surface (the UI layer enables a window whose first responder
+// takes text, and disables it otherwise), and every state it sends (the cursor rectangle, the surrounding text, the
+// content type) is followed by the protocol's commit request. The cursor rectangle is the surface's own, from the
+// window's top left corner (a backend that has the UI layer draw the window's frame inside the surface adds
+// where the content starts). The input method's events of one "done" are posted in the protocol's order: the
+// surrounding text that is deleted (a composition that is showing is removed with an empty preedit first), the
+// commit, then the preedit; a commit replaces the composition, so no empty preedit comes before it alone, and nothing is posted for a "done" that says what the window has been told already.
+// preedit_string is kCGSToplevelEventInputMethodPreedit with its cursor_begin/cursor_end converted from bytes of
+// UTF-8 to UTF-16 units (a missing cursor is the end of the text), commit_string is
+// kCGSToplevelEventInputMethodCommit, and a composition the compositor took away (the window lost the text input
+// focus) ends with an empty preedit.
+//
+// The input method only works while the window's surface has the text input focus of the compositor, which follows
+// the keyboard focus.
 
 #endif

@@ -186,6 +186,9 @@ typedef enum {
 - (void) renderManagerAvailable;
 // Where the window is, as far as the connection knows (the rect that was asked for).
 - (CGPoint) frameOrigin;
+// Where the window's content starts in the surface, when the UI layer draws the window's frame inside it (see
+// -setToplevelContentOffset:).
+- (CGPoint) toplevelContentOffset;
 
 // The window's objects of the window system, for the UI layer that owns the window's content and what the protocol
 // has beyond CGSWindow.h (the toplevel's fullscreen, parent and move requests, the objects that must be made

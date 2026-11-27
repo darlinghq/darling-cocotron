@@ -23,6 +23,7 @@
 #import "CGSWaylandPointer.h"
 #import "CGSWaylandCursor.h"
 #import "CGSWaylandTouch.h"
+#import "CGSWaylandInputMethod.h"
 #import "CGSWaylandTablet.h"
 #import "CGSWaylandKeymap.h"
 #import "CGSWaylandClipboard.h"
@@ -179,6 +180,9 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectTouch:
                 [(CGSWaylandTouch *) object touchEvent: opcode arguments: args];
                 break;
+            case CGSWaylandObjectTextInput:
+                [(CGSWaylandInputMethod *) object textInputEvent: opcode arguments: args];
+                break;
             case CGSWaylandObjectTabletSeat:
                 [(CGSWaylandTablet *) object tabletSeatEvent: opcode arguments: args];
                 break;
@@ -302,6 +306,7 @@ static const CGEventFlags kHotKeyModifierMask =
     _pointerDecoder = [[CGSWaylandPointer alloc] initWithConnection: self];
     _touchDecoder = [[CGSWaylandTouch alloc] initWithConnection: self];
     _tabletDecoder = [[CGSWaylandTablet alloc] initWithConnection: self];
+    _inputMethodDecoder = [[CGSWaylandInputMethod alloc] initWithConnection: self];
 
     _wlDisplay = WL.wl_display_connect(NULL);
     if (_wlDisplay == NULL) {
@@ -444,6 +449,8 @@ static const CGEventFlags kHotKeyModifierMask =
     [_touchDecoder release];
     [(CGSWaylandTablet *) _tabletDecoder stop];
     [_tabletDecoder release];
+    [(CGSWaylandInputMethod *) _inputMethodDecoder stop];
+    [_inputMethodDecoder release];
     if (_pointerGestures != NULL)
         WL.wl_proxy_destroy(_pointerGestures);
     [_hotKeys release];
@@ -887,6 +894,14 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                          version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
                             kind: CGSWaylandObjectSeat object: self];
         [(CGSWaylandTablet *) _tabletDecoder seatBound: _seat name: name];
+        [(CGSWaylandInputMethod *) _inputMethodDecoder seatBound: _seat name: name];
+    } else if (strcmp(interface, "zwp_text_input_manager_v3") == 0 &&
+               [(CGSWaylandInputMethod *) _inputMethodDecoder managerName] == 0) {
+        struct wl_proxy *manager = [self bindGlobal: name
+                                          interface: &zwp_text_input_manager_v3_interface
+                                            version: 1
+                                               kind: CGSWaylandObjectNone object: nil];
+        [(CGSWaylandInputMethod *) _inputMethodDecoder managerBound: manager name: name seat: _seat];
     } else if (strcmp(interface, "zwp_tablet_manager_v2") == 0 &&
                [(CGSWaylandTablet *) _tabletDecoder manager] == NULL) {
         // Tablet seats are made from the wl_seat, whether or not it has pointer or keyboard
@@ -1036,6 +1051,10 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         WL.wl_proxy_destroy(renderManagerProxy);
 
     [(WaylandColorManager *) _color globalRemoved: name];
+    if (name == [(CGSWaylandInputMethod *) _inputMethodDecoder managerName]) {
+        [(CGSWaylandInputMethod *) _inputMethodDecoder managerRemoved];
+        return;
+    }
     if ([(CGSWaylandTablet *) _tabletDecoder manager] != NULL &&
         name == [(CGSWaylandTablet *) _tabletDecoder managerName]) {
         [(CGSWaylandTablet *) _tabletDecoder managerRemoved];
@@ -1045,6 +1064,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         // The wl_seat proxy is invalid once its global is gone; a later tablet manager must not
         // be given it. The other seat decoders keep their own state.
         _seat = NULL;
+        [(CGSWaylandInputMethod *) _inputMethodDecoder seatRemoved];
         [(CGSWaylandTablet *) _tabletDecoder seatRemoved];
         return;
     }
@@ -1395,6 +1415,24 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
 
 - (uint64_t) modifierFlags {
     return [(CGSWaylandKeyboard *) _keyboardDecoder modifierFlags];
+}
+
+#pragma mark - Input method
+
+- (BOOL) _inputMethodAvailable {
+    return [(CGSWaylandInputMethod *) _inputMethodDecoder available];
+}
+
+- (void) inputMethodWindowChanged: (CGSWindow *) window {
+    [(CGSWaylandInputMethod *) _inputMethodDecoder windowChanged: window];
+}
+
+- (void) inputMethodWindowUnmapped: (CGSWindow *) window {
+    [(CGSWaylandInputMethod *) _inputMethodDecoder windowUnmapped: window];
+}
+
+- (void) inputMethodWindowDestroyed: (uint32_t) windowID {
+    [(CGSWaylandInputMethod *) _inputMethodDecoder windowDestroyed: windowID];
 }
 
 - (void) nativeObjectDestroyed: (void *) object {

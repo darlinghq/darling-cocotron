@@ -89,6 +89,7 @@ typedef enum {
     CGSWaylandObjectDataSource,
     CGSWaylandObjectCursorScale,
     CGSWaylandObjectDecoration,
+    CGSWaylandObjectTextInput,
     CGSWaylandObjectActivationToken,
 } CGSWaylandObjectKind;
 
@@ -146,6 +147,8 @@ typedef enum {
     id _touchDecoder;
     // The tablet manager's tablet seats, which decode stylus tools into tablet CGEvents (CGSWaylandTablet).
     id _tabletDecoder;
+    // The seat's text input, the compositor's input method for the windows (CGSWaylandInputMethod).
+    id _inputMethodDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
     // input-timestamps-unstable-v1: one timestamp object per device, handing high-resolution times
@@ -250,6 +253,11 @@ typedef enum {
 - (void) flushPendingPointerEvents;
 // Posts the modifier key change the keyboard decoder holds back until the compositor confirms it.
 - (void) flushPendingKeyboardEvents;
+
+// The windows' input method (see CGSInputMethod.h): the text input of the seat.
+- (void) inputMethodWindowChanged: (CGSWindow *) window;
+- (void) inputMethodWindowUnmapped: (CGSWindow *) window;
+- (void) inputMethodWindowDestroyed: (uint32_t) windowID;
 // Asks the compositor, through xdg-activation, to focus a window of this process. The compositor decides: it may only mark
 // the window as wanting attention. The token carries the serial of the last key or button press when there is one,
 // because compositors refuse requests that cannot be tied to user input. The requester is the window the token names as the

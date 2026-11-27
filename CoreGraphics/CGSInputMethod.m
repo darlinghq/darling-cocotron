@@ -49,6 +49,20 @@ void _CGSInputMethodSetEnabled(CGSWindowID window, BOOL enabled)
 	[[inputMethodConnection() windowForId: window] setInputMethodEnabled: enabled];
 }
 
+void _CGSInputMethodSetSurroundingText(CGSWindowID window, CFStringRef text, CFRange selection)
+{
+	if (!_CGSInputMethodAvailable())
+		return;
+	[[inputMethodConnection() windowForId: window] setInputMethodSurroundingText: (NSString*) text selection: selection];
+}
+
+void _CGSInputMethodSetContentType(CGSWindowID window, uint32_t hint, uint32_t purpose)
+{
+	if (!_CGSInputMethodAvailable())
+		return;
+	[[inputMethodConnection() windowForId: window] setInputMethodContentHint: hint purpose: purpose];
+}
+
 void _CGSInputMethodSetCursorRect(CGSWindowID window, CGRect rect)
 {
 	if (!_CGSInputMethodAvailable())
