@@ -3,12 +3,14 @@
  *
  * CAEDRMetadata must decode the public HDR10 SEI payloads before passing them to a
  * window-system surface. The vectors below follow SMPTE ST 2086 (mastering display
- * colour volume) and CTA-861.3 (content light level): both are big-endian, the xy
- * coordinates carry four decimals, the minimum luminance four decimals, and the
- * maximum luminance whole nits. The test checks the units and the conversion from
- * the SEI green/blue/red/white order to the r/g/b/white order used by the
- * Wayland color-management protocol.
+ * colour volume, 24 bytes: the green, blue, red primaries and the white point as
+ * 16-bit x/y in units of 0.00002, then the maximum and minimum luminance as 32-bit
+ * values in units of 0.0001 cd/m^2) and CTA-861.3 (content light level, two 16-bit
+ * values in cd/m^2). Both are big-endian. The test checks the units and the
+ * conversion from the SEI green/blue/red/white order to the r/g/b/white order used
+ * by the Wayland color-management protocol.
  */
+#import <Foundation/NSAutoreleasePool.h>
 #import <Foundation/NSData.h>
 #import <QuartzCore/CAEDRMetadata.h>
 #import "../QuartzCore/CAEDRMetadataInternal.h"
@@ -116,19 +118,16 @@ int main(void) {
 
     // A coordinate outside the ST 2086 bounds, or a range whose maximum does not exceed
     // its minimum, must not be passed to the compositor.
-    uint16_t outOfRange[10];
-    memcpy(outOfRange, display, sizeof(outOfRange));
-    outOfRange[0] = 8000; // 0.8000 exceeds the 0.7400 x bound
-    decoded = Decode([CAEDRMetadata HDR10MetadataWithDisplayInfo: BigEndian16(outOfRange, 10)
+    uint16_t outOfRange[8];
+    memcpy(outOfRange, coordinates, sizeof(outOfRange));
+    outOfRange[0] = 40000; // 0.8000 exceeds the 0.7400 x bound
+    decoded = Decode([CAEDRMetadata HDR10MetadataWithDisplayInfo: DisplayInfo(outOfRange, 10000000, 1)
                                                      contentInfo: BigEndian16(content, 2)
                                               opticalOutputScale: 100.0f]);
     CHECK(!decoded.hasMasteringDisplayPrimaries && !decoded.hasMasteringLuminance);
     CHECK(decoded.hasMaxCLL && decoded.maxCLL == 1000);
 
-    uint16_t badRange[10];
-    memcpy(badRange, display, sizeof(badRange));
-    badRange[8] = badRange[9] = 1000;
-    decoded = Decode([CAEDRMetadata HDR10MetadataWithDisplayInfo: BigEndian16(badRange, 10)
+    decoded = Decode([CAEDRMetadata HDR10MetadataWithDisplayInfo: DisplayInfo(coordinates, 1000, 1000)
                                                      contentInfo: nil
                                               opticalOutputScale: 100.0f]);
     CHECK(!decoded.hasMasteringDisplayPrimaries && !decoded.hasMasteringLuminance);
