@@ -204,9 +204,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // The pointer is over a window decoration, where the arrow is shown whatever cursor the application selected.
     BOOL _cursorOverDecoration;
     WaylandDataDevice *_dataDevice;
-    // Shared dma-buf, explicit-sync and fifo client (WaylandRenderManager), bound with this
-    // display's registry. The CoreGraphics connection binds its own set on its own connection.
-    id _render;
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
@@ -217,7 +214,8 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) flush;
 // The shared color manager, or nil when the compositor offers neither protocol.
 - (WaylandColorManager *) colorManager;
-// The render-protocol manager used to attach buffers and queue frames.
+// The render-protocol manager used to attach buffers and queue frames: CoreGraphics' one, so that a
+// surface has one set of syncobj and fifo objects whichever framework presents on it.
 - (WaylandRenderManager *) renderManager;
 // Called when one of the render globals arrives, so surfaces made earlier can observe it.
 - (void) renderGlobalsAvailable;

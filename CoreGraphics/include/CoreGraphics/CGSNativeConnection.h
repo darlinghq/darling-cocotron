@@ -61,6 +61,8 @@ typedef enum {
 - (void) nativeConnectionFocusMovedToAnotherClient;
 // The compositor's color management or color representation global arrived after the windows were made.
 - (void) nativeConnectionColorManagerAvailable;
+// The compositor's dma-buf, explicit synchronization or fifo global arrived after the windows were made.
+- (void) nativeConnectionRenderManagerAvailable;
 // The compositor's preferred image description for a surface changed. The pointer identifies the
 // wp_color_management_surface_feedback_v1 proxy CoreGraphics made for that surface; the framework
 // above reads the new description with WaylandColorManager's -preferredInfoForFeedback:.
@@ -181,6 +183,8 @@ extern bool _CGSSetCursorHiddenUntilMouseMoves(bool flag);
 extern bool _CGSNativeConnectionPointerLocked(void);
 // The color manager of a Wayland connection (see WaylandColor.h), nil without one.
 extern id _CGSNativeConnectionWaylandColorManager(void);
+// The render-protocol manager of a Wayland connection (see WaylandRender.h), nil without one.
+extern id _CGSNativeConnectionWaylandRenderManager(void);
 // Whether any connected output reports luminance headroom above its reference white. False on a
 // connection without color management; CAEDRMetadata.isAvailable asks this.
 extern bool _CGSExtendedDynamicRangeAvailable(void);

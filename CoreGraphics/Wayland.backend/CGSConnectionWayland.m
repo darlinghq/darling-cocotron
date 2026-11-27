@@ -559,6 +559,10 @@ static const CGEventFlags kHotKeyModifierMask =
 }
 
 - (void) notifyWindowsRenderManagerAvailable {
+    // The windows of the framework above share this manager (see -waylandRenderManager).
+    id observer = [CGSConnection nativeObserver];
+    if ([observer respondsToSelector: @selector(nativeConnectionRenderManagerAvailable)])
+        [observer nativeConnectionRenderManagerAvailable];
     @synchronized (_windows) {
         for (NSNumber *key in _windows) {
             CGSWindow *window = [_windows objectForKey: key];
@@ -570,6 +574,10 @@ static const CGEventFlags kHotKeyModifierMask =
 
 - (WaylandRenderManager *) renderManager {
     return (WaylandRenderManager *) _render;
+}
+
+- (id) waylandRenderManager {
+    return _render;
 }
 
 - (void) connectionFailed {
