@@ -1696,12 +1696,8 @@ static NSSize scaledImageSizeInFrameSize(NSSize imageSize, NSSize frameSize,
 
     if (NS_EXTRA(NSButtonCell, self)->_bezelStyle == NSDisclosureBezelStyle)
         ;
-    else if (![self isBordered]) {
-        if (defaulted)
-            frame = NSInsetRect(frame, 1, 1);
-    } else {
+    else if ([self isBordered])
         frame = NSInsetRect(frame, 2, 2);
-    }
 
     NSAttributedString *title = [self titleForHighlight];
     NSImage *image = [self imageForHighlight];

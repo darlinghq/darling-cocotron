@@ -408,11 +408,10 @@ static NSDictionary *sScrollerButtonAttributes = nil;
 
 @implementation NSGraphicsStyle (NSButton)
 
+// A button without a border has no bezel to emphasise, so nothing is drawn for it, whether or not it is the
+// window default button cell (a check box or radio button that is the default cell looks as it does otherwise).
+// Observed on macOS 10.14.4 and 26.7.3: the renderings with and without the cell being the default are identical.
 - (void) drawUnborderedButtonInRect: (NSRect) rect defaulted: (BOOL) defaulted {
-    if (defaulted) {
-        [[NSColor blackColor] setFill];
-        NSRectFill(rect);
-    }
 }
 
 - (void) drawPushButtonNormalInRect: (NSRect) rect defaulted: (BOOL) defaulted {
