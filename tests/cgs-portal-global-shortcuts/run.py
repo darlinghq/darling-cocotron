@@ -80,8 +80,7 @@ guest_env = [
     "XDG_RUNTIME_DIR=" + os.environ.get("XDG_RUNTIME_DIR", ""),
 ]
 with open(out, "w") as f:
-    subprocess.run(["timeout", "-s", "KILL", "60", "darling", "shell", "sh", "-c",
-                    "ulimit -v 4000000; exec \"$0\"", "env"] + guest_env +
+    subprocess.run(["timeout", "-s", "KILL", "60", "darling", "shell", "env"] + guest_env +
                    ["/Volumes/SystemRoot" + binary],
                    stdin=subprocess.DEVNULL, stdout=f, stderr=subprocess.STDOUT)
 

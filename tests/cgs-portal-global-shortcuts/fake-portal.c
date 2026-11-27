@@ -217,7 +217,8 @@ static void logShortcuts(DBusMessage *message) {
 
     if (!dbus_message_iter_init(message, &iterator))
         return;
-    if (dbus_message_iter_get_arg_type(&iterator) != DBUS_TYPE_ARRAY)
+    /* BindShortcuts(session_handle, shortcuts, parent_window, options): the shortcuts are the second argument. */
+    if (!dbus_message_iter_next(&iterator) || dbus_message_iter_get_arg_type(&iterator) != DBUS_TYPE_ARRAY)
         return;
     dbus_message_iter_recurse(&iterator, &array);
     while (dbus_message_iter_get_arg_type(&array) == DBUS_TYPE_STRUCT) {
@@ -259,7 +260,14 @@ static DBusHandlerResult bindShortcuts(DBusConnection *connection, DBusMessage *
     if (handle[0] == '\0')
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
     requestPath(message, handle, request, sizeof(request));
-    log_line("CALL BindShortcuts session=%s parent=''", dbus_message_get_path(message));
+    {
+        DBusMessageIter first;
+        const char *session = "?";
+        if (dbus_message_iter_init(message, &first) &&
+            dbus_message_iter_get_arg_type(&first) == DBUS_TYPE_OBJECT_PATH)
+            dbus_message_iter_get_basic(&first, &session);
+        log_line("CALL BindShortcuts session=%s parent=''", session);
+    }
     logShortcuts(message);
 
     replyWithPath(connection, message, request);
