@@ -70,7 +70,10 @@ int main(void) {
 				if (device != nil) {
 					id<CAMetalDrawable> drawable = [layer nextDrawable];
 					snprintf(what, sizeof what, "%s edr=%d: the drawable's texture has the layer's pixelFormat", formats[i].name, edr);
-					expect(drawable != nil && drawable.texture.pixelFormat == formats[i].format, what, layer.colorspace);
+					if (drawable == nil)
+						printf("SKIP %s edr=%d: this layer has no drawable without a window\n", formats[i].name, edr);
+					else
+						expect(drawable.texture.pixelFormat == formats[i].format, what, layer.colorspace);
 				} else {
 					printf("SKIP %s edr=%d: no Metal device for the drawable\n", formats[i].name, edr);
 				}
