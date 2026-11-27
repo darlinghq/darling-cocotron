@@ -164,14 +164,6 @@ COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByTransformingPath(
         CGPathRef _Nullable path, const CGAffineTransform * _Nullable transform)
     CF_SWIFT_NAME(CGPath.copy(self:using:));
 
-COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByNormalizing(CGPathRef _Nullable path, bool evenOddFillRule);
-COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByUnioningPath(CGPathRef _Nullable path, CGPathRef _Nullable maskPath, bool evenOddFillRule);
-COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyByIntersectingPath(CGPathRef _Nullable path, CGPathRef _Nullable maskPath, bool evenOddFillRule);
-COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyBySubtractingPath(CGPathRef _Nullable path, CGPathRef _Nullable maskPath, bool evenOddFillRule);
-COREGRAPHICS_EXPORT CGPathRef _Nullable CGPathCreateCopyBySymmetricDifferenceOfPath(CGPathRef _Nullable path, CGPathRef _Nullable maskPath, bool evenOddFillRule);
-COREGRAPHICS_EXPORT CFArrayRef _Nullable CGPathCreateSeparateComponents(CGPathRef _Nullable path, bool evenOddFillRule);
-COREGRAPHICS_EXPORT bool CGPathIntersectsPath(CGPathRef _Nullable path1, CGPathRef _Nullable path2, bool evenOddFillRule);
-
 COREGRAPHICS_EXPORT CGMutablePathRef _Nullable CGPathCreateMutableCopyByTransformingPath(
         CGPathRef _Nullable path, const CGAffineTransform * _Nullable transform)
     CF_SWIFT_NAME(CGPath.mutableCopy(self:using:));
