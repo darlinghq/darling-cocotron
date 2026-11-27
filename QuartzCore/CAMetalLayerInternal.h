@@ -37,6 +37,8 @@ namespace IndiumKit {
 	id<MTLDevice> _device;
 	MTLPixelFormat _pixelFormat;
 	CGColorSpaceRef _colorspace;
+	// whether the application assigned the colorspace, which a later pixelFormat then leaves alone
+	BOOL _colorspaceAssigned;
 	BOOL _framebufferOnly;
 	CGSize _drawableSize;
 	BOOL _drawableSizeExplicitlySet;

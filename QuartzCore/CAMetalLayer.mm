@@ -492,9 +492,45 @@ static BOOL forcesOpenGLPresentation(void) {
 	return _pixelFormat;
 }
 
+// The name of the colorspace setting a pixel format gives a layer, or NULL for a format that sets none.
+static CFStringRef defaultColorspaceName(MTLPixelFormat pixelFormat)
+{
+	switch (pixelFormat) {
+		case MTLPixelFormatBGRA10_XR:
+		case MTLPixelFormatBGRA10_XR_sRGB:
+		case MTLPixelFormatBGR10_XR:
+		case MTLPixelFormatBGR10_XR_sRGB:
+			return kCGColorSpaceExtendedSRGB;
+		case MTLPixelFormatRGBA16Float:
+			return kCGColorSpaceExtendedLinearSRGB;
+		case MTLPixelFormatBGRA8Unorm:
+		case MTLPixelFormatRGB10A2Unorm:
+			return kCGColorSpaceSRGB;
+		default:
+			return NULL;
+	}
+}
+
 - (void)setPixelFormat: (MTLPixelFormat)pixelFormat
 {
 	_pixelFormat = pixelFormat;
+	// QUIRK: setting pixelFormat sets the layer's colorspace to the default of that format (ExtendedSRGB for the four extended-range
+	// formats, ExtendedLinearSRGB for RGBA16Float, SRGB for BGRA8Unorm and RGB10A2Unorm), also when it changes from one format to another,
+	// unless the application assigned a non-nil colorspace (even one equal to a default), which every later pixelFormat keeps, whether it
+	// was assigned before or after the first pixelFormat; assigning nil reads nil at once and the next pixelFormat applies the default
+	// again. A new layer has none, and wantsExtendedDynamicRangeContent never changes it. Not documented. Evidence: black-box
+	// observation on macOS 27.0.1 arm64 (tier 2). Test: tests/quartzcore-metal-layer-colorspace.m
+	CFStringRef name = defaultColorspaceName(pixelFormat);
+	@synchronized(self) {
+		if (name != NULL && !_colorspaceAssigned) {
+			CGColorSpaceRef space = CGColorSpaceCreateWithName(name);
+			if (space != NULL) {
+				CGColorSpaceRef old = _colorspace;
+				_colorspace = space;
+				if (old) CGColorSpaceRelease(old);
+			}
+		}
+	}
 	[self recreateDrawables];
 }
 
@@ -508,6 +544,7 @@ static BOOL forcesOpenGLPresentation(void) {
 {
 	BOOL changed = NO;
 	@synchronized(self) {
+		_colorspaceAssigned = colorspace != NULL;
 		BOOL equal = _colorspace == colorspace ||
 		             (_colorspace != NULL && colorspace != NULL && CFEqual(_colorspace, colorspace));
 		if (!equal) {
