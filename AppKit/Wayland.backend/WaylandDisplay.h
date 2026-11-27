@@ -144,9 +144,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // xdg-system-bell-v1: the compositor's bell, used by NSBeep().
     struct wl_proxy *_bell;
     uint32_t _bellName;
-    // alpha-modifier-v1: the manager that creates per-surface opacity modifiers.
-    struct wl_proxy *_alphaModifierManager;
-    uint32_t _alphaModifierManagerName;
     // xdg-toplevel-tag-v1: stable window tags for compositor-side window rules.
     struct wl_proxy *_toplevelTagManager;
     uint32_t _toplevelTagManagerName;
@@ -222,8 +219,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) updateWindowIcons;
 // Tells a window that the dialog manager arrived after it was mapped.
 - (void) dialogManagerAvailable;
-// Tells windows that the alpha modifier manager arrived after their surfaces were created.
-- (void) alphaModifierManagerAvailable;
 // Tells windows that the toplevel tag manager arrived after their toplevels were created.
 - (void) toplevelTagManagerAvailable;
 // Tells mapped windows to create an inhibitor when the idle inhibit manager arrives.

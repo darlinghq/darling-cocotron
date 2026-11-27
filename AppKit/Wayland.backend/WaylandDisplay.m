@@ -289,7 +289,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
             WaylandMarshal(_sessionManager, WP_SESSION_MANAGER_DESTROY,
                            NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         struct wl_proxy *proxies[] = {_dialogManager, _bell,
-                                      _alphaModifierManager, _toplevelTagManager, _idleInhibitManager,
+                                      _toplevelTagManager, _idleInhibitManager,
                                       _textInput, _textInputManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
                                       _shm, _viewporter, _fractionalScaleManager, _activationToken, _activation, _appMenuManager, _subcompositor, _compositor, _registry};
@@ -428,10 +428,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) dialogManagerAvailable];
 }
 
-- (void) alphaModifierManagerAvailable {
-    for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-        [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) alphaModifierAvailable];
-}
 
 - (void) toplevelTagManagerAvailable {
     for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
@@ -606,14 +602,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                          version: 1
                             kind: 0
                           object: nil];
-    } else if (strcmp(interface, "wp_alpha_modifier_v1") == 0 && _alphaModifierManager == NULL) {
-        _alphaModifierManagerName = name;
-        _alphaModifierManager = [self bindGlobal: name
-                                       interface: &wp_alpha_modifier_v1_interface
-                                         version: 1
-                                            kind: 0
-                                          object: nil];
-        [self alphaModifierManagerAvailable];
     } else if (strcmp(interface, "xdg_toplevel_tag_manager_v1") == 0 && _toplevelTagManager == NULL) {
         _toplevelTagManagerName = name;
         _toplevelTagManager = [self bindGlobal: name
@@ -760,14 +748,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                        WL_MARSHAL_FLAG_DESTROY, NULL);
         _bell = NULL;
         _bellName = 0;
-        return;
-    }
-    if (_alphaModifierManager != NULL && name == _alphaModifierManagerName) {
-        // The protocol says objects created with the manager survive its destruction.
-        WaylandMarshal(_alphaModifierManager, WP_ALPHA_MODIFIER_DESTROY, NULL,
-                       WL_MARSHAL_FLAG_DESTROY, NULL);
-        _alphaModifierManager = NULL;
-        _alphaModifierManagerName = 0;
         return;
     }
     if (_toplevelTagManager != NULL && name == _toplevelTagManagerName) {

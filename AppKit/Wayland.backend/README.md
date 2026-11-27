@@ -38,6 +38,11 @@ to, such a window is an ordinary toplevel.
 
 - Windows: xdg toplevels, resize, hide and show, compositor close, nested popup menus, client or
   server-side decorations.
+  The windows are CoreGraphics toplevel windows (`CGSWindow.h`, the SPI the X11 backend uses too): CoreGraphics makes the
+  wl_surface and, while a window is shown, its xdg-shell, xdg-decoration and layer-shell objects, and tells the backend
+  the compositor's configure sequences, close requests and dismissed pop-ups; a window's number is its CoreGraphics
+  window's id. The backend draws into the surface and adds what the protocol needs beyond that (fullscreen, parent,
+  minimizing, activation, session, scale).
 - The main menu in Plasma's global menu, or in the windows: see below.
 - Input: pointer with click grouping and scroll frames, keyboard through xkbcommon with the compositor's
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
