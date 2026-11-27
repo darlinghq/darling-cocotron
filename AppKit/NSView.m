@@ -1214,7 +1214,9 @@ static void drawViewTreeInContext(NSView *view, CGContextRef port, NSRect rect) 
     [NSGraphicsContext setCurrentContext: context];
     CGContextSaveGState(port);
     CGContextClipToRect(port, rect);
-    [view drawRect: rect];
+    [[view effectiveAppearance] performAsCurrentDrawingAppearance: ^{
+        [view drawRect: rect];
+    }];
     CGContextRestoreGState(port);
     [NSGraphicsContext restoreGraphicsState];
 
@@ -3604,14 +3606,16 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
             [[NSColor yellowColor] set];
             NSRectFill(rect);
         } else {
-            if (_layer != nil && [self wantsUpdateLayer]) {
-                [self updateLayer];
-                // A custom backing layer may implement -display (e.g. a Metal
-                // blit layer). View invalidation must also invalidate that layer.
-                [_layer setNeedsDisplay];
-            }
-            else
-                [self drawRect: rect];
+            [[self effectiveAppearance] performAsCurrentDrawingAppearance: ^{
+                if (_layer != nil && [self wantsUpdateLayer]) {
+                    [self updateLayer];
+                    // A custom backing layer may implement -display (e.g. a Metal
+                    // blit layer). View invalidation must also invalidate that layer.
+                    [_layer setNeedsDisplay];
+                }
+                else
+                    [self drawRect: rect];
+            }];
             if (NSShowAllViews) {
                 [[self _borderColorForNSShowAllViews] set];
                 NSFrameRect(rect);
@@ -4712,6 +4716,8 @@ static id anchorForView(NSView *view, Class anchorClass, NSLayoutAttribute attri
         return NS_EXTRA(NSView, self)->_appearance;
     if (_superview != nil)
         return [_superview effectiveAppearance];
+    if (_window != nil)
+        return [_window effectiveAppearance];
     return [NSAppearance currentAppearance];
 }
 
