@@ -79,7 +79,15 @@ static int readCallback(GifFileType *ft, GifByteType *buf, int count) {
 - (CFDictionaryRef) copyPropertiesAtIndex: (NSUInteger) index
                                   options: (CFDictionaryRef) options
 {
+    if (index >= _gif->ImageCount)
+        return NULL;
+
+    // The pixel size is that of the image createImageAtIndex: makes for this
+    // frame.
+    GifImageDesc *desc = &_gif->SavedImages[index].ImageDesc;
     return (CFDictionaryRef)[@{
+        kO2ImagePropertyPixelWidth : @(desc->Width),
+        kO2ImagePropertyPixelHeight : @(desc->Height),
         kO2ImagePropertyDPIWidth : @(72),
         kO2ImagePropertyDPIHeight : @(72)
     } retain];
