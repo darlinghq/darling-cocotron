@@ -577,7 +577,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
     if ((self = [super init]) == nil)
         return nil;
     CGSConnectionWayland *connection = drag->_connection;
-    struct wl_proxy *manager = connection->_dataDeviceManager;
+    struct wl_proxy *manager = [connection dataDeviceManager];
     struct wl_proxy *device = [drag->_clipboard dataDevice];
     uint32_t serial = [connection dragSerial];
     CGSWindow *origin = [connection windowForId: description->window];
@@ -647,7 +647,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
                                interface: &wl_data_source_interface
                                arguments: args
                                     kind: CGSWaylandObjectDragSource
-                                  object: self];
+                                  object: drag];
     if (_wlSource == NULL) {
         [self release];
         return nil;
@@ -880,7 +880,8 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
 - (id<CGSDragSession>) beginDragWithDescription: (const CGSDragDescription *) description {
     if (![self available] || _outgoing != nil || ![NSThread isMainThread])
         return nil;
-    return [[[CGSWaylandDragSession alloc] initWithDrag: self description: description] autorelease];
+    // The caller owns the session (see _CGSDragBegin()).
+    return [[CGSWaylandDragSession alloc] initWithDrag: self description: description];
 }
 
 - (void) windowUnmapped: (uint32_t) windowID {
@@ -991,6 +992,10 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
 
 - (id<CGSDragSession>) _beginDrag: (const CGSDragDescription *) description {
     return [(CGSWaylandDrag *) _drag beginDragWithDescription: description];
+}
+
+- (struct wl_proxy *) dataDeviceManager {
+    return _dataDeviceManager;
 }
 
 - (uint32_t) dragSerial {

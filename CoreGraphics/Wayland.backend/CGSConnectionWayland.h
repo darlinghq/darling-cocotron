@@ -229,6 +229,7 @@ typedef enum {
 // The serial of the button press that a drag started now is tied to, 0 when no button is down; a drag that is
 // started takes it (see CGSWaylandDrag).
 - (uint32_t) dragSerial;
+- (struct wl_proxy *) dataDeviceManager;
 - (void) consumeDragSerial;
 
 // The seat, NULL until the compositor has described it.

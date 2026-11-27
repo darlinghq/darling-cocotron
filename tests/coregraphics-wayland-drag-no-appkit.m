@@ -224,7 +224,7 @@ int main(int argc, char **argv) {
                 .types = @[ @"public.utf8-plain-text", @"public.html" ],
                 .source = [Source new],
                 .operations = n == 3 ? 0 : (Copy | Move | Link),
-                .localOperations = n == 3 ? Move : Copy,
+                .localOperations = n == 3 ? Move : (Copy | Move),
             };
             id<DragSession> session = dragBegin(&description);
             if (session == nil) {

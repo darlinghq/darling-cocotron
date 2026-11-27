@@ -205,7 +205,7 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                 [(CGSWaylandPointer *) object lockEvent: opcode kind: objectKind proxy: (struct wl_proxy *) proxy arguments: args];
                 break;
             case CGSWaylandObjectDragSource:
-                [(CGSWaylandDrag *) _drag sourceEvent: opcode proxy: (struct wl_proxy *) proxy arguments: args];
+                [(CGSWaylandDrag *) object sourceEvent: opcode proxy: (struct wl_proxy *) proxy arguments: args];
                 break;
             case CGSWaylandObjectDataDevice:
             case CGSWaylandObjectDataOffer:
