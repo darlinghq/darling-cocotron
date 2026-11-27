@@ -33,6 +33,9 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <sys/mman.h>
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+#include <screen_capture_backend.h>
+#endif
 
 // not sure what type or value this has
 unsigned int kCGDisplayPixelHeight = 8200;
@@ -1299,16 +1302,70 @@ CGColorSpaceRef CGDisplayCopyColorSpace(CGDirectDisplayID display) {
 }
 
 CGImageRef CGDisplayCreateImageForRect(CGDirectDisplayID display, CGRect rect) {
-    // Only an existing display and a non-empty part of it can be captured.
-    if (!screenForDisplayID(activeScreens(NULL), display) ||
-        CGRectIsEmpty(rect) || CGRectIsNull(rect) ||
-        !CGRectIntersectsRect(rect, CGDisplayBounds(display)))
-        return NULL;
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+    CGRect bounds = CGDisplayBounds(display);
+    CGRect captureRect = CGRectIntersection(rect, bounds);
+    struct darling_screen_capture_stream *stream = NULL;
+    uint8_t *pixels = NULL;
+    CGColorSpaceRef space = NULL;
+    CGContextRef context = NULL;
+    CGImageRef image = NULL;
+    size_t width, height, bytesPerRow;
+    int result;
 
-    // Reading the display's contents is a screen capture. No backend can read
-    // pixels back, so the function returns NULL, as it does on a Mac where
-    // screen recording is not permitted (see CGPreflightScreenCaptureAccess).
+    if (CGRectIsNull(captureRect) || CGRectIsEmpty(captureRect))
+        return NULL;
+    width = (size_t) captureRect.size.width;
+    height = (size_t) captureRect.size.height;
+    bytesPerRow = width * 4;
+
+    {
+        struct darling_screen_capture_callbacks callbacks;
+        memset(&callbacks, 0, sizeof(callbacks));
+        result = darling_screen_capture_open((int32_t) bounds.origin.x, (int32_t) bounds.origin.y,
+            (uint32_t) bounds.size.width, (uint32_t) bounds.size.height, 1,
+            darling_screen_capture_supports_hdr() ? 1 : 0, &callbacks, NULL, &stream);
+    }
+    if (result != 0 || stream == NULL)
+        return NULL;
+    if (darling_screen_capture_start(stream, 1) == 0 && darling_screen_capture_wait(stream, 5000) == 0) {
+        struct darling_pw_buffer buffer;
+        struct darling_pw_format format;
+        void *cookie = NULL;
+        memset(&buffer, 0, sizeof(buffer));
+        if (darling_pw_stream_dequeue(darling_screen_capture_pipe(stream), &buffer, &cookie) > 0
+                && darling_pw_stream_get_format(darling_screen_capture_pipe(stream), &format) == 0) {
+            struct darling_screen_capture_frame frame;
+            uint32_t i;
+            memset(&frame, 0, sizeof(frame));
+            frame.pts_ns = buffer.pts_ns; frame.flags = buffer.flags;
+            frame.format = format.video_format; frame.width = format.width; frame.height = format.height;
+            for (i = 0; i < 4; i++) { frame.planes[i] = buffer.planes[i]; frame.strides[i] = buffer.plane_strides[i]; frame.sizes[i] = buffer.plane_sizes[i]; }
+            pixels = calloc(1, bytesPerRow * height);
+            if (pixels != NULL && darling_screen_capture_convert_bgra_rect(&frame, pixels, (uint32_t) bytesPerRow,
+                    (uint32_t) width, (uint32_t) height,
+                    (int32_t) (captureRect.origin.x - bounds.origin.x),
+                    (int32_t) (captureRect.origin.y - bounds.origin.y),
+                    (uint32_t) captureRect.size.width, (uint32_t) captureRect.size.height,
+                    0, 0, (uint32_t) width, (uint32_t) height) == 0) {
+                space = CGColorSpaceCreateDeviceRGB();
+                context = CGBitmapContextCreate(pixels, width, height, 8, bytesPerRow, space,
+                    kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Little);
+                if (context != NULL)
+                    image = CGBitmapContextCreateImage(context);
+            }
+            darling_pw_stream_queue(darling_screen_capture_pipe(stream), cookie, 0);
+        }
+    }
+    if (context != NULL) CGContextRelease(context);
+    if (space != NULL) CGColorSpaceRelease(space);
+    free(pixels);
+    darling_screen_capture_start(stream, 0);
+    darling_screen_capture_close(stream);
+    return image;
+#else
     return NULL;
+#endif
 }
 
 CGImageRef CGDisplayCreateImage(CGDirectDisplayID displayID) {
@@ -1326,12 +1383,19 @@ bool CGDisplayUsesForceToGray(void) {
 }
 
 bool CGPreflightScreenCaptureAccess(void) {
-    // Without screen capture, access is never granted.
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+    return darling_screen_capture_permitted() != 0;
+#else
     return false;
+#endif
 }
 
 bool CGRequestScreenCaptureAccess(void) {
+#if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
+    return darling_screen_capture_request_access() == 0;
+#else
     return false;
+#endif
 }
 
 id CGDirectDisplayCopyCurrentMetalDevice(CGDirectDisplayID displayID) {
