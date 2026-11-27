@@ -41,7 +41,7 @@ typedef enum {
 @protocol CGSNativeConnectionObserver <NSObject>
 @optional
 // X11: an event read from the connection that CoreGraphics did not handle itself (an XEvent*). The
-// observer calls XFilterEvent() as Xlib requires.
+// input method has seen it already (XFilterEvent(), as Xlib requires).
 - (void) nativeConnectionEvent: (void *) event;
 // The pending events have been read and dispatched (on Wayland the listeners of every object on the
 // connection have run). The observer sends what it queued meanwhile.
@@ -71,17 +71,6 @@ typedef enum {
 // Called before CoreGraphics posts the events a keyboard event of the window system makes, so that
 // the observer can send what it holds back from earlier input first (the order of the events).
 - (void) nativeConnectionWillPostKeyboardEvent;
-// X11: the text a key press (an XKeyEvent*) makes after the input method of the window it is for has
-// composed it. The input contexts belong to the framework that owns the windows (the input method
-// stays in the application); nil when the observer has no input context for the window, which makes
-// CoreGraphics look the key up in the keymap. The keysym is set when the lookup gives one (NoSymbol,
-// 0, otherwise).
-- (NSString *) nativeConnectionComposedTextForKeyEvent: (void *) event keySym: (unsigned long *) keySym;
-// X11: whether an input method of the application (XMODIFIERS names one) composes dead keys and Compose
-// sequences, filtering the key events (XFilterEvent) and returning the text. Without one (the observer does not
-// answer, or answers NO; Xlib's built-in input method only composes) CoreGraphics composes them itself, and does
-// not pass the key events to Xlib's compose filter, which drops a sequence that no table entry continues.
-- (BOOL) nativeConnectionInputMethodComposes;
 // X11: CoreGraphics has decoded a pointer event (an XEvent*) into the CGEvent and is about to post it.
 // The observer may add what only it knows (kCGSMouseEventWindowKeyState). Returns whether the process'
 // event stream gets the event: NO when the window it is for does not take it (a mouse moved event for a

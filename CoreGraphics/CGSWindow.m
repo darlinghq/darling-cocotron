@@ -38,6 +38,7 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     _nextSurfaceId = 1;
     _surfaces = [[NSMutableDictionary alloc] initWithCapacity: 1];
     _windowId = windowID;
+    _inputMethodCursorRect = CGRectNull;
     return self;
 }
 
@@ -62,6 +63,34 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
 }
 
 - (void) dragDestinationChanged {
+}
+
+- (void) setInputMethodEnabled: (BOOL) enabled {
+    if (enabled == _inputMethodEnabled)
+        return;
+    _inputMethodEnabled = enabled;
+    [self inputMethodEnabledChanged];
+}
+
+- (BOOL) inputMethodEnabled {
+    return _inputMethodEnabled;
+}
+
+- (void) setInputMethodCursorRect: (CGRect) rect {
+    if (CGRectEqualToRect(rect, _inputMethodCursorRect))
+        return;
+    _inputMethodCursorRect = rect;
+    [self inputMethodCursorRectChanged];
+}
+
+- (CGRect) inputMethodCursorRect {
+    return _inputMethodCursorRect;
+}
+
+- (void) inputMethodEnabledChanged {
+}
+
+- (void) inputMethodCursorRectChanged {
 }
 
 - (CGSSurface *) surfaceForId: (CGSSurfaceID) surfaceId {

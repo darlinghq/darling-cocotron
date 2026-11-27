@@ -74,19 +74,6 @@ static BOOL appKitPreference(CFStringRef key) {
     return valid && value;
 }
 
-// Whether the locale modifiers (XMODIFIERS, as XSetLocaleModifiers("") returns them) name an input method other
-// than Xlib's own: "@im=none" and "@im=local" are the built-in one, and so is no @im at all.
-static BOOL modifiersNameInputMethod(const char *modifiers) {
-    const char *name = modifiers != NULL ? strstr(modifiers, "@im=") : NULL;
-    if (name == NULL)
-        return NO;
-    name += 4;
-    size_t length = strcspn(name, "@");
-    if (length == 0)
-        return NO;
-    return !(length == 4 && strncmp(name, "none", 4) == 0) && !(length == 5 && strncmp(name, "local", 5) == 0);
-}
-
 @implementation X11Display
 
 static int errorHandler(Display *display, XErrorEvent *errorEvent) {
@@ -114,17 +101,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 
         _windowsByID = [NSMutableDictionary new];
 
-        const char *modifiers = XSetLocaleModifiers("");
-        _xim = XOpenIM(_display, NULL, NULL, NULL);
-        _inputMethodComposes = _xim != NULL && modifiersNameInputMethod(modifiers);
-
-        if (!_xim) {
-            NSLog(@"Failed to open XIM, falling back to im=none\n");
-
-            XSetLocaleModifiers("@im=none");
-            _xim = XOpenIM(_display, NULL, NULL, NULL);
-        }
-
         // RandR events are CoreGraphics', which reports the new layout (see -nativeConnectionDisplayLayoutChanged).
         // Which window covers one of ours is judged by CoreGraphics, which tells the windows (see
         // kCGSToplevelEventOcclusionChanged).
@@ -149,9 +125,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 
     // -init releases self when it cannot use the connection, so none of these may exist yet.
     // The connection itself is CoreGraphics'; it stays open.
-    if (_xim)
-        XCloseIM(_xim);
-
     [_appMenu release];
     [_windowsByID release];
     [super dealloc];
@@ -575,10 +548,9 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     if (window != nil)
         window->_receivingFocus = NO;
     lastFocusedWindow = delegate;
-    if (window != nil && window->_xic != NULL) {
-        XSetICFocus(window->_xic);
-        [window updateInputMethodSpot];
-    }
+    // The input method took the focus with the window system's (CoreGraphics gives it); it needs to know where
+    // the client's caret is.
+    [window updateInputMethodSpot];
 }
 
 // The window system's keyboard focus came to a window or left it (see kCGSToplevelEventFocusGained). Focus
@@ -604,9 +576,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
                 checkForAppDeactivation: NO];
     lastFocusedWindow = nil;
     [self updatePointerConfinement];
-    // Unlike XSetICFocus(), XUnsetICFocus() doesn't accept a NULL XIC.
-    if (window != nil && window->_xic != NULL)
-        XUnsetICFocus(window->_xic);
 }
 
 // The window system's input focus went to a window of another client: the application is no longer active, even
@@ -780,52 +749,8 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 - (void) nativeConnectionEvent: (void *) event {
     XEvent *e = event;
 
-    // An input method's reply (Xlib: every event goes through XFilterEvent()); key events are filtered in
-    // -postXEvent:, where the input method's decision is used.
-    if (e->type != KeyPress && e->type != KeyRelease && XFilterEvent(e, None))
-        return;
+    // The input method has seen it already: CoreGraphics runs it.
     [self postXEvent: e];
-}
-
-- (BOOL) nativeConnectionInputMethodComposes {
-    return _inputMethodComposes;
-}
-
-// The text of a key press as the input method of its window composes it (CoreGraphics decodes the key and
-// asks, since the input contexts are this display's: the input method stays in the application). nil when
-// the window has no input context (no input method could be opened, or XCreateIC() failed), which makes
-// CoreGraphics look the key up in the keymap itself.
-- (NSString *) nativeConnectionComposedTextForKeyEvent: (void *) event keySym: (unsigned long *) keySym {
-    XKeyEvent *keyEvent = event;
-    X11Window *window = (X11Window *) [self windowForID: keyEvent->window];
-
-    if (![window isKindOfClass: [X11Window class]] || window->_xic == NULL)
-        return nil;
-
-    char buf[64];
-    char *text = buf;
-    KeySym symbol = NoSymbol;
-    Status status;
-    int length = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) keyEvent, buf, sizeof(buf) - 1, &symbol, &status);
-    if (status == XBufferOverflow) {
-        // Composed and input method text can be longer than buf. Nothing was copied and length is the
-        // size needed; Xlib says to repeat the lookup with a large enough buffer.
-        char *larger = malloc(length + 1);
-        if (larger != NULL) {
-            text = larger;
-            length = Xutf8LookupString(window->_xic, (XKeyPressedEvent *) keyEvent, text, length, &symbol, &status);
-        }
-    }
-    // The text and the keysym are only valid for the statuses that report them.
-    if ((status != XLookupChars && status != XLookupBoth) || length < 0)
-        length = 0;
-    if (status != XLookupKeySym && status != XLookupBoth)
-        symbol = NoSymbol;
-    NSString *result = [[[NSString alloc] initWithBytes: text length: length encoding: NSUTF8StringEncoding] autorelease];
-    if (text != buf)
-        free(text);
-    *keySym = symbol;
-    return result != nil ? result : @"";
 }
 
 // CoreGraphics decoded a pointer event and is about to post it. What AppKit knows when the event arrives is

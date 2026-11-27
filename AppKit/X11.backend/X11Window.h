@@ -33,6 +33,8 @@
 // Posted, with the window as the object, after its backing pixels were flushed.
 extern NSString *const X11WindowBackingDidFlushNotification;
 
+@class NSCGSInputMethod;
+
 @interface X11Window : CGWindow {
     int _level; // TODO: care about this value
     Display *_display;
@@ -82,27 +84,16 @@ extern NSString *const X11WindowBackingDidFlushNotification;
     BOOL _variableRefreshHint;
 
 @public
-    XIC _xic;
-    // Set once the context delivers the composition through callbacks (on-the-spot
-    // preedit), with the callbacks and the composition's code points and caret.
-    BOOL _onTheSpotPreedit;
-    XIMCallback _preeditCallbacks[4];
-    NSMutableData *_preedit;
-    int _preeditCaret;
+    // The window's use of the window system's input method (see NSCGSInputMethod.h); nil when there is none.
+    NSCGSInputMethod *_inputMethod;
     // YES while X11Display delivers FocusIn for this window (see -makeKey).
     BOOL _receivingFocus;
 }
 
 - (instancetype) initWithDelegate: (NSWindow *) delegate;
+// Lets the window use the window system's input method, which is CoreGraphics' (made once; again is a no-op).
 - (void) createXInputContext;
-// The input method's composition, as its preedit callbacks report it, passed on to the
-// text input client of the window's first responder (see NSTextInputContext).
-- (void) preeditReplaceCharactersFrom: (int) first
-                               length: (int) length
-                             withText: (NSString *) text
-                                caret: (int) caret;
-- (void) preeditMoveCaretTo: (int) position direction: (XIMCaretDirection) direction;
-- (void) preeditDone;
+// The client's caret moved: the input method is told where its candidates belong.
 - (void) updateInputMethodSpot;
 - (O2Rect) frame;
 - (Visual *) visual;

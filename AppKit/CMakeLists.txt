@@ -357,6 +357,7 @@ set(AppKit_sources
 	NSLevelIndicator.m
 	NSDraggingManager.m
 	NSCGSDraggingManager.m
+	NSCGSInputMethod.m
 	NSCGSDropSession.m
 	NSImage.m
 	NSImageSymbolGlyphs.m

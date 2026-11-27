@@ -67,6 +67,7 @@ set_property(SOURCE
 	CGSSymbolicHotKeys.m
 	CGSSelection.m
 	CGSDrag.m
+	CGSInputMethod.m
 
 	APPEND PROPERTY COMPILE_FLAGS "-include Foundation/Foundation.h"
 )
@@ -139,6 +140,7 @@ set(CoreGraphics_sources
 	CGSSymbolicHotKeys.m
 	CGSSelection.m
 	CGSDrag.m
+	CGSInputMethod.m
 	CGSCursor.m
 	DarlingFileURIList.m
 	CGEvent.m

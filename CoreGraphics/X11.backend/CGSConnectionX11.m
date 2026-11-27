@@ -225,6 +225,8 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 	{
 		[_windows removeAllObjects];
 	}
+	// The input contexts of the windows are gone with them; the input method goes before XCloseDisplay().
+	[_inputMethodSupport release];
 	// Closing the display releases the grabs
 	[_hotKeys release];
 	[_grabbedHotKeys release];
@@ -985,6 +987,7 @@ static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
 				_CGSNativeFocusReport(YES);
 			}
 			[_pointer focusEvent: event];
+			[self _inputMethodFocusEvent: event gained: YES];
 			[self _toplevelFocusEvent: event gained: YES];
 			break;
 		case FocusOut:
@@ -994,6 +997,7 @@ static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
 				event->xfocus.detail != NotifyInferior)
 				[_keyboard resetComposition];
 			[_pointer focusEvent: event];
+			[self _inputMethodFocusEvent: event gained: NO];
 			[self _toplevelFocusEvent: event gained: NO];
 			break;
 		case PropertyNotify:
@@ -1101,6 +1105,17 @@ static NSArray<NSNumber*>* rootWindowList(Display* display, const char* name);
 {
 	CGSWindowX11* window = [self _cgsWindowForNativeWindow: native];
 	return [window isToplevel] ? window : nil;
+}
+
+// The keyboard focus came to a window of the process or left it (a grab or the pointer passing over the window
+// moves nothing): the window's input method follows it. Windows that are not toplevel windows have one too.
+-(void) _inputMethodFocusEvent:(XEvent*) event gained:(BOOL) gained
+{
+	if (event->xfocus.mode == NotifyGrab || event->xfocus.mode == NotifyUngrab ||
+		event->xfocus.detail == NotifyPointer || event->xfocus.detail == NotifyPointerRoot ||
+		event->xfocus.detail == NotifyInferior)
+		return;
+	[[self _cgsWindowForNativeWindow: event->xfocus.window] inputMethodFocusChanged: gained];
 }
 
 // The window system's focus moved to or from a toplevel window; a grab or the pointer passing over the window
@@ -1627,7 +1642,13 @@ static int ignoreBadWindowWhileOrdering(Display* display, XErrorEvent* errorEven
 
 		if (XNextEvent(_display, &event) != Success)
 			continue;
-		if (![self processXEvent: &event] && observesEvents)
+		if ([self processXEvent: &event])
+			continue;
+		// An input method's reply (Xlib: every event goes through XFilterEvent()); key events are filtered by
+		// the keyboard, where the input method's decision is used.
+		if (event.type != KeyPress && event.type != KeyRelease && XFilterEvent(&event, None))
+			continue;
+		if (observesEvents)
 			[observer nativeConnectionEvent: &event];
 	}
 

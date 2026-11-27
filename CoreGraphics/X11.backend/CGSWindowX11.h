@@ -28,6 +28,7 @@
 // CGSSurface, which is a child X11 window of this one; nothing in this tree composites
 // a CGS window, so it stays unmapped until CGSOrderWindow() is asked to show it.
 
+@class CGSX11InputContext;
 @class CGSConnectionX11;
 
 @interface CGSWindowX11 : CGSWindow {
@@ -72,6 +73,9 @@
 	BOOL _occluded;
 	BOOL _configureKnown;        // the geometry of the last configure event, to tell a repeat from a change
 	int _configureX, _configureY, _configureWidth, _configureHeight;
+
+	// The window's input context, while it uses the input method (see CGSInputMethod.h); nil otherwise.
+	CGSX11InputContext* _inputContext;
 }
 
 // Whether the window is a toplevel window of the UI layer, which handles the window system's events for it.
@@ -102,6 +106,11 @@
 // pointer passing over), the window was mapped (the manager has stacked it by now) or put in a manager's frame,
 // or its _NET_WM_STATE changed.
 -(void) windowSystemFocusChanged:(BOOL) gained;
+// The text a key press makes as the window's input method composes it (nil: no input context, the keymap's).
+// The window system's keyboard focus came to the window or left it: the window's input method follows (a
+// FocusIn or FocusOut that is not a grab or the pointer passing over). Not only toplevel windows have one.
+-(void) inputMethodFocusChanged:(BOOL) gained;
+-(NSString*) inputMethodTextForKeyEvent:(XKeyEvent*) event keySym:(KeySym*) keySym;
 -(void) windowSystemDidMap;
 -(void) windowSystemDidReparent;
 -(void) windowSystemStateChanged;

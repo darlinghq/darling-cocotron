@@ -32,6 +32,7 @@
 @class CGSX11Keyboard;
 @class CGSX11Pointer;
 @class CGSX11Drag;
+@class CGSX11InputMethod;
 
 @interface CGSConnectionX11 : CGSConnection <CGSCursorNativeOwner> {
 @public
@@ -70,6 +71,8 @@
 	// The connection's part in XDND (see CGSX11Drag.h), made when the first window gets a drag destination or
 	// the first drag starts.
 	CGSX11Drag* _dragSupport;
+	// The connection's input method (see CGSX11InputMethod.h), made when the first window uses it.
+	CGSX11InputMethod* _inputMethodSupport;
 
 @private
 	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
@@ -147,6 +150,10 @@
 // The pointer of the process' connection, nil without one. Not retained for the caller (a test of the pointer's
 // decoding uses it to give the decoder an event of its own).
 +(CGSX11Pointer*) _processPointer;
+// The connection's input method, made on first use, and whether an input method of the application composes
+// dead keys and Compose sequences (see CGSX11InputMethod.h).
+-(CGSX11InputMethod*) _inputMethod;
+-(BOOL) _inputMethodComposes;
 
 @end
 

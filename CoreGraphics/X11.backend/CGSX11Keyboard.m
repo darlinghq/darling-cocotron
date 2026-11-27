@@ -20,6 +20,7 @@
 
 #import "CGSX11Keyboard.h"
 #import "CGSConnectionX11.h"
+#import "CGSWindowX11.h"
 #import "CGSModifierKeys.h"
 #import "X11KeyEvent.h"
 #import <CoreGraphics/CGEvent.h>
@@ -263,16 +264,14 @@ static unsigned int stateAfterKeyEvent(const ModifierKey *key, unsigned int stat
 
 #pragma mark - Keys
 
-// The characters of a key press: the text the input method of the window composed (the observer is the
-// framework that owns the input contexts), or the plain lookup in the keymap.
+// The characters of a key press: the text the input method of the window composed, or the plain lookup in the
+// keymap.
 - (NSString *) textForKeyEvent: (XKeyEvent *) event keySym: (KeySym *) keySym {
     if (event->type == KeyPress) {
-        id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
-        if ([observer respondsToSelector: @selector(nativeConnectionComposedTextForKeyEvent:keySym:)]) {
-            NSString *composed = [observer nativeConnectionComposedTextForKeyEvent: event keySym: keySym];
-            if (composed != nil)
-                return composed;
-        }
+        CGSWindowX11 *window = [_connection _cgsWindowForNativeWindow: event->window];
+        NSString *composed = [window inputMethodTextForKeyEvent: event keySym: keySym];
+        if (composed != nil)
+            return composed;
     }
     // Xutf8LookupString() may not be used with KeyRelease, and needs an input context.
     char buffer[32];
@@ -292,10 +291,7 @@ static unsigned int stateAfterKeyEvent(const ModifierKey *key, unsigned int stat
 #ifdef CGS_HAVE_KEY_COMPOSE
     if (!_composeLoaded) {
         _composeLoaded = YES;
-        id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
-        BOOL inputMethod = [observer respondsToSelector: @selector(nativeConnectionInputMethodComposes)] &&
-                           [observer nativeConnectionInputMethodComposes];
-        if (!inputMethod) {
+        if (![_connection _inputMethodComposes]) {
             _compose = CGSKeyComposeCreate();
             _composingKeys = [NSMutableSet new];
         }
