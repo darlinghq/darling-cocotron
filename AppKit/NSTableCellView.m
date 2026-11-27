@@ -18,6 +18,8 @@
 */
 
 #import <AppKit/NSTableCellView.h>
+#import <AppKit/NSControl.h>
+#import <AppKit/NSTableView.h>
 #import <AppKit/NSTextField.h>
 #import <AppKit/NSImageView.h>
 
@@ -26,8 +28,40 @@
 @synthesize textField = _textField;
 @synthesize imageView = _imageView;
 @synthesize objectValue = _objectValue;
-@synthesize backgroundStyle = _backgroundStyle;
 @synthesize rowSizeStyle = _rowSizeStyle;
+
+- (NSBackgroundStyle) backgroundStyle {
+    return _backgroundStyle;
+}
+
+// The controls in the view draw for the background the cell view says it is on (their text turns light on a
+// dark one). The search stops at the cell views and tables nested in it, which have their own.
+- (void) _applyBackgroundStyle: (NSBackgroundStyle) style toViewTree: (NSView *) view {
+    if (view != self && ([view isKindOfClass: [NSTableCellView class]] || [view isKindOfClass: [NSTableView class]]))
+        return;
+    if ([view isKindOfClass: [NSControl class]])
+        [[(NSControl *) view cell] setBackgroundStyle: style];
+    for (NSView *subview in [view subviews])
+        [self _applyBackgroundStyle: style toViewTree: subview];
+}
+
+- (void) setBackgroundStyle: (NSBackgroundStyle) style {
+    if (_backgroundStyle == style)
+        return;
+    _backgroundStyle = style;
+    [self _applyBackgroundStyle: style toViewTree: self];
+    [self setNeedsDisplay: YES];
+}
+
+- (void) didAddSubview: (NSView *) subview {
+    [super didAddSubview: subview];
+    [self _applyBackgroundStyle: _backgroundStyle toViewTree: subview];
+}
+
+- (void) setTextField: (NSTextField *) textField {
+    _textField = textField;
+    [[_textField cell] setBackgroundStyle: _backgroundStyle];
+}
 
 - (void) dealloc {
     [_objectValue release];

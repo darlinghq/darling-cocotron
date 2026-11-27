@@ -346,9 +346,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
             return;
     }
 
-    if ([self drawsBackground]) {
+    if ([self drawsBackground] && _backgroundColor != nil) {
         [_backgroundColor setFill];
-        NSRectFill(rect);
+        NSRectFillUsingOperation(rect, NSCompositeSourceOver);
     }
 }
 
@@ -401,8 +401,52 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     point = [self constrainScrollPoint: point];
     // Not need for more work and a full redislay if we don't really scroll
     if (!NSEqualPoints(point, _bounds.origin)) {
+        NSRect oldBounds = _bounds;
+        NSRect oldVisible = [self visibleRect];
+        CGFloat dx = oldBounds.origin.x - point.x;
+        CGFloat dy = oldBounds.origin.y - point.y;
+        NSRect newBounds = NSMakeRect(point.x, point.y, oldBounds.size.width, oldBounds.size.height);
+        NSRect newVisible = NSMakeRect(oldVisible.origin.x - dx, oldVisible.origin.y - dy,
+                                       oldVisible.size.width, oldVisible.size.height);
+        NSRect overlap = NSIntersectionRect(oldVisible, newVisible);
+        BOOL didCopy = NO;
+
+        if (NS_EXTRA(NSClipView, self)->_copiesOnScroll &&
+            _layer == nil &&
+            !NSIsEmptyRect(overlap) &&
+            ![self needsDisplay] &&
+            dx == floor(dx) && dy == floor(dy) &&
+            NSEqualSizes(oldBounds.size, _frame.size) &&
+            ([self isOpaque] || [[self documentView] isOpaque]) &&
+            [self canDraw]) {
+            [self scrollRect: overlap by: NSMakeSize(dx, dy)];
+            didCopy = YES;
+        }
+
         [self setBoundsOrigin: point];
-        [self setNeedsDisplay: YES];
+
+        if (didCopy) {
+            if (point.y > oldBounds.origin.y) {
+                NSRect strip = NSMakeRect(newVisible.origin.x, NSMaxY(oldVisible),
+                                          newVisible.size.width, point.y - oldBounds.origin.y);
+                [self setNeedsDisplayInRect: NSIntersectionRect(strip, newVisible)];
+            } else if (point.y < oldBounds.origin.y) {
+                NSRect strip = NSMakeRect(newVisible.origin.x, newVisible.origin.y,
+                                          newVisible.size.width, oldBounds.origin.y - point.y);
+                [self setNeedsDisplayInRect: NSIntersectionRect(strip, newVisible)];
+            }
+            if (point.x > oldBounds.origin.x) {
+                NSRect strip = NSMakeRect(NSMaxX(oldVisible), newVisible.origin.y,
+                                          point.x - oldBounds.origin.x, newVisible.size.height);
+                [self setNeedsDisplayInRect: NSIntersectionRect(strip, newVisible)];
+            } else if (point.x < oldBounds.origin.x) {
+                NSRect strip = NSMakeRect(newVisible.origin.x, newVisible.origin.y,
+                                          oldBounds.origin.x - point.x, newVisible.size.height);
+                [self setNeedsDisplayInRect: NSIntersectionRect(strip, newVisible)];
+            }
+        } else {
+            [self setNeedsDisplay: YES];
+        }
 
         if ([[self superview] isKindOfClass: [NSScrollView class]])
             [[self superview] reflectScrolledClipView: self];

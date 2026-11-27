@@ -997,9 +997,25 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
 }
 
+// The row views of a view-based table follow the selection state of the table: they draw the highlight in the
+// style it has, and hand their cell views the interior background style that goes with it.
+- (void) _syncRowViewsEmphasisWithState: (BOOL) emphasized {
+    NSTableViewSelectionHighlightStyle style = [self selectionHighlightStyle];
+
+    for (NSTableRowView *rowView in [NS_EXTRA(NSTableView, self)->_rowViews allValues]) {
+        [rowView setEmphasized: emphasized];
+        [rowView setSelectionHighlightStyle: style];
+    }
+}
+
+- (void) _syncRowViewsEmphasis {
+    [self _syncRowViewsEmphasisWithState: [self _selectionIsEmphasized]];
+}
+
 - (void) setSelectionHighlightStyle: (NSTableViewSelectionHighlightStyle) value
 {
     NS_EXTRA(NSTableView, self)->_selectionHighlightStyle = value;
+    [self _syncRowViewsEmphasis];
     [self setNeedsDisplay: YES];
 }
 
@@ -1735,6 +1751,7 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (void) _keyStateChanged: (NSNotification *) note {
+    [self _syncRowViewsEmphasis];
     [self setNeedsDisplay: YES];
 }
 
@@ -1745,8 +1762,14 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
 }
 
 - (BOOL) becomeFirstResponder {
-    [self setNeedsDisplay: YES];
-    return [super becomeFirstResponder];
+    BOOL accepted = [super becomeFirstResponder];
+
+    if (accepted) {
+        // The window has not recorded the new first responder yet.
+        [self _syncRowViewsEmphasisWithState: [[self window] isKeyWindow]];
+        [self setNeedsDisplay: YES];
+    }
+    return accepted;
 }
 
 // A table gives way to the field editor of the cell it edits. NSControl checks its selected cell while it has an
@@ -1755,7 +1778,12 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     [self setNeedsDisplay: YES];
     if (NS_EXTRA(NSControl, self)->_currentEditor != nil)
         return _editingCell == nil || [_editingCell hasValidObjectValue];
-    return [super resignFirstResponder];
+
+    BOOL resigned = [super resignFirstResponder];
+
+    if (resigned)
+        [self _syncRowViewsEmphasisWithState: NO];
+    return resigned;
 }
 
 - (void) drawHighlightedSelectionForColumn: (NSInteger) column
@@ -1908,8 +1936,10 @@ static CGFloat rowHeightAtIndex(NSTableView *self, NSInteger index) {
     NSInteger colorCount = [rowColors count];
 
     if (colorCount == 0 || !NS_EXTRA(NSTableView, self)->_alternatingRowBackground) {
-        [_backgroundColor setFill];
-        NSRectFill(clipRect);
+        if (_backgroundColor != nil) {
+            [_backgroundColor setFill];
+            NSRectFillUsingOperation(clipRect, NSCompositeSourceOver);
+        }
     } else if (colorCount == 1) {
         [(NSColor *) [rowColors objectAtIndex: 0] setFill];
         NSRectFill(clipRect);
@@ -3502,6 +3532,7 @@ static NSNumber *CellViewKey(NSInteger row, NSInteger column, BOOL group) {
     [rowView setFrame: frame];
     [rowView setGroupRowStyle: [self _isGroupRow: row]];
     [rowView setSelectionHighlightStyle: [self selectionHighlightStyle]];
+    [rowView setEmphasized: [self _selectionIsEmphasized]];
     [rowView setSelected: [self isRowSelected: row]];
     [NS_EXTRA(NSTableView, self)->_rowViews setObject: rowView forKey: key];
     [self addSubview: rowView];

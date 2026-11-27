@@ -24,7 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSUserInterfaceItemIdentification.h>
 #import <AppKit/NSUserInterfaceLayoutDirection.h>
 
-@class NSScreen, NSMenu, NSMenuItem, NSWindow, NSEvent, NSView;
+@class NSScreen, NSMenu, NSMenuItem, NSWindow, NSEvent, NSView, NSFont;
 
 @protocol NSMenuDelegate;
 
@@ -70,10 +70,16 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
         BOOL _hasExplicitUserInterfaceLayoutDirection;
         NSUserInterfaceLayoutDirection _userInterfaceLayoutDirection;
         NSAppearance *_appearance;
+        NSFont *_font;
+        BOOL _allowsContextMenuPlugIns;
+        BOOL _automaticallyInsertsWritingToolsItems;
     NS_EXTRA_IVARS_END(NSMenu)
 }
 
 @property BOOL showsStateColumn;
+@property (null_resettable, strong) NSFont *font;
+@property BOOL allowsContextMenuPlugIns;
+@property BOOL automaticallyInsertsWritingToolsItems;
 // the direction the menu's items are laid out in; unless set, the
 // application's
 @property NSUserInterfaceLayoutDirection userInterfaceLayoutDirection;

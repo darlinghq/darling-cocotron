@@ -66,9 +66,24 @@ extern id _NSMenuTrackingBegin(NSMenu *menu);
 extern void _NSMenuTrackingEnd(id session);
 extern BOOL _NSMenuTrackingCancelRequested(id session);
 
+#import <AppKit/NSFont.h>
+
 @implementation NSMenu
 
 NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, showsStateColumn, _showsStateColumn, BOOL, showsStateColumn, setShowsStateColumn:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, allowsContextMenuPlugIns, _allowsContextMenuPlugIns, BOOL, allowsContextMenuPlugIns, setAllowsContextMenuPlugIns:)
+NS_EXTRA_SYNTHESIZE_ASSIGN(NSMenu, automaticallyInsertsWritingToolsItems, _automaticallyInsertsWritingToolsItems, BOOL, automaticallyInsertsWritingToolsItems, setAutomaticallyInsertsWritingToolsItems:)
+
+- (NSFont *) font {
+    NSFont *font = NS_EXTRA(NSMenu, self)->_font;
+    return font != nil ? font : [NSFont menuFontOfSize: 0];
+}
+
+- (void) setFont: (NSFont *) font {
+    font = [font retain];
+    [NS_EXTRA(NSMenu, self)->_font release];
+    NS_EXTRA(NSMenu, self)->_font = font;
+}
 
 - (NSUserInterfaceLayoutDirection) userInterfaceLayoutDirection {
     return NS_EXTRA(NSMenu, self)->_hasExplicitUserInterfaceLayoutDirection
@@ -328,6 +343,8 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
 
 - initWithCoder: (NSCoder *) coder {
     NS_EXTRA(NSMenu, self)->_showsStateColumn = YES;
+    NS_EXTRA(NSMenu, self)->_allowsContextMenuPlugIns = YES;
+    NS_EXTRA(NSMenu, self)->_automaticallyInsertsWritingToolsItems = YES;
 
     if ([coder allowsKeyedCoding]) {
         NSKeyedUnarchiver *keyed = (NSKeyedUnarchiver *) coder;
@@ -372,6 +389,8 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
     NS_EXTRA(NSMenu, self)->_itemArray = [NSMutableArray new];
     NS_EXTRA(NSMenu, self)->_autoenablesItems = YES;
     NS_EXTRA(NSMenu, self)->_showsStateColumn = YES;
+    NS_EXTRA(NSMenu, self)->_allowsContextMenuPlugIns = YES;
+    NS_EXTRA(NSMenu, self)->_automaticallyInsertsWritingToolsItems = YES;
     return self;
 }
 
@@ -387,6 +406,7 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
     [NS_EXTRA(NSMenu, self)->_itemArray release];
     [NS_EXTRA(NSMenu, self)->_identifier release];
     [NS_EXTRA(NSMenu, self)->_appearance release];
+    [NS_EXTRA(NSMenu, self)->_font release];
     NS_EXTRA_FREE(NSMenu, self);
     [super dealloc];
 }
@@ -398,6 +418,10 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
         [NS_EXTRA(NSMenu, self)->_identifier copyWithZone: zone];
     // Observed on macOS 26.7.3: a copy keeps the appearance, as it keeps the identifier.
     [NS_EXTRA(NSMenu, copy)->_appearance retain];
+    // QUIRK: a copy has the default font, not the font that was set on the original. Not documented. Evidence:
+    // black-box observation on macOS 26.7.3 (tier 2). Test: appkit-menu-font-properties
+    // (test_quirk_menu_copy_font).
+    NS_EXTRA(NSMenu, copy)->_font = nil;
     // QUIRK: a copy of a submenu has no supermenu. Not documented. Evidence: black-box observation on macOS
     // 26.7.3 (tier 2): the supermenu of a copy of a submenu, and of a copy of a menu with a supermenu, was nil.
     // Test: appkit-menu-appearance (test_copy_of_a_hierarchy)

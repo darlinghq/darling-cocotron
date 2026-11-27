@@ -1077,9 +1077,11 @@ static BOOL _NSTextViewSpaceWantedBefore(unichar c) {
 }
 
 - (void) drawViewBackgroundInRect: (NSRect) rect {
-    if ([self drawsBackground]) {
-        [[self backgroundColor] setFill];
-        NSRectFill(rect);
+    NSColor *color = [self backgroundColor];
+
+    if ([self drawsBackground] && color != nil) {
+        [color setFill];
+        NSRectFillUsingOperation(rect, NSCompositeSourceOver);
     }
 }
 

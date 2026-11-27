@@ -303,9 +303,7 @@ CGImageRef CGSCreateRegisteredCursorImage(CGSConnectionID cid, const char *curso
 }
 
 boolean_t CGDisplayIsInMirrorSet(CGDirectDisplayID display) {
-    printf("STUB %s\n", __PRETTY_FUNCTION__);
-
-    return FALSE;
+    return CGDisplayMirrorsDisplay(display) != kCGNullDirectDisplay;
 }
 
 Boolean CGDisplayIsMain(CGDirectDisplayID display) {
@@ -1053,6 +1051,11 @@ CGError CGDisplaySetDisplayMode(CGDirectDisplayID displayID, CGDisplayModeRef mo
     if (index == NSNotFound)
         return kCGErrorFailure;
     return changeBackendMode(displayID, [modes objectAtIndex: index], YES);
+}
+
+uint32_t CGDisplayGammaTableCapacity(CGDirectDisplayID display) {
+    (void)display;
+    return 256;
 }
 
 // QUIRK: capturing a display ID that is not a display succeeds (and captures

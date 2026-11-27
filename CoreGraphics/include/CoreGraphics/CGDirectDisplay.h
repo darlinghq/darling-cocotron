@@ -147,5 +147,6 @@ COREGRAPHICS_EXPORT size_t CGDisplayModeGetWidth(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT size_t CGDisplayModeGetHeight(CGDisplayModeRef mode);
 COREGRAPHICS_EXPORT CFStringRef
 CGDisplayModeCopyPixelEncoding(CGDisplayModeRef mode);
+COREGRAPHICS_EXPORT uint32_t CGDisplayGammaTableCapacity(CGDirectDisplayID display);
 
 #endif /* CGDIRECTDISPLAY_H */

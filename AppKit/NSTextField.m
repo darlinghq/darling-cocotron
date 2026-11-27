@@ -283,14 +283,18 @@ NS_EXTRA_DEALLOC(NSTextField)
     NS_EXTRA(NSTextField, self)->_automaticTextCompletionEnabled = value;
 }
 
+// A text field does not claim to cover its frame whatever it draws: a bezel with transparent corners or a
+// clear background leaves part of it to the views behind (observed on macOS 26.7.3 for every combination of
+// bezel, background drawing and background colour; test: appkit-text-field-opaque).
 - (BOOL) isOpaque {
-    return [_cell drawsBackground] || [_cell isBezeled];
+    return NO;
 }
 
-// See the QUIRK in NSControl: a text field follows the view rule, so a
-// label lets clicks through and a bezeled, editable field does not.
+// See the QUIRK in NSControl: a label lets a mouse down move the window and a bezeled, editable field
+// does not (a field that draws its background or a bezel counts as editable here, as it always did;
+// this is not derived from -isOpaque, which is NO for every field).
 - (BOOL) mouseDownCanMoveWindow {
-    return ![self isOpaque];
+    return ![_cell drawsBackground] && ![_cell isBezeled];
 }
 
 - (void) resetCursorRects {
