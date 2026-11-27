@@ -418,7 +418,10 @@ NS_EXTRA_SYNTHESIZE_RETAIN(NSMenu, appearance, _appearance, NSAppearance *, appe
         [NS_EXTRA(NSMenu, self)->_identifier copyWithZone: zone];
     // Observed on macOS 26.7.3: a copy keeps the appearance, as it keeps the identifier.
     [NS_EXTRA(NSMenu, copy)->_appearance retain];
-    [NS_EXTRA(NSMenu, copy)->_font retain];
+    // QUIRK: a copy has the default font, not the font that was set on the original. Not documented. Evidence:
+    // black-box observation on macOS 26.7.3 (tier 2). Test: appkit-menu-font-properties
+    // (test_quirk_menu_copy_font).
+    NS_EXTRA(NSMenu, copy)->_font = nil;
     // QUIRK: a copy of a submenu has no supermenu. Not documented. Evidence: black-box observation on macOS
     // 26.7.3 (tier 2): the supermenu of a copy of a submenu, and of a copy of a menu with a supermenu, was nil.
     // Test: appkit-menu-appearance (test_copy_of_a_hierarchy)
