@@ -434,6 +434,47 @@ static void applySVGTransform(NSString *transformStr) {
 }
 @end
 
+static void applySVGStateAttributes(_NSSVGState *state, NSDictionary *attrs) {
+    NSString *fillAttr = [attrs objectForKey: @"fill"];
+    if (fillAttr != nil) {
+        BOOL none = NO;
+        NSColor *c = parseSVGColor(fillAttr, &none);
+        [state->_fillColor release];
+        state->_fillColor = [c retain];
+        state->_hasFill = !none;
+    }
+    NSString *strokeAttr = [attrs objectForKey: @"stroke"];
+    if (strokeAttr != nil) {
+        BOOL none = NO;
+        NSColor *c = parseSVGColor(strokeAttr, &none);
+        [state->_strokeColor release];
+        state->_strokeColor = [c retain];
+        state->_hasStroke = !none;
+    }
+    if ([attrs objectForKey: @"fill-opacity"] != nil)
+        state->_fillOpacity = [[attrs objectForKey: @"fill-opacity"] doubleValue];
+    if ([attrs objectForKey: @"stroke-opacity"] != nil)
+        state->_strokeOpacity = [[attrs objectForKey: @"stroke-opacity"] doubleValue];
+    if ([attrs objectForKey: @"opacity"] != nil)
+        state->_opacity *= [[attrs objectForKey: @"opacity"] doubleValue];
+    if ([attrs objectForKey: @"stroke-width"] != nil)
+        state->_lineWidth = [[attrs objectForKey: @"stroke-width"] doubleValue];
+    if ([[attrs objectForKey: @"fill-rule"] isEqualToString: @"evenodd"])
+        state->_windingRule = NSEvenOddWindingRule;
+    else if ([[attrs objectForKey: @"fill-rule"] isEqualToString: @"nonzero"])
+        state->_windingRule = NSNonZeroWindingRule;
+
+    NSString *cap = [attrs objectForKey: @"stroke-linecap"];
+    if ([cap isEqualToString: @"round"]) state->_lineCap = NSRoundLineCapStyle;
+    else if ([cap isEqualToString: @"square"]) state->_lineCap = NSSquareLineCapStyle;
+    else if ([cap isEqualToString: @"butt"]) state->_lineCap = NSButtLineCapStyle;
+
+    NSString *join = [attrs objectForKey: @"stroke-linejoin"];
+    if ([join isEqualToString: @"round"]) state->_lineJoin = NSRoundLineJoinStyle;
+    else if ([join isEqualToString: @"bevel"]) state->_lineJoin = NSBevelLineJoinStyle;
+    else if ([join isEqualToString: @"miter"]) state->_lineJoin = NSMiterLineJoinStyle;
+}
+
 @implementation _NSSVGParserDelegate
 
 - (instancetype) initWithPointSize: (NSSize) pointSize scale: (CGFloat) scale {
@@ -514,6 +555,7 @@ static void applySVGTransform(NSString *transformStr) {
             [xf scaleXBy: (CGFloat) pxW / vbW yBy: -(CGFloat) pxH / vbH];
             [xf translateXBy: -vbX yBy: -vbY];
             [xf concat];
+            applySVGStateAttributes([_stateStack lastObject], attrs);
             return;
         }
     }
@@ -526,44 +568,7 @@ static void applySVGTransform(NSString *transformStr) {
     [_stateStack addObject: state];
     [state release];
 
-    NSString *fillAttr = [attrs objectForKey: @"fill"];
-    if (fillAttr != nil) {
-        BOOL none = NO;
-        NSColor *c = parseSVGColor(fillAttr, &none);
-        [state->_fillColor release];
-        state->_fillColor = [c retain];
-        state->_hasFill = !none;
-    }
-    NSString *strokeAttr = [attrs objectForKey: @"stroke"];
-    if (strokeAttr != nil) {
-        BOOL none = NO;
-        NSColor *c = parseSVGColor(strokeAttr, &none);
-        [state->_strokeColor release];
-        state->_strokeColor = [c retain];
-        state->_hasStroke = !none;
-    }
-    if ([attrs objectForKey: @"fill-opacity"] != nil)
-        state->_fillOpacity = [[attrs objectForKey: @"fill-opacity"] doubleValue];
-    if ([attrs objectForKey: @"stroke-opacity"] != nil)
-        state->_strokeOpacity = [[attrs objectForKey: @"stroke-opacity"] doubleValue];
-    if ([attrs objectForKey: @"opacity"] != nil)
-        state->_opacity *= [[attrs objectForKey: @"opacity"] doubleValue];
-    if ([attrs objectForKey: @"stroke-width"] != nil)
-        state->_lineWidth = [[attrs objectForKey: @"stroke-width"] doubleValue];
-    if ([[attrs objectForKey: @"fill-rule"] isEqualToString: @"evenodd"])
-        state->_windingRule = NSEvenOddWindingRule;
-    else if ([[attrs objectForKey: @"fill-rule"] isEqualToString: @"nonzero"])
-        state->_windingRule = NSNonZeroWindingRule;
-
-    NSString *cap = [attrs objectForKey: @"stroke-linecap"];
-    if ([cap isEqualToString: @"round"]) state->_lineCap = NSRoundLineCapStyle;
-    else if ([cap isEqualToString: @"square"]) state->_lineCap = NSSquareLineCapStyle;
-    else if ([cap isEqualToString: @"butt"]) state->_lineCap = NSButtLineCapStyle;
-
-    NSString *join = [attrs objectForKey: @"stroke-linejoin"];
-    if ([join isEqualToString: @"round"]) state->_lineJoin = NSRoundLineJoinStyle;
-    else if ([join isEqualToString: @"bevel"]) state->_lineJoin = NSBevelLineJoinStyle;
-    else if ([join isEqualToString: @"miter"]) state->_lineJoin = NSMiterLineJoinStyle;
+    applySVGStateAttributes(state, attrs);
 
     applySVGTransform([attrs objectForKey: @"transform"]);
 
