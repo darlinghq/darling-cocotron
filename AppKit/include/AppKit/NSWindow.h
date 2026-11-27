@@ -393,6 +393,8 @@ typedef NS_ENUM(NSInteger, NSWindowUserTabbingPreference) {
         NSInteger _fullScreenTransition;
         NSUInteger _fullScreenTransitionGeneration;
         BOOL _fullScreenSized, _fullScreenUpdatePending;
+        // The in-window menu strip was hidden for full screen (and comes back when it ends).
+        BOOL _menuViewHiddenForFullScreen;
         NSTitlebarSeparatorStyle _titlebarSeparatorStyle;
         NSWindowToolbarStyle _toolbarStyle;
         BOOL _titlebarAppearsTransparent;

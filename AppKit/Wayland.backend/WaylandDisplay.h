@@ -243,6 +243,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                      proxies: (struct wl_proxy **) proxies
                          max: (size_t) max
                      entered: (NSSet *) entered;
+// The frame of the screen that a fullscreen window of this logical size fills: the output the window has entered
+// whose size it is (the only output of that size when it has entered none). NO when there is no such screen.
+- (BOOL) fullscreenScreenFrameForSize: (NSSize) size entered: (NSSet *) entered frame: (NSRect *) frame;
 - (void) unmapPopupsForParent: (WaylandWindow *) parent;
 - (void) mapPopupsWaitingForParent;
 - (void) cancelPopupMenus;

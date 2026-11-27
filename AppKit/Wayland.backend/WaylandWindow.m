@@ -2081,6 +2081,17 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
         sized = YES;
     }
 
+    // A fullscreen window is the screen's frame; the compositor places it, a client has no position of its own.
+    NSRect screenFrame;
+    if (_pendingFullscreen && _popupParent == nil &&
+        [_display fullscreenScreenFrameForSize: _frame.size entered: _surfaceOutputs frame: &screenFrame] &&
+        !NSEqualPoints(_frame.origin, screenFrame.origin))
+    {
+        _frame.origin = screenFrame.origin;
+        [self syncCGFrame];
+        moved = YES;
+    }
+
     [self updateSubwindows];
     [self recheckFullscreen];
 

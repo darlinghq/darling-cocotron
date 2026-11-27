@@ -1656,6 +1656,30 @@ static NSUInteger utf16OffsetOfUTF8Offset(NSString *text, int byteOffset) {
     return count;
 }
 
+- (BOOL) fullscreenScreenFrameForSize: (NSSize) size entered: (NSSet *) entered frame: (NSRect *) frame {
+    NSArray *outputs = [self outputsWithModes];
+    NSArray *screens = [self screens];
+    BOOL found = NO;
+    NSUInteger matches = 0;
+    NSRect match = NSZeroRect, enteredMatch = NSZeroRect;
+    for (NSUInteger i = 0; i < [outputs count] && i < [screens count]; i++) {
+        NSRect screen = [(NSScreen *) screens[i] frame];
+        if (WaylandFullscreenRound(screen.size.width) != WaylandFullscreenRound(size.width) ||
+            WaylandFullscreenRound(screen.size.height) != WaylandFullscreenRound(size.height))
+            continue;
+        matches++;
+        match = screen;
+        if ([entered containsObject: [NSValue valueWithPointer: ((WaylandOutput *) outputs[i])->_proxy]]) {
+            enteredMatch = screen;
+            found = YES;
+        }
+    }
+    if (!found && matches != 1)
+        return NO;
+    *frame = found ? enteredMatch : match;
+    return YES;
+}
+
 #pragma mark - Windows
 
 - (struct wl_proxy *) seat { return _seat; }
