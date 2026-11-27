@@ -1259,8 +1259,10 @@ static CGFloat clampMagnification(NSScrollView *self, CGFloat value) {
         // scrollToPoint calls constrainScrollPoint *and* this method.
         headerClipRect.origin.x = [_clipView frame].origin.x;
         headerClipRect.size.width = [_clipView frame].size.width;
-        [_headerClipView setFrame: headerClipRect];
-        [_headerClipView setNeedsDisplay: YES];
+        if (!NSEqualRects([_headerClipView frame], headerClipRect)) {
+            [_headerClipView setFrame: headerClipRect];
+            [_headerClipView setNeedsDisplay: YES];
+        }
     }
 }
 
