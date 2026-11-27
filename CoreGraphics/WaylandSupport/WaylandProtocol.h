@@ -27,9 +27,9 @@
 // xdg-shell, xdg-decoration, xdg-output, viewporter, fractional-scale, xdg-activation,
 // pointer-gestures,
 // relative-pointer, pointer-constraints, text-input-v3, wlr-output-management, KDE appmenu,
-// xdg-toplevel-icon, color-management, color-representation and xdg-session-management XML. The
-// scanner's client headers are not used: their inline request stubs call the variadic
-// wl_proxy_marshal_flags().
+// xdg-toplevel-icon, color-management, color-representation, xdg-session-management, linux-dmabuf,
+// linux-drm-syncobj and fifo XML. The scanner's client headers are not used: their inline request
+// stubs call the variadic wl_proxy_marshal_flags().
 extern const struct wl_interface wl_display_interface;
 extern const struct wl_interface wl_registry_interface;
 extern const struct wl_interface wl_callback_interface;
@@ -111,6 +111,14 @@ extern const struct wl_interface wp_alpha_modifier_surface_v1_interface;
 extern const struct wl_interface xdg_toplevel_tag_manager_v1_interface;
 extern const struct wl_interface zwp_idle_inhibit_manager_v1_interface;
 extern const struct wl_interface zwp_idle_inhibitor_v1_interface;
+extern const struct wl_interface zwp_linux_dmabuf_v1_interface;
+extern const struct wl_interface zwp_linux_buffer_params_v1_interface;
+extern const struct wl_interface zwp_linux_dmabuf_feedback_v1_interface;
+extern const struct wl_interface wp_linux_drm_syncobj_manager_v1_interface;
+extern const struct wl_interface wp_linux_drm_syncobj_timeline_v1_interface;
+extern const struct wl_interface wp_linux_drm_syncobj_surface_v1_interface;
+extern const struct wl_interface wp_fifo_manager_v1_interface;
+extern const struct wl_interface wp_fifo_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -525,6 +533,53 @@ enum {
     WP_TOPLEVEL_SESSION_DESTROY = 0,
     WP_TOPLEVEL_SESSION_RENAME = 1,
     WP_TOPLEVEL_SESSION_EV_RESTORED = 0,
+
+    // zwp_linux_dmabuf_v1
+    WP_DMABUF_DESTROY = 0,
+    WP_DMABUF_CREATE_PARAMS = 1,
+    WP_DMABUF_GET_DEFAULT_FEEDBACK = 2,
+    WP_DMABUF_GET_SURFACE_FEEDBACK = 3,
+    WP_DMABUF_EV_FORMAT = 0,
+    WP_DMABUF_EV_MODIFIER = 1,
+
+    // zwp_linux_buffer_params_v1
+    WP_DMABUF_PARAMS_DESTROY = 0,
+    WP_DMABUF_PARAMS_ADD = 1,
+    WP_DMABUF_PARAMS_CREATE = 2,
+    WP_DMABUF_PARAMS_CREATE_IMMED = 3,
+    WP_DMABUF_PARAMS_SET_SAMPLING_DEVICE = 4,
+    WP_DMABUF_PARAMS_EV_CREATED = 0,
+    WP_DMABUF_PARAMS_EV_FAILED = 1,
+
+    // zwp_linux_dmabuf_feedback_v1
+    WP_DMABUF_FEEDBACK_DESTROY = 0,
+    WP_DMABUF_FEEDBACK_EV_DONE = 0,
+    WP_DMABUF_FEEDBACK_EV_FORMAT_TABLE = 1,
+    WP_DMABUF_FEEDBACK_EV_MAIN_DEVICE = 2,
+    WP_DMABUF_FEEDBACK_EV_TRANCHE_DONE = 3,
+    WP_DMABUF_FEEDBACK_EV_TRANCHE_TARGET_DEVICE = 4,
+    WP_DMABUF_FEEDBACK_EV_TRANCHE_FORMATS = 5,
+    WP_DMABUF_FEEDBACK_EV_TRANCHE_FLAGS = 6,
+
+    // wp_linux_drm_syncobj_manager_v1
+    WP_SYNCOBJ_MANAGER_DESTROY = 0,
+    WP_SYNCOBJ_MANAGER_GET_SURFACE = 1,
+    WP_SYNCOBJ_MANAGER_IMPORT_TIMELINE = 2,
+
+    // wp_linux_drm_syncobj_timeline_v1
+    WP_SYNCOBJ_TIMELINE_DESTROY = 0,
+
+    // wp_linux_drm_syncobj_surface_v1
+    WP_SYNCOBJ_SURFACE_DESTROY = 0,
+    WP_SYNCOBJ_SURFACE_SET_ACQUIRE_POINT = 1,
+    WP_SYNCOBJ_SURFACE_SET_RELEASE_POINT = 2,
+
+    // wp_fifo_manager_v1 / wp_fifo_v1
+    WP_FIFO_MANAGER_DESTROY = 0,
+    WP_FIFO_MANAGER_GET_FIFO = 1,
+    WP_FIFO_SET_BARRIER = 0,
+    WP_FIFO_WAIT_BARRIER = 1,
+    WP_FIFO_DESTROY = 2,
 };
 
 // Enum values from the same protocol files.
@@ -679,6 +734,20 @@ enum {
     // Since version 2 of wp_cursor_shape_manager_v1.
     WP_CURSOR_SHAPE_DND_ASK = 35,
     WP_CURSOR_SHAPE_ALL_RESIZE = 36,
+
+    // DRM fourcc codes and layout modifiers (linux drm_fourcc.h). The byte order makes
+    // ARGB8888 the format of an IOSurface with kCGBitmapByteOrder32Little and an alpha-first
+    // pixel layout.
+    WP_DRM_FORMAT_ARGB8888 = 0x34325241,
+    WP_DRM_FORMAT_XRGB8888 = 0x34325258,
+    WP_DRM_FORMAT_ABGR8888 = 0x34324241,
+    WP_DRM_FORMAT_XBGR8888 = 0x34324258,
+    // Half-float versions of the same little-endian RGBA/XRGB byte order. They carry
+    // EDR values above the reference white when the backing IOSurface stores half floats.
+    WP_DRM_FORMAT_ARGB16161616F = 0x48345241,
+    WP_DRM_FORMAT_XRGB16161616F = 0x48345258,
+    WP_DRM_FORMAT_MOD_LINEAR = 0,
+    WP_DRM_FORMAT_MOD_INVALID = 0x00ffffffffffffffULL,
 };
 
 // Linux input event codes (linux/input-event-codes.h) carried by wl_pointer.button.

@@ -63,7 +63,12 @@ set(WAYLAND_PROTOCOL_FILES
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-system-bell-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/alpha-modifier-v1.xml"
 	"${CMAKE_CURRENT_LIST_DIR}/protocols/xdg-toplevel-tag-v1.xml"
-	"${CMAKE_CURRENT_LIST_DIR}/protocols/idle-inhibit-unstable-v1.xml")
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/idle-inhibit-unstable-v1.xml"
+	# Render protocols: DMA-BUF buffer negotiation, explicit synchronization and the
+	# refresh-cycle barrier. Kept here so older wayland-protocols releases still build.
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/linux-dmabuf-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/linux-drm-syncobj-v1.xml"
+	"${CMAKE_CURRENT_LIST_DIR}/protocols/fifo-v1.xml")
 
 set(WAYLAND_PROTOCOLS_USABLE TRUE)
 foreach (protocol ${WAYLAND_PROTOCOL_FILES})

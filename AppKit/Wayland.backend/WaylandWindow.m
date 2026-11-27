@@ -22,9 +22,11 @@
 #import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import "WaylandRender.h"
 #import "WaylandWindowLevel.h"
 #import "../../CoreGraphics/Wayland.backend/CGSWindowWayland.h"
 #import <CoreGraphics/CGSServerSPI.h>
+#import <IOSurface/IOSurface.h>
 #import "../DarlingWindowPresentation.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSColorSpace.h>
@@ -49,6 +51,12 @@
 #include <limits.h>
 #import "WaylandScale.h"
 #include <math.h>
+
+// Implemented by NSScreen for both screen outputs and compositor-preferred descriptions. Declared
+// here rather than in AppKit's public header because only this backend needs it.
+@interface NSScreen (WaylandColorDescription)
++ (NSColorSpace *) _colorSpaceFromDisplayColorInfo: (NSDictionary *) info;
+@end
 
 // NSView replaces the user CTM whenever it locks focus. Keep scaling in the
 // device transform, alongside Onyx2D's bottom-left to top-left conversion.
@@ -137,6 +145,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     [_surfaceOutputs release];
     [_title release];
     [_sessionName release];
+    [_preferredColorSpace release];
     [super dealloc];
 }
 
@@ -192,6 +201,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _viewport = WaylandCreateObject(_display->_viewporter, WP_VIEWPORTER_GET_VIEWPORT,
                 &wp_viewport_interface, viewportArgs, 0, nil);
         }
+        WaylandColorManager *color = [_display colorManager];
+        if (color != nil && _surfaceFeedback == NULL)
+            _surfaceFeedback = [color newSurfaceFeedbackForSurface: _surface];
+        [[_display renderManager] observeSurface: _surface];
         [self updateSurfaceColorIfNeeded];
     }
     return _surface;
@@ -202,6 +215,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (NSColorSpace *) contentColorSpace {
     NSColorSpace *space = [_delegate respondsToSelector: @selector(colorSpace)]
                           ? [_delegate colorSpace] : nil;
+    if (space == nil)
+        space = _preferredColorSpace;
     if (space == nil)
         space = [[NSScreen screens] count] > 0 ? [[NSScreen mainScreen] colorSpace] : nil;
     return space != nil ? space : [NSColorSpace sRGBColorSpace];
@@ -218,8 +233,42 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_representationSurface == NULL)
         _representationSurface = [color newRepresentationSurfaceForSurface: _surface];
     CGColorSpaceRef space = [[self contentColorSpace] CGColorSpace];
-    if (space != NULL)
-        [color setColorSpace: space onSurface: _colorSurface];
+    if (space == NULL)
+        return;
+    NSDictionary *preferred = _surfaceFeedback != NULL
+                              ? [color preferredInfoForFeedback: _surfaceFeedback] : nil;
+    WaylandColorHDRMetadata metadata = WaylandHDRMetadataFromColorInfo(preferred, space);
+    [color setColorSpace: space
+         renderingIntent: WP_COLOR_RENDER_INTENT_PERCEPTUAL
+              hdrMetadata: &metadata
+                onSurface: _colorSurface];
+}
+
+// The compositor's preferred image description for this surface changed. Use it for content whose
+// color space the application has not chosen, and pass its HDR metadata with the next description.
+- (void) preferredColorInfoChanged {
+    if (_invalidated)
+        return;
+    WaylandColorManager *color = [_display colorManager];
+    NSDictionary *info = _surfaceFeedback != NULL
+                         ? [color preferredInfoForFeedback: _surfaceFeedback] : nil;
+    NSColorSpace *preferred = [NSScreen _colorSpaceFromDisplayColorInfo: info];
+    [_preferredColorSpace release];
+    _preferredColorSpace = [preferred retain];
+    [self updateSurfaceColor];
+    // The subwindows use the parent's preference when their own feedback has none.
+    for (NSValue *value in _subwindows)
+        [(WaylandSubWindow *) [value pointerValue] colorManagerAvailable];
+    [_display flush];
+}
+
+- (BOOL) preferredSubwindowColorInfoChangedForFeedback: (struct wl_proxy *) feedback {
+    for (NSValue *value in _subwindows) {
+        WaylandSubWindow *child = (WaylandSubWindow *) [value pointerValue];
+        if ([child preferredColorInfoChangedForFeedback: feedback])
+            return YES;
+    }
+    return NO;
 }
 
 - (void) updateSurfaceColorIfNeeded {
@@ -236,7 +285,18 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) colorManagerAvailable {
+    if (_surface != NULL && _surfaceFeedback == NULL) {
+        WaylandColorManager *color = [_display colorManager];
+        _surfaceFeedback = [color newSurfaceFeedbackForSurface: _surface];
+    }
     [self updateSurfaceColorIfNeeded];
+    for (NSValue *value in _subwindows)
+        [(WaylandSubWindow *) [value pointerValue] colorManagerAvailable];
+}
+
+- (void) renderGlobalsAvailable {
+    if (_surface != NULL)
+        [[_display renderManager] observeSurface: _surface];
 }
 
 // The window's opacity is the window system window's (alpha-modifier-v1 where the compositor has it).
@@ -285,6 +345,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _surfaceCommitted = YES;
 }
 
+- (struct wl_proxy *) surfaceFeedback {
+    return _surfaceFeedback;
+}
+
 - (struct wl_proxy *) toplevelSession {
     return _toplevelSession;
 }
@@ -302,7 +366,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     WaylandColorManager *color = [_display colorManager];
     [color destroyColorSurface: _colorSurface];
     [color destroyRepresentationSurface: _representationSurface];
-    _colorSurface = _representationSurface = NULL;
+    [color destroySurfaceFeedback: _surfaceFeedback];
+    _colorSurface = _representationSurface = _surfaceFeedback = NULL;
     if (_idleInhibitor != NULL)
         sendRequest(_idleInhibitor, ZWP_IDLE_INHIBITOR_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _idleInhibitor = NULL;
@@ -316,6 +381,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_fractionalScale) sendRequest(_fractionalScale, WP_FRACTIONAL_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     if (_viewport) sendRequest(_viewport, WP_VIEWPORT_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     // The surface is the window system window's: it is destroyed with that window, or when it makes another.
+    [[_display renderManager] destroySurface: _surface];
     _fractionalScale = _viewport = _surface = NULL;
     _surfaceCommitted = NO;
 }
@@ -634,15 +700,21 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     WaylandMarshal(_appMenu, WP_APPMENU_SET_ADDRESS, NULL, 0, address);
 }
 
-- (void) destroyBuffers {
-    for (int i = 0; i < 2; i++) {
-        struct WaylandBuffer *buffer = &_buffers[i];
-        if (buffer->buffer != NULL)
-            sendRequest(buffer->buffer, WP_BUFFER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-        if (buffer->data != NULL)
-            munmap(buffer->data, buffer->size);
-        memset(buffer, 0, sizeof(*buffer));
+- (void) discardBuffer: (struct WaylandBuffer *) buffer {
+    if (buffer->buffer != NULL) {
+        [[_display renderManager] bufferDestroyed: buffer->buffer];
+        sendRequest(buffer->buffer, WP_BUFFER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     }
+    if (buffer->data != NULL)
+        munmap(buffer->data, buffer->size);
+    if (buffer->surface != NULL)
+        CFRelease(buffer->surface);
+    memset(buffer, 0, sizeof(*buffer));
+}
+
+- (void) destroyBuffers {
+    for (int i = 0; i < 2; i++)
+        [self discardBuffer: &_buffers[i]];
 }
 
 // Unmapping an xdg surface requires a new configure sequence before it can be
@@ -1518,10 +1590,19 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
 {
     struct WaylandBuffer *reusable = NULL;
 
+    WaylandRenderManager *render = [_display renderManager];
     for (int i = 0; i < 2; i++) {
         struct WaylandBuffer *buffer = &_buffers[i];
-        if (buffer->busy)
-            continue;
+        // A dma-buf the compositor rejected cannot be attached again; rebuild it as shm.
+        if (buffer->buffer != NULL && [render bufferCreationFailed: buffer->buffer])
+            [self discardBuffer: buffer];
+        if (buffer->busy) {
+            // With explicit synchronization there is no wl_buffer.release event.
+            if ([render releasePointSignalledForBuffer: buffer->buffer])
+                buffer->busy = NO;
+            else
+                continue;
+        }
         if (buffer->buffer != NULL && buffer->width == width &&
             buffer->height == height && buffer->format == format)
             return buffer;
@@ -1536,14 +1617,70 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
         height > INT32_MAX / (width * 4))
         return NULL;
 
-    if (reusable->buffer != NULL)
-        sendRequest(reusable->buffer, WP_BUFFER_DESTROY, WL_MARSHAL_FLAG_DESTROY);
-    if (reusable->data != NULL)
-        munmap(reusable->data, reusable->size);
-    memset(reusable, 0, sizeof(*reusable));
+    [self discardBuffer: reusable];
 
     int32_t stride = width * 4;
     size_t size = (size_t) stride * (size_t) height;
+
+    // When the compositor advertised a format/modifier we can import, keep the pixels in an
+    // IOSurface and let the host export its memory as a dma-buf. The same IOSurface backs every
+    // frame in this slot, so GPU contents survive between commits and the CPU view below stays
+    // coherent. Fall back to wl_shm whenever any step is unavailable.
+    uint32_t drmFormat = 0;
+    uint64_t modifier = 0;
+    BOOL needsAlpha = format == WP_SHM_FORMAT_ARGB8888;
+    // Onyx2D produces premultiplied 8-bit ARGB pixels. Request a wide format only when the
+    // producer supplies half-float pixels; a plain window buffer must stay 8-bit.
+    if ([render preferredFormat: &drmFormat modifier: &modifier forSurface: _surface
+                      needsAlpha: needsAlpha
+                     pixelFormat: WaylandRenderPixelFormat8Bit]) {
+        size_t pageSize = (size_t) getpagesize();
+        size_t allocSize = (size_t) ((size + pageSize - 1) / pageSize) * pageSize;
+        if (allocSize >= size) {
+            NSMutableDictionary *properties = [NSMutableDictionary dictionary];
+            [properties setObject: [NSNumber numberWithInt: width] forKey: (id) kIOSurfaceWidth];
+            [properties setObject: [NSNumber numberWithInt: height] forKey: (id) kIOSurfaceHeight];
+            [properties setObject: [NSNumber numberWithUnsignedInt: 4]
+                           forKey: (id) kIOSurfaceBytesPerElement];
+            [properties setObject: [NSNumber numberWithInt: stride]
+                           forKey: (id) kIOSurfaceBytesPerRow];
+            [properties setObject: [NSNumber numberWithUnsignedLongLong: allocSize]
+                           forKey: (id) kIOSurfaceAllocSize];
+            [properties setObject: [NSNumber numberWithUnsignedInt: 'BGRA']
+                           forKey: (id) kIOSurfacePixelFormat];
+
+            IOSurfaceRef surface = IOSurfaceCreate((CFDictionaryRef) properties);
+            if (surface != NULL) {
+                struct wl_proxy *proxy =
+                        [render newBufferForIOSurface: surface
+                                               format: drmFormat
+                                             modifier: modifier
+                                            forSurface: _surface
+                                                width: width
+                                               height: height
+                                               offset: 0
+                                               stride: stride];
+                if (proxy != NULL) {
+                    // create_immed has no dispatcher of its own. Without explicit synchronization
+                    // the compositor still sends wl_buffer.release, which frees this slot.
+                    WL.wl_proxy_add_dispatcher(proxy, WaylandDispatch,
+                                               (void *) (uintptr_t) WaylandObjectBuffer, self);
+                    reusable->buffer = proxy;
+                    reusable->surface = surface;
+                    reusable->width = width;
+                    reusable->height = height;
+                    reusable->format = format;
+                    reusable->drmFormat = drmFormat;
+                    reusable->modifier = modifier;
+                    return reusable;
+                }
+                CFRelease(surface);
+            }
+        }
+    }
+
+    if (_display->_shm == NULL)
+        return NULL;
     int fd = WaylandCreateAnonymousFile(size);
     if (fd < 0) {
         NSLog(@"Wayland backend: cannot allocate a %dx%d window buffer", width,
@@ -1603,13 +1740,41 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
     struct WaylandBuffer *buffer = [self bufferWithWidth: (int32_t) width
                                                   height: (int32_t) height
                                                   format: format];
-    if (buffer == NULL)
+    if (buffer == NULL) {
+        // An explicitly synchronized buffer has no wl_buffer.release event. When its timeline has
+        // not been signalled yet, ask for another frame callback instead of waiting forever for an
+        // event the compositor will not send.
+        BOOL waitingForExplicitRelease = NO;
+        for (int i = 0; i < 2; i++)
+            if (_buffers[i].busy && _buffers[i].surface != NULL)
+                waitingForExplicitRelease = YES;
+        if (waitingForExplicitRelease && _frameCallback == NULL) {
+            union wl_argument args[1] = {{.o = NULL}};
+            _frameCallback = WaylandCreateObject(_surface, WP_SURFACE_FRAME,
+                                                 &wl_callback_interface, args,
+                                                 WaylandObjectFrameCallback, self);
+            [_display flush];
+        }
         return;
+    }
 
-    // Both start with the top row.
-    for (size_t row = 0; row < height; row++)
-        memcpy((uint8_t *) buffer->data + row * width * 4,
-               pixels + row * sourceStride, width * 4);
+    // Both start with the top row. An IOSurface's stride can differ from the tight shm stride.
+    if (buffer->surface != NULL) {
+        if (IOSurfaceLock(buffer->surface, 0, NULL) != kIOSurfaceSuccess)
+            return;
+        uint8_t *destination = (uint8_t *) IOSurfaceGetBaseAddressOfPlane(buffer->surface, 0);
+        size_t destinationStride = IOSurfaceGetBytesPerRowOfPlane(buffer->surface, 0);
+        if (destination != NULL && destinationStride >= width * 4) {
+            for (size_t row = 0; row < height; row++)
+                memcpy(destination + row * destinationStride,
+                       pixels + row * sourceStride, width * 4);
+        }
+        IOSurfaceUnlock(buffer->surface, 0, NULL);
+    } else {
+        for (size_t row = 0; row < height; row++)
+            memcpy((uint8_t *) buffer->data + row * width * 4,
+                   pixels + row * sourceStride, width * 4);
+    }
 
     union wl_argument args[4] = {{.o = (struct wl_object *) buffer->buffer},
                                  {.i = 0},
@@ -1639,6 +1804,8 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
                                          &wl_callback_interface, args,
                                          WaylandObjectFrameCallback, self);
 
+    // fifo (and explicit sync for a dma-buf buffer, if one was attached) must be set before commit.
+    [[_display renderManager] beginFrameForSurface: _surface buffer: buffer->buffer];
     [self commitSurface];
     buffer->busy = YES;
     _needsPresent = NO;

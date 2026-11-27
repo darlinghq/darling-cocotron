@@ -370,6 +370,11 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 	return nil;
 }
 
+-(BOOL) extendedDynamicRangeAvailable
+{
+	return NO;
+}
+
 -(BOOL) cancelsHiddenUntilMouseMoves
 {
 	return NO;

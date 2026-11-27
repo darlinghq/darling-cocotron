@@ -185,3 +185,39 @@ can remember window rules across launches.
 - Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
 - Copyright: 2024 Xaver Hugl
 - Licence: the MIT permission notice at the top of the file.
+
+## linux-dmabuf
+
+`linux-dmabuf-v1.xml` is the stable `zwp_linux_dmabuf_v1` protocol. The CoreGraphics Wayland backend uses
+its feedback to choose a DRM format and modifier, and its buffer-params factory to attach buffers exported
+from IOSurface as DMA-BUFs.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `stable/linux-dmabuf/linux-dmabuf-v1.xml` (wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2014, 2015 Collabora, Ltd.
+- Licence: the MIT permission notice at the top of the file.
+
+## linux-drm-syncobj
+
+`linux-drm-syncobj-v1.xml` is the staging `wp_linux_drm_syncobj_manager_v1` protocol. The CoreGraphics
+Wayland backend uses it to give compositor commits an explicit acquire and release point on a DRM syncobj
+timeline when a DMA-BUF buffer is committed.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/linux-drm-syncobj/linux-drm-syncobj-v1.xml` (wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2016 The Chromium Authors, 2017 Intel Corporation, 2018 Collabora, Ltd, 2021 Simon Ser
+- Licence: the MIT permission notice at the top of the file.
+
+## fifo
+
+`fifo-v1.xml` is the staging `wp_fifo_manager_v1` protocol. The CoreGraphics Wayland backend uses it to
+ask the compositor to keep each update on the surface for at least one refresh cycle, so presented frames
+are not skipped.
+
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols,
+  `staging/fifo/fifo-v1.xml` (wayland-protocols 1.44)
+- Commit: 309f384d8811c424cee01fd91612c0c1b176ae36
+- Copyright: 2023 Valve Corporation
+- Licence: the MIT permission notice at the top of the file.

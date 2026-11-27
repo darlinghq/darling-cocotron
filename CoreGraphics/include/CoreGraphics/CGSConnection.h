@@ -214,6 +214,8 @@
 // shares for the color management of its windows instead of binding the compositor's globals again.
 // The default is nil.
 -(id) waylandColorManager;
+// Whether a display of this connection reports luminance above its reference white. The default is NO.
+-(BOOL) extendedDynamicRangeAvailable;
 
 // Implementations should also emit kTISNotifySelectedKeyboardInputSourceChanged via NSDistributedNotificationCenter
 // if layout changes.

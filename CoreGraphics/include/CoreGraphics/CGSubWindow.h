@@ -43,6 +43,11 @@ extern NSString *const CGSubWindowBackdropDidChangeNotification;
 // the backend does not know. The OpenGL layer paces swaps to it.
 - (uint32_t) refreshMillihertz;
 
+// An OpenGL layer in this subwindow wants its content to use extended dynamic
+// range. Layers are tracked separately so one layer turning the property off
+// does not turn it off for another; backends without EDR presentation ignore it.
+- (void) setWantsExtendedDynamicRangeContent: (BOOL) wants forLayer: (id) layer;
+
 - (void) show;
 - (void) hide;
 

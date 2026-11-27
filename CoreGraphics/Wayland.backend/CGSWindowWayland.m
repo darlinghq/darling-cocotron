@@ -23,6 +23,7 @@
 #import "WaylandColor.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
+#import "WaylandRender.h"
 
 #import <CoreGraphics/CGSSurface.h>
 #import <Foundation/NSDictionary.h>
@@ -67,6 +68,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
         [self release];
         return nil;
     }
+    [[_waylandConnection renderManager] observeSurface: _surface];
 
     // The role (and with it the initial commit) is made by -ensureRole once the level and style
     // are known.
@@ -93,6 +95,11 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
         _representationSurface = [color newRepresentationSurfaceForSurface: _surface];
 }
 
+- (void) renderManagerAvailable {
+    if (_surface != NULL)
+        [[_waylandConnection renderManager] observeSurface: _surface];
+}
+
 - (void) dealloc {
     // The surface's wl_egl_window references our wl_surface, so it has to go
     // first; -[CGSWindow dealloc] would only release _surfaces after this body.
@@ -109,6 +116,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode);
     _representationSurface = NULL;
     [self destroyRole];
     destroyProxy(&_alphaModifier, WP_ALPHA_MODIFIER_SURFACE_DESTROY);
+    [[_waylandConnection renderManager] destroySurface: _surface];
     if (_surface != NULL)
         WaylandMarshal(_surface, WP_SURFACE_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
                        (union wl_argument[1]) {{.o = NULL}});
@@ -1355,6 +1363,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 - (void) bufferReleased: (struct wl_proxy *) buffer opcode: (uint32_t) opcode {
     if (opcode != WP_BUFFER_EV_RELEASE)
         return;
+    [[_waylandConnection renderManager] bufferDestroyed: buffer];
     WaylandMarshal(buffer, WP_BUFFER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY,
                    (union wl_argument[1]) {{.o = NULL}});
     [_waylandConnection flush];
@@ -1421,6 +1430,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         WaylandMarshal(_surface, WP_SURFACE_ATTACH, NULL, 0, attach);
         union wl_argument damage[4] = {{.i = 0}, {.i = 0}, {.i = width}, {.i = height}};
         WaylandMarshal(_surface, WP_SURFACE_DAMAGE, NULL, 0, damage);
+        // The fifo barrier must be set before the commit that presents the frame.
+        [[_waylandConnection renderManager] beginFrameForSurface: _surface buffer: buffer];
         union wl_argument none[1] = {{.o = NULL}};
         WaylandMarshal(_surface, WP_SURFACE_COMMIT, NULL, 0, none);
         [_waylandConnection flush];

@@ -20,16 +20,29 @@
 #import <Foundation/NSCoder.h>
 #import <Foundation/NSData.h>
 #import <QuartzCore/CAEDRMetadata.h>
+#import <CoreGraphics/CGSNativeConnection.h>
+#import "CAEDRMetadataInternal.h"
+#include <math.h>
+#include <stdint.h>
 
-enum {
-    CAEDRTransferHDR10 = 1,
-    CAEDRTransferHLG = 2,
-};
+static BOOL readBigEndian16(NSData *data, NSUInteger offset, uint16_t *value) {
+    if (data == nil || [data length] < offset + 2)
+        return NO;
+    const uint8_t *bytes = [data bytes];
+    if (bytes == NULL)
+        return NO;
+    *value = (uint16_t) ((bytes[offset] << 8) | bytes[offset + 1]);
+    return YES;
+}
 
 @implementation CAEDRMetadata
 
 + (BOOL) supportsSecureCoding {
     return YES;
+}
+
++ (BOOL) isAvailable {
+    return _CGSExtendedDynamicRangeAvailable() ? YES : NO;
 }
 
 + (CAEDRMetadata *) HDR10MetadataWithDisplayInfo: (NSData *) displayData
@@ -135,6 +148,75 @@ static BOOL sameData(NSData *a, NSData *b) {
 
 - (NSUInteger) hash {
     return (NSUInteger) _transfer ^ [_displayInfo hash] ^ [_contentInfo hash];
+}
+
+// The display data is the 20-byte mastering display colour volume SEI payload
+// of SMPTE ST 2086, and the content data the 4-byte content light level
+// information payload of CTA-861.3. Both are big-endian. The SEI stores the
+// primaries in green, blue, red, white order and the maximum luminance in whole
+// nits; the presentation path wants red, green, blue, white and a scaled
+// minimum. Malformed or zero fields are left unset so the display's defaults
+// apply.
+- (void) copyHDRDescription: (CAEDRHDRDescription *) description {
+    description->transfer = (CAEDRTransfer) _transfer;
+    description->hasMasteringDisplayPrimaries = NO;
+    description->hasMasteringLuminance = NO;
+    description->hasMaxCLL = NO;
+    description->hasMaxFALL = NO;
+    description->maxCLL = 0;
+    description->maxFALL = 0;
+    description->opticalOutputScale = isfinite(_opticalOutputScale) && _opticalOutputScale > 0
+                                      ? _opticalOutputScale : 0;
+    if (_minLuminance > 0 && _maxLuminance > _minLuminance) {
+        // The convenience constructor gives the mastering range in nits, while the
+        // color protocol takes the minimum with four decimal places.
+        description->masteringMinLuminance = (uint32_t) (_minLuminance * 10000 + 0.5f);
+        description->masteringMaxLuminance = (uint32_t) (_maxLuminance + 0.5f);
+        description->hasMasteringLuminance = YES;
+    }
+
+    uint16_t values[10] = {0};
+    BOOL complete = YES;
+    for (NSUInteger i = 0; i < 10; i++) {
+        if (!readBigEndian16(_displayInfo, i * 2, &values[i])) {
+            complete = NO;
+            break;
+        }
+    }
+    if (complete) {
+        BOOL valid = YES;
+        for (NSUInteger i = 0; i < 8; i++) {
+            // The standard bounds x to 0.7400 and y to 0.8400, with four decimals.
+            if (values[i] == 0 || values[i] > (i % 2 == 0 ? 7400 : 8400)) {
+                valid = NO;
+                break;
+            }
+        }
+        uint16_t maxLuminance = values[8], minLuminance = values[9];
+        if (valid && minLuminance > 0 && maxLuminance > minLuminance) {
+            static const NSUInteger order[8] = {4, 5, 0, 1, 2, 3, 6, 7};
+            for (NSUInteger i = 0; i < 8; i++)
+                // ST 2086 carries four decimals; the color protocol carries six.
+                description->masteringDisplayPrimaries[i] = (int32_t) values[order[i]] * 100;
+            description->hasMasteringDisplayPrimaries = YES;
+            description->masteringMaxLuminance = maxLuminance;
+            description->masteringMinLuminance = minLuminance;
+            description->hasMasteringLuminance = YES;
+        }
+    }
+
+    uint16_t maxCLL = 0, maxFALL = 0;
+    if (readBigEndian16(_contentInfo, 0, &maxCLL) &&
+        readBigEndian16(_contentInfo, 2, &maxFALL)) {
+        if (maxCLL > 0) {
+            description->maxCLL = maxCLL;
+            description->hasMaxCLL = YES;
+        }
+        if (maxFALL > 0) {
+            description->maxFALL = maxFALL;
+            description->hasMaxFALL = YES;
+        }
+    }
 }
 
 @end
