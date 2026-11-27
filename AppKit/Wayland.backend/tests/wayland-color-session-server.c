@@ -9,7 +9,9 @@
 // sync and fifo. It renders nothing and prints the protocol activity used by
 // wayland-color-session.sh. With the "surface" scenario it also changes each surface's preferred
 // description once, for wayland-surface-color.sh. The "formats" scenario advertises every format
-// the render manager can negotiate, for wayland-render-formats.sh.
+// the render manager can negotiate, for wayland-render-formats.sh. The "tablet" scenario also offers a
+// seat and zwp_tablet_manager_v2 and plays one pen stroke on the first toplevel, for
+// wayland-tablet-session.sh.
 #define _GNU_SOURCE
 #include <errno.h>
 #include <fcntl.h>
@@ -27,6 +29,7 @@
 #include "linux-dmabuf-v1-server-protocol.h"
 #include "linux-drm-syncobj-v1-server-protocol.h"
 #include "fifo-v1-server-protocol.h"
+#include "tablet-unstable-v2-server-protocol.h"
 
 static struct wl_display *display;
 static const char *session_id = "test-session-1";
@@ -78,6 +81,8 @@ struct session {
 
 static void noop() {}
 
+static void tablet_maybe_start(struct surface *surface);
+
 // ---- Core protocol and xdg-shell
 
 static void surface_attach(struct wl_client *c, struct wl_resource *r, struct wl_resource *buffer,
@@ -94,6 +99,7 @@ static void surface_frame(struct wl_client *c, struct wl_resource *r, uint32_t i
 static void surface_commit(struct wl_client *c, struct wl_resource *r) {
     struct surface *surface = wl_resource_get_user_data(r);
     surface->commits++;
+    tablet_maybe_start(surface);
     if (surface->buffer != NULL) {
         wl_buffer_send_release(surface->buffer);
         surface->buffer = NULL;
@@ -901,6 +907,140 @@ static void bind_fifo(struct wl_client *c, void *data, uint32_t version, uint32_
     wl_resource_set_implementation(r, &fifo_manager_impl, NULL, NULL);
 }
 
+// ---- Tablet (the "tablet" scenario): a pen tool visits the first toplevel and is gone again.
+// The probe checks what AppKit made of the events; see wayland-tablet-session.sh.
+
+static struct wl_resource *tablet_seat_resource, *tablet_resource, *tool_resource, *tablet_surface_resource;
+static struct wl_event_source *tablet_timer;
+static int tablet_step = -1;
+
+static void tool_set_cursor(struct wl_client *c, struct wl_resource *r, uint32_t serial,
+                            struct wl_resource *surface, int32_t x, int32_t y) {}
+static void tablet_object_destroy(struct wl_client *c, struct wl_resource *r) { wl_resource_destroy(r); }
+
+static const struct zwp_tablet_tool_v2_interface tool_impl = {
+    .set_cursor = tool_set_cursor,
+    .destroy = tablet_object_destroy,
+};
+static const struct zwp_tablet_v2_interface tablet_impl = {.destroy = tablet_object_destroy};
+static const struct zwp_tablet_seat_v2_interface tablet_seat_impl = {.destroy = tablet_object_destroy};
+
+static void tablet_seat_gone(struct wl_resource *r) { tablet_seat_resource = NULL; }
+
+static void tablet_manager_get_tablet_seat(struct wl_client *c, struct wl_resource *r, uint32_t id,
+                                           struct wl_resource *seat) {
+    int version = wl_resource_get_version(r);
+    tablet_seat_resource = wl_resource_create(c, &zwp_tablet_seat_v2_interface, version, id);
+    wl_resource_set_implementation(tablet_seat_resource, &tablet_seat_impl, NULL, tablet_seat_gone);
+    tablet_resource = wl_resource_create(c, &zwp_tablet_v2_interface, version, 0);
+    wl_resource_set_implementation(tablet_resource, &tablet_impl, NULL, NULL);
+    zwp_tablet_seat_v2_send_tablet_added(tablet_seat_resource, tablet_resource);
+    zwp_tablet_v2_send_name(tablet_resource, "test tablet");
+    zwp_tablet_v2_send_id(tablet_resource, 0x1234, 0x5678);
+    zwp_tablet_v2_send_path(tablet_resource, "/dev/test-tablet");
+    zwp_tablet_v2_send_done(tablet_resource);
+    tool_resource = wl_resource_create(c, &zwp_tablet_tool_v2_interface, version, 0);
+    wl_resource_set_implementation(tool_resource, &tool_impl, NULL, NULL);
+    zwp_tablet_seat_v2_send_tool_added(tablet_seat_resource, tool_resource);
+    zwp_tablet_tool_v2_send_type(tool_resource, ZWP_TABLET_TOOL_V2_TYPE_PEN);
+    zwp_tablet_tool_v2_send_hardware_serial(tool_resource, 0x11, 0x22334455);
+    zwp_tablet_tool_v2_send_capability(tool_resource, ZWP_TABLET_TOOL_V2_CAPABILITY_TILT);
+    zwp_tablet_tool_v2_send_capability(tool_resource, ZWP_TABLET_TOOL_V2_CAPABILITY_PRESSURE);
+    zwp_tablet_tool_v2_send_done(tool_resource);
+}
+
+static const struct zwp_tablet_manager_v2_interface tablet_manager_impl = {
+    .get_tablet_seat = tablet_manager_get_tablet_seat,
+    .destroy = noop,
+};
+
+static void bind_tablet_manager(struct wl_client *c, void *data, uint32_t version, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(c, &zwp_tablet_manager_v2_interface, version, id);
+    wl_resource_set_implementation(r, &tablet_manager_impl, NULL, NULL);
+}
+
+static void seat_get_pointer(struct wl_client *c, struct wl_resource *r, uint32_t id) {
+    static const struct wl_pointer_interface pointer_impl = {.set_cursor = noop, .release = noop};
+    struct wl_resource *p = wl_resource_create(c, &wl_pointer_interface, wl_resource_get_version(r), id);
+    wl_resource_set_implementation(p, &pointer_impl, NULL, NULL);
+}
+
+static const struct wl_seat_interface seat_impl = {
+    .get_pointer = seat_get_pointer,
+    .get_keyboard = noop,
+    .get_touch = noop,
+    .release = noop,
+};
+
+static void bind_seat(struct wl_client *c, void *data, uint32_t version, uint32_t id) {
+    struct wl_resource *r = wl_resource_create(c, &wl_seat_interface, version, id);
+    wl_resource_set_implementation(r, &seat_impl, NULL, NULL);
+    wl_seat_send_capabilities(r, WL_SEAT_CAPABILITY_POINTER);
+    if (version >= 2)
+        wl_seat_send_name(r, "tablet-test-seat");
+}
+
+static int tablet_tick(void *data) {
+    struct wl_resource *tool = tool_resource;
+    uint32_t t = (uint32_t) tablet_step * 20;
+    if (tool == NULL || tablet_surface_resource == NULL)
+        return 0;
+    switch (tablet_step) {
+    case 0:
+        zwp_tablet_tool_v2_send_proximity_in(tool, wl_display_next_serial(display), tablet_resource,
+                                             tablet_surface_resource);
+        break;
+    case 1:
+        zwp_tablet_tool_v2_send_motion(tool, wl_fixed_from_int(100), wl_fixed_from_int(50));
+        break;
+    case 2:
+        zwp_tablet_tool_v2_send_down(tool, wl_display_next_serial(display));
+        zwp_tablet_tool_v2_send_pressure(tool, 32768);
+        zwp_tablet_tool_v2_send_tilt(tool, wl_fixed_from_int(30), wl_fixed_from_int(-20));
+        break;
+    case 3:
+        zwp_tablet_tool_v2_send_motion(tool, wl_fixed_from_int(120), wl_fixed_from_int(60));
+        zwp_tablet_tool_v2_send_pressure(tool, 49152);
+        break;
+    case 4:
+        zwp_tablet_tool_v2_send_button(tool, wl_display_next_serial(display), 0x14b,
+                                       ZWP_TABLET_TOOL_V2_BUTTON_STATE_PRESSED);
+        break;
+    case 5:
+        zwp_tablet_tool_v2_send_button(tool, wl_display_next_serial(display), 0x14b,
+                                       ZWP_TABLET_TOOL_V2_BUTTON_STATE_RELEASED);
+        break;
+    case 6:
+        zwp_tablet_tool_v2_send_up(tool);
+        zwp_tablet_tool_v2_send_pressure(tool, 0);
+        break;
+    case 7:
+        zwp_tablet_tool_v2_send_proximity_out(tool);
+        break;
+    default:
+        printf("TABLET done\n");
+        fflush(stdout);
+        return 0;
+    }
+    zwp_tablet_tool_v2_send_frame(tool, t);
+    printf("TABLET step %d\n", tablet_step);
+    fflush(stdout);
+    tablet_step++;
+    wl_event_source_timer_update(tablet_timer, 150);
+    return 0;
+}
+
+static void tablet_maybe_start(struct surface *surface) {
+    if (strcmp(scenario, "tablet") != 0 || tablet_step >= 0 || tablet_seat_resource == NULL ||
+        surface->toplevel == NULL || surface->commits < 3)
+        return;
+    tablet_surface_resource = surface->resource;
+    tablet_step = 0;
+    tablet_timer = wl_event_loop_add_timer(wl_display_get_event_loop(display), tablet_tick, NULL);
+    wl_event_source_timer_update(tablet_timer, 300);
+}
+
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         fprintf(stderr, "usage: wayland-color-session-server <socket name> [scenario]\n");
@@ -921,6 +1061,8 @@ int main(int argc, char **argv) {
     wl_global_create(display, &zwp_linux_dmabuf_v1_interface, 4, NULL, bind_dmabuf);
     wl_global_create(display, &wp_linux_drm_syncobj_manager_v1_interface, 1, NULL, bind_syncobj);
     wl_global_create(display, &wp_fifo_manager_v1_interface, 1, NULL, bind_fifo);
+    wl_global_create(display, &wl_seat_interface, 5, NULL, bind_seat);
+    wl_global_create(display, &zwp_tablet_manager_v2_interface, 1, NULL, bind_tablet_manager);
     if (wl_display_add_socket(display, argv[1]) < 0) {
         fprintf(stderr, "cannot create socket %s\n", argv[1]);
         return 2;
