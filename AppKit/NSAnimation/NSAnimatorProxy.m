@@ -4,6 +4,7 @@
  Licensed under the MIT license, the same as the rest of this project.
 */
 #import <AppKit/NSAnimatorProxy.h>
+#import <AppKit/NSLayoutConstraint.h>
 #import <Foundation/NSInvocation.h>
 #import <Foundation/NSMethodSignature.h>
 
@@ -54,6 +55,14 @@
 
 - (NSString *) description {
     return [_target description];
+}
+
+@end
+
+@implementation NSLayoutConstraint (NSAnimatablePropertyContainer)
+
+- (instancetype) animator {
+    return (id)[NSAnimatorProxy animatorProxyForTarget: self];
 }
 
 @end
