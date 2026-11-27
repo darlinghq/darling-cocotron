@@ -53,6 +53,7 @@
 #include <poll.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 // Mode pixels are untransformed. The properties of a wl_output (version 2 and later) take effect
@@ -159,6 +160,22 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
                 if (opcode == WP_FRACTIONAL_EV_PREFERRED)
                     [(CGSWaylandCursor *) object preferredScaleChanged: args[0].u];
                 break;
+            case CGSWaylandObjectHoldGesture:
+                [(CGSWaylandPointer *) object holdEvent: opcode arguments: args];
+                break;
+            case CGSWaylandObjectInputTimestamp: {
+                // The compositor's clock is CLOCK_MONOTONIC; CGEvent time is CLOCK_UPTIME_RAW.
+                // Convert using their relation at arrival. A timestamp generated before a suspend
+                // and delivered after it is shifted by that suspend: the protocol gives no sleep
+                // boundary with which to translate it exactly.
+                uint64_t protocol = ((uint64_t) args[0].u << 32) | (uint32_t) args[1].u;
+                protocol += (uint32_t) args[2].u;
+                int64_t offset = (int64_t) clock_gettime_nsec_np(CLOCK_UPTIME_RAW) -
+                                 (int64_t) clock_gettime_nsec_np(CLOCK_MONOTONIC);
+                uint64_t time = (uint64_t) ((int64_t) protocol + offset);
+                [object setPendingTimestamp: time];
+                break;
+            }
             case CGSWaylandObjectTouch:
                 [(CGSWaylandTouch *) object touchEvent: opcode arguments: args];
                 break;
@@ -385,6 +402,18 @@ static const CGEventFlags kHotKeyModifierMask =
     [_clipboard release];
     [(CGSWaylandPortalShortcuts *) _portalShortcuts invalidate];
     [_portalShortcuts release];
+    if (_pointerTimestamps != NULL)
+        WaylandMarshal(_pointerTimestamps, WP_INPUT_TIMESTAMPS_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_keyboardTimestamps != NULL)
+        WaylandMarshal(_keyboardTimestamps, WP_INPUT_TIMESTAMPS_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_touchTimestamps != NULL)
+        WaylandMarshal(_touchTimestamps, WP_INPUT_TIMESTAMPS_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_inputTimestampsManager != NULL)
+        WaylandMarshal(_inputTimestampsManager, WP_INPUT_TIMESTAMPS_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
     if (_dataDeviceManager != NULL)
         WL.wl_proxy_destroy(_dataDeviceManager);
     [_afterDispatch release];
@@ -668,7 +697,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                            kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name interface: &xdg_wm_base_interface
-                           version: MIN(version, 6u)
+                           version: MIN(version, 7u)
                               kind: CGSWaylandObjectWmBase object: self];
     } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
         _layerShell = [self bindGlobal: name interface: &zwlr_layer_shell_v1_interface
@@ -682,7 +711,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                                    kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 && _decorationManager == NULL) {
         _decorationManager = [self bindGlobal: name interface: &zxdg_decoration_manager_v1_interface
-                                      version: 1
+                                      version: MIN(version, 2u)
                                          kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
                ((WaylandColorManager *) _color)->_colorManager == NULL) {
@@ -787,11 +816,18 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                                            version: 1 kind: CGSWaylandObjectNone object: nil];
         [(CGSWaylandPointer *) _pointerDecoder cursorGlobalsChanged];
     } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
-        // Version 2 adds the release request.
+        // Version 2 adds release, version 3 the hold gesture.
         _pointerGesturesName = name;
         _pointerGestures = [self bindGlobal: name interface: &zwp_pointer_gestures_v1_interface
-                                    version: MIN(version, 2u) kind: CGSWaylandObjectNone object: nil];
+                                    version: MIN(version, 3u) kind: CGSWaylandObjectNone object: nil];
         [(CGSWaylandPointer *) _pointerDecoder pointerGesturesChanged];
+    } else if (strcmp(interface, "zwp_input_timestamps_manager_v1") == 0 && _inputTimestampsManager == NULL) {
+        _inputTimestampsName = name;
+        _inputTimestampsManager = [self bindGlobal: name
+                                         interface: &zwp_input_timestamps_manager_v1_interface
+                                           version: 1
+                                              kind: CGSWaylandObjectNone object: nil];
+        [self updateInputTimestamps];
     } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
         _logicalOutputManagerName = name;
         _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
@@ -938,6 +974,14 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
             WaylandMarshal(gestures, WP_GESTURES_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         else
             WL.wl_proxy_destroy(gestures);
+        return;
+    }
+    if (_inputTimestampsManager != NULL && name == _inputTimestampsName) {
+        // Timestamp objects made from a manager stay valid after it goes away.
+        WaylandMarshal(_inputTimestampsManager, WP_INPUT_TIMESTAMPS_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _inputTimestampsManager = NULL;
+        _inputTimestampsName = 0;
         return;
     }
     if (_outputManager != nil && name == _outputManagerName) {
@@ -1177,6 +1221,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         // Also with no wl_keyboard object: the decoder may still hold state (a pending modifier key).
         [self releaseKeyboard];
     }
+    [self updateInputTimestamps];
 }
 
 - (void) releaseKeyboard {
@@ -1234,6 +1279,47 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
 
 - (struct wl_proxy *) pointerGestures {
     return _pointerGestures;
+}
+
+// One timestamp object follows one device: the event it sends belongs to the next event of that
+// device, so the decoder of that device is the proxy's user data.
+- (void) updateTimestamp: (struct wl_proxy **) slot
+               forDevice: (struct wl_proxy *) device
+                 decoder: (id) decoder
+                  opcode: (uint32_t) opcode
+{
+    if (device == NULL || _inputTimestampsManager == NULL) {
+        if (*slot != NULL) {
+            WaylandMarshal(*slot, WP_INPUT_TIMESTAMPS_DESTROY, NULL,
+                           WL_MARSHAL_FLAG_DESTROY, NULL);
+            *slot = NULL;
+        }
+        return;
+    }
+    if (*slot != NULL)
+        return;
+    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) device}};
+    *slot = [self createObject: _inputTimestampsManager
+                       opcode: opcode
+                    interface: &zwp_input_timestamps_v1_interface
+                    arguments: args
+                         kind: CGSWaylandObjectInputTimestamp
+                       object: decoder];
+}
+
+- (void) updateInputTimestamps {
+    [self updateTimestamp: &_pointerTimestamps
+               forDevice: [(CGSWaylandPointer *) _pointerDecoder pointerProxy]
+                 decoder: _pointerDecoder
+                  opcode: WP_INPUT_TIMESTAMPS_MANAGER_GET_POINTER_TIMESTAMPS];
+    [self updateTimestamp: &_keyboardTimestamps
+               forDevice: _keyboard
+                 decoder: _keyboardDecoder
+                  opcode: WP_INPUT_TIMESTAMPS_MANAGER_GET_KEYBOARD_TIMESTAMPS];
+    [self updateTimestamp: &_touchTimestamps
+               forDevice: [(CGSWaylandTouch *) _touchDecoder touchProxy]
+                 decoder: _touchDecoder
+                  opcode: WP_INPUT_TIMESTAMPS_MANAGER_GET_TOUCH_TIMESTAMPS];
 }
 
 - (struct wl_proxy *) pointerConstraints {

@@ -151,6 +151,12 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // power assertion that prevents display sleep.
     struct wl_proxy *_idleInhibitManager;
     uint32_t _idleInhibitManagerName;
+    // wp_content_type_v1: the compositor is told whether a window shows a game or video.
+    struct wl_proxy *_contentTypeManager;
+    uint32_t _contentTypeManagerName;
+    // keyboard-shortcuts-inhibit-unstable-v1: fullscreen windows take the compositor's shortcuts.
+    struct wl_proxy *_shortcutsInhibitManager;
+    uint32_t _shortcutsInhibitManagerName;
 
 @protected
     struct wl_proxy *_seat;
@@ -273,4 +279,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (NSString *) applicationMenuObjectPath;
 
 - (struct wl_proxy *) newFractionalScaleForSurface: (struct wl_proxy *) surface owner: (id<WaylandFractionalScaleOwner>) owner;
+- (void) contentTypeManagerAvailable;
+- (void) shortcutsInhibitManagerAvailable;
 @end

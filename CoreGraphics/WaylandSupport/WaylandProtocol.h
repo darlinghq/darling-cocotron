@@ -30,6 +30,10 @@
 // xdg-toplevel-icon, color-management, color-representation, xdg-session-management, linux-dmabuf,
 // linux-drm-syncobj, fifo and tablet-v2 XML. The scanner's client headers are not used: their inline
 // request stubs call the variadic wl_proxy_marshal_flags().
+// xdg-toplevel-icon, color-management, color-representation, xdg-session-management, content-type,
+// input-timestamps and keyboard-shortcuts-inhibit XML. The
+// scanner's client headers are not used: their inline request stubs call the variadic
+// wl_proxy_marshal_flags().
 extern const struct wl_interface wl_display_interface;
 extern const struct wl_interface wl_registry_interface;
 extern const struct wl_interface wl_callback_interface;
@@ -67,6 +71,7 @@ extern const struct wl_interface zxdg_decoration_manager_v1_interface;
 extern const struct wl_interface zxdg_toplevel_decoration_v1_interface;
 extern const struct wl_interface zwp_pointer_gestures_v1_interface;
 extern const struct wl_interface zwp_pointer_gesture_pinch_v1_interface;
+extern const struct wl_interface zwp_pointer_gesture_hold_v1_interface;
 extern const struct wl_interface zwp_relative_pointer_manager_v1_interface;
 extern const struct wl_interface zwp_relative_pointer_v1_interface;
 extern const struct wl_interface zwp_pointer_constraints_v1_interface;
@@ -124,6 +129,12 @@ extern const struct wl_interface zwp_tablet_seat_v2_interface;
 extern const struct wl_interface zwp_tablet_v2_interface;
 extern const struct wl_interface zwp_tablet_tool_v2_interface;
 extern const struct wl_interface zwp_tablet_pad_v2_interface;
+extern const struct wl_interface wp_content_type_manager_v1_interface;
+extern const struct wl_interface wp_content_type_v1_interface;
+extern const struct wl_interface zwp_input_timestamps_manager_v1_interface;
+extern const struct wl_interface zwp_input_timestamps_v1_interface;
+extern const struct wl_interface zwp_keyboard_shortcuts_inhibit_manager_v1_interface;
+extern const struct wl_interface zwp_keyboard_shortcuts_inhibitor_v1_interface;
 
 // Opcodes are the zero-based positions of <request> and <event> elements in the
 // protocol XML. WaylandCheckOpcodes() verifies each one against the generated tables.
@@ -228,12 +239,17 @@ enum {
     // no such event and the pointer then has no high resolution wheel steps.
     WP_POINTER_EV_AXIS_VALUE120 = 9,
 
+    WP_GESTURES_GET_SWIPE = 0,
     WP_GESTURES_GET_PINCH = 1,
     WP_GESTURES_RELEASE = 2,
+    WP_GESTURES_GET_HOLD = 3, /* pointer-gestures version 3 */
     WP_PINCH_DESTROY = 0,
     WP_PINCH_EV_BEGIN = 0,
     WP_PINCH_EV_UPDATE = 1,
     WP_PINCH_EV_END = 2,
+    WP_HOLD_DESTROY = 0,
+    WP_HOLD_EV_BEGIN = 0,
+    WP_HOLD_EV_END = 1,
     WP_TEXT_INPUT_MANAGER_DESTROY = 0,
     WP_TEXT_INPUT_MANAGER_GET_TEXT_INPUT = 1,
     WP_TEXT_INPUT_DESTROY = 0,
@@ -327,6 +343,23 @@ enum {
     ZWP_TABLET_TOOL_EV_WHEEL = 16,
     ZWP_TABLET_TOOL_EV_BUTTON = 17,
     ZWP_TABLET_TOOL_EV_FRAME = 18,
+    WP_CONTENT_TYPE_MANAGER_DESTROY = 0,
+    WP_CONTENT_TYPE_MANAGER_GET_SURFACE_CONTENT_TYPE = 1,
+    WP_CONTENT_TYPE_DESTROY = 0,
+    WP_CONTENT_TYPE_SET_CONTENT_TYPE = 1,
+
+    WP_INPUT_TIMESTAMPS_MANAGER_DESTROY = 0,
+    WP_INPUT_TIMESTAMPS_MANAGER_GET_KEYBOARD_TIMESTAMPS = 1,
+    WP_INPUT_TIMESTAMPS_MANAGER_GET_POINTER_TIMESTAMPS = 2,
+    WP_INPUT_TIMESTAMPS_MANAGER_GET_TOUCH_TIMESTAMPS = 3,
+    WP_INPUT_TIMESTAMPS_DESTROY = 0,
+    WP_INPUT_TIMESTAMPS_EV_TIMESTAMP = 0,
+
+    ZWP_KEYBOARD_SHORTCUTS_INHIBIT_MANAGER_DESTROY = 0,
+    ZWP_KEYBOARD_SHORTCUTS_INHIBIT_MANAGER_INHIBIT_SHORTCUTS = 1,
+    ZWP_KEYBOARD_SHORTCUTS_INHIBITOR_DESTROY = 0,
+    ZWP_KEYBOARD_SHORTCUTS_INHIBITOR_EV_ACTIVE = 0,
+    ZWP_KEYBOARD_SHORTCUTS_INHIBITOR_EV_INACTIVE = 1,
 
     WP_TOUCH_RELEASE = 0,
     WP_TOUCH_EV_DOWN = 0,
@@ -674,6 +707,10 @@ enum {
     WP_TOPLEVEL_STATE_MAXIMIZED = 1,
     WP_TOPLEVEL_STATE_FULLSCREEN = 2,
     WP_TOPLEVEL_STATE_SUSPENDED = 9, /* xdg_toplevel version 6 */
+    WP_TOPLEVEL_STATE_CONSTRAINED_LEFT = 10, /* xdg_toplevel version 7 */
+    WP_TOPLEVEL_STATE_CONSTRAINED_RIGHT = 11,
+    WP_TOPLEVEL_STATE_CONSTRAINED_TOP = 12,
+    WP_TOPLEVEL_STATE_CONSTRAINED_BOTTOM = 13,
     WP_TOPLEVEL_DECORATION_MODE_CLIENT_SIDE = 1,
     WP_TOPLEVEL_DECORATION_MODE_SERVER_SIDE = 2,
     WP_POSITIONER_ANCHOR_TOP_LEFT = 5,
@@ -764,6 +801,12 @@ enum {
     WP_SESSION_REASON_SESSION_RESTORE = 3,
 
     // wp_cursor_shape_device_v1.shape
+    // wp_content_type_v1.type
+    WP_CONTENT_TYPE_NONE = 0,
+    WP_CONTENT_TYPE_PHOTO = 1,
+    WP_CONTENT_TYPE_VIDEO = 2,
+    WP_CONTENT_TYPE_GAME = 3,
+
     WP_CURSOR_SHAPE_DEFAULT = 1,
     WP_CURSOR_SHAPE_CONTEXT_MENU = 2,
     WP_CURSOR_SHAPE_HELP = 3,

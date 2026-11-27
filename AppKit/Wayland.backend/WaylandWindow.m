@@ -206,6 +206,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             _surfaceFeedback = [color newSurfaceFeedbackForSurface: _surface];
         [[_display renderManager] observeSurface: _surface];
         [self updateSurfaceColorIfNeeded];
+        [self updateContentType];
+        [self updateShortcutsInhibitor];
     }
     return _surface;
 }
@@ -371,6 +373,14 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_idleInhibitor != NULL)
         sendRequest(_idleInhibitor, ZWP_IDLE_INHIBITOR_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _idleInhibitor = NULL;
+    if (_shortcutsInhibitor != NULL)
+        sendRequest(_shortcutsInhibitor, ZWP_KEYBOARD_SHORTCUTS_INHIBITOR_DESTROY,
+                    WL_MARSHAL_FLAG_DESTROY);
+    _shortcutsInhibitor = NULL;
+    if (_contentType != NULL)
+        sendRequest(_contentType, WP_CONTENT_TYPE_DESTROY, WL_MARSHAL_FLAG_DESTROY);
+    _contentType = NULL;
+    _contentTypeValue = WP_CONTENT_TYPE_NONE;
     if (_toplevelSession != NULL)
         sendRequest(_toplevelSession, WP_TOPLEVEL_SESSION_DESTROY, WL_MARSHAL_FLAG_DESTROY);
     _toplevelSession = NULL;
@@ -787,6 +797,8 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _fullscreenRequested = _pendingFullscreen = _fullscreenRecheckPending = NO;
     _fullscreenReported = NO;
     _fullscreenSettling = NO;
+    [self updateShortcutsInhibitor];
+    [self updateContentType];
     [_display windowUnmapped: self];
     [_display flush];
 }
@@ -1227,6 +1239,56 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     } else if (!inhibit && _idleInhibitor != NULL) {
         sendRequest(_idleInhibitor, ZWP_IDLE_INHIBITOR_DESTROY, WL_MARSHAL_FLAG_DESTROY);
         _idleInhibitor = NULL;
+    }
+}
+
+// wp_content_type_v1 lets the compositor optimize for the kind of content a surface shows. The
+// frameworks have no macOS API for this, so the backend derives it from the state it already knows:
+// a fullscreen window is a game, a window visible while the process holds a display sleep assertion
+// is showing video, and everything else says none.
+- (void) updateContentType {
+    if (_surface == NULL || _display->_contentTypeManager == NULL)
+        return;
+    uint32_t type = WP_CONTENT_TYPE_NONE;
+    if (_fullscreenReported)
+        type = WP_CONTENT_TYPE_GAME;
+    else if (_mapped && !_suspended && !_fullyTransparent && _CGSNativeConnectionDisplaySleepPrevented())
+        type = WP_CONTENT_TYPE_VIDEO;
+    if (_contentType == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+        _contentType = WaylandCreateObject(_display->_contentTypeManager,
+                                           WP_CONTENT_TYPE_MANAGER_GET_SURFACE_CONTENT_TYPE,
+                                           &wp_content_type_v1_interface, args, 0, nil);
+        if (_contentType == NULL)
+            return;
+    }
+    if (type == _contentTypeValue)
+        return;
+    union wl_argument value[1] = {{.u = type}};
+    WaylandMarshal(_contentType, WP_CONTENT_TYPE_SET_CONTENT_TYPE, NULL, 0, value);
+    _contentTypeValue = type;
+    if (_mapped && _configured) {
+        [self commitSurface];
+        [_display flush];
+    }
+}
+
+// The compositor's own shortcuts (switching workspaces, for instance) must not take keys away from a
+// fullscreen game; the protocol needs both the surface and the seat.
+- (void) updateShortcutsInhibitor {
+    BOOL inhibit = !_invalidated && _mapped && _fullscreenReported && _surface != NULL &&
+                   _display->_shortcutsInhibitManager != NULL && [_display seat] != NULL;
+    if (inhibit && _shortcutsInhibitor == NULL) {
+        union wl_argument args[3] = {{.o = NULL}, {.o = (struct wl_object *) _surface},
+                                     {.o = (struct wl_object *) [_display seat]}};
+        _shortcutsInhibitor = WaylandCreateObject(_display->_shortcutsInhibitManager,
+                                                  ZWP_KEYBOARD_SHORTCUTS_INHIBIT_MANAGER_INHIBIT_SHORTCUTS,
+                                                  &zwp_keyboard_shortcuts_inhibitor_v1_interface,
+                                                  args, 0, nil);
+    } else if (!inhibit && _shortcutsInhibitor != NULL) {
+        sendRequest(_shortcutsInhibitor, ZWP_KEYBOARD_SHORTCUTS_INHIBITOR_DESTROY,
+                    WL_MARSHAL_FLAG_DESTROY);
+        _shortcutsInhibitor = NULL;
     }
 }
 
@@ -2013,6 +2075,8 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
     // Tell the delegate when the compositor's fullscreen state changes.
     BOOL fullscreenChanged = _pendingFullscreen != _fullscreenReported;
     _fullscreenReported = _pendingFullscreen;
+    [self updateShortcutsInhibitor];
+    [self updateContentType];
     if (_fullscreenSettling && _fullscreenReported == _fullscreenRequested)
         _fullscreenSettling = NO;
 

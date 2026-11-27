@@ -35,6 +35,13 @@
 
 @implementation CGSWaylandTouch
 
+@synthesize touchProxy = _touch;
+
+- (void) setPendingTimestamp: (uint64_t) timestamp {
+    _pendingTimestamp = timestamp;
+    _hasPendingTimestamp = YES;
+}
+
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection {
     self = [super init];
     if (self == nil)
@@ -77,6 +84,7 @@
 - (void) stop {
     // The compositor takes the touch screen away: every finger is cancelled.
     [self cancelAll];
+    _hasPendingTimestamp = NO;
     if (_touch == NULL)
         return;
     // wl_touch.release exists from version 3.
@@ -128,6 +136,10 @@
 
     if (event == NULL)
         return;
+    if (_hasPendingTimestamp) {
+        CGEventSetTimestamp(event, _pendingTimestamp);
+        _hasPendingTimestamp = NO;
+    }
     // What the other devices held back (a modifier key, a scroll frame) came before this finger moved.
     [_connection flushPendingKeyboardEvents];
     [_connection flushPendingPointerEvents];

@@ -71,6 +71,8 @@ typedef enum {
     CGSWaylandObjectKeyboardSync,
     CGSWaylandObjectPointer,
     CGSWaylandObjectPinchGesture,
+    CGSWaylandObjectHoldGesture,
+    CGSWaylandObjectInputTimestamp,
     CGSWaylandObjectTouch,
     CGSWaylandObjectTabletSeat,
     CGSWaylandObjectTablet,
@@ -138,6 +140,11 @@ typedef enum {
     id _tabletDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
+    // input-timestamps-unstable-v1: one timestamp object per device, handing high-resolution times
+    // to the device's decoder before the input event they describe.
+    struct wl_proxy *_inputTimestampsManager;
+    uint32_t _inputTimestampsName;
+    struct wl_proxy *_pointerTimestamps, *_keyboardTimestamps, *_touchTimestamps;
     // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers
     // none.
     struct wl_proxy *_pointerConstraints, *_relativePointerManager;
@@ -209,6 +216,8 @@ typedef enum {
 - (struct wl_proxy *) seat;
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;
+// Creates or drops the input timestamp objects to match the seat's devices.
+- (void) updateInputTimestamps;
 // The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerConstraints;
 - (struct wl_proxy *) relativePointerManager;

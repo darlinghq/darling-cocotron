@@ -79,6 +79,8 @@ WaylandColorHDRMetadata WaylandHDRMetadataFromColorInfo(NSDictionary *info, CGCo
     BOOL _featuresKnown, _parametricSupported, _iccSupported, _representationKnown;
     uint32_t _features, _supportedIntents;
     uint32_t _alphaModes;
+    // The coefficients/range pairs the compositor advertised, packed as (coefficients << 8) | range.
+    NSMutableSet *_supportedCoefficientsAndRanges;
     NSMutableSet *_namedTransferFunctions, *_namedPrimaries;
     NSMutableArray *_outputs;
     NSMutableDictionary *_outputObservers;
@@ -140,6 +142,13 @@ WaylandColorHDRMetadata WaylandHDRMetadataFromColorInfo(NSDictionary *info, CGCo
         renderingIntent: (uint32_t) intent
              hdrMetadata: (const WaylandColorHDRMetadata *) metadata
                onSurface: (struct wl_proxy *) surfaceManager;
+
+// Describes non-RGB contents of a representation surface. The values are sent only when they are
+// allowed for the surface's pixel format; the caller is responsible for the chroma location of 4:2:0
+// buffers. RGB surfaces use -applyRepresentationToSurface: and need neither call.
+- (void) setCoefficients: (uint32_t) coefficients range: (uint32_t) range
+                onSurface: (struct wl_proxy *) surfaceManager;
+- (void) setChromaLocation: (uint32_t) location onSurface: (struct wl_proxy *) surfaceManager;
 
 // Sends the protocol's destructor requests while the display is still connected. Called by the
 // owner before it disconnects, and by -dealloc as a fallback.
