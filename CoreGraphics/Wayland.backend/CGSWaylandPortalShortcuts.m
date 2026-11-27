@@ -223,6 +223,7 @@ static int uidFromShortcutID(const char *identifier) {
 
 @interface CGSWaylandPortalShortcuts ()
 - (void) readMessages;
+- (void) readQueuedMessages;
 - (void) processMessage: (DBusMessage *) message;
 - (NSString *) appID;
 - (void) registerAppID;
@@ -387,6 +388,7 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     }
     dbus_message_unref(call);
     dbus_error_free(&error);
+    [self readQueuedMessages];
 }
 
 // A shortcut set is offered in a fresh session: the portal allows BindShortcuts only once per
@@ -501,6 +503,7 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     if (reply != NULL)
         dbus_message_unref(reply);
     dbus_error_free(&error);
+    [self readQueuedMessages];
 }
 
 - (void) bindShortcuts {
@@ -564,6 +567,14 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
     if (reply != NULL)
         dbus_message_unref(reply);
     dbus_error_free(&error);
+    [self readQueuedMessages];
+}
+
+// A blocking call (send_with_reply_and_block) reads whatever else the bus has sent into libdbus's
+// queue, for example the Response of a request whose call it was waiting for. Those messages
+// never make the socket readable again, so look at the queue once the call is over.
+- (void) readQueuedMessages {
+    [self performSelectorOnMainThread: @selector(readMessages) withObject: nil waitUntilDone: NO];
 }
 
 - (void) readMessages {
