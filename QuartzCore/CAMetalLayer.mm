@@ -348,6 +348,48 @@ static IndiumKit::HdrTransferFunction hdrTransferFunctionForColorSpace(CGColorSp
 	return IndiumKit::HdrTransferFunction::None;
 }
 
+// The color space of a layer's swapchain, from the layer's colorspace: the names that mean sRGB primaries or the
+// linear light of Display P3 or BT.2020 (with or without the extended range); anything else, and no colorspace,
+// is presented as sRGB, as before colorspaces were passed on. The gamut of a Display P3 or BT.2020 colorspace
+// that is not linear is not converted either.
+static IndiumKit::ColorSpace indiumColorSpace(CGColorSpaceRef space) {
+	if (space == nullptr) {
+		return IndiumKit::ColorSpace::SRGB;
+	}
+	CFStringRef name = CGColorSpaceCopyName(space);
+	IndiumKit::ColorSpace result = IndiumKit::ColorSpace::SRGB;
+	if (name != nullptr) {
+		auto is = [&](CFStringRef other) { return CFEqual(name, other); };
+		if (is(kCGColorSpaceExtendedSRGB)) {
+			result = IndiumKit::ColorSpace::ExtendedSRGB;
+		} else if (is(kCGColorSpaceExtendedLinearSRGB) || is(kCGColorSpaceLinearSRGB)) {
+			result = IndiumKit::ColorSpace::ExtendedLinearSRGB;
+		} else if (is(kCGColorSpaceExtendedLinearDisplayP3) || is(kCGColorSpaceLinearDisplayP3)) {
+			result = IndiumKit::ColorSpace::ExtendedLinearDisplayP3;
+		} else if (is(kCGColorSpaceExtendedLinearITUR_2020) || is(kCGColorSpaceLinearITUR_2020)) {
+			result = IndiumKit::ColorSpace::ExtendedLinearITUR2020;
+		}
+		CFRelease(name);
+	}
+	return result;
+}
+
+// Whether the values of a layer with this colorspace are linear light, which a composited 8-bit copy has to encode.
+static BOOL colorspaceIsLinearLight(CGColorSpaceRef space) {
+	IndiumKit::ColorSpace result = indiumColorSpace(space);
+	return result == IndiumKit::ColorSpace::ExtendedLinearSRGB || result == IndiumKit::ColorSpace::ExtendedLinearDisplayP3
+	    || result == IndiumKit::ColorSpace::ExtendedLinearITUR2020;
+}
+
+// Gives a swapchain the layer's pixel format and color space. Each is checked against the other's current value, so the
+// order that is valid for the swapchain's current settings is the one that works.
+static BOOL configureSwapchain(IndiumKit::Layer& swapchain, Indium::PixelFormat pixelFormat, IndiumKit::ColorSpace space, BOOL extendedDynamicRange) {
+	if (swapchain.setColorSpace(space, extendedDynamicRange) && swapchain.setPixelFormat(pixelFormat)) {
+		return YES;
+	}
+	return swapchain.setPixelFormat(pixelFormat) && swapchain.setColorSpace(space, extendedDynamicRange);
+}
+
 // The swapchain takes chromaticities as CIE xy and luminances in nits; CAEDRMetadata hands them over in
 // the units of CAEDRHDRDescription (xy times a million, minimum luminance times ten thousand).
 static IndiumKit::HdrMetadata indiumHdrMetadata(CAEDRMetadata* edrMetadata, CGColorSpaceRef colorspace) {
@@ -885,11 +927,23 @@ static CFStringRef defaultColorspaceName(MTLPixelFormat pixelFormat)
 
 	CANativeSurface surface = {};
 
+	const IndiumKit::ColorSpace colorSpace = indiumColorSpace(_colorspace);
 	if (swapchain) {
 		if (![subwindow updateMetalSurface: &surface forLayer: self frame: frame]) {
 			swapchain.reset();
 			[self tearDownSwapchain];
 			return NO;
+		}
+		// a pixel format or colorspace that changed since the swapchain was set up
+		if (swapchain->pixelFormat() != pixelFormat || _swapchainColorSpace != static_cast<uint8_t>(colorSpace) || _swapchainExtendedDynamicRange != _wantsExtendedDynamicRangeContent) {
+			if (!configureSwapchain(*swapchain, pixelFormat, colorSpace, _wantsExtendedDynamicRangeContent)) {
+				// the surface cannot present it that way: composite it, as for a first setup that fails
+				swapchain.reset();
+				[self tearDownSwapchain];
+				return NO;
+			}
+			_swapchainColorSpace = static_cast<uint8_t>(colorSpace);
+			_swapchainExtendedDynamicRange = _wantsExtendedDynamicRangeContent;
 		}
 	} else {
 		if (![subwindow createMetalSurface: &surface forLayer: self frame: frame]) {
@@ -926,8 +980,12 @@ static CFStringRef defaultColorspaceName(MTLPixelFormat pixelFormat)
 			swapchain->setHdrMetadata(hdrMetadata);
 		}
 
-		if (swapchain && !swapchain->setPixelFormat(pixelFormat)) {
+		if (swapchain && !configureSwapchain(*swapchain, pixelFormat, colorSpace, _wantsExtendedDynamicRangeContent)) {
 			swapchain.reset();
+		}
+		if (swapchain) {
+			_swapchainColorSpace = static_cast<uint8_t>(colorSpace);
+			_swapchainExtendedDynamicRange = _wantsExtendedDynamicRangeContent;
 		}
 
 		if (!swapchain) {
@@ -1161,7 +1219,7 @@ static CFStringRef defaultColorspaceName(MTLPixelFormat pixelFormat)
 	// when it runs out, as it does when the layer has no device.
 	for (size_t i = 0; i < _maximumDrawableCount; ++i) {
 		try {
-			_drawables[i] = std::make_shared<CAMetalDrawableActual>(self, _drawableSize, i, pixelFormat, ((MTLDeviceInternal*)self.device).device, NS_EXTRA(CALayer, self)->_context.glContext, _glImportsSemaphores);
+			_drawables[i] = std::make_shared<CAMetalDrawableActual>(self, _drawableSize, i, pixelFormat, colorspaceIsLinearLight(_colorspace), ((MTLDeviceInternal*)self.device).device, NS_EXTRA(CALayer, self)->_context.glContext, _glImportsSemaphores);
 		} catch (const std::exception& e) {
 			NSLog(@"CAMetalLayer: cannot create a %gx%g drawable: %s", _drawableSize.width, _drawableSize.height, e.what());
 			break;
