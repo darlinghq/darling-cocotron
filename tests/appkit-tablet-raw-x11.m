@@ -175,6 +175,9 @@ int main(void) {
         expect(over, "the pointer is over the window");
         if (!over)
             return 1;
+        // The server has told the process of the window and of the pointer in it by now.
+        for (int i = 0; i < 4; i++)
+            pump();
 
         // The stroke of the Wayland session: hover, tip down with pressure and tilt, move, a side button, up, away.
         feed(XIRawMotion, PenDevice, 0, 100, 50, 0, 0, 0, 0);
@@ -192,7 +195,7 @@ int main(void) {
         expect(in != nil && [in type] == NSEventTypeTabletProximity && [in isEnteringProximity],
                "the first event is the tool entering proximity");
         expect(in != nil && [in pointingDeviceType] == NSPointingDeviceTypePen, "the tool is a pen");
-        expect(in != nil && [in vendorID] == 0x1234 && [in tabletID] == 0x5678 && [in systemTabletID] == (0x1234ULL << 32 | 0x5678),
+        expect(in != nil && [in vendorID] == 0x1234 && [in tabletID] == 0x5678 && [in systemTabletID] == (NSUInteger) (0x1234ULL << 32 | 0x5678),
                "the tablet's vendor, product and system tablet ids");
         expect(in != nil && [in pointingDeviceSerialNumber] == 0x22334455 && [in uniqueID] == 0x22334455ULL &&
                        [in pointingDeviceID] == 0x22334455,
@@ -214,9 +217,10 @@ int main(void) {
                        near([down tilt].y, -20.0 / 90, 0.001) && ([down buttonMask] & NSEventButtonMaskPenTip),
                "pressure 0.5, tilt of 30 and -20 degrees as -1 to 1, and the tip in the button mask");
         NSEvent *moved = [events count] > 3 ? [events objectAtIndex: 3] : nil;
-        expect(moved != nil && near([moved pressure], 0.75, 0.001) && near([moved locationInWindow].x, 120, 0.5) &&
-                       near([moved locationInWindow].y, 140, 0.5),
-               "pressure 0.75 at the moved position");
+        // The position is the pointer's, which the server keeps where the harness put it; the tablet's own axes move.
+        expect(moved != nil && near([moved pressure], 0.75, 0.001) && near([moved locationInWindow].x, 100, 0.5) &&
+                       near([moved locationInWindow].y, 150, 0.5) && [moved absoluteX] == 120 && [moved absoluteY] == 60,
+               "pressure 0.75, and the tablet's axes at the moved position");
         NSEvent *side = [events count] > 4 ? [events objectAtIndex: 4] : nil;
         expect(side != nil && ([side buttonMask] & NSEventButtonMaskPenLowerSide) && ([side buttonMask] & NSEventButtonMaskPenTip) &&
                        near([side tangentialPressure], 450.0 / 900, 0.001),
