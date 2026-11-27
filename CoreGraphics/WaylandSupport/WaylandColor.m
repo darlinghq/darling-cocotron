@@ -140,6 +140,7 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
     _colorSurfaces = [NSMutableSet new];
     _representationSurfaces = [NSMutableSet new];
     _pendingRepresentationSurfaces = [NSMutableArray new];
+    _supportedCoefficientsAndRanges = [NSMutableSet new];
     return self;
 }
 
@@ -162,6 +163,7 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
     [_colorSurfaces release];
     [_representationSurfaces release];
     [_pendingRepresentationSurfaces release];
+    [_supportedCoefficientsAndRanges release];
     [super dealloc];
 }
 
@@ -202,6 +204,7 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
     _featuresKnown = _parametricSupported = _iccSupported = NO;
     _representationKnown = NO;
     _alphaModes = 0;
+    [_supportedCoefficientsAndRanges removeAllObjects];
     _colorManager = NULL;
     _colorManagerVersion = _colorManagerName = 0;
     _representationManager = NULL;
@@ -282,6 +285,7 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
     _representationManagerName = 0;
     _representationKnown = NO;
     _alphaModes = 0;
+    [_supportedCoefficientsAndRanges removeAllObjects];
 }
 
 - (void) globalRemoved: (uint32_t) name {
@@ -431,8 +435,32 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
         union wl_argument alpha[1] = {{.u = WP_COLOR_ALPHA_PREMULTIPLIED_ELECTRICAL}};
         WaylandMarshal(proxy, WP_COLOR_REP_SURFACE_SET_ALPHA_MODE, NULL, 0, alpha);
     }
-    // No coefficients and range are sent: the buffers contain RGB pixels, not
-    // subsampled YUV data, and the protocol's defaults describe them correctly.
+    // RGB buffers are described by the identity matrix and full range. Sending them uses the same
+    // request as YUV content and makes the representation explicit instead of compositor-defined.
+    [self setCoefficients: WP_COLOR_COEFFICIENTS_IDENTITY
+                    range: WP_COLOR_RANGE_FULL
+                 onSurface: proxy];
+}
+
+- (void) setCoefficients: (uint32_t) coefficients range: (uint32_t) range
+                onSurface: (struct wl_proxy *) surfaceManager
+{
+    if (surfaceManager == NULL || _representationManager == NULL || coefficients == 0 || range == 0)
+        return;
+    // The protocol raises an error for a combination the compositor did not advertise.
+    uint32_t pair = (coefficients << 8) | range;
+    if (_representationKnown &&
+        ![_supportedCoefficientsAndRanges containsObject: [NSNumber numberWithUnsignedInt: pair]])
+        return;
+    union wl_argument args[2] = {{.u = coefficients}, {.u = range}};
+    WaylandMarshal(surfaceManager, WP_COLOR_REP_SURFACE_SET_COEFFICIENTS_AND_RANGE, NULL, 0, args);
+}
+
+- (void) setChromaLocation: (uint32_t) location onSurface: (struct wl_proxy *) surfaceManager {
+    if (surfaceManager == NULL || _representationManager == NULL || location == 0)
+        return;
+    union wl_argument args[1] = {{.u = location}};
+    WaylandMarshal(surfaceManager, WP_COLOR_REP_SURFACE_SET_CHROMA_LOCATION, NULL, 0, args);
 }
 
 #pragma mark - Image descriptions
@@ -677,6 +705,11 @@ static BOOL ColorSpaceDescription(CGColorSpaceRef space, uint32_t *primaries, ui
             // A future compositor could advertise a value outside the bits of _alphaModes.
             if (args[0].u < 8 * sizeof(_alphaModes))
                 _alphaModes |= 1u << args[0].u;
+            break;
+        case WP_COLOR_REP_MANAGER_EV_SUPPORTED_COEFFICIENTS_AND_RANGES:
+            if (args[0].u != 0 && args[1].u != 0)
+                [_supportedCoefficientsAndRanges addObject:
+                        [NSNumber numberWithUnsignedInt: (args[0].u << 8) | args[1].u]];
             break;
         case WP_COLOR_REP_MANAGER_EV_DONE:
             _representationKnown = YES;

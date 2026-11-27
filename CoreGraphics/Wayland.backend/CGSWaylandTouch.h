@@ -41,6 +41,9 @@ struct wl_proxy;
     // Declared here: the i386 slice has the legacy Objective-C ABI, which has no ivars in the @implementation.
     CGSConnectionWayland *_connection; // not retained: the connection owns the decoder
     void *_source;                     // CGEventSourceRef of the hardware state
+    // The high-resolution time of the next input event, in CGEvent's clock (nanoseconds since boot).
+    uint64_t _pendingTimestamp;
+    BOOL _hasPendingTimestamp;
     struct wl_proxy *_touch;
     // The surface each finger that is down went down on (an NSValue of the pointer, compared by value only), by the
     // compositor's number of the finger.
@@ -49,6 +52,8 @@ struct wl_proxy;
 
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection;
 
+// The timestamp of the next input event, from input-timestamps-unstable-v1.
+- (void) setPendingTimestamp: (uint64_t) timestamp;
 // The seat gained or lost its touch screen.
 - (void) seatCapabilities: (uint32_t) capabilities seat: (struct wl_proxy *) seat;
 // One event of the wl_touch (down, up, motion, frame, cancel), with the arguments of the wl_touch protocol. These are
@@ -58,6 +63,7 @@ struct wl_proxy;
 - (void) surfaceDestroyed: (struct wl_proxy *) surface;
 // Cancels every finger, releases the wl_touch.
 - (void) stop;
+@property (readonly) struct wl_proxy *touchProxy;
 
 @end
 

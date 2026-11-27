@@ -81,6 +81,8 @@ typedef enum {
     int32_t _pendingPopupX, _pendingPopupY;
     struct wl_proxy *_decoration;
     struct wl_proxy *_frameCallback;
+    // wp_single_pixel_buffer_manager_v1: a reusable transparent buffer for the first commit.
+    struct wl_proxy *_blankBuffer;
     // Per-surface color objects and the compositor session this toplevel belongs to.
     struct wl_proxy *_colorSurface, *_representationSurface, *_toplevelSession;
     // alpha-modifier-v1: how much of the surface alpha the compositor keeps (NSWindow.alphaValue).
@@ -90,6 +92,12 @@ typedef enum {
     BOOL _dialogModal;
     // idle-inhibit-unstable-v1: held while this toplevel is mapped and visible.
     struct wl_proxy *_idleInhibitor;
+    // wp_content_type_v1: fullscreen windows are games, a visible window while the process holds a
+    // display sleep assertion is showing video, and every other window says none.
+    struct wl_proxy *_contentType;
+    uint32_t _contentTypeValue;
+    // keyboard-shortcuts-inhibit-unstable-v1: fullscreen windows take the compositor's shortcuts.
+    struct wl_proxy *_shortcutsInhibitor;
     NSString *_sessionName;
     BOOL _restoringSessionToplevel;
     // Once a surface has committed, a saved session state can no longer be restored on it.
@@ -236,6 +244,10 @@ typedef enum {
 - (void) updateToplevelTags;
 // Creates or destroys the idle inhibitor as this toplevel becomes visible or occluded.
 - (void) updateIdleInhibitor;
+// Tells the compositor what the surface shows when wp_content_type_v1 is available.
+- (void) updateContentType;
+// Takes or drops the compositor's keyboard shortcuts when the toplevel is fullscreen.
+- (void) updateShortcutsInhibitor;
 
 // Overrides of CGWindow's window-system session hooks (see CGWindowPrivate.h).
 - (NSString *) ensureSessionToplevelName;

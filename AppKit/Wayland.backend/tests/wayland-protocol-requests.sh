@@ -5,10 +5,12 @@
 # Runs tests/wayland-protocol-requests.m against a private headless compositor and checks, from the
 # client's WAYLAND_DEBUG log, that the AppKit and CoreGraphics Wayland backends send the requests of the
 # staging protocols the compositor offers (xdg-system-bell, alpha-modifier, xdg-toplevel-tag,
-# xdg-dialog, cursor-shape, pointer-warp, idle-inhibit, color-management, xdg-session-management) and
-# send nothing of a protocol the compositor lacks. An idle inhibitor must exist only while the process
-# holds a power assertion that prevents display sleep, and the client must never ask the compositor for
-# the user's idle state. Usage:
+# xdg-dialog, cursor-shape, pointer-warp, idle-inhibit, color-management, color-representation,
+# xdg-session-management, content-type, single-pixel-buffer, input-timestamps,
+# keyboard-shortcuts-inhibit and ext-idle-notify) and send nothing of a protocol the compositor lacks.
+# An idle inhibitor must exist only while the process holds a power assertion that prevents display
+# sleep; the separate ext-idle-notify listener reports display sleep state and must be requested when
+# the compositor offers it. Usage:
 #   wayland-protocol-requests.sh sway|kwin <command that runs the guest binary, such as "darling shell /path/probe">
 # The command's arguments get the number of seconds to wait for the pointer appended. The compositor is a
 # private one (sway with the headless backend, or kwin_wayland --virtual --no-lockscreen); nothing of the
@@ -17,6 +19,10 @@
 # seat), and are skipped on sway, whose headless backend has none.
 # Needs sway or kwin_wayland, wayland-info, wayland-scanner, wayland-protocols and a C compiler.
 set -u
+if [ $# -lt 2 ]; then
+    echo "usage: $0 sway|kwin command..." >&2
+    exit 2
+fi
 which=$1; shift
 here=$(cd "$(dirname "$0")" && pwd)
 work=$(mktemp -d /tmp/wpr.XXXXXX)
@@ -62,8 +68,12 @@ if [ "$which" = kwin ] && ! ps -o args= -p "$comp_pid" | grep -q -- '--no-locksc
     echo "FAIL: kwin without --no-lockscreen"; exit 1
 fi
 
-globals=$(WAYLAND_DISPLAY=$sock wayland-info 2>/dev/null | sed -n "s/.*interface: '\([a-z_0-9]*\)'.*/\1/p")
+info=$(WAYLAND_DISPLAY=$sock wayland-info 2>/dev/null)
+globals=$(printf '%s\n' "$info" | sed -n "s/.*interface: '\([a-z_0-9]*\)'.*/\1/p")
 has() { printf '%s\n' "$globals" | grep -qx "$1"; }
+global_version() {
+    printf '%s\n' "$info" | sed -n "s/.*interface: '$1'.*version: \([0-9][0-9]*\).*/\1/p" | head -n 1
+}
 
 # The kwin fake input tool: moves the pointer so that it enters the probe's window.
 if [ "$which" = kwin ]; then
@@ -91,6 +101,7 @@ guest_status=$?
 status=0
 fail() { echo "FAIL: $*"; status=1; }
 ok() { echo "PASS: $*"; }
+skip() { echo "SKIP: $*"; }
 # The requests the client sent between two markers.
 steps() { # first marker, last marker (or end)
     awk -v a="STEP $1" -v b="${2:+STEP $2}" '
@@ -110,17 +121,24 @@ expect_req() { # global, step, last step, regex, description
     elif printf '%s\n' "$out" | grep -Eq "$4"; then ok "$5: $(printf '%s\n' "$out" | grep -E "$4" | head -n 1 | sed 's/^[^-]*-> //')"
     else fail "$5: expected /$4/ during $2"; fi
 }
-anywhere() { # global, regex, description
+anywhere() { # global, request regex, description
     if ! has "$1"; then
         if grep -Eq -- "-> $2" "$guest_out"; then fail "$3: sent without the compositor offering $1"
-        else ok "$3: not sent, the compositor has no $1"; fi
+        else skip "$3: the compositor has no $1"; fi
     elif grep -Eq -- "-> $2" "$guest_out"; then ok "$3: $(grep -E -- "-> $2" "$guest_out" | head -n 1 | sed 's/^[^-]*-> //')"
     else fail "$3: expected /$2/"; fi
 }
+anywhere_event() { # global, event regex, description
+    if ! has "$1"; then
+        if grep -Eq -- "<- $2" "$guest_out"; then fail "$3: received without the compositor offering $1"
+        else skip "$3: the compositor has no $1"; fi
+    elif grep -Eq -- "<- $2" "$guest_out"; then ok "$3: $(grep -E -- "<- $2" "$guest_out" | head -n 1 | sed 's/^[^-]*<- //')"
+    else fail "$3: expected /$2/"; fi
+}
 
-grep -q '^PROBE done' "$guest_out" || { fail "the probe did not finish"; grep -E '^(STEP|READY|POINTER|ASLEEP|PROBE)' "$guest_out" | tail -n 8; }
+grep -q '^PROBE done' "$guest_out" || { fail "the probe did not finish"; grep -E '^(STEP|READY|POINTER|FULLSCREEN|ASLEEP|PROBE)' "$guest_out" | tail -n 8; }
 [ "$guest_status" = 0 ] || fail "the probe exited with status $guest_status"
-echo "compositor globals: $(printf '%s\n' "$globals" | grep -E 'color_manager|session_manager|pointer_warp|cursor_shape|wm_dialog|system_bell|alpha_modifier|toplevel_tag|idle_' | tr '\n' ' ')"
+echo "compositor globals: $(printf '%s\n' "$globals" | grep -E 'color_representation|color_manager|content_type|session_manager|pointer_warp|cursor_shape|wm_dialog|system_bell|alpha_modifier|toplevel_tag|shortcuts_inhibit|single_pixel_buffer|input_timestamps|idle_' | tr '\n' ' ')"
 
 expect_req xdg_system_bell_v1 bell title 'xdg_system_bell_v1#[0-9]+\.ring\(' "NSBeep rings the compositor bell"
 anywhere wp_alpha_modifier_v1 'wp_alpha_modifier_surface_v1#[0-9]+\.set_multiplier\(2147483647\)' "alphaValue 0.5 as a multiplier"
@@ -130,11 +148,20 @@ anywhere xdg_toplevel_tag_manager_v1 'xdg_toplevel_tag_manager_v1#[0-9]+\.set_to
 expect_req xdg_toplevel_tag_manager_v1 title sheet 'set_toplevel_description\(.*"Retitled probe"' "retitled description"
 expect_req xdg_wm_dialog_v1 sheet modal 'xdg_dialog_v1#[0-9]+\.set_modal\(' "a sheet is a modal dialog"
 expect_req xdg_wm_dialog_v1 modal pointer 'xdg_dialog_v1#[0-9]+\.set_modal\(' "a window in a modal session is a modal dialog"
-# The idle state of the user is not the display's power state: nothing is asked of the compositor.
-if grep -Eq -- '-> ext_idle_notifier_v1#[0-9]+\.get_(input_)?idle_notification\(' "$guest_out"; then
-    fail "an idle notification was requested"; else ok "no idle notification is requested"; fi
-if [ "$(grep -E '^ASLEEP ' "$guest_out" | head -n 1)" = "ASLEEP 0" ]; then ok "the display is not reported asleep"
-else fail "CGDisplayIsAsleep() reported the display asleep"; fi
+# ext-idle-notify is a display power state, unlike idle-inhibit: listen when the compositor offers it.
+idle_version=$(global_version ext_idle_notifier_v1)
+if has ext_idle_notifier_v1 && [ -z "$idle_version" ]; then
+    fail "could not read the ext_idle_notifier_v1 version from wayland-info"
+fi
+if [ -n "$idle_version" ] && [ "$idle_version" -ge 2 ]; then
+    idle_request=get_input_idle_notification
+else
+    idle_request=get_idle_notification
+fi
+anywhere ext_idle_notifier_v1 "ext_idle_notifier_v1#[0-9]+\\.${idle_request}\\(" \
+    "a display idle notification is requested"
+if grep -Eq '^ASLEEP [01]$' "$guest_out"; then ok "CGDisplayIsAsleep() reported a valid state"
+else fail "CGDisplayIsAsleep() reported no valid state"; fi
 grep -q '^ASSERTION created=1' "$guest_out" || fail "the display sleep assertion could not be created"
 grep -q '^ASSERTION released=1' "$guest_out" || fail "the display sleep assertion could not be released"
 # A visible window holds an idle inhibitor exactly while the process holds the assertion.
@@ -146,6 +173,38 @@ if has zwp_idle_inhibit_manager_v1; then
     expect_req zwp_idle_inhibit_manager_v1 release alpha 'zwp_idle_inhibitor_v1#[0-9]+\.destroy\(' "idle inhibitor dropped when the assertion is released"
 else
     ok "no idle inhibitor: the compositor has no zwp_idle_inhibit_manager_v1"
+fi
+# The compositor confirms a fullscreen transition asynchronously; only then does the backend own the
+# shortcuts or describe the surface as a game. kwin and sway both report the transition here.
+if grep -q '^FULLSCREEN entered=1$' "$guest_out" && grep -q '^FULLSCREEN left=1$' "$guest_out"; then
+    expect_req zwp_keyboard_shortcuts_inhibit_manager_v1 fullscreen-in fullscreen-out \
+        'zwp_keyboard_shortcuts_inhibit_manager_v1#[0-9]+\.inhibit_shortcuts\(' "shortcuts inhibitor follows full screen"
+    expect_req zwp_keyboard_shortcuts_inhibit_manager_v1 fullscreen-out idle \
+        'zwp_keyboard_shortcuts_inhibitor_v1#[0-9]+\.destroy\(' "shortcuts inhibitor drops with full screen"
+    expect_req wp_content_type_manager_v1 fullscreen-in fullscreen-out \
+        'wp_content_type_v1#[0-9]+\.set_content_type\(3\)' "a fullscreen surface is a game"
+else
+    fail "the compositor did not report both fullscreen transitions"
+fi
+expect_req wp_content_type_manager_v1 assert release \
+    'wp_content_type_v1#[0-9]+\.set_content_type\(2\)' "a surface shown under a display sleep assertion is video"
+anywhere wp_content_type_manager_v1 'wp_content_type_manager_v1#[0-9]+\.get_surface_content_type\(' \
+    "surface content type object"
+anywhere wp_single_pixel_buffer_manager_v1 \
+    'wp_single_pixel_buffer_manager_v1#[0-9]+\.create_u32_rgba_buffer\(.*0, 0, 0, 0\)' \
+    "a transparent blank single pixel buffer"
+anywhere wp_color_representation_manager_v1 \
+    'wp_color_representation_surface_v1#[0-9]+\.set_coefficients_and_range\(1, 1\)' \
+    "RGB surfaces use the identity matrix and full range"
+if [ "$which" = kwin ]; then
+    # The timestamp objects exist only for devices the seat has; headless sway has none.
+    anywhere zwp_input_timestamps_manager_v1 \
+        'zwp_input_timestamps_manager_v1#[0-9]+\.get_(pointer|keyboard|touch)_timestamps\(' \
+        "a device gets an input timestamp object"
+    anywhere_event zwp_input_timestamps_v1 'zwp_input_timestamps_v1#[0-9]+\.timestamp\(' \
+        "input timestamps reach the device decoder"
+else
+    skip "input timestamps need an input device, which the headless sway has none of"
 fi
 anywhere wp_color_manager_v1 'wp_color_manager_v1#[0-9]+\.get_surface\(' "surface color management object"
 anywhere xdg_session_manager_v1 'xdg_session_manager_v1#[0-9]+\.get_session\(' "compositor session"

@@ -19,6 +19,7 @@ union Argument { int32_t i; uint32_t u; const char *s; void *o; void *a; int h; 
 - (void *) surface;
 - (void) pointerEvent: (uint32_t) opcode arguments: (union Argument *) args;
 - (void) pinchEvent: (uint32_t) opcode arguments: (union Argument *) args;
+- (void) holdEvent: (uint32_t) opcode arguments: (union Argument *) args;
 - (void) windowUnmapped: (id) window;
 - (void) seatCapabilities: (uint32_t) capabilities seat: (void *) seat;
 @end
@@ -80,6 +81,19 @@ static void update(double scale, double clockwiseDegrees) {
 static void end(int cancelled) {
     union Argument args[3] = {{.u = 8}, {.u = 102}, {.i = cancelled}};
     [decoder pinchEvent: 2 arguments: args];
+    drain();
+}
+
+// pointer-gestures v3's hold has a begin and an end, with no update stage.
+static void holdBegin(void) {
+    union Argument args[3] = {{.u = 9}, {.u = 103}, {.o = [[window platformWindow] surface]}};
+    [decoder holdEvent: 0 arguments: args];
+    drain();
+}
+
+static void holdEnd(int cancelled) {
+    union Argument args[3] = {{.u = 10}, {.u = 104}, {.i = cancelled}};
+    [decoder holdEvent: 1 arguments: args];
     drain();
 }
 
@@ -183,6 +197,17 @@ static void end(int cancelled) {
     pinchCheck(view.magnifications == 10 && view.rotations == 9 && fabs(view.totalMagnification - 0.25) < 0.01 &&
               fabs(view.totalRotation + 10) < 0.01,
           "NSWindow sends magnify and rotate events to the view under the pointer");
+
+    holdBegin();
+    pinchCheck([events count] == 20 && isGesture(19, NSEventTypeScrollWheel, NSEventPhaseBegan),
+           "a hold begin posts a zero-delta scroll began event");
+    holdEnd(0);
+    pinchCheck([events count] == 21 && isGesture(20, NSEventTypeScrollWheel, NSEventPhaseEnded),
+           "a hold end posts a zero-delta scroll ended event");
+    holdBegin();
+    holdEnd(1);
+    pinchCheck([events count] == 23 && isGesture(22, NSEventTypeScrollWheel, NSEventPhaseCancelled),
+           "a cancelled hold posts a zero-delta scroll cancelled event");
 
     [events release];
     printf("RESULT checks=%d failures=%d\n", checks, failures);

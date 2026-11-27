@@ -136,6 +136,9 @@
 // layout changes, and every call returns the same objects until then. The caller releases the
 // array. Backends implement -buildScreens, not this.
 -(NSArray<CGSScreen*>*) createScreens;
+// Whether the window system reports the displays as asleep. The default is NO: only the Wayland
+// backend can learn it, from ext-idle-notify.
+-(BOOL) displayIsAsleep;
 // For backends: describes the displays afresh, each with its displayID, bounds, backingScale, modes
 // and currentMode (and the edid and name when the window system tells). Called with the lock held.
 -(NSArray<CGSScreen*>*) buildScreens;

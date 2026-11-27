@@ -168,6 +168,11 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 	NSInvalidAbstractInvocation();
 }
 
+-(BOOL) displayIsAsleep
+{
+	return NO;
+}
+
 -(NSArray<CGSScreen*>*) createScreens
 {
 	@synchronized (self)

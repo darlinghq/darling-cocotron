@@ -70,6 +70,9 @@ typedef enum {
     CGSWaylandObjectKeyboardSync,
     CGSWaylandObjectPointer,
     CGSWaylandObjectPinchGesture,
+    CGSWaylandObjectHoldGesture,
+    CGSWaylandObjectInputTimestamp,
+    CGSWaylandObjectIdleNotification,
     CGSWaylandObjectTouch,
     CGSWaylandObjectLockedPointer,
     CGSWaylandObjectRelativePointer,
@@ -125,6 +128,11 @@ typedef enum {
     id _touchDecoder;
     struct wl_proxy *_pointerGestures;
     uint32_t _pointerGesturesName;
+    // input-timestamps-unstable-v1: one timestamp object per device, handing high-resolution times
+    // to the device's decoder before the input event they describe.
+    struct wl_proxy *_inputTimestampsManager;
+    uint32_t _inputTimestampsName;
+    struct wl_proxy *_pointerTimestamps, *_keyboardTimestamps, *_touchTimestamps;
     // The globals the pointer lock (relative mouse mode, warps) is made of; NULL when the compositor offers
     // none.
     struct wl_proxy *_pointerConstraints, *_relativePointerManager;
@@ -149,6 +157,10 @@ typedef enum {
     // none.
     struct wl_proxy *_cursorShapeManager, *_fractionalScaleManager;
     uint32_t _cursorShapeManagerName, _fractionalScaleManagerName;
+    // ext-idle-notify-v2: an input-idle notification for the seat tells whether the display is asleep.
+    struct wl_proxy *_idleNotifier, *_idleNotification;
+    uint32_t _idleNotifierName;
+    BOOL _displayAsleep;
     // IOPM assertions: the queue that asks IOKit about them, the notify(3) token of their change
     // notification, and whether this process holds one that keeps the display awake.
     dispatch_queue_t _assertionsQueue;
@@ -187,6 +199,8 @@ typedef enum {
 
 // The pointer gestures global, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerGestures;
+// Creates or drops the input timestamp objects to match the seat's devices.
+- (void) updateInputTimestamps;
 // The pointer constraints and the relative pointer manager, NULL when the compositor offers none.
 - (struct wl_proxy *) pointerConstraints;
 - (struct wl_proxy *) relativePointerManager;
@@ -200,6 +214,9 @@ typedef enum {
 // YES while this process holds a power assertion that keeps the display awake. It is learned from
 // IOKit (IOPMCopyAssertionsByProcess), as the compositor cannot be asked for it.
 - (BOOL) displaySleepPrevented;
+- (BOOL) displayIsAsleep;
+- (void) updateIdleNotification;
+- (void) idleNotificationEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
 - (void) observeDisplaySleepAssertions;
 - (void) refreshDisplaySleepPrevented;
 - (void) setDisplaySleepPrevented: (BOOL) prevented;

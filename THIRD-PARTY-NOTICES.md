@@ -140,6 +140,66 @@ and the licence.
 - Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
   generates the interface tables from it at build time.
 
+## pointer-gestures-unstable-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/pointer-gestures-unstable-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`unstable/pointer-gestures/pointer-gestures-unstable-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2015, 2021 Red Hat Inc.
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## content-type-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/content-type-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/content-type/content-type-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2021 Emmanuel Gil Peyrot, 2022 Xaver Hugl
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## ext-idle-notify-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/ext-idle-notify-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/ext-idle-notify/ext-idle-notify-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2015 Martin Gräßlin, 2022 Simon Ser
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## single-pixel-buffer-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/single-pixel-buffer-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`staging/single-pixel-buffer/single-pixel-buffer-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2022 Simon Ser
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## input-timestamps-unstable-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/input-timestamps-unstable-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`unstable/input-timestamps/input-timestamps-unstable-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2017 Collabora, Ltd.
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
+## keyboard-shortcuts-inhibit-unstable-v1.xml
+
+- Location: `CoreGraphics/WaylandSupport/protocols/keyboard-shortcuts-inhibit-unstable-v1.xml`
+- Source: https://gitlab.freedesktop.org/wayland/wayland-protocols
+  (`unstable/keyboard-shortcuts-inhibit/keyboard-shortcuts-inhibit-unstable-v1.xml`, wayland-protocols 1.50)
+- Commit: 3eab2dccf4bfdd85c16d312a6c8c8fbc2a6e73a8
+- Copyright: 2017 Red Hat Inc.
+- Licence: MIT (the permission notice at the top of the file). The file is kept unmodified; `wayland-scanner`
+  generates the interface tables from it at build time.
+
 ## DejaVuSans.ttf
 
 - Location: `tests/fixtures/fonts/DejaVuSans.ttf`, licence text in `tests/fixtures/fonts/DejaVu-LICENSE.txt`

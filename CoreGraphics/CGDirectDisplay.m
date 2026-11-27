@@ -1274,10 +1274,11 @@ static bool mainDisplayIsBuiltin(void) {
     return builtin;
 }
 
-// The display backends report no display power state, and a display
-// they list stays drawable, so no display is ever reported asleep.
+// A backend that can learn the compositor's idle state says so, from the
+// CGSConnection of this process; the others report no display asleep.
 boolean_t CGDisplayIsAsleep(CGDirectDisplayID display) {
-    return false;
+    CGSConnection *connection = displayConnection();
+    return connection != nil && [connection displayIsAsleep];
 }
 
 boolean_t CGDisplayIsBuiltin(CGDirectDisplayID display) {

@@ -48,6 +48,7 @@
 #include <poll.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 // Mode pixels are untransformed. The properties of a wl_output (version 2 and later) take effect
@@ -142,6 +143,25 @@ static int CGSWaylandDispatch(const void *kind, void *proxy, uint32_t opcode,
             case CGSWaylandObjectCursorScale:
                 if (opcode == WP_FRACTIONAL_EV_PREFERRED)
                     [(CGSWaylandCursor *) object preferredScaleChanged: args[0].u];
+                break;
+            case CGSWaylandObjectHoldGesture:
+                [(CGSWaylandPointer *) object holdEvent: opcode arguments: args];
+                break;
+            case CGSWaylandObjectInputTimestamp: {
+                // The compositor's clock is CLOCK_MONOTONIC; CGEvent time is CLOCK_UPTIME_RAW.
+                // Convert using their relation at arrival. A timestamp generated before a suspend
+                // and delivered after it is shifted by that suspend: the protocol gives no sleep
+                // boundary with which to translate it exactly.
+                uint64_t protocol = ((uint64_t) args[0].u << 32) | (uint32_t) args[1].u;
+                protocol += (uint32_t) args[2].u;
+                int64_t offset = (int64_t) clock_gettime_nsec_np(CLOCK_UPTIME_RAW) -
+                                 (int64_t) clock_gettime_nsec_np(CLOCK_MONOTONIC);
+                uint64_t time = (uint64_t) ((int64_t) protocol + offset);
+                [object setPendingTimestamp: time];
+                break;
+            }
+            case CGSWaylandObjectIdleNotification:
+                [(CGSConnectionWayland *) object idleNotificationEvent: opcode arguments: args];
                 break;
             case CGSWaylandObjectTouch:
                 [(CGSWaylandTouch *) object touchEvent: opcode arguments: args];
@@ -348,6 +368,24 @@ static const CGEventFlags kHotKeyModifierMask =
 
     [_clipboard invalidate];
     [_clipboard release];
+    if (_idleNotification != NULL)
+        WaylandMarshal(_idleNotification, EXT_IDLE_NOTIFICATION_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_idleNotifier != NULL)
+        WaylandMarshal(_idleNotifier, EXT_IDLE_NOTIFIER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_pointerTimestamps != NULL)
+        WaylandMarshal(_pointerTimestamps, WP_INPUT_TIMESTAMPS_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_keyboardTimestamps != NULL)
+        WaylandMarshal(_keyboardTimestamps, WP_INPUT_TIMESTAMPS_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_touchTimestamps != NULL)
+        WaylandMarshal(_touchTimestamps, WP_INPUT_TIMESTAMPS_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+    if (_inputTimestampsManager != NULL)
+        WaylandMarshal(_inputTimestampsManager, WP_INPUT_TIMESTAMPS_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
     if (_dataDeviceManager != NULL)
         WL.wl_proxy_destroy(_dataDeviceManager);
     [_afterDispatch release];
@@ -600,7 +638,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                            kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name interface: &xdg_wm_base_interface
-                           version: MIN(version, 2u)
+                           version: MIN(version, 7u)
                               kind: CGSWaylandObjectWmBase object: self];
     } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
         _layerShell = [self bindGlobal: name interface: &zwlr_layer_shell_v1_interface
@@ -614,7 +652,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                                    kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 && _decorationManager == NULL) {
         _decorationManager = [self bindGlobal: name interface: &zxdg_decoration_manager_v1_interface
-                                      version: 1
+                                      version: MIN(version, 2u)
                                          kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "wp_color_manager_v1") == 0 &&
                ((WaylandColorManager *) _color)->_colorManager == NULL) {
@@ -641,6 +679,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         _seat = [self bindGlobal: name interface: &wl_seat_interface
                          version: MIN(MIN(version, 8u), (uint32_t) wl_seat_interface.version)
                             kind: CGSWaylandObjectSeat object: self];
+        [self updateIdleNotification];
     } else if (strcmp(interface, "wl_data_device_manager") == 0 && _dataDeviceManager == NULL) {
         _dataDeviceManager = [self bindGlobal: name interface: &wl_data_device_manager_interface
                                       version: MIN(version, 3u)
@@ -670,12 +709,27 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         _fractionalScaleManager = [self bindGlobal: name interface: &wp_fractional_scale_manager_v1_interface
                                            version: 1 kind: CGSWaylandObjectNone object: nil];
         [(CGSWaylandPointer *) _pointerDecoder cursorGlobalsChanged];
+    } else if (strcmp(interface, "ext_idle_notifier_v1") == 0 && _idleNotifier == NULL) {
+        // Version 2's input idle notification ignores idle inhibitors, which is what the display's
+        // power state means: other applications' inhibitors must not keep our display reported awake.
+        _idleNotifierName = name;
+        _idleNotifier = [self bindGlobal: name interface: &ext_idle_notifier_v1_interface
+                                 version: MIN(version, 2u)
+                                    kind: CGSWaylandObjectNone object: nil];
+        [self updateIdleNotification];
     } else if (strcmp(interface, "zwp_pointer_gestures_v1") == 0 && _pointerGestures == NULL) {
-        // Version 2 adds the release request.
+        // Version 2 adds release, version 3 the hold gesture.
         _pointerGesturesName = name;
         _pointerGestures = [self bindGlobal: name interface: &zwp_pointer_gestures_v1_interface
-                                    version: MIN(version, 2u) kind: CGSWaylandObjectNone object: nil];
+                                    version: MIN(version, 3u) kind: CGSWaylandObjectNone object: nil];
         [(CGSWaylandPointer *) _pointerDecoder pointerGesturesChanged];
+    } else if (strcmp(interface, "zwp_input_timestamps_manager_v1") == 0 && _inputTimestampsManager == NULL) {
+        _inputTimestampsName = name;
+        _inputTimestampsManager = [self bindGlobal: name
+                                         interface: &zwp_input_timestamps_manager_v1_interface
+                                           version: 1
+                                              kind: CGSWaylandObjectNone object: nil];
+        [self updateInputTimestamps];
     } else if (strcmp(interface, "zxdg_output_manager_v1") == 0 && _logicalOutputManager == NULL) {
         _logicalOutputManagerName = name;
         _logicalOutputManager = [self bindGlobal: name interface: &zxdg_output_manager_v1_interface
@@ -782,6 +836,20 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         WaylandMarshal(manager, WP_FRACTIONAL_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         return;
     }
+    if (_idleNotifier != NULL && name == _idleNotifierName) {
+        // The notification is made from the notifier, so it goes with the global.
+        if (_idleNotification != NULL) {
+            WaylandMarshal(_idleNotification, EXT_IDLE_NOTIFICATION_DESTROY, NULL,
+                           WL_MARSHAL_FLAG_DESTROY, NULL);
+            _idleNotification = NULL;
+        }
+        WaylandMarshal(_idleNotifier, EXT_IDLE_NOTIFIER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _idleNotifier = NULL;
+        _idleNotifierName = 0;
+        [self setDisplayAsleep: NO];
+        return;
+    }
     if (_pointerGestures != NULL && name == _pointerGesturesName) {
         struct wl_proxy *gestures = _pointerGestures;
         _pointerGestures = NULL;
@@ -792,6 +860,14 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
             WaylandMarshal(gestures, WP_GESTURES_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         else
             WL.wl_proxy_destroy(gestures);
+        return;
+    }
+    if (_inputTimestampsManager != NULL && name == _inputTimestampsName) {
+        // Timestamp objects made from a manager stay valid after it goes away.
+        WaylandMarshal(_inputTimestampsManager, WP_INPUT_TIMESTAMPS_MANAGER_DESTROY, NULL,
+                       WL_MARSHAL_FLAG_DESTROY, NULL);
+        _inputTimestampsManager = NULL;
+        _inputTimestampsName = 0;
         return;
     }
     if (_outputManager != nil && name == _outputManagerName) {
@@ -1020,6 +1096,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         // Also with no wl_keyboard object: the decoder may still hold state (a pending modifier key).
         [self releaseKeyboard];
     }
+    [self updateInputTimestamps];
 }
 
 - (void) releaseKeyboard {
@@ -1076,6 +1153,47 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
 
 - (struct wl_proxy *) pointerGestures {
     return _pointerGestures;
+}
+
+// One timestamp object follows one device: the event it sends belongs to the next event of that
+// device, so the decoder of that device is the proxy's user data.
+- (void) updateTimestamp: (struct wl_proxy **) slot
+               forDevice: (struct wl_proxy *) device
+                 decoder: (id) decoder
+                  opcode: (uint32_t) opcode
+{
+    if (device == NULL || _inputTimestampsManager == NULL) {
+        if (*slot != NULL) {
+            WaylandMarshal(*slot, WP_INPUT_TIMESTAMPS_DESTROY, NULL,
+                           WL_MARSHAL_FLAG_DESTROY, NULL);
+            *slot = NULL;
+        }
+        return;
+    }
+    if (*slot != NULL)
+        return;
+    union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) device}};
+    *slot = [self createObject: _inputTimestampsManager
+                       opcode: opcode
+                    interface: &zwp_input_timestamps_v1_interface
+                    arguments: args
+                         kind: CGSWaylandObjectInputTimestamp
+                       object: decoder];
+}
+
+- (void) updateInputTimestamps {
+    [self updateTimestamp: &_pointerTimestamps
+               forDevice: [(CGSWaylandPointer *) _pointerDecoder pointerProxy]
+                 decoder: _pointerDecoder
+                  opcode: WP_INPUT_TIMESTAMPS_MANAGER_GET_POINTER_TIMESTAMPS];
+    [self updateTimestamp: &_keyboardTimestamps
+               forDevice: _keyboard
+                 decoder: _keyboardDecoder
+                  opcode: WP_INPUT_TIMESTAMPS_MANAGER_GET_KEYBOARD_TIMESTAMPS];
+    [self updateTimestamp: &_touchTimestamps
+               forDevice: [(CGSWaylandTouch *) _touchDecoder touchProxy]
+                 decoder: _touchDecoder
+                  opcode: WP_INPUT_TIMESTAMPS_MANAGER_GET_TOUCH_TIMESTAMPS];
 }
 
 - (struct wl_proxy *) pointerConstraints {
@@ -1169,6 +1287,44 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
 
 - (BOOL) displaySleepPrevented {
     return _displaySleepPrevented;
+}
+
+#pragma mark - Idle state
+
+// ext-idle-notify-v2's input notification reports whether the user has been inactive for a moment.
+// The compositor may be told to keep the display awake by any application's inhibitor; this request
+// deliberately ignores them and tracks input alone, which is what CGDisplayIsAsleep() means here.
+- (void) updateIdleNotification {
+    if (_idleNotification != NULL || _idleNotifier == NULL || _seat == NULL)
+        return;
+    uint32_t opcode = WL.wl_proxy_get_version(_idleNotifier) >= 2
+                      ? EXT_IDLE_NOTIFIER_GET_INPUT_IDLE_NOTIFICATION
+                      : EXT_IDLE_NOTIFIER_GET_IDLE_NOTIFICATION;
+    union wl_argument args[3] = {{.o = NULL}, {.u = 1000}, {.o = (struct wl_object *) _seat}};
+    _idleNotification = [self createObject: _idleNotifier
+                                   opcode: opcode
+                                interface: &ext_idle_notification_v1_interface
+                                arguments: args
+                                     kind: CGSWaylandObjectIdleNotification
+                                   object: self];
+}
+
+- (void) idleNotificationEvent: (uint32_t) opcode arguments: (union wl_argument *) args {
+    (void) args;
+    if (opcode == EXT_IDLE_NOTIFICATION_EV_IDLED)
+        [self setDisplayAsleep: YES];
+    else if (opcode == EXT_IDLE_NOTIFICATION_EV_RESUMED)
+        [self setDisplayAsleep: NO];
+}
+
+- (void) setDisplayAsleep: (BOOL) asleep {
+    if (_displayAsleep == asleep)
+        return;
+    _displayAsleep = asleep;
+}
+
+- (BOOL) displayIsAsleep {
+    return _displayAsleep;
 }
 
 #pragma mark - Pointer state
