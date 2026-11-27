@@ -59,6 +59,7 @@ include_directories(
 	${CMAKE_CURRENT_SOURCE_DIR}
 	${CMAKE_CURRENT_SOURCE_DIR}/..
 	${CMAKE_CURRENT_SOURCE_DIR}/../CoreText
+	${CMAKE_CURRENT_SOURCE_DIR}/../CoreGraphics/WaylandSupport
 
 	${CMAKE_CURRENT_SOURCE_DIR}/nib.subproj
 	${CMAKE_CURRENT_SOURCE_DIR}/NSColorPicker.subproj

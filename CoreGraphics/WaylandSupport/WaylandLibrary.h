@@ -76,7 +76,8 @@
     X(xkb_state_key_get_layout)                                                \
     X(xkb_state_mod_name_is_active)                                            \
     X(xkb_state_serialize_layout)                                              \
-    X(xkb_keysym_to_utf32)
+    X(xkb_keysym_to_utf32)                                                     \
+    X(xkb_keysym_get_name)
 
 #define WAYLAND_CURSOR_FUNCTIONS(X)                                            \
     X(wl_cursor_theme_load)                                                    \
