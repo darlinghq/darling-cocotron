@@ -61,6 +61,11 @@ typedef enum {
 	// The window system's state of the window (miniaturized, fullscreen) was read again. Follows the events above
 	// that the change caused, and is also posted when none applies.
 	kCGSToplevelEventStateChanged,
+	// The window's input method (see CGSInputMethod.h) changed what it composes: text is the whole composition
+	// and textRange the caret or selected part of it, in UTF-16 units; empty text means no composition any more.
+	kCGSToplevelEventInputMethodPreedit,
+	// The input method's final text (text), which replaces the composition if there is one.
+	kCGSToplevelEventInputMethodCommit,
 } CGSToplevelEventKind;
 
 typedef struct {
@@ -69,6 +74,8 @@ typedef struct {
 	bool resized;      // kCGSToplevelEventFrameChanged
 	CGFloat oldScale;  // kCGSToplevelEventBackingScaleChanged
 	bool state;        // kCGSToplevelEventOcclusionChanged, kCGSToplevelEventFullscreenChanged
+	CFStringRef text;  // kCGSToplevelEventInputMethodPreedit and ...Commit; valid during the call only
+	CFRange textRange; // kCGSToplevelEventInputMethodPreedit
 } CGSToplevelEvent;
 
 // Called on the thread that runs the main run loop.
@@ -112,6 +119,8 @@ typedef struct {
 	CGSToplevelEventProc _toplevelEventProc;
 	void* _toplevelEventInfo;
 	id<CGSDragDestination> _dragDestination;
+	BOOL _inputMethodEnabled;
+	CGRect _inputMethodCursorRect;
 }
 
 -(instancetype) initWithRegion:(CGSRegionRef) region
@@ -220,6 +229,16 @@ typedef struct {
 -(void) setDragDestination:(id<CGSDragDestination>) destination;
 -(id<CGSDragDestination>) dragDestination;
 -(void) dragDestinationChanged;
+
+// Whether the window uses the window system's input method, and where the text is being entered (see
+// CGSInputMethod.h). The backends override the two hooks to tell the input method; the default window system has
+// none and does nothing. A window starts with the input method off and the rectangle CGRectNull.
+-(void) setInputMethodEnabled:(BOOL) enabled;
+-(BOOL) inputMethodEnabled;
+-(void) setInputMethodCursorRect:(CGRect) rect;
+-(CGRect) inputMethodCursorRect;
+-(void) inputMethodEnabledChanged;
+-(void) inputMethodCursorRectChanged;
 
 // Ordering, levels, the keyboard focus, miniaturizing and fullscreen of a toplevel window. The UI layer decides
 // when; the window system's calls are made here. A backend that cannot do one of them keeps the default, which

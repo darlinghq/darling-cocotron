@@ -48,12 +48,6 @@
     NSRect _primaryRootFrame;
     BOOL _primaryRootFrameValid;
     CGFloat _backingScale;
-
-@public
-    XIM _xim;
-    // YES when a real input method (XMODIFIERS names one) does the composing; NO for Xlib's built-in one, which
-    // only composes dead keys and Compose sequences, and which CoreGraphics replaces.
-    BOOL _inputMethodComposes;
 }
 
 - (Display *) display;

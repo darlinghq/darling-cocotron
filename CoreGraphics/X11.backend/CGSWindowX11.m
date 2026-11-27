@@ -19,6 +19,7 @@
 #import "CGSWindowX11.h"
 #import "CGSConnectionX11.h"
 #import "CGSX11Drag.h"
+#import "CGSX11InputMethod.h"
 #import "CGSSurfaceX11.h"
 #import "X11WindowOwner.h"
 #import "X11Monitors.h"
@@ -186,6 +187,10 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 	}
 
 	[_title release];
+
+	// The input context belongs to the X window.
+	[_inputContext destroy];
+	[_inputContext release];
 
 	if (_display != NULL && _gc != None)
 		XFreeGC(_display, _gc);
@@ -873,6 +878,8 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 			if (children != NULL)
 				XFree(children);
 		}
+		// The input context belongs to the X window it was made for.
+		[_inputContext destroy];
 		XDestroyWindow(_display, old);
 		// The old colormap stays: the children that moved may still have it.
 	}
@@ -902,9 +909,45 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	// A window that takes drops is a target on its new X window as well.
 	if (_dragDestination != nil)
 		[self dragDestinationChanged];
+	// So does the input method: its context is made for the new X window.
+	[_inputContext create];
 	XFlush(_display);
 	[_x11Connection _toplevelWindowCreated];
 	return YES;
+}
+
+// The window uses the input method, or no more (see CGSInputMethod.h).
+-(void) inputMethodEnabledChanged
+{
+	if (_x11Connection == nil)
+		return;
+	if (_inputMethodEnabled)
+	{
+		if (_inputContext == nil)
+			_inputContext = [[CGSX11InputContext alloc] initWithWindow: self method: [_x11Connection _inputMethod]];
+		[_inputContext create];
+	}
+	else
+	{
+		[_inputContext destroy];
+		[_inputContext release];
+		_inputContext = nil;
+	}
+}
+
+-(void) inputMethodFocusChanged:(BOOL) gained
+{
+	[_inputContext setFocused: gained];
+}
+
+-(void) inputMethodCursorRectChanged
+{
+	[_inputContext updateSpot];
+}
+
+-(NSString*) inputMethodTextForKeyEvent:(XKeyEvent*) event keySym:(KeySym*) keySym
+{
+	return [_inputContext textForKeyEvent: event keySym: keySym];
 }
 
 // The window takes drops (XDND), or no more.
@@ -1695,6 +1738,7 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 		{
 			[_surfaces removeAllObjects];
 		}
+		[_inputContext destroy];
 		XDestroyWindow(_display, _window);
 		_window = None;
 	}
