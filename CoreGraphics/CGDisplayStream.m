@@ -22,6 +22,7 @@
 #import <IOSurface/IOSurfaceRef.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
 #include <screen_capture_backend.h>
 #endif
@@ -85,6 +86,7 @@ enum {
     size_t _pendingDrops;
     uint64_t _minimumFrameIntervalNs;
     uint64_t _lastFrameTimeNs;
+    uint64_t _lastDisplayTime;
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
     struct darling_screen_capture_stream *_capture;
     IOSurfaceRef *_surfaces;
@@ -384,6 +386,7 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
         _inFlight = 0;
         _pendingDrops = 0;
         _lastFrameTimeNs = 0;
+        _lastDisplayTime = 0;
     }
     CFRetain(self);
     return kCGErrorSuccess;
@@ -461,7 +464,13 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
     IOSurfaceRef surface = NULL;
     uint8_t *base;
     uint32_t stride;
-    uint64_t pts = (uint64_t) frame->pts_ns;
+    struct timespec arrival;
+    uint64_t pts, nowNs;
+    clock_gettime(CLOCK_MONOTONIC, &arrival);
+    nowNs = (uint64_t) arrival.tv_sec * 1000000000ull + (uint64_t) arrival.tv_nsec;
+    /* The display time is the compositor's buffer timestamp when it advances, otherwise the
+     * arrival time (a stream may repeat one timestamp for every buffer). */
+    pts = frame->pts_ns > 0 ? (uint64_t) frame->pts_ns : nowNs;
     size_t slot = 0, i, drops = 0;
     uint32_t dx, dy, dw, dh;
     int32_t sx, sy;
@@ -470,10 +479,14 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
     if (CGRectIsNull(destination) || CGRectIsEmpty(destination)) return;
     @synchronized (self) {
         if (!_running) return;
+        if (pts <= _lastDisplayTime)
+            pts = nowNs > _lastDisplayTime ? nowNs : _lastDisplayTime + 1;
+        /* The minimum frame time is wall-clock time between deliveries. */
         if (_minimumFrameIntervalNs > 0 && _lastFrameTimeNs != 0 &&
-            pts < _lastFrameTimeNs + _minimumFrameIntervalNs)
+            nowNs < _lastFrameTimeNs + _minimumFrameIntervalNs)
             return;
-        _lastFrameTimeNs = pts;
+        _lastFrameTimeNs = nowNs;
+        _lastDisplayTime = pts;
         if (_inFlight >= _queueDepth) { _pendingDrops++; return; }
         for (i = 0; i < _surfaceCount; i++) {
             size_t candidate = (_nextSurface + i) % _surfaceCount;

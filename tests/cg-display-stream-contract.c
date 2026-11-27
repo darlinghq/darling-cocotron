@@ -8,6 +8,7 @@
 #include <IOSurface/IOSurfaceRef.h>
 #include <dispatch/dispatch.h>
 #include <stdio.h>
+#include <time.h>
 #include <string.h>
 
 #define HELD_SURFACES 3
@@ -111,6 +112,46 @@ int main(void)
             CHECK(stopCount == 1);
         }
         CFRelease(stream);
+    }
+
+    /* kCGDisplayStreamMinimumFrameTime limits how often frames are delivered, and the display
+     * times of delivered frames increase. */
+    {
+        __block int throttled = 0;
+        __block uint64_t previous = 0;
+        __block int decreasing = 0;
+        dispatch_queue_t tq = dispatch_queue_create("cg-display-stream-throttle", NULL);
+        double minimum = 0.5;
+        CFNumberRef number = CFNumberCreate(NULL, kCFNumberDoubleType, &minimum);
+        CFMutableDictionaryRef properties = CFDictionaryCreateMutable(NULL, 0,
+            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionarySetValue(properties, kCGDisplayStreamMinimumFrameTime, number);
+        CGDisplayStreamRef slow = CGDisplayStreamCreateWithDispatchQueue(CGMainDisplayID(), 16, 16,
+            'BGRA', properties, tq, ^(CGDisplayStreamFrameStatus status, uint64_t time,
+                                     IOSurfaceRef surface, CGDisplayStreamUpdateRef update) {
+                (void) surface; (void) update;
+                if (status != kCGDisplayStreamFrameStatusFrameComplete)
+                    return;
+                if (time <= previous)
+                    decreasing = 1;
+                previous = time;
+                throttled++;
+            });
+        CHECK(slow != NULL);
+        if (slow != NULL) {
+            if (CGDisplayStreamStart(slow) == kCGErrorSuccess) {
+                struct timespec pause = { 3, 0 };
+                nanosleep(&pause, NULL);
+                CGDisplayStreamStop(slow);
+                CHECK(throttled >= 2);
+                CHECK(throttled <= 7);
+                CHECK(!decreasing);
+            }
+            CFRelease(slow);
+        }
+        CFRelease(properties);
+        CFRelease(number);
+        dispatch_release(tq);
     }
     free(held);
     dispatch_release(queue);
