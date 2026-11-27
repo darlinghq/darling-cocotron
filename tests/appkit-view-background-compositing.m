@@ -20,12 +20,15 @@ static void expect(BOOL ok, NSString *what)
 
 static void render(NSView *view, int *rgba)
 {
-    NSRect b = [view bounds];
-    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes: NULL pixelsWide: b.size.width
+    // The views are 150 points square; a table without rows would report a smaller bounds.
+    NSRect b = NSMakeRect(0, 0, 150, 150);
+    size_t rowBytes = (size_t) b.size.width * 4;
+    unsigned char *storage = calloc(rowBytes, (size_t) b.size.height);
+    NSBitmapImageRep *rep = [[NSBitmapImageRep alloc] initWithBitmapDataPlanes: &storage pixelsWide: b.size.width
                                                                     pixelsHigh: b.size.height bitsPerSample: 8
                                                                samplesPerPixel: 4 hasAlpha: YES isPlanar: NO
                                                                 colorSpaceName: NSDeviceRGBColorSpace
-                                                                   bytesPerRow: 0 bitsPerPixel: 32];
+                                                                   bytesPerRow: rowBytes bitsPerPixel: 32];
     NSGraphicsContext *ctx = [NSGraphicsContext graphicsContextWithBitmapImageRep: rep];
     [NSGraphicsContext saveGraphicsState];
     [NSGraphicsContext setCurrentContext: ctx];
@@ -37,10 +40,12 @@ static void render(NSView *view, int *rgba)
     [NSGraphicsContext setCurrentContext: ctx];
     [view drawRect: b];
     [NSGraphicsContext restoreGraphicsState];
-    const unsigned char *data = [rep bitmapData] + 5 * [rep bytesPerRow] + 5 * 4;
+    const unsigned char *data = storage + 5 * rowBytes + 5 * 4;
     for (int i = 0; i < 4; i++)
         rgba[i] = data[i];
+    printf("%s pixel (5,5): %d,%d,%d,%d\n", [NSStringFromClass([view class]) UTF8String], rgba[0], rgba[1], rgba[2], rgba[3]);
     [rep release];
+    free(storage);
 }
 
 static BOOL near(int a, int b) { return abs(a - b) <= 2; }
@@ -54,6 +59,7 @@ static BOOL near(int a, int b) { return abs(a - b) <= 2; }
 
 int main(void)
 {
+    setvbuf(stdout, NULL, _IOLBF, 0);
     @autoreleasepool {
         [NSApplication sharedApplication];
         NSWindow *w = [[NSWindow alloc] initWithContentRect: NSMakeRect(0, 0, 200, 200)

@@ -1047,10 +1047,8 @@ static NSTextView *s_targetTextView = nil;
     NSRange glyphRange;
     NSRect glyphRect = rect;
 
-    if (NS_EXTRA(NSTextView, self)->_backgroundColor != nil) {
-        [NS_EXTRA(NSTextView, self)->_backgroundColor setFill];
-        NSRectFillUsingOperation(rect, NSCompositeSourceOver);
-    }
+    [NS_EXTRA(NSTextView, self)->_backgroundColor setFill];
+    NSRectFill(rect);
 
     glyphRect.origin.x -= NS_EXTRA(NSTextView, self)->_textContainerInset.width;
     glyphRect.origin.y -= NS_EXTRA(NSTextView, self)->_textContainerInset.height;
