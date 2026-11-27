@@ -81,8 +81,7 @@ COREGRAPHICS_EXPORT void _CGSInputMethodSetCursorRect(CGSWindowID window, CGRect
 COREGRAPHICS_EXPORT void _CGSInputMethodSetSurroundingText(CGSWindowID window, CFStringRef text, CFRange selection);
 
 // What kind of text the window takes, for an input method that adapts to it (a number pad for digits, no learning
-// for a password). The values are the ones of Wayland's text input (zwp_text_input_v3), whose names these
-// are, and 0 for both is plain text. A backend whose input method does not take it (X11) ignores it.
+// for a password). The values are those of Wayland's text input (zwp_text_input_v3), and 0 for both is plain text. A backend whose input method does not take it (X11) ignores it.
 enum {
 	kCGSInputMethodHintCompletion = 0x1,
 	kCGSInputMethodHintSpellcheck = 0x2,
@@ -119,8 +118,8 @@ COREGRAPHICS_EXPORT void _CGSInputMethodSetContentType(CGSWindowID window, uint3
 // content type) is followed by the protocol's commit request. The cursor rectangle is the surface's own, from the
 // window's top left corner (a backend that has the UI layer draw the window's frame inside the surface adds
 // where the content starts). The input method's events of one "done" are posted in the protocol's order: the
-// surrounding text that is deleted, the commit, then the preedit; a commit replaces the composition, so no empty
-// preedit comes before it, and nothing is posted for a "done" that says what the window has been told already.
+// surrounding text that is deleted (a composition that is showing is removed with an empty preedit first), the
+// commit, then the preedit; a commit replaces the composition, so no empty preedit comes before it alone, and nothing is posted for a "done" that says what the window has been told already.
 // preedit_string is kCGSToplevelEventInputMethodPreedit with its cursor_begin/cursor_end converted from bytes of
 // UTF-8 to UTF-16 units (a missing cursor is the end of the text), commit_string is
 // kCGSToplevelEventInputMethodCommit, and a composition the compositor took away (the window lost the text input

@@ -27,9 +27,16 @@ static const struct wl_registry_listener registry_listener = {registry_global, r
 
 static void im_activate(void *d, struct zwp_input_method_v2 *m) { pending_active = 1; }
 static void im_deactivate(void *d, struct zwp_input_method_v2 *m) { pending_active = 0; }
-static void im_surrounding(void *d, struct zwp_input_method_v2 *m, const char *t, uint32_t c, uint32_t a) {}
+// What the client says of its text is printed, for a driver that checks it.
+static void im_surrounding(void *d, struct zwp_input_method_v2 *m, const char *t, uint32_t c, uint32_t a) {
+    printf("surrounding \"%s\" %u %u\n", t, c, a);
+    fflush(stdout);
+}
 static void im_cause(void *d, struct zwp_input_method_v2 *m, uint32_t cause) {}
-static void im_content_type(void *d, struct zwp_input_method_v2 *m, uint32_t hint, uint32_t purpose) {}
+static void im_content_type(void *d, struct zwp_input_method_v2 *m, uint32_t hint, uint32_t purpose) {
+    printf("content_type %u %u\n", hint, purpose);
+    fflush(stdout);
+}
 static void im_done(void *d, struct zwp_input_method_v2 *m) {
     serial++;
     active = pending_active;
@@ -56,12 +63,20 @@ static void pump(struct wl_display *display, int ms) {
     }
 }
 
-static void step(struct wl_display *display, const char *preedit, int begin, int end, const char *commit) {
+// One state of the input method: text deleted around the caret (bytes), the final text, the composition.
+static void step_delete(struct wl_display *display, unsigned before, unsigned after, const char *preedit, int begin,
+                        int end, const char *commit) {
+    if (before != 0 || after != 0)
+        zwp_input_method_v2_delete_surrounding_text(method, before, after);
     if (commit != NULL)
         zwp_input_method_v2_commit_string(method, commit);
     zwp_input_method_v2_set_preedit_string(method, preedit, begin, end);
     zwp_input_method_v2_commit(method, serial);
     pump(display, 400);
+}
+
+static void step(struct wl_display *display, const char *preedit, int begin, int end, const char *commit) {
+    step_delete(display, 0, 0, preedit, begin, end, commit);
 }
 
 int main(void) {
@@ -98,6 +113,13 @@ int main(void) {
     step(display, "x", 1, 1, NULL);
     // Cancelled: no composition and nothing committed.
     step(display, "", 0, 0, NULL);
+    // Outside the BMP: U+20BB7 (4 bytes of UTF-8, a surrogate pair in UTF-16) after "a", with the caret after it
+    // (byte 5), then two such characters committed (U+20BB7 and U+1F600).
+    step(display, "a\xf0\xa0\xae\xb7", 5, 5, NULL);
+    step(display, "", 0, 0, "\xf0\xa0\xae\xb7\xf0\x9f\x98\x80");
+    // Text deleted around the caret (1 byte before it, 4 after) and non-ASCII text (U+00FC) committed: a client that
+    // says what its text is gets the deletion.
+    step_delete(display, 1, 4, "", 0, 0, "\xc3\xbc");
     printf("done\n");
     fflush(stdout);
     pump(display, 500);
