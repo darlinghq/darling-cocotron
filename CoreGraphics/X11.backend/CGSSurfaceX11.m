@@ -71,6 +71,16 @@
 	return (void*) (uintptr_t) _xWindow;
 }
 
+-(CGError) setVisible:(BOOL) visible
+{
+	if (visible)
+		XMapWindow(_display, _xWindow);
+	else
+		XUnmapWindow(_display, _xWindow);
+	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
 -(CGError) setBounds:(CGRect) rect
 {
 	// X11 refuses a zero-sized window, and a size below one pixel rounds down to it.
