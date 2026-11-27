@@ -359,6 +359,7 @@ static const struct {
     case NSEventTypeOtherMouseDragged: [self otherMouseDragged: event]; break;
     case NSEventTypeMagnify: [self magnifyWithEvent: event]; break;
     case NSEventTypeRotate: [self rotateWithEvent: event]; break;
+    case NSEventTypeTabletPoint: [self tabletPoint: event]; break;
     default: return NO;
     }
     return YES;

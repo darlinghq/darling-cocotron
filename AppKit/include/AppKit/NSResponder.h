@@ -81,6 +81,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (void) beginGestureWithEvent: (NSEvent *) event NS_SWIFT_NAME(beginGesture(with:));
 - (void) endGestureWithEvent: (NSEvent *) event NS_SWIFT_NAME(endGesture(with:));
 - (void) pressureChangeWithEvent: (NSEvent *) event NS_SWIFT_NAME(pressureChange(with:));
+- (void) tabletPoint: (NSEvent *) event NS_SWIFT_NAME(tabletPoint(with:));
+- (void) tabletProximity: (NSEvent *) event NS_SWIFT_NAME(tabletProximity(with:));
 - (void) touchesBeganWithEvent: (NSEvent *) event;
 - (void) touchesMovedWithEvent: (NSEvent *) event;
 - (void) touchesEndedWithEvent: (NSEvent *) event;
