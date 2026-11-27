@@ -1841,6 +1841,8 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
     [self finishLaunching];
     [pool release];
 
+    int scrollBurst = 0;
+
     do {
         pool = [NSAutoreleasePool new];
         NSEvent *event;
@@ -1855,8 +1857,18 @@ static BOOL terminateAfterLastWindowClosedSetting(void) {
         NS_HANDLER [self reportException: localException];
         NS_ENDHANDLER
 
-        // The windows are brought up to date after each event
-        [self updateWindows];
+        // Coalesce window toolbar/update work across queued scroll-wheel bursts.
+        NSEvent *nextQueued = ([event type] == NSScrollWheel && scrollBurst < 16)
+            ? _NSEventQueueNextEvent(NSAnyEventMask, [NSDate distantPast],
+                                     NSDefaultRunLoopMode, NO)
+            : nil;
+        if (nextQueued != nil && [nextQueued type] == NSScrollWheel) {
+            scrollBurst++;
+        } else {
+            scrollBurst = 0;
+            // The windows are brought up to date after each event
+            [self updateWindows];
+        }
                 [self _checkForReleasedWindows];
         [self _checkForTerminate];
 
