@@ -76,6 +76,8 @@ typedef NS_ENUM(NSInteger, NSSharingContentScope) {
     NS_EXTRA_IVARS_BEGIN(NSSharingServicePicker)
     NSArray *_items;
     id <NSSharingServicePickerDelegate> _delegate;
+    NSMenu *_presentedMenu;
+    NSUInteger _showGeneration;
     NS_EXTRA_IVARS_END(NSSharingServicePicker)
 }
 
@@ -84,14 +86,30 @@ typedef NS_ENUM(NSInteger, NSSharingContentScope) {
 - (instancetype) initWithItems: (NSArray *) items;
 - (NSMenu *) menu;
 - (void) showRelativeToRect: (NSRect) rect ofView: (NSView *) view preferredEdge: (NSRectEdge) preferredEdge;
+- (void) close;
 
 @end
 
 @protocol NSSharingServiceDelegate <NSObject>
 
+@optional
+- (void) sharingService: (NSSharingService *) sharingService willShareItems: (NSArray *) items;
+- (void) sharingService: (NSSharingService *) sharingService didFailToShareItems: (NSArray *) items error: (NSError *) error;
+- (void) sharingService: (NSSharingService *) sharingService didShareItems: (NSArray *) items;
+
 @end
 
 @protocol NSSharingServicePickerDelegate <NSObject>
+
+@optional
+// ObjC spellings of the Swift names in the NSSharingServicePickerDelegate reference.
+- (NSArray<NSSharingService *> *) sharingServicePicker: (NSSharingServicePicker *) picker
+                               sharingServicesForItems: (NSArray *) items
+                               proposedSharingServices: (NSArray<NSSharingService *> *) proposedServices;
+- (id <NSSharingServiceDelegate>) sharingServicePicker: (NSSharingServicePicker *) picker
+                             delegateForSharingService: (NSSharingService *) service;
+- (void) sharingServicePicker: (NSSharingServicePicker *) picker
+      didChooseSharingService: (NSSharingService *) service;
 
 @end
 
