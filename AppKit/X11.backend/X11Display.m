@@ -314,21 +314,6 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     return [NSCGSDraggingManager sharedManager];
 }
 
-// Activating another process asks the window manager to activate its
-// frontmost window with an EWMH _NET_ACTIVE_WINDOW request, which CoreGraphics
-// makes (its window system layer owns the process-to-window mapping, and knows
-// whether a window manager is there to ask). The window manager decides, and
-// may refuse to steal focus. The current process is activated through its own
-// windows by NSApplication.
-- (BOOL) activateProcessIdentifier: (pid_t) processIdentifier {
-    if (processIdentifier <= 0 || processIdentifier == getpid())
-        return NO;
-
-    return _CGSActivateProcess(processIdentifier,
-                               kCGSActivateProcessFrontWindowOnly) ==
-           kCGErrorSuccess;
-}
-
 - (BOOL) usesPointerController {
     return NO;
 }

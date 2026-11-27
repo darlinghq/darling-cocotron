@@ -23,7 +23,7 @@
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import "WaylandRender.h"
-#import "WaylandWindowLevel.h"
+#import "../DarlingWindowLevelPolicy.h"
 #import "../../CoreGraphics/Wayland.backend/CGSWindowWayland.h"
 #import <CoreGraphics/CGSServerSPI.h>
 #import <IOSurface/IOSurface.h>
@@ -157,6 +157,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     // Like X11Window, this can run several times.
     if (_invalidated) return;
     _invalidated = YES;
+    [_cgsWindow setToplevelHeldBack: NO];
     [_context release];
     _context = nil;
 
@@ -507,8 +508,21 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
 }
 
+// The compositor activated the window, or it is the key window of a window that is never shown: it comes first in the
+// order of the windows.
+- (void) activatedInWindowSystem {
+    [_cgsWindow orderToplevelAbove: nil];
+}
+
 - (BOOL) isOrderedIn {
     return _mapped || ((_fullyTransparent || _mapDeferred) && _shouldBeMapped && !_invalidated);
+}
+
+// A window that is ordered in but not mapped (fully transparent, or held back while the application cannot take the
+// focus) is not given to the compositor, but counts as ordered in for the window order, which the window system window
+// keeps (see -[CGSWindow setToplevelHeldBack:]).
+- (void) syncHeldBack {
+    [_cgsWindow setToplevelHeldBack: !_mapped && [self isOrderedIn]];
 }
 
 - (BOOL) isMapDeferred {
@@ -559,6 +573,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) ensureMapped {
+    [self ensureMappedUnsynced];
+    [self syncHeldBack];
+}
+
+- (void) ensureMappedUnsynced {
     if (_unmapPending && !_invalidated) {
         // Ordered out and in again within one pass of the run loop: nothing changed for the window.
         _unmapPending = NO;
@@ -644,7 +663,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _surfaceCommitted = YES;
     _pendingWidth = _pendingHeight = 0;
     _pendingActivated = NO;
-    _pendingSuspended = NO;
     _pendingFullscreen = NO;
     _mapped = YES;
     [self updateIdleInhibitor];
@@ -750,6 +768,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (BOOL) isPopupWaitingForParent { return _popupWaitingForParent; }
 
 - (void) unmap {
+    [self unmapUnsynced];
+    [self syncHeldBack];
+}
+
+- (void) unmapUnsynced {
     _unmapPending = NO;
     _shouldBeMapped = NO;
     _mapDeferred = NO;
@@ -789,9 +812,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
     _mapped = NO;
     [self updateIdleInhibitor];
-    // The toplevel is gone, and so is what the compositor did to it.
-    [self endMinimized];
-    _levelParent = nil;
     _configureUpdatePending = NO;
     _configured = NO;
     // The compositor moves the focus away from a window that is unmapped without telling the client,
@@ -809,12 +829,10 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
             [delegate platformWindowDeactivated: self checkForAppDeactivation: NO];
         }];
     }
-    _pendingSuspended = _suspended = NO;
     // The tracker survives hiding: _frame keeps the fullscreen size, so the size
     // from before fullscreen would be lost if the next map saved it again.
-    _fullscreenRequested = _pendingFullscreen = _fullscreenRecheckPending = NO;
+    _pendingFullscreen = _fullscreenRecheckPending = NO;
     _fullscreenReported = NO;
-    _fullscreenSettling = NO;
     [self updateShortcutsInhibitor];
     [self updateContentType];
     [_display windowUnmapped: self];
@@ -847,6 +865,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     _unmapPending = YES;
     _shouldBeMapped = NO;
     _keyRequested = NO;
+    [self syncHeldBack];
     [_display performAfterRunLoopPass: ^{
         if (self->_unmapPending)
             [self unmap];
@@ -911,67 +930,31 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 - (void) captureEvents {
 }
 
-// xdg-shell has no request to undo set_minimized and no event that says a toplevel is minimized,
-// so the window keeps the state itself. GUESS: the compositor minimizes the window when asked (it
-// may ignore the request, and then the window is reported miniaturized until it is shown again).
-// The state is kept only when something can bring the window back (xdg-activation) and the
-// compositor advertised that it minimizes (a compositor that did not ignores the request, so the
-// window would be reported miniaturized while it stays on screen). Otherwise the request is sent as
-// before and the window keeps being reported as not miniaturized. GUESS: a compositor that
-// predates the capabilities event (xdg_toplevel before version 5) minimizes.
-- (BOOL) compositorMinimizes {
-    return WL.wl_proxy_get_version(_toplevel) < 5 || _minimizeAdvertised;
-}
-
+// The window system window asks the compositor to minimize the window, and keeps the state xdg-shell does not tell, and
+// asks for the activation that shows the window again (see -[CGSWindow miniaturizeToplevel]).
 - (void) miniaturize {
-    if (_toplevel == NULL || _minimized)
-        return;
-    sendRequest(_toplevel, WP_TOPLEVEL_SET_MINIMIZED, 0);
-    [_display flush];
-    if (_display->_activation == NULL || ![self compositorMinimizes])
-        return;
-    _minimized = YES;
-    [_display performAfterDispatch: ^{
-        if (self->_minimized && !self->_invalidated)
-            [self->_delegate platformWindowMiniaturized: self];
-    }];
+    [_cgsWindow miniaturizeToplevel];
 }
 
-// The only client-side way to bring a minimized toplevel back is to ask for its activation
-// (xdg-activation-v1); the compositor decides, and may only mark the window as wanting attention.
-// The window counts as shown again from the request on. If no request could be made (one is waiting
-// for its token) the state stays, and asking again later works. A restore the compositor does itself
-// (its task bar) ends the state when a configure changes the window to activated (see
-// -applyConfigure); a compositor that never reports the window deactivated cannot be told.
 - (void) deminiaturize {
-    if (_minimized && [_display requestActivationOfWindow: self])
-        [self endMinimized];
+    [_cgsWindow deminiaturizeToplevel];
     [self ensureMapped];
 }
 
-- (BOOL) isMiniaturized {
-    return _minimized;
+// Whether the compositor advertised that it minimizes windows.
+- (BOOL) compositorMinimizes {
+    return [(CGSWindowWayland *) _cgsWindow compositorMinimizes];
 }
 
-// The window is shown again (activated by the compositor, or mapped anew): tell the NSWindow.
-- (void) endMinimized {
-    if (!_minimized)
-        return;
-    _minimized = NO;
-    // A window being invalidated (-dealloc does it) has no NSWindow to tell, and must not be retained.
-    if (_invalidated)
-        return;
-    [_display performAfterDispatch: ^{
-        if (!self->_minimized && !self->_invalidated)
-            [self->_delegate platformWindowDeminiaturized: self];
-    }];
+- (BOOL) isMiniaturized {
+    return [_cgsWindow toplevelIsMiniaturized];
 }
 
 // What xdg-shell offers of occlusion is the suspended state, sent by compositors that stop repainting a
 // toplevel they do not show (version 6 of xdg_wm_base). A compositor that never sends it leaves the
 // window seen whenever it is mapped.
 - (BOOL) isOccluded {
-    return _mapped && _suspended;
+    return _mapped && [_cgsWindow toplevelIsOccluded];
 }
 
 - (void) flashWindow {
@@ -1087,35 +1070,11 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
         return;
     struct wl_proxy *output;
     BOOL wanted = [self wantsFullscreenOn: &output];
-    if (wanted == _fullscreenRequested)
+    if (wanted == [_cgsWindow toplevelFullscreenRequested])
         return;
-    _fullscreenRequested = wanted;
-    if (wanted)
-        WaylandToplevelSetFullscreen(_toplevel, output);
-    else
-        WaylandToplevelUnsetFullscreen(_toplevel);
-    if (_configured)
-        [self beginFullscreenSettle];
-    [_display flush];
-}
-
-// After set_fullscreen or unset_fullscreen the client waits for the configure that
-// answers it before it commits again: the compositor decides the size. A commit
-// sent before the answer arrives has the size the window gets from the
-// application's own side of the change (the title bar goes away, for instance),
-// and a compositor that lets a client's size count for a floating window (sway)
-// then sends one more configure with that size and the fullscreen state, which
-// wins over the real fullscreen size. Drawing resumes when a configure brings the
-// requested state, or after a second when the compositor answers nothing.
-- (void) beginFullscreenSettle {
-    _fullscreenSettling = YES;
-    NSUInteger token = ++_fullscreenSettleToken;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        if (self->_fullscreenSettleToken != token || !self->_fullscreenSettling)
-            return;
-        self->_fullscreenSettling = NO;
-        [self presentIfPossible];
-    });
+    // The window system window asks the compositor, and holds the drawing back until the compositor has answered (see
+    // -toplevelFullscreenSettling).
+    [(CGSWindowWayland *) _cgsWindow setToplevelFullscreen: wanted onOutput: output force: NO];
 }
 
 - (void) outputsChanged {
@@ -1154,23 +1113,22 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     if (_toplevel == NULL)
         return;
 
-    WaylandWindow *parent = nil;
-    // A window of a raised level, and any window that is not an application window (a panel, a
-    // child window, a window that cannot become main: see DarlingWindowPresentation.h), is related
-    // to the window it belongs to, which keeps it in front of that window and out of the task bar.
+    // A window of a raised level, and any window that is not an application window (a panel, a child window, a window that
+    // cannot become main: see DarlingWindowPresentation.h), is related to the window it belongs to, which keeps it in front
+    // of that window and out of the task bar. The window system window refuses a parent that would make the window its own
+    // ancestor, and then the next candidate is tried.
     BOOL auxiliary = [_delegate respondsToSelector: @selector(_windowPresentation)] &&
                      [(NSWindow *) _delegate _windowPresentation] != DarlingWindowPresentationApplication;
-    if (DarlingWindowRoleForLevel(_level) == DarlingWindowRoleTransient || auxiliary)
-        parent = [_display levelParentForWindow: self];
-    if (parent == _levelParent || (parent != nil && parent->_toplevel == NULL))
-        return;
-    _levelParent = parent;
-    WaylandToplevelSetParent(_toplevel, parent != nil ? parent->_toplevel : NULL);
-    [_display flush];
-}
-
-- (WaylandWindow *) levelParent {
-    return _levelParent;
+    if (DarlingWindowRoleForLevel(_level) == DarlingWindowRoleTransient || auxiliary) {
+        CGSWindow *current = [_cgsWindow toplevelParent];
+        for (WaylandWindow *candidate in [_display levelParentCandidatesForWindow: self]) {
+            if (candidate->_cgsWindow == current)
+                return;
+            if ([_cgsWindow setToplevelParent: candidate->_cgsWindow] == kCGSErrorSuccess)
+                return;
+        }
+    }
+    [_cgsWindow setToplevelParent: nil];
 }
 
 // Sheets and windows in an application modal session are the dialogs AppKit has. xdg-shell can relate
@@ -1185,8 +1143,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 
 - (void) updateDialogForToplevel {
     BOOL dialog = _toplevel != NULL && [self isDialogToplevel] &&
-                  _display->_dialogManager != NULL && _levelParent != nil &&
-                  _levelParent->_toplevel != NULL;
+                  _display->_dialogManager != NULL && [_cgsWindow toplevelParent] != nil;
     if (!dialog) {
         if (_dialog != NULL) {
             sendRequest(_dialog, XDG_DIALOG_DESTROY, WL_MARSHAL_FLAG_DESTROY);
@@ -1212,12 +1169,6 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 }
 
 - (void) dialogManagerAvailable {
-    [self updateDialogForToplevel];
-}
-
-// The compositor drops the relation when the parent unmaps.
-- (void) levelParentUnmapped {
-    _levelParent = nil;
     [self updateDialogForToplevel];
 }
 
@@ -1248,7 +1199,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
 // a compositor ignores it when the surface is unmapped or occluded, so it is dropped as soon as either
 // happens.
 - (void) updateIdleInhibitor {
-    BOOL inhibit = !_invalidated && _mapped && !_suspended && !_fullyTransparent &&
+    BOOL inhibit = !_invalidated && _mapped && ![_cgsWindow toplevelIsOccluded] && !_fullyTransparent &&
                    _surface != NULL && _display->_idleInhibitManager != NULL &&
                    _CGSNativeConnectionDisplaySleepPrevented();
     if (inhibit && _idleInhibitor == NULL) {
@@ -1272,7 +1223,7 @@ static void sendRequest(struct wl_proxy *proxy, uint32_t opcode, uint32_t flags)
     uint32_t type = WP_CONTENT_TYPE_NONE;
     if (_fullscreenReported)
         type = WP_CONTENT_TYPE_GAME;
-    else if (_mapped && !_suspended && !_fullyTransparent && _CGSNativeConnectionDisplaySleepPrevented())
+    else if (_mapped && ![_cgsWindow toplevelIsOccluded] && !_fullyTransparent && _CGSNativeConnectionDisplaySleepPrevented())
         type = WP_CONTENT_TYPE_VIDEO;
     if (_contentType == NULL) {
         union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
@@ -1387,6 +1338,7 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
             BOOL ordered = _shouldBeMapped;
             [self unmap];
             _shouldBeMapped = ordered;
+            [self syncHeldBack];
         } else if (_shouldBeMapped)
             [self ensureMapped];
     }
@@ -1806,7 +1758,7 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
 // per frame callback.
 - (void) presentIfPossible {
     if (!_needsPresent || !_mapped || !_configured || _configureUpdatePending || _frameCallback != NULL ||
-        _fullscreenSettling || _context == nil)
+        [_cgsWindow toplevelFullscreenSettling] || _context == nil)
         return;
 
     O2Surface *surface = [_context surface];
@@ -1961,6 +1913,36 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
     case kCGSToplevelEventInputMethodDeleteSurrounding:
         [_inputMethod handleToplevelEvent: event];
         break;
+    case kCGSToplevelEventOcclusionChanged:
+        // Whether the compositor still repaints the window: what depends on it follows.
+        [_display performAfterDispatch: ^{
+          if (self->_invalidated)
+              return;
+          [self updateIdleInhibitor];
+          if ([self->_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
+              [self->_delegate platformWindowOcclusionChanged: self];
+        }];
+        break;
+    case kCGSToplevelEventMiniaturized:
+        if (!_invalidated)
+            [_delegate platformWindowMiniaturized: self];
+        break;
+    case kCGSToplevelEventDeminiaturized:
+        // A window being invalidated (-dealloc does it) has no NSWindow to tell.
+        if (!_invalidated)
+            [_delegate platformWindowDeminiaturized: self];
+        break;
+    case kCGSToplevelEventParentLost:
+        // The compositor dropped the relation with the parent: a dialog needs one.
+        [self updateDialogForToplevel];
+        break;
+    case kCGSToplevelEventFullscreenSettled:
+        // The compositor answered a request for fullscreen: the content can be drawn at the size it chose.
+        [_display performAfterDispatch: ^{
+          if (!self->_invalidated)
+              [self presentIfPossible];
+        }];
+        break;
     default:
         break;
     }
@@ -1976,12 +1958,9 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
     _layerSurface = [window layerSurfaceProxy];
 
     if (_toplevel != NULL) {
-        _minimizeAdvertised = _pendingMinimizeAdvertised = NO;
         [self updateTitle];
-        _fullscreenRequested = NO;
         [self updateFullscreen];
         [self updateSizeLimits];
-        _levelParent = nil;
         [self updateLevelParent];
         [self updateDialogForToplevel];
         [self updateDecorationMode];
@@ -2015,8 +1994,6 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
     _pendingActivated = configure->activated;
     _pendingMaximized = configure->maximized;
     _pendingFullscreen = configure->fullscreen;
-    _pendingSuspended = configure->suspended;
-    _pendingMinimizeAdvertised = configure->minimizeAdvertised;
     if (_popup != NULL) {
         _pendingPopupX = configure->popupX;
         _pendingPopupY = configure->popupY;
@@ -2102,8 +2079,6 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
     _fullscreenReported = _pendingFullscreen;
     [self updateShortcutsInhibitor];
     [self updateContentType];
-    if (_fullscreenSettling && _fullscreenReported == _fullscreenRequested)
-        _fullscreenSettling = NO;
 
     BOOL sized = NO;
     BOOL moved = NO;
@@ -2147,21 +2122,6 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
     BOOL activationChanged = _pendingActivated != _activated;
     BOOL activated = _pendingActivated;
     _activated = activated;
-    _minimizeAdvertised = _pendingMinimizeAdvertised;
-    // Only the change to activated shows a restore: a configure that repeats the state of a window
-    // that was active when it was minimized may already be on its way.
-    if (activationChanged && activated)
-        [self endMinimized];
-
-    BOOL suspendedChanged = _pendingSuspended != _suspended;
-    _suspended = _pendingSuspended;
-    if (suspendedChanged) {
-        [self updateIdleInhibitor];
-        [_display performAfterDispatch: ^{
-          if ([self->_delegate respondsToSelector: @selector(platformWindowOcclusionChanged:)])
-              [self->_delegate platformWindowOcclusionChanged: self];
-        }];
-    }
 
     if (firstConfigure || sized || moved || activationChanged || decorationChanged) {
         [_display performAfterDispatch: ^{
@@ -2200,7 +2160,7 @@ static void WaylandWindowToplevelEvent(CGSWindow *window, const CGSToplevelEvent
 
 // Whether the compositor currently holds the window fullscreen.
 - (BOOL) isFullScreen {
-    return _mapped && _fullscreenReported;
+    return _mapped && [_cgsWindow toplevelIsFullscreen];
 }
 
 - (void) closeRequested {

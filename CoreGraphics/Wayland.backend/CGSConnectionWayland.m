@@ -675,6 +675,121 @@ static const CGEventFlags kHotKeyModifierMask =
     }
 }
 
+
+#pragma mark - Activation and order of the toplevel windows
+
+// The toplevel windows of the UI layer that are ordered in, front to back as far as the process knows (see
+// -[CGSWindowWayland orderRank]).
+- (NSArray<NSNumber *> *) orderedToplevelWindowIDs {
+    NSArray *windows = [self copyAllWindows];
+    NSMutableArray<CGSWindowWayland *> *ordered = [NSMutableArray array];
+    for (CGSWindow *candidate in windows)
+        if ([candidate isKindOfClass: [CGSWindowWayland class]] && [(CGSWindowWayland *) candidate isOrderedIn] &&
+            [(CGSWindowWayland *) candidate isUIToplevel])
+            [ordered addObject: (CGSWindowWayland *) candidate];
+    [windows release];
+    [ordered sortUsingComparator: ^NSComparisonResult(CGSWindowWayland *a, CGSWindowWayland *b) {
+        uint64_t rankA = [a orderRank], rankB = [b orderRank];
+        return rankA > rankB ? NSOrderedAscending : rankA < rankB ? NSOrderedDescending : NSOrderedSame;
+    }];
+    NSMutableArray<NSNumber *> *result = [NSMutableArray arrayWithCapacity: [ordered count]];
+    for (CGSWindowWayland *window in ordered)
+        [result addObject: @(window.windowId)];
+    return result;
+}
+
+// Another process asked for the windows of this one to be activated (see _CGSActivateProcess): the UI layer is told first,
+// as it may be holding windows back until the application is activated, then the compositor is asked to focus the window
+// that was active last.
+- (void) activationRequested {
+    [super activationRequested];
+    if (_activation == NULL || _activationToken != NULL)
+        return;
+    CGSWindowWayland *window = [self windowForActivation];
+    [self requestActivationOfWindow: window from: window];
+}
+
+- (CGSWindowWayland *) windowForActivation {
+    CGSWindowWayland *best = nil;
+    NSArray *windows = [self copyAllWindows];
+    for (CGSWindow *candidate in windows) {
+        if (![candidate isKindOfClass: [CGSWindowWayland class]])
+            continue;
+        CGSWindowWayland *window = (CGSWindowWayland *) candidate;
+        if (![window isShown] || [window role] != CGSWaylandRoleToplevel)
+            continue;
+        if (best == nil || [window orderRank] > [best orderRank])
+            best = window;
+    }
+    [best retain];
+    [windows release];
+    return [best autorelease];
+}
+
+- (BOOL) requestActivationOfWindow: (CGSWindowWayland *) window {
+    CGSWindowWayland *requester = nil;
+    NSArray *windows = [self copyAllWindows];
+    for (CGSWindow *candidate in windows) {
+        if (![candidate isKindOfClass: [CGSWindowWayland class]])
+            continue;
+        CGSWindowWayland *other = (CGSWindowWayland *) candidate;
+        if (other == window || ![other isShown] || [other role] != CGSWaylandRoleToplevel || [other isMinimizedByRequest])
+            continue;
+        if (requester == nil || [other orderRank] > [requester orderRank])
+            requester = other;
+    }
+    [requester retain];
+    [windows release];
+    BOOL requested = [self requestActivationOfWindow: window from: requester];
+    [requester release];
+    return requested;
+}
+
+- (BOOL) requestActivationOfWindow: (CGSWindowWayland *) window from: (CGSWindowWayland *) requester {
+    if (_activation == NULL || _activationToken != NULL || window == nil || window->_surface == NULL)
+        return NO;
+    union wl_argument none[1] = {{.o = NULL}};
+    _activationToken = [self createObject: _activation
+                                   opcode: WP_ACTIVATION_GET_TOKEN
+                                interface: &xdg_activation_token_v1_interface
+                                arguments: none
+                                     kind: CGSWaylandObjectActivationToken
+                                   object: self];
+    if (_activationToken == NULL)
+        return NO;
+    if (_inputSerial != 0 && _seat != NULL) {
+        union wl_argument serial[2] = {{.u = _inputSerial}, {.o = (struct wl_object *) _seat}};
+        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SERIAL, NULL, 0, serial);
+    }
+    if (requester != nil && requester->_surface != NULL) {
+        union wl_argument forSurface[1] = {{.o = (struct wl_object *) requester->_surface}};
+        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_SET_SURFACE, NULL, 0, forSurface);
+    }
+    WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_COMMIT, NULL, 0, NULL);
+    _activationWindow = [window retain];
+    [self flush];
+    return YES;
+}
+
+- (void) cancelActivationRequest {
+    if (_activationToken != NULL) {
+        WaylandMarshal(_activationToken, WP_ACTIVATION_TOKEN_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _activationToken = NULL;
+    }
+    [_activationWindow release];
+    _activationWindow = nil;
+}
+
+- (void) activationTokenDone: (const char *) token {
+    struct wl_proxy *surface = _activationWindow != nil ? _activationWindow->_surface : NULL;
+    if (_activation != NULL && surface != NULL) {
+        union wl_argument args[2] = {{.s = token}, {.o = (struct wl_object *) surface}};
+        WaylandMarshal(_activation, WP_ACTIVATION_ACTIVATE, NULL, 0, args);
+    }
+    [self cancelActivationRequest];
+    [self flush];
+}
+
 #pragma mark - Clipboard
 
 // How long the serial of a press stays good for the clipboard after the keyboard focus left.
@@ -821,6 +936,10 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
                                        version: MIN(version, (uint32_t) wp_cursor_shape_manager_v1_interface.version)
                                           kind: CGSWaylandObjectNone object: nil];
         [(CGSWaylandPointer *) _pointerDecoder cursorGlobalsChanged];
+    } else if (strcmp(interface, "xdg_activation_v1") == 0 && _activation == NULL) {
+        _activationName = name;
+        _activation = [self bindGlobal: name interface: &xdg_activation_v1_interface
+                               version: 1 kind: CGSWaylandObjectNone object: nil];
     } else if (strcmp(interface, "wp_alpha_modifier_v1") == 0 && _alphaModifierManager == NULL) {
         _alphaModifierManagerName = name;
         _alphaModifierManager = [self bindGlobal: name interface: &wp_alpha_modifier_v1_interface
@@ -961,6 +1080,13 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         else
             _relativePointerManagerName = 0;
         [(CGSWaylandPointer *) _pointerDecoder pointerLockGlobalsChanged];
+        return;
+    }
+    if (_activation != NULL && name == _activationName) {
+        [self cancelActivationRequest];
+        WaylandMarshal(_activation, WP_ACTIVATION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
+        _activation = NULL;
+        _activationName = 0;
         return;
     }
     if (_alphaModifierManager != NULL && name == _alphaModifierManagerName) {
@@ -1208,6 +1334,11 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
             WaylandMarshal(_wmBase, WP_WM_BASE_PONG, NULL, 0, pong);
             [self flush];
         }
+        break;
+
+    case CGSWaylandObjectActivationToken:
+        if (opcode == WP_ACTIVATION_TOKEN_EV_DONE)
+            [self activationTokenDone: args[0].s];
         break;
 
     case CGSWaylandObjectOutput:
@@ -1954,7 +2085,12 @@ static NSDictionary *modeDictionary(int32_t width, int32_t height, double refres
 - (NSArray<NSDictionary *> *) copyWindowDescriptions {
     NSMutableArray<NSDictionary *> *result = [[NSMutableArray alloc] init];
     NSArray *windows = [self copyAllWindows];
+    // The windows of the UI layer first, in the order of -orderedToplevelWindowIDs, then the others, the newer first.
+    NSArray<NSNumber *> *ordered = [self orderedToplevelWindowIDs];
     NSArray *sorted = [windows sortedArrayUsingComparator: ^NSComparisonResult(CGSWindow *a, CGSWindow *b) {
+        NSUInteger indexA = [ordered indexOfObject: @(a.windowId)], indexB = [ordered indexOfObject: @(b.windowId)];
+        if (indexA != indexB)
+            return indexA < indexB ? NSOrderedAscending : NSOrderedDescending;
         return a.windowId < b.windowId ? NSOrderedDescending : a.windowId > b.windowId ? NSOrderedAscending
                                                                                         : NSOrderedSame;
     }];

@@ -113,17 +113,7 @@ typedef enum {
     struct WaylandBuffer _buffers[2];
     int32_t _pendingWidth, _pendingHeight;
     BOOL _pendingActivated;
-    // The compositor's xdg_toplevel suspended state (version 6): the surface is not being repainted,
-    // for instance because it is covered or its workspace is not shown.
-    BOOL _pendingSuspended, _suspended;
     BOOL _mapped;
-    // The window was sent -miniaturize (xdg_toplevel.set_minimized) and has not been shown again
-    // since; xdg-shell cannot tell a client whether a toplevel is minimized (see -miniaturize).
-    BOOL _minimized;
-    // Whether the compositor advertised that it minimizes toplevels (xdg_toplevel wm_capabilities,
-    // version 5): one that did not ignores set_minimized. The event applies with the configure that
-    // follows it.
-    BOOL _minimizeAdvertised, _pendingMinimizeAdvertised;
     // The window has been ordered in, whether or not it is mapped (a window with alpha 0 is not).
     BOOL _shouldBeMapped;
     BOOL _fullyTransparent;
@@ -153,16 +143,12 @@ typedef enum {
     BOOL _scaleUpdatePending, _subwindowRedrawPending, _subwindowRedrawNeeded;
     BOOL _clientDecorated, _pendingClientDecorated, _decorationForcedClient;
     BOOL _maximized, _pendingMaximized;
-    // Whether the current xdg_toplevel was asked for fullscreen, what the last
-    // configure said, and the size to go back to.
-    BOOL _fullscreenRequested, _pendingFullscreen, _fullscreenRecheckPending;
-    BOOL _fullscreenReported; // what the last configure said, told to the delegate
-    BOOL _fullscreenSettling; // a fullscreen change was requested and not yet answered
-    NSUInteger _fullscreenSettleToken;
+    // What the configure being applied said of fullscreen, what the last one applied said (told to the delegate), and the
+    // size to go back to. Asking the compositor for fullscreen, the wait for its answer and the state the compositor holds
+    // are the window system window's (see -[CGSWindow setToplevelFullscreen:force:]).
+    BOOL _pendingFullscreen, _fullscreenRecheckPending;
+    BOOL _fullscreenReported;
     WaylandFullscreenTracker _fullscreenTracker;
-    // The window this one is transient for because of its level, if any (not retained: the
-    // display clears it when that window goes away).
-    WaylandWindow *_levelParent;
     BOOL _configureUpdatePending;
     NSUInteger _surfaceGeneration;
 }
@@ -183,6 +169,9 @@ typedef enum {
 - (BOOL) isInvalidated;
 - (BOOL) isMapped;
 - (BOOL) isFullyTransparent;
+// Tells the window system window whether the window is ordered in without being mapped (see -isOrderedIn).
+- (void) syncHeldBack;
+- (void) activatedInWindowSystem;
 - (BOOL) isOrderedIn;
 - (void) keyboardFocusLeft;
 - (BOOL) isActivatedByCompositor;
@@ -208,9 +197,7 @@ typedef enum {
 // ungrabbed popup of its parent window; it is not part of menu tracking.
 - (BOOL) isGenericPopup;
 - (WaylandWindow *) popupParent;
-- (WaylandWindow *) levelParent;
 - (void) updateLevelParent;
-- (void) levelParentUnmapped;
 - (uint32_t) popupGrabSerial;
 - (struct wl_proxy *) xdgSurface;
 - (void) unmap;

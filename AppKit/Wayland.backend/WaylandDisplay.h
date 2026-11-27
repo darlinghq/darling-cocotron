@@ -67,7 +67,6 @@ typedef enum {
     WaylandObjectFractionalScale,
     WaylandObjectLockedPointer,
     WaylandObjectRelativePointer,
-    WaylandObjectActivationToken,
     WaylandObjectLayerSurface,
     WaylandObjectIconManager,
     // The session protocol's objects. These are above the color manager's range so the two sets
@@ -97,12 +96,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     struct wl_proxy *_registry;
     struct wl_proxy *_compositor;
     struct wl_proxy *_viewporter, *_fractionalScaleManager;
-    // xdg-activation: asks the compositor to focus one of our windows (see
-    // -requestActivation). The token object and the window it is for exist only
-    // while a request waits for the compositor's token.
-    struct wl_proxy *_activation, *_activationToken;
-    uint32_t _activationName;
-    WaylandWindow *_activationWindow;
     // Windows of an inactive application that were not mapped are being mapped for an activation.
     BOOL _mappingForActivation;
     uint32_t _viewporterName, _fractionalScaleManagerName;
@@ -228,7 +221,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (uint32_t) refreshForOutput: (struct wl_proxy *) output; // millihertz, 0 if unknown
 - (WaylandWindow *) popupParentForWindow: (WaylandWindow *) window;
 - (WaylandWindow *) popupParentForGenericPopup: (WaylandWindow *) window;
-- (WaylandWindow *) levelParentForWindow: (WaylandWindow *) window;
+- (NSArray *) levelParentCandidatesForWindow: (WaylandWindow *) window;
 - (uint32_t) popupGrabSerialForParent: (WaylandWindow *) parent;
 - (struct wl_proxy *) seat;
 // Fills `result` and `proxies` with up to `max` outputs in -screens order (the order of the displays): their
@@ -256,7 +249,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 - (void) windowUnmapped: (WaylandWindow *) window;
 - (void) applicationFocusMayHaveLeft;
 - (BOOL) mappingForActivation;
-- (BOOL) requestActivationOfWindow: (WaylandWindow *) window;
 - (void) mapDeferredWindows;
 - (void) windowDestroyed: (WaylandWindow *) window;
 

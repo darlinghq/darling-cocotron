@@ -41,8 +41,12 @@ to, such a window is an ordinary toplevel.
   The windows are CoreGraphics toplevel windows (`CGSWindow.h`, the SPI the X11 backend uses too): CoreGraphics makes the
   wl_surface and, while a window is shown, its xdg-shell, xdg-decoration and layer-shell objects, and tells the backend
   the compositor's configure sequences, close requests and dismissed pop-ups; a window's number is its CoreGraphics
-  window's id. The backend draws into the surface and adds what the protocol needs beyond that (fullscreen, parent,
-  minimizing, activation, session, scale).
+  window's id. CoreGraphics also relates a window to the window the backend names as its parent (`xdg_toplevel.set_parent`),
+  asks for fullscreen and minimizing, keeps the state xdg-shell does not tell (minimized, covered, holding the focus),
+  asks for activation (xdg-activation, also for another process' request, see `_CGSActivateProcess()`) and keeps the order
+  of the windows (`_CGSOrderedToplevelWindowIDs()`: the one activated last first). The backend draws into the surface
+  and decides what a window level, a window's presentation or its size mean for those requests, and adds what the
+  protocol needs beyond that (session, scale, tags).
 - The main menu in Plasma's global menu, or in the windows: see below.
 - Input: pointer with click grouping and scroll frames, keyboard through xkbcommon with the compositor's
   keymap and key repeat, aggregate and left/right modifier changes, touchpad pinch as magnify and rotate
@@ -136,7 +140,8 @@ render manager's float-format negotiation is available to native IOSurface produ
 
 A window is fullscreen when it has the fullscreen style bit, or is an untitled window that can become key and has
 the size of one output (`DarlingFullscreenPolicy.h`, the rule the X11 backend uses too); it then sends
-`xdg_toplevel.set_fullscreen`, naming the output it is on when that is unambiguous. The size to return to is kept
+`xdg_toplevel.set_fullscreen` (made by the CoreGraphics window, which holds the drawing back until the compositor has
+answered), naming the output it is on when that is unambiguous. The size to return to is kept
 across leaving fullscreen, hiding and showing, and a `setFrame:` made while fullscreen wins over what the compositor
 remembers. The decision is re-made when the outputs change.
 

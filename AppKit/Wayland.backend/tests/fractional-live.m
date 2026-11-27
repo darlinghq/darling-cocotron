@@ -78,17 +78,25 @@ static unsigned oldDraws[2], oldReshapes[2];
     NSTimeInterval now = [NSDate timeIntervalSinceReferenceDate];
     if (!settleUntil) { settleUntil = now + 1; return; }
     if (now < settleUntil) return;
-    const double scales[] = {1.25, 1.5, 1.75};
-    double scale = scales[stage];
-    expectResult(fabs([window backingScaleFactor] - scale) < 1e-9, "window fractional scale");
+    // Output scales: the first two share the whole scale 2, the last one is 3.
+    const double scales[] = {1.25, 1.5, 2.25};
+    static double previousScale;
+    // The output scale is fractional, the window scale factor is whole (NSWindow and NSScreen report whole
+    // factors): the output scale rounded up. The drawable is that many pixels per point, shown at the logical
+    // size through the viewport.
+    double scale = ceil(scales[stage] - 1e-9);
+    expectResult(fabs([window backingScaleFactor] - scale) < 1e-9, "window scale is the output scale rounded up");
+    // Only a new whole scale reallocates the drawables; the same one must keep working as it is.
+    BOOL scaleChanged = stage == 0 || scale != previousScale;
+    previousScale = scale;
     FractionalGLView *views[] = {fullView, clipped};
     for (unsigned i = 0; i < 2; ++i) {
         FractionalGLView *view = views[i];
         int width = (int)floor(101 * scale + .5), height = (int)floor(51 * scale + .5);
         expectResult(view->lastPixels.width == width && view->lastPixels.height == height,
-              "GL rounded full drawable extent");
-        expectResult(view->draws > oldDraws[i] && view->reshapes > oldReshapes[i],
-              "static GL redraw and reshape after scale");
+              "GL drawable extent at the whole scale");
+        expectResult(!scaleChanged || (view->draws > oldDraws[i] && view->reshapes > oldReshapes[i]),
+              "static GL redraw and reshape after a new whole scale");
         expectResult(view->error == GL_NO_ERROR && view->edge[0] == (view->cyan ? 0 : 255) &&
               view->edge[1] == (view->cyan ? 255 : 0) &&
               view->edge[2] == 255 && view->edge[3] == 255, "GL last physical pixel");

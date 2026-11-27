@@ -26,7 +26,7 @@ done
 protocols=$(pkg-config --variable=pkgdatadir wayland-protocols)
 wayland-scanner client-header "$protocols/stable/xdg-shell/xdg-shell.xml" "$work/xdg-shell-client-protocol.h"
 wayland-scanner private-code "$protocols/stable/xdg-shell/xdg-shell.xml" "$work/xdg-shell.c"
-cc -Wall -I"$work" -o "$work/test" "$here/wayland-fullscreen.c" "$work/xdg-shell.c" \
+cc -Wall -I"$work" -I"$here/../../../CoreGraphics/WaylandSupport" -o "$work/test" "$here/wayland-fullscreen.c" "$work/xdg-shell.c" \
     $(pkg-config --cflags --libs wayland-client xkbcommon wayland-cursor wayland-egl) -lm
 
 mkdir -m 700 "$work/run"

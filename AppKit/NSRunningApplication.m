@@ -330,8 +330,11 @@ static NSInteger executableArchitectureAtPath(const char *path) {
         return YES;
     }
 
-    return [[NSDisplay currentDisplay]
-            activateProcessIdentifier: _processIdentifier];
+    // Another process: the window system layer asks the window manager or the compositor to focus its windows, which may
+    // refuse (see _CGSActivateProcess).
+    if (_processIdentifier <= 0 || _processIdentifier == getpid())
+        return NO;
+    return _CGSActivateProcess(_processIdentifier, kCGSActivateProcessFrontWindowOnly) == kCGErrorSuccess;
 }
 
 // Activation requested on behalf of another application, which has yielded
