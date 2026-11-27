@@ -896,9 +896,10 @@ static WaylandColorHDRMetadata HDRMetadataFromColorInfo(NSDictionary *info, CGCo
 
 - (void) handleReadyDescription: (struct wl_proxy *) description {
     NSValue *key = Key(description);
-    NSValue *output = [_pendingOutputDescriptions objectForKey: key];
-    NSValue *surface = [_pendingSurfaceDescriptions objectForKey: key];
-    NSValue *feedback = [_pendingPreferredDescriptions objectForKey: key];
+    // The dictionaries own these values; they are used after being removed from them below.
+    NSValue *output = [[[_pendingOutputDescriptions objectForKey: key] retain] autorelease];
+    NSValue *surface = [[[_pendingSurfaceDescriptions objectForKey: key] retain] autorelease];
+    NSValue *feedback = [[[_pendingPreferredDescriptions objectForKey: key] retain] autorelease];
 
     if (feedback != nil) {
         [_pendingPreferredDescriptions removeObjectForKey: key];
