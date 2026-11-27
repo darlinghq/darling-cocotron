@@ -27,7 +27,31 @@
 
 #import <Foundation/NSString.h>
 
+// wl_surface.set_opaque_region and wl_region.add of the core protocol
+enum { kSurfaceSetOpaqueRegion = 4, kRegionAdd = 1 };
+
 @implementation CGSSurfaceWayland
+
+// What GL draws is opaque whatever its alpha channel holds: the window's alpha is for the windows that ask for a
+// translucent one, and the compositor would blend a GL window of drawn alpha below one with what is behind it
+- (void) markOpaque {
+    if (_ownSurface == NULL)
+        return;
+    CGSConnectionWayland *connection = _waylandWindow->_waylandConnection;
+    union wl_argument regionArgs[1] = {{.o = NULL}};
+    struct wl_proxy *region = [connection createObject: connection->_compositor
+                                                opcode: WP_COMPOSITOR_CREATE_REGION
+                                             interface: &wl_region_interface
+                                             arguments: regionArgs
+                                                  kind: CGSWaylandObjectNone
+                                                object: nil];
+    if (region == NULL)
+        return;
+    union wl_argument add[4] = {{.i = 0}, {.i = 0}, {.i = (int32_t) ceil(_size.width)}, {.i = (int32_t) ceil(_size.height)}};
+    WaylandMarshal(region, kRegionAdd, NULL, 0, add);
+    WaylandMarshal(_ownSurface, kSurfaceSetOpaqueRegion, NULL, 0, (union wl_argument[1]) {{.o = (struct wl_object *) region}});
+    WaylandMarshal(region, WP_REGION_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, (union wl_argument[1]) {{.o = NULL}});
+}
 
 - (instancetype) initWithWindow: (CGSWindow *) window
                       surfaceID: (CGSSurfaceID) surfaceID
@@ -79,6 +103,7 @@
         WaylandMarshal(_subsurface, WP_SUBSURFACE_SET_DESYNC, NULL, 0, (union wl_argument[1]) {{.o = NULL}});
         [[connection renderManager] observeSurface: _ownSurface];
         drawn = _ownSurface;
+        [self markOpaque];
     }
 
     _eglWindow = WL.wl_egl_window_create(
@@ -136,6 +161,7 @@
                        (union wl_argument[2]) {{.i = (int32_t) rect.origin.x}, {.i = (int32_t) rect.origin.y}});
         _size = rect.size;
         WL.wl_egl_window_resize(_eglWindow, (int) rect.size.width, (int) rect.size.height, 0, 0);
+        [self markOpaque];
         [self _boundsDidChange: rect];
         return kCGSErrorSuccess;
     }
