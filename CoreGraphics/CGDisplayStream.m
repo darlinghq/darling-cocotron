@@ -97,6 +97,7 @@ enum {
 - initWithDisplay: (CGDirectDisplayID) display width: (size_t) width height: (size_t) height pixelFormat: (int32_t) pixelFormat properties: (CFDictionaryRef) properties handler: (CGDisplayStreamFrameAvailableHandler) handler queue: (dispatch_queue_t) queue;
 - (CFRunLoopSourceRef) runLoopSource;
 - (CGError) start;
+- (void) stopFromBackend;
 - (CGError) stop;
 - (void) deliverStop;
 - (void) deliverPendingFrame;
@@ -231,6 +232,11 @@ static CGRect fittedRect(CGRect source, CGRect destination, BOOL preserveAspectR
 static void receivePipeWireFrame(const struct darling_screen_capture_frame *frame, void *userData) {
     [(CGDisplayStream *) userData receiveFrame: frame];
 }
+static void receivePipeWireError(int error, void *userData) {
+    (void) error;
+    /* The backend ended the stream: it is reported like a stop, with the Stopped status. */
+    [(CGDisplayStream *) userData stopFromBackend];
+}
 static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFormat, uint8_t **baseOut, uint32_t *strideOut) {
     CFMutableDictionaryRef properties;
     CFNumberRef number;
@@ -359,6 +365,7 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
         if (CGRectIsEmpty(bounds)) return kCGErrorIllegalArgument;
         memset(&callbacks, 0, sizeof(callbacks));
         callbacks.frame = receivePipeWireFrame;
+        callbacks.error = receivePipeWireError;
         result = darling_screen_capture_open((int32_t) bounds.origin.x, (int32_t) bounds.origin.y, (uint32_t) bounds.size.width, (uint32_t) bounds.size.height, _showCursor, darling_screen_capture_supports_hdr() ? 1 : 0, &callbacks, self, &_capture);
         if (result != 0) return kCGErrorFailure;
         result = darling_screen_capture_start(_capture, 1);
@@ -366,6 +373,9 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
         result = darling_screen_capture_wait(_capture, 5000);
         if (result != 0) { darling_screen_capture_close(_capture); _capture = NULL; return kCGErrorFailure; }
     }
+#else
+    /* Without a capture backend no frame can ever be delivered. */
+    return kCGErrorFailure;
 #endif
     @synchronized (self) {
         _running = YES;
@@ -410,6 +420,14 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
         CFRelease(self);
     }
     return kCGErrorSuccess;
+}
+- (void) stopFromBackend {
+    /* Called on the capture thread, which stop() would have to join. */
+    [self retain];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self stop];
+        [self release];
+    });
 }
 - (void) deliverStop {
     BOOL deliver = NO;
