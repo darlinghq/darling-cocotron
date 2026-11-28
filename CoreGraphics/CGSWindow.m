@@ -315,6 +315,14 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     return kCGErrorNotImplemented;
 }
 
+- (CGError) setToplevelApplicationMenuServiceName: (NSString *) service objectPath: (NSString *) path {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelHoldsInputForMenu: (BOOL) holds {
+    return kCGErrorNotImplemented;
+}
+
 - (CGError) orderToplevelAbove: (CGSWindow *) sibling {
     return kCGErrorNotImplemented;
 }

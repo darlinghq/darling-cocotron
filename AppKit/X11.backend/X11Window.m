@@ -262,6 +262,9 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     [_cgsWindow setToplevelStacksByLevel: !_dock && !_menuWindow];
     // The level may have been set before the window system window was made.
     [_cgsWindow setToplevelLevel: _level];
+    // The pointer and the keyboard are held for a menu while it is shown, so that a click outside it reaches the menu's
+    // tracking and not another client, and its keys reach it.
+    [_cgsWindow setToplevelHoldsInputForMenu: _menuWindow];
 
     [self updateWindowManagerHints];
 
@@ -272,7 +275,7 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     // A window of the application's own, not a popup or its menu bar, shows
     // the application's menu in the desktop's global menu.
     if (!_dock && !_overrideRedirect && !isMenuWindow)
-        [[x11disp appMenu] windowCreated: _window];
+        [[x11disp appMenu] windowCreated: _window cgsWindow: _cgsWindow];
 
     [self setStyleMaskInternal: _styleMask force: YES];
 
@@ -713,8 +716,6 @@ static const int X11ChromelessCornerRadius = (int) kCGSToplevelHiddenTitlebarCor
         [_cgsWindow orderWindow: kCGSOrderIn relativeTo: nil];
         _mapped = YES;
         _wasMapped = YES;
-        if (_menuWindow)
-            [(X11Display *) [NSDisplay currentDisplay] menuWindowMapped: self];
     }
 }
 
@@ -852,8 +853,6 @@ static const int X11ChromelessCornerRadius = (int) kCGSToplevelHiddenTitlebarCor
         [_inputMethod release];
         _inputMethod = nil;
 
-        if (_menuWindow)
-            [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
         [(X11Display *) [NSDisplay currentDisplay] setWindow: nil
                                                        forID: _window];
         // CoreGraphics destroys the window system's window, with its children.
@@ -1024,8 +1023,6 @@ static const int X11ChromelessCornerRadius = (int) kCGSToplevelHiddenTitlebarCor
         return;
     [_cgsWindow orderWindow: kCGSOrderOut relativeTo: nil];
     _mapped = NO;
-    if (_menuWindow)
-        [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
     // A key request still waiting for the focus is void once the window is ordered out; otherwise a later
     // non-key orderFront would take focus. (The window system's window forgets what it was waiting for, and the
     // fullscreen state, which the window manager drops for a withdrawn window.)

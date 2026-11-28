@@ -1,7 +1,7 @@
-// Host test for AppKit/X11.backend/X11DockSupport.h: the decision on a list of supported atoms, and the
+// Host test for CoreGraphics/X11.backend/X11DockSupport.h: the decision on a list of supported atoms, and the
 // read of _NET_SUPPORTED from a real root window. Needs an X server; use tests/x11-dock-support.sh, which runs
 // it on its own Xvfb. Build: cc x11-dock-support.c -lX11
-#include "../AppKit/X11.backend/X11DockSupport.h"
+#include "../CoreGraphics/X11.backend/X11DockSupport.h"
 #include <stdio.h>
 #include <string.h>
 

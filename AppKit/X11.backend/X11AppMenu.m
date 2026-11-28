@@ -21,11 +21,7 @@
 #import "../private-include/AppKit/NSDBusMenu.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSMenu.h>
-#import <X11/Xatom.h>
-
-// Atoms KDE reads to find the menu of a window; the registrar is told the same.
-#define SERVICE_NAME_PROPERTY "_KDE_NET_WM_APPMENU_SERVICE_NAME"
-#define OBJECT_PATH_PROPERTY "_KDE_NET_WM_APPMENU_OBJECT_PATH"
+#import <CoreGraphics/CGSWindow.h>
 
 @implementation X11AppMenu
 
@@ -46,7 +42,7 @@ static NSString *applicationName(void) {
 
     _display = display;
     _exporting = exporting;
-    _windows = [NSMutableSet new];
+    _windows = [NSMutableDictionary new];
 
     _bar = [[NSMenuBarController alloc] initWithDelegate: self];
     return self;
@@ -80,32 +76,21 @@ static NSString *applicationName(void) {
 #pragma mark - Windows
 
 - (void) publishMenuOnWindow: (Window) window {
-    NSString *service = [_exporter busName];
-    NSString *path = [NSDBusMenu menuObjectPath];
+    CGSWindow *cgsWindow = [_windows objectForKey: [NSNumber numberWithUnsignedLong: window]];
 
-    XChangeProperty(_display, window,
-                    XInternAtom(_display, SERVICE_NAME_PROPERTY, False),
-                    XA_STRING, 8, PropModeReplace,
-                    (const unsigned char *) [service UTF8String],
-                    (int) [service lengthOfBytesUsingEncoding: NSUTF8StringEncoding]);
-    XChangeProperty(_display, window,
-                    XInternAtom(_display, OBJECT_PATH_PROPERTY, False),
-                    XA_STRING, 8, PropModeReplace,
-                    (const unsigned char *) [path UTF8String],
-                    (int) [path lengthOfBytesUsingEncoding: NSUTF8StringEncoding]);
+    [cgsWindow setToplevelApplicationMenuServiceName: [_exporter busName] objectPath: [NSDBusMenu menuObjectPath]];
     [_exporter registerWindow: window];
 }
 
 - (void) withdrawMenuFromWindow: (Window) window {
-    XDeleteProperty(_display, window,
-                    XInternAtom(_display, SERVICE_NAME_PROPERTY, False));
-    XDeleteProperty(_display, window,
-                    XInternAtom(_display, OBJECT_PATH_PROPERTY, False));
+    CGSWindow *cgsWindow = [_windows objectForKey: [NSNumber numberWithUnsignedLong: window]];
+
+    [cgsWindow setToplevelApplicationMenuServiceName: nil objectPath: nil];
     [_exporter unregisterWindow: window];
 }
 
-- (void) windowCreated: (Window) window {
-    [_windows addObject: [NSNumber numberWithUnsignedLong: window]];
+- (void) windowCreated: (Window) window cgsWindow: (CGSWindow *) cgsWindow {
+    [_windows setObject: cgsWindow forKey: [NSNumber numberWithUnsignedLong: window]];
     if (_exporter != nil && _menu != nil)
         [self publishMenuOnWindow: window];
 }
@@ -113,9 +98,9 @@ static NSString *applicationName(void) {
 - (void) windowDestroyed: (Window) window {
     NSNumber *key = [NSNumber numberWithUnsignedLong: window];
 
-    if (![_windows containsObject: key])
+    if ([_windows objectForKey: key] == nil)
         return;
-    [_windows removeObject: key];
+    [_windows removeObjectForKey: key];
     [_exporter unregisterWindow: window];
 }
 
@@ -134,7 +119,7 @@ static NSString *applicationName(void) {
         [self connectIfNeeded];
     [_exporter setMenu: _menu];
 
-    for (NSNumber *window in _windows) {
+    for (NSNumber *window in [_windows allKeys]) {
         if (_menu != nil)
             [self publishMenuOnWindow: [window unsignedLongValue]];
         else if (hadMenu)

@@ -111,6 +111,10 @@ typedef enum {
     // (a position for a toplevel), xdg-decoration (the frame is the compositor's).
     struct wl_proxy *_layerShell, *_plasmaShell, *_decorationManager;
     uint32_t _plasmaShellVersion;
+    // KDE's appmenu protocol, when the compositor has it: a window tells where its application menu is (see
+    // -[CGSWindow setToplevelApplicationMenuServiceName:objectPath:]).
+    struct wl_proxy *_appMenuManager;
+    uint32_t _appMenuManagerName, _appMenuManagerVersion;
     // alpha-modifier-v1, when the compositor offers it: the opacity of a window's surface (-[CGSWindow setToplevelAlpha:]).
     struct wl_proxy *_alphaModifierManager;
     uint32_t _alphaModifierManagerName;

@@ -560,6 +560,30 @@ static const CGEventFlags kHotKeyModifierMask =
     return [[self colorManager] hasExtendedDynamicRange];
 }
 
+// The appmenu manager came or went: every window gives the compositor the address of its menu, or releases it.
+- (void) notifyWindowsApplicationMenuManagerChanged {
+    NSMutableArray *windows = [NSMutableArray array];
+
+    @synchronized (_windows) {
+        for (NSNumber *key in _windows) {
+            CGSWindow *window = [_windows objectForKey: key];
+            if ([window isKindOfClass: [CGSWindowWayland class]])
+                [windows addObject: window];
+        }
+    }
+    for (CGSWindowWayland *window in windows)
+        [window applyApplicationMenu];
+}
+
+- (BOOL) carriesApplicationMenuAddress {
+    return _appMenuManager != NULL;
+}
+
+// The menu bar window is a layer surface along the top of the screen.
+- (BOOL) placesMenuBar {
+    return _layerShell != NULL;
+}
+
 - (void) notifyWindowsColorManagerAvailable {
     // The windows of the framework above share this manager (see -waylandColorManager).
     id observer = [CGSConnection nativeObserver];
@@ -852,6 +876,14 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         _plasmaShell = [self bindGlobal: name interface: &org_kde_plasma_shell_interface
                                 version: _plasmaShellVersion
                                    kind: CGSWaylandObjectNone object: nil];
+    } else if (strcmp(interface, "org_kde_kwin_appmenu_manager") == 0 && _appMenuManager == NULL) {
+        // Version 2 adds the manager's release request.
+        _appMenuManagerName = name;
+        _appMenuManagerVersion = MIN(version, 2u);
+        _appMenuManager = [self bindGlobal: name interface: &org_kde_kwin_appmenu_manager_interface
+                                   version: _appMenuManagerVersion
+                                      kind: CGSWaylandObjectNone object: nil];
+        [self notifyWindowsApplicationMenuManagerChanged];
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 && _decorationManager == NULL) {
         _decorationManager = [self bindGlobal: name interface: &zxdg_decoration_manager_v1_interface
                                       version: MIN(version, 2u)
@@ -1064,6 +1096,20 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
         WL.wl_proxy_destroy(renderManagerProxy);
 
     [(WaylandColorManager *) _color globalRemoved: name];
+    if (_appMenuManager != NULL && name == _appMenuManagerName) {
+        struct wl_proxy *manager = _appMenuManager;
+        uint32_t version = _appMenuManagerVersion;
+        _appMenuManager = NULL;
+        _appMenuManagerName = 0;
+        // The windows release their appmenu objects while the manager is gone.
+        [self notifyWindowsApplicationMenuManagerChanged];
+        if (version >= 2)
+            WaylandMarshal(manager, WP_APPMENU_MANAGER_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY,
+                           (union wl_argument[1]) {{.o = NULL}});
+        else
+            WL.wl_proxy_destroy(manager);
+        return;
+    }
     if (name == [(CGSWaylandInputMethod *) _inputMethodDecoder managerName]) {
         [(CGSWaylandInputMethod *) _inputMethodDecoder managerRemoved];
         return;

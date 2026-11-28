@@ -27,7 +27,6 @@
     // Shows the main menu outside the windows (see X11AppMenu), nil until the
     // application has one or when the menu is drawn inside the windows.
     X11AppMenu *_appMenu;
-    BOOL _desktopMenuProbed, _desktopMenuPresent;
 
     id lastFocusedWindow;
     // ConfinePointerToFullscreenWindows (org.darlinghq.AppKit): keep the
@@ -38,9 +37,6 @@
     // arrive as their Command shortcuts.
     BOOL _controlActsAsCommand;
     Window _confinedWindow;
-    // The menu and pop-up windows that are on the screen, oldest first, while
-    // the pointer is held for them (see -menuWindowMapped:).
-    NSMutableArray *_openMenuWindows;
     // Xwayland forwards a pointer warp to the compositor only while the X
     // cursor is hidden, so warps are not honoured with a visible cursor there.
     BOOL _isXwayland;
@@ -63,14 +59,6 @@
 // Converts a point in root coordinates to CoreGraphics' global space.
 - (NSPoint) cgPointFromRoot: (NSPoint) root;
 - (void) setWindow: (id) window forID: (XID) i;
-// Menu and pop-up windows are not managed by the window manager and never
-// take the keyboard focus, so a click outside them reaches other clients
-// and not the application's tracking of its menu. While any is on the screen
-// the pointer is grabbed for the application (owner_events set: its windows
-// keep receiving their own events, those elsewhere are delivered as if made
-// in the newest menu window), as menus do in other toolkits.
-- (void) menuWindowMapped: (X11Window *) window;
-- (void) menuWindowUnmapped: (X11Window *) window;
 - (id) windowForID: (XID) i;
 - (void) windowHoldsFocus: (X11Window *) window;
 // The window system's keyboard focus came to the window or left it.

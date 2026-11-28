@@ -80,8 +80,6 @@ typedef enum {
     struct wl_proxy *_toplevel;
     // The menu bar, when the compositor has wlr-layer-shell: it has this role instead of the xdg ones.
     struct wl_proxy *_layerSurface;
-    // org_kde_kwin_appmenu of the toplevel, while the main menu is exported.
-    struct wl_proxy *_appMenu;
     // org_kde_plasma_surface of the toplevel while it is not an application window (see
     // -updateTaskbarPresence).
     struct wl_proxy *_plasmaSurface;

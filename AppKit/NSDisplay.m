@@ -28,6 +28,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CGSPointerController.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreGraphics/CGSCursor.h>
+#import <CoreGraphics/CGSNativeConnection.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
 #import "NSEventQueue.h"
@@ -249,12 +250,32 @@ static void displaysReconfigured(CGDirectDisplayID display, CGDisplayChangeSumma
 - (void) _mainMenuDidChange: (NSMenu *) menu {
 }
 
-- (BOOL) _showsMainMenuOutsideWindows {
-    return YES;
+// Whether the session has a desktop that shows application menus: something on the session bus registered for them (the
+// bus is the application's, not CoreGraphics', so the display that exports the menu looks). The backends answer.
+- (BOOL) _probeGlobalMenuRegistrar {
+    return NO;
 }
 
+// Asked once, because the answer decides whether the application exports its menu at all. The window system carries
+// the address of a window's menu only where it can (CoreGraphics says), and the answer is a flag of its connection
+// (see _CGSNativeConnectionGlobalMenuAvailable()).
 - (BOOL) _desktopShowsMainMenu {
-    return NO;
+    if (!_desktopMenuProbed) {
+        _desktopMenuProbed = YES;
+        if (_CGSNativeConnectionCarriesApplicationMenuAddress())
+            _CGSNativeConnectionSetGlobalMenuAvailable([self _probeGlobalMenuRegistrar]);
+    }
+    return _CGSNativeConnectionGlobalMenuAvailable();
+}
+
+// The menu is outside the windows when the window system places a menu bar window of the application at the top of the
+// screen (a window manager that handles docks, a compositor with a layer shell), or the desktop shows it itself. Under
+// a window manager that does not handle docks the bar would float over the windows of the application, so the windows
+// draw the menu themselves unless the desktop has a global menu.
+- (BOOL) _showsMainMenuOutsideWindows {
+    if (_CGSNativeConnectionKind() == CGSNativeConnectionKindNone)
+        return YES;
+    return _CGSNativeConnectionPlacesMenuBar() || [self _desktopShowsMainMenu];
 }
 
 // The screens are the displays of CoreGraphics (this framework sits above it): the frame is the

@@ -39,6 +39,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     // The screens, made from CoreGraphics' displays and dropped when they change. Guarded by
     // @synchronized(self).
     NSArray *_screens;
+    // Whether -_desktopShowsMainMenu looked for a desktop that shows application menus.
+    BOOL _desktopMenuProbed;
 }
 
 + (NSDisplay *) currentDisplay;

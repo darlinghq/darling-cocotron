@@ -337,6 +337,18 @@ typedef struct {
 
 // Ordering, levels, the keyboard focus, miniaturizing and fullscreen of a toplevel window. The UI layer decides
 // when; the window system's calls are made here. A backend that cannot do one of them keeps the default, which
+// The address of the window's application menu on the session bus (the bus name of the service and the object path), for
+// a desktop that shows application menus outside the application: the window system carries it (a property of the window
+// on X11, KDE's appmenu protocol on Wayland). nil for both withdraws it. The window system keeps it for as long as the
+// window exists (across the window being hidden and shown, and on X11 across -recreateToplevelWithAttributes:).
+-(CGError) setToplevelApplicationMenuServiceName:(NSString*) service objectPath:(NSString*) path;
+
+// Whether the window is the window of a menu that is being tracked while it is shown: the window system's pointer and
+// keyboard are held for the newest such window, so that a click elsewhere or a key reaches the menu whichever window has the
+// focus (X11; a window system with its own popup grab, Wayland, keeps it). The observer is told when the pointer is held or
+// let go (-nativeConnectionMenuGrabChanged:). Does nothing in a relative mouse mode, which holds the pointer itself.
+-(CGError) setToplevelHoldsInputForMenu:(BOOL) holds;
+
 // refuses (the queries answer for a window that is not so: not miniaturized, not fullscreen, not covered, not
 // holding the focus). The window must be shown (-orderWindow:relativeTo:) before it is stacked or given the focus.
 //
