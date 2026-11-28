@@ -1,7 +1,6 @@
 #import <AppKit/AppKitExport.h>
 #import <Foundation/NSString.h>
 #import <AppKit/NSAccessibility.h>
-#import <AppKit/NSAccessibility+Private.h>
 #import <AppKit/NSAccessibilityConstants.h>
 #import <AppKit/NSErrors.h>
 #import <AppKit/NSView.h>
@@ -621,7 +620,6 @@ NSPoint NSAccessibilityPointInView(NSView *parentView, NSPoint point) {
 }
 
 void NSAccessibilityPostNotification(id element, NSString *notification) {
-    NSAccessibilityDeliverNotification(element, notification, nil);
 }
 
 // The English descriptions macOS 26 gives for each role, and for the role and
@@ -844,17 +842,13 @@ void NSAccessibilityPostNotificationWithUserInfo(id element,
                                                  NSAccessibilityNotificationName notification,
                                                  NSDictionary<NSAccessibilityNotificationUserInfoKey, id> *userInfo)
 {
-    NSAccessibilityDeliverNotification(element, notification, userInfo);
+    // Like NSAccessibilityPostNotification: there is no assistive client to tell.
 }
 
-// QUIRK: posts the focused-element notification with no element, so assistive clients query the application for
-// the focused element again. Not documented. Evidence: WebCore's BSD-licensed accessibility code calls this
-// entry point and notes AppKit's synchronous focus query (tier 3, public Cocoa client), and LibreOffice's
-// MPL-2.0/LGPL Cocoa a11y code calls it too. No OS-version dependence is known.
-// https://github.com/WebKit/WebKit/blob/main/Source/WebCore/accessibility/mac/AXObjectCacheMac.mm
-// Test: appkit-accessibility-notification-delivery
+// Private: tells the accessibility server that the focused element changed, so
+// it asks the application for it again. Darling has no accessibility server
+// (see NSAccessibilityPostNotification), so there is nobody to tell.
 void NSAccessibilityHandleFocusChanged(void) {
-    NSAccessibilityDeliverNotification(nil, NSAccessibilityFocusedUIElementChangedNotification, nil);
 }
 
 // Private: the AXUIElementRef (a Create rule reference) that stands for an

@@ -10,9 +10,9 @@
 static int failures;
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); failures++; } } while (0)
 
-static CGFloat Get(void)
+static float Get(void)
 {
-    CGFloat scale = 0;
+    float scale = 0;
     CHECK(CGSGetCursorScale(0, &scale) == kCGErrorSuccess);
     return scale;
 }

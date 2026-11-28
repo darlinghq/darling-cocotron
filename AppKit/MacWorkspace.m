@@ -671,7 +671,7 @@ static OSStatus openURLsWithFlags(NSArray *urls, NSURL *appURL,
     return LSOpenFromURLSpec(&spec, NULL);
 }
 
-LSLaunchFlags NSWorkspaceLaunchFlagsForConfiguration(
+static LSLaunchFlags launchFlagsForConfiguration(
         NSWorkspaceOpenConfiguration *configuration) {
     LSLaunchFlags flags = kLSLaunchDefaults;
     if (configuration == nil)
@@ -710,7 +710,7 @@ LSLaunchFlags NSWorkspaceLaunchFlagsForConfiguration(
         configuration: (NSWorkspaceOpenConfiguration *) configuration
     completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler
 {
-    LSLaunchFlags flags = NSWorkspaceLaunchFlagsForConfiguration(configuration);
+    LSLaunchFlags flags = launchFlagsForConfiguration(configuration);
     [url retain];
     void (^handler)(NSRunningApplication *, NSError *) = [completionHandler copy];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -1295,7 +1295,7 @@ static void runOnConcurrentQueue(dispatch_block_t block) {
                configuration: (NSWorkspaceOpenConfiguration *) configuration
            completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler
 {
-    LSLaunchFlags flags = NSWorkspaceLaunchFlagsForConfiguration(configuration);
+    LSLaunchFlags flags = launchFlagsForConfiguration(configuration);
     NSArray *items = [urls copy];
     NSURL *application = [applicationURL retain];
     void (^handler)(NSRunningApplication *, NSError *) = [completionHandler copy];
@@ -1484,4 +1484,10 @@ static NSError *errorForDefaultApplication(NSURL *applicationURL, NSString **bun
     return path;
 }
 
+@end
+
+@implementation NSWorkspaceOpenConfiguration (NSLaunchServicesOptions)
+- (LSLaunchFlags) _launchFlags {
+    return launchFlagsForConfiguration(self);
+}
 @end

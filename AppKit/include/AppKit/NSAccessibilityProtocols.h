@@ -19,19 +19,12 @@
 
 #import <Foundation/NSObject.h>
 #import <Foundation/NSGeometry.h>
+#import <Foundation/NSRange.h>
 
 // Role and subrole values are the NSAccessibilityRole and NSAccessibilitySubrole strings of
 // NSAccessibilityConstants.h, which cannot be imported here: through NSAttributedString.h
 // it leads back to NSView.h, which imports this header.
-@class NSArray, NSString, NSAccessibilityCustomAction;
-
-// The orientation reported by -accessibilityOrientation and NSAccessibilityOrientationAttribute.
-// The raw values are those of AppKit's public enum (unknown, horizontal, vertical).
-typedef NS_ENUM(NSInteger, NSAccessibilityOrientation) {
-    NSAccessibilityOrientationUnknown = 0,
-    NSAccessibilityOrientationHorizontal = 1,
-    NSAccessibilityOrientationVertical = 2,
-};
+@class NSArray, NSString, NSNumber, NSAttributedString, NSAccessibilityCustomAction;
 
 // The minimum an object exposed to assistive applications provides.
 @protocol NSAccessibilityElement <NSObject>
@@ -92,38 +85,70 @@ typedef NS_ENUM(NSInteger, NSAccessibilityOrientation) {
 @protocol NSAccessibilityGroup <NSAccessibilityElement>
 @end
 
-// Role protocols. Adopting one identifies the element's role to AppKit; the values of the role's attributes
-// are read through the NSAccessibility property API and the legacy attribute methods, not through extra
-// required methods. An object can adopt several roles (a control can be a button and a checkbox, for example)
-// and answer only for the attributes it has.
+// The role protocols. An object adopts the one for its role and answers the methods it requires.
 @protocol NSAccessibilityButton <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityLabel;
+- (BOOL) accessibilityPerformPress;
 @end
 
-@protocol NSAccessibilitySwitch <NSAccessibilityElement>
+@protocol NSAccessibilitySwitch <NSAccessibilityButton>
+@required
+- (NSString *) accessibilityValue;
+@optional
+- (BOOL) accessibilityPerformIncrement;
+- (BOOL) accessibilityPerformDecrement;
 @end
 
-@protocol NSAccessibilityRadioButton <NSAccessibilityElement>
+@protocol NSAccessibilityRadioButton <NSAccessibilityButton>
+@required
+- (NSNumber *) accessibilityValue;
 @end
 
-@protocol NSAccessibilityCheckBox <NSAccessibilityElement>
+@protocol NSAccessibilityCheckBox <NSAccessibilityButton>
+@required
+- (NSNumber *) accessibilityValue;
 @end
 
 @protocol NSAccessibilityStaticText <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityValue;
+@optional
+- (NSAttributedString *) accessibilityAttributedStringForRange: (NSRange) range;
+- (NSRange) accessibilityVisibleCharacterRange;
 @end
 
 @protocol NSAccessibilityNavigableStaticText <NSAccessibilityStaticText>
+@required
+- (NSString *) accessibilityStringForRange: (NSRange) range;
+- (NSInteger) accessibilityLineForIndex: (NSInteger) index;
+- (NSRange) accessibilityRangeForLine: (NSInteger) lineNumber;
+- (NSRect) accessibilityFrameForRange: (NSRange) range;
 @end
 
-@protocol NSAccessibilityProgressIndicator <NSAccessibilityElement>
+@protocol NSAccessibilityProgressIndicator <NSAccessibilityGroup>
+@required
+- (NSNumber *) accessibilityValue;
 @end
 
 @protocol NSAccessibilityStepper <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityLabel;
+- (BOOL) accessibilityPerformIncrement;
+- (BOOL) accessibilityPerformDecrement;
+@optional
+- (id) accessibilityValue;
 @end
 
 @protocol NSAccessibilitySlider <NSAccessibilityElement>
-@optional
-- (NSAccessibilityOrientation) accessibilityOrientation;
+@required
+- (NSString *) accessibilityLabel;
+- (id) accessibilityValue;
+- (BOOL) accessibilityPerformIncrement;
+- (BOOL) accessibilityPerformDecrement;
 @end
 
 @protocol NSAccessibilityImage <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityLabel;
 @end

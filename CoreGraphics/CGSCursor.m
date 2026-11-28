@@ -228,8 +228,9 @@ CGError CGSCursorSetCurrent(CGSCursorRef cursor)
 }
 
 // QUIRK: CGSGetCursorScale/CGSSetCursorScale expose a process-wide pointer-size factor in [1, 4], initially 1.
-// Not documented. Evidence: the MIT-licensed CGSCursor.h of the NUIKit project declares these exact signatures
-// and the upper bound (tier 3, public source of a Cocoa compatibility project), and Blender's GPL-2.0-or-later
+// Not documented. Evidence: the MIT-licensed CGSCursor.h of the NUIKit project declares these functions and
+// the upper bound (tier 3, public source of a Cocoa compatibility project; it types the scale as CGFloat, but the
+// getter of macOS 26.7.3 writes a 4-byte float, observed black-box, tier 2), and Blender's GPL-2.0-or-later
 // GHOST_SystemCocoa.mm calls them to follow the system pointer size. No OS-version dependence is known. The
 // connection argument is accepted for ABI compatibility but does not change the process-wide factor; a NULL
 // output pointer is an error rather than a crash.
@@ -237,16 +238,16 @@ CGError CGSCursorSetCurrent(CGSCursorRef cursor)
 // Test: coregraphics-cursor-scale
 static _Atomic(double) g_cursorScale = 1.0;
 
-CGError CGSGetCursorScale(CGSConnectionID connection, CGFloat *outScale)
+CGError CGSGetCursorScale(CGSConnectionID connection, float *outScale)
 {
 	(void) connection;
 	if (outScale == NULL)
 		return kCGErrorIllegalArgument;
-	*outScale = atomic_load(&g_cursorScale);
+	*outScale = (float) atomic_load(&g_cursorScale);
 	return kCGErrorSuccess;
 }
 
-CGError CGSSetCursorScale(CGSConnectionID connection, CGFloat scale)
+CGError CGSSetCursorScale(CGSConnectionID connection, float scale)
 {
 	(void) connection;
 	if (!isfinite(scale))

@@ -2146,7 +2146,7 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	if (![self cursorIsVisible])
 		return [self _blankCursorMade];
 	CGFloat scale = backingScaleFactor();
-	CGFloat pointerScale = 1.0;
+	float pointerScale = 1.0f;
 	if (CGSGetCursorScale(CGSMainConnectionID(), &pointerScale) == kCGErrorSuccess && pointerScale > 0.0)
 		scale *= pointerScale;
 	CGSCursor* cursor = [self cursor];

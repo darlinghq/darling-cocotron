@@ -20,9 +20,6 @@
 #import <AppKit/NSWorkspace.h>
 #include <LaunchServices/LSOpen.h>
 
-// The LaunchServices flags Darling derives from a public open configuration and its private options.
-APPKIT_EXPORT LSLaunchFlags NSWorkspaceLaunchFlagsForConfiguration(NSWorkspaceOpenConfiguration *configuration);
-
 // QUIRK: NSWorkspaceOpenConfiguration accepts a private dictionary of LaunchServices options, including
 // _kLSOpenOptionBackgroundLaunchKey, whose truthy value keeps the launched application in the background.
 // Not documented. Evidence: Chromium's BSD-licensed launch_services_spi.h and WebKit's BSD-licensed
@@ -33,4 +30,6 @@ APPKIT_EXPORT LSLaunchFlags NSWorkspaceLaunchFlagsForConfiguration(NSWorkspaceOp
 // Test: appkit-launchservices-background-option.
 @interface NSWorkspaceOpenConfiguration (NSLaunchServicesOptions)
 @property(nonatomic, readwrite, copy, setter=_setAdditionalLSOpenOptions:) NSDictionary<NSString *, id> *_additionalLSOpenOptions;
+// The LaunchServices flags this configuration opens with.
+- (LSLaunchFlags) _launchFlags;
 @end

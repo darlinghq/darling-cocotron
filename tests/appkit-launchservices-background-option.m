@@ -18,7 +18,7 @@ int main(void)
 {
     @autoreleasepool {
         NSWorkspaceOpenConfiguration *plain = [NSWorkspaceOpenConfiguration configuration];
-        CHECK(!(NSWorkspaceLaunchFlagsForConfiguration(plain) & kLSLaunchDontSwitch));
+        CHECK(!([plain _launchFlags] & kLSLaunchDontSwitch));
 
         NSMutableDictionary *options = [NSMutableDictionary dictionaryWithObject: [NSNumber numberWithBool: YES]
                                                                           forKey: BackgroundKey];
@@ -28,22 +28,22 @@ int main(void)
         // The setter copies, so a caller mutating its dictionary cannot change the configuration.
         [options setObject: [NSNumber numberWithBool: NO] forKey: BackgroundKey];
         CHECK([[[plain _additionalLSOpenOptions] objectForKey: BackgroundKey] boolValue]);
-        CHECK(NSWorkspaceLaunchFlagsForConfiguration(plain) & kLSLaunchDontSwitch);
+        CHECK([plain _launchFlags] & kLSLaunchDontSwitch);
 
         NSWorkspaceOpenConfiguration *copied = [[plain copy] autorelease];
         CHECK(copied != plain);
         CHECK([[copied _additionalLSOpenOptions] isEqualToDictionary: [plain _additionalLSOpenOptions]]);
-        CHECK(NSWorkspaceLaunchFlagsForConfiguration(copied) & kLSLaunchDontSwitch);
+        CHECK([copied _launchFlags] & kLSLaunchDontSwitch);
 
         NSWorkspaceOpenConfiguration *disabled = [NSWorkspaceOpenConfiguration configuration];
         [disabled _setAdditionalLSOpenOptions: [NSDictionary dictionaryWithObject: [NSNumber numberWithBool: NO]
                                                                           forKey: BackgroundKey]];
-        CHECK(!(NSWorkspaceLaunchFlagsForConfiguration(disabled) & kLSLaunchDontSwitch));
+        CHECK(!([disabled _launchFlags] & kLSLaunchDontSwitch));
 
         NSWorkspaceOpenConfiguration *nonBoolean = [NSWorkspaceOpenConfiguration configuration];
         [nonBoolean _setAdditionalLSOpenOptions: [NSDictionary dictionaryWithObject: @"YES"
                                                                              forKey: BackgroundKey]];
-        CHECK(!(NSWorkspaceLaunchFlagsForConfiguration(nonBoolean) & kLSLaunchDontSwitch));
+        CHECK(!([nonBoolean _launchFlags] & kLSLaunchDontSwitch));
     }
 
     if (failures == 0)

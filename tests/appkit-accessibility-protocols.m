@@ -8,8 +8,8 @@
 #include <stdio.h>
 
 _Static_assert(NSAccessibilityOrientationUnknown == 0, "unexpected orientation value");
-_Static_assert(NSAccessibilityOrientationHorizontal == 1, "unexpected orientation value");
-_Static_assert(NSAccessibilityOrientationVertical == 2, "unexpected orientation value");
+_Static_assert(NSAccessibilityOrientationVertical == 1, "unexpected orientation value");
+_Static_assert(NSAccessibilityOrientationHorizontal == 2, "unexpected orientation value");
 
 static int failures;
 #define CHECK(c) do { if (!(c)) { fprintf(stderr, "FAIL line %d: %s\n", __LINE__, #c); failures++; } } while (0)

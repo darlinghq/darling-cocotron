@@ -167,7 +167,7 @@ static uint32_t cursorShapeForName(const char* name)
 // the compositor scales it down to a fractional output. Without a fractional-scale manager, or without
 // set_buffer_scale, the compositor owns the scaling: hand over a 1x raster.
 - (uint32_t) renderScale120 {
-    CGFloat pointerScale = 1.0;
+    float pointerScale = 1.0f;
     if (CGSGetCursorScale(CGSMainConnectionID(), &pointerScale) != kCGErrorSuccess || pointerScale <= 0.0)
         pointerScale = 1.0;
     uint32_t scale = 120;
@@ -274,7 +274,7 @@ static uint32_t cursorShapeForName(const char* name)
 
     CGSCursor *cursor = [_connection cursor];
     BOOL image = [cursor isImage];
-    CGFloat pointerScale = 1.0;
+    float pointerScale = 1.0f;
     BOOL scaledByAccessibility = CGSGetCursorScale(CGSMainConnectionID(), &pointerScale) == kCGErrorSuccess
                                  && pointerScale > 1.0;
     // A shape needs neither a cursor surface nor a theme when the compositor draws it. The protocol requires the
