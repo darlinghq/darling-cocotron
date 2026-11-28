@@ -20,7 +20,9 @@
 #import <CoreGraphics/CGDisplayStream.h>
 #import <Foundation/Foundation.h>
 #import <IOSurface/IOSurfaceRef.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
 #include <screen_capture_backend.h>
 #endif
@@ -78,16 +80,26 @@ enum {
     BOOL _showCursor;
     BOOL _running;
     BOOL _stopPending;
+    BOOL _stopDelivered;
+    size_t _queueDepth;
+    size_t _inFlight;
+    size_t _pendingDrops;
+    uint64_t _minimumFrameIntervalNs;
+    uint64_t _lastFrameTimeNs;
+    uint64_t _lastDisplayTime;
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
     struct darling_screen_capture_stream *_capture;
-    IOSurfaceRef _surface;
-    uint8_t *_surfaceBase;
-    uint32_t _surfaceStride;
+    IOSurfaceRef *_surfaces;
+    uint8_t **_surfaceBases;
+    uint32_t *_surfaceStrides;
+    size_t _surfaceCount;
+    size_t _nextSurface;
 #endif
 }
 - initWithDisplay: (CGDirectDisplayID) display width: (size_t) width height: (size_t) height pixelFormat: (int32_t) pixelFormat properties: (CFDictionaryRef) properties handler: (CGDisplayStreamFrameAvailableHandler) handler queue: (dispatch_queue_t) queue;
 - (CFRunLoopSourceRef) runLoopSource;
 - (CGError) start;
+- (void) stopFromBackend;
 - (CGError) stop;
 - (void) deliverStop;
 - (void) deliverPendingFrame;
@@ -98,8 +110,10 @@ enum {
 
 @implementation DarlingDisplayFrame
 - (void) dealloc {
-    if (surface != NULL)
+    if (surface != NULL) {
+        IOSurfaceDecrementUseCount(surface);
         CFRelease(surface);
+    }
     [update release];
     [super dealloc];
 }
@@ -121,6 +135,19 @@ static BOOL propertyBool(CFDictionaryRef properties, CFStringRef key, BOOL fallb
     if (value == NULL || CFGetTypeID(value) != CFBooleanGetTypeID())
         return fallback;
     return CFBooleanGetValue(value) ? YES : NO;
+}
+
+static double propertyNumber(CFDictionaryRef properties, CFStringRef key, double fallback) {
+    CFNumberRef value;
+    double result = fallback;
+    if (properties == NULL)
+        return fallback;
+    value = (CFNumberRef) CFDictionaryGetValue(properties, key);
+    if (value == NULL || CFGetTypeID(value) != CFNumberGetTypeID())
+        return fallback;
+    if (!CFNumberGetValue(value, kCFNumberDoubleType, &result))
+        return fallback;
+    return result;
 }
 
 static CGRect propertyRect(CFDictionaryRef properties, CFStringRef key, BOOL *hasValue) {
@@ -207,6 +234,11 @@ static CGRect fittedRect(CGRect source, CGRect destination, BOOL preserveAspectR
 static void receivePipeWireFrame(const struct darling_screen_capture_frame *frame, void *userData) {
     [(CGDisplayStream *) userData receiveFrame: frame];
 }
+static void receivePipeWireError(int error, void *userData) {
+    (void) error;
+    /* The backend ended the stream: it is reported like a stop, with the Stopped status. */
+    [(CGDisplayStream *) userData stopFromBackend];
+}
 static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFormat, uint8_t **baseOut, uint32_t *strideOut) {
     CFMutableDictionaryRef properties;
     CFNumberRef number;
@@ -253,19 +285,59 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
     if (queue != NULL) { dispatch_retain(queue); _queue = queue; }
     _pending = [[NSMutableArray alloc] init];
     _display = display; _outputWidth = width; _outputHeight = height; _pixelFormat = pixelFormat;
+    {
+        double depth = propertyNumber(properties, kCGDisplayStreamQueueDepth, 3);
+        double interval = propertyNumber(properties, kCGDisplayStreamMinimumFrameTime, 0);
+        /* Apple WWDC 2012 session 506 documents a default depth of 3 and
+         * recommends no more than 8 queued frames. */
+        if (depth < 1)
+            depth = 3;
+        if (depth > 8)
+            depth = 8;
+        _queueDepth = (size_t) depth;
+        _minimumFrameIntervalNs = (interval > 0 && interval < 3600) ? (uint64_t) (interval * 1000000000.0) : 0;
+    }
     _showCursor = propertyBool(properties, kCGDisplayStreamShowCursor, NO);
     _preserveAspectRatio = propertyBool(properties, kCGDisplayStreamPreserveAspectRatio, NO);
     _sourceRect = propertyRect(properties, kCGDisplayStreamSourceRect, &_hasSourceRect);
     _destinationRect = propertyRect(properties, kCGDisplayStreamDestinationRect, &_hasDestinationRect);
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
-    _surface = createSurface(width, height, ioSurfacePixelFormat(pixelFormat), &_surfaceBase, &_surfaceStride);
+    {
+        size_t i, count = _queueDepth;
+        _surfaces = calloc(count, sizeof(IOSurfaceRef));
+        _surfaceBases = calloc(count, sizeof(uint8_t *));
+        _surfaceStrides = calloc(count, sizeof(uint32_t));
+        if (_surfaces != NULL && _surfaceBases != NULL && _surfaceStrides != NULL) {
+            for (i = 0; i < count; i++) {
+                _surfaces[i] = createSurface(width, height, ioSurfacePixelFormat(pixelFormat),
+                                             &_surfaceBases[i], &_surfaceStrides[i]);
+                if (_surfaces[i] == NULL)
+                    break;
+            }
+            _surfaceCount = i;
+            if (i != count) {
+                for (i = 0; i < _surfaceCount; i++)
+                    CFRelease(_surfaces[i]);
+                _surfaceCount = 0;
+            }
+        }
+        if (_surfaceCount == 0) {
+            free(_surfaces); free(_surfaceBases); free(_surfaceStrides);
+            _surfaces = NULL; _surfaceBases = NULL; _surfaceStrides = NULL;
+        }
+    }
 #endif
     return self;
 }
 - (void) dealloc {
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
     if (_capture != NULL) darling_screen_capture_close(_capture);
-    if (_surface != NULL) CFRelease(_surface);
+    {
+        size_t i;
+        for (i = 0; i < _surfaceCount; i++)
+            CFRelease(_surfaces[i]);
+        free(_surfaces); free(_surfaceBases); free(_surfaceStrides);
+    }
 #endif
     if (_runLoopSource != NULL) { CFRunLoopSourceInvalidate(_runLoopSource); CFRelease(_runLoopSource); }
     if (_queue != NULL) dispatch_release(_queue);
@@ -287,7 +359,7 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
 - (CGError) start {
     if (_running) return kCGErrorSuccess;
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
-    if (_surface == NULL) return kCGErrorFailure;
+    if (_surfaceCount == 0) return kCGErrorFailure;
     {
         CGRect bounds = CGDisplayBounds(_display);
         struct darling_screen_capture_callbacks callbacks;
@@ -295,6 +367,7 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
         if (CGRectIsEmpty(bounds)) return kCGErrorIllegalArgument;
         memset(&callbacks, 0, sizeof(callbacks));
         callbacks.frame = receivePipeWireFrame;
+        callbacks.error = receivePipeWireError;
         result = darling_screen_capture_open((int32_t) bounds.origin.x, (int32_t) bounds.origin.y, (uint32_t) bounds.size.width, (uint32_t) bounds.size.height, _showCursor, darling_screen_capture_supports_hdr() ? 1 : 0, &callbacks, self, &_capture);
         if (result != 0) return kCGErrorFailure;
         result = darling_screen_capture_start(_capture, 1);
@@ -302,36 +375,82 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
         result = darling_screen_capture_wait(_capture, 5000);
         if (result != 0) { darling_screen_capture_close(_capture); _capture = NULL; return kCGErrorFailure; }
     }
+#else
+    /* Without a capture backend no frame can ever be delivered. */
+    return kCGErrorFailure;
 #endif
-    _running = YES;
+    @synchronized (self) {
+        _running = YES;
+        _stopPending = NO;
+        _stopDelivered = NO;
+        _inFlight = 0;
+        _pendingDrops = 0;
+        _lastFrameTimeNs = 0;
+        _lastDisplayTime = 0;
+    }
     CFRetain(self);
     return kCGErrorSuccess;
 }
 - (CGError) stop {
-    if (!_running) return kCGErrorSuccess;
-    _running = NO;
+    BOOL deliver = NO;
+    @synchronized (self) {
+        if (!_running) return kCGErrorSuccess;
+        _running = NO;
+        if (!_stopDelivered) {
+            _stopDelivered = YES;
+            _stopPending = YES;
+            deliver = YES;
+        }
+    }
 #if defined(HAVE_PIPEWIRE) && HAVE_PIPEWIRE
     if (_capture != NULL) { darling_screen_capture_start(_capture, 0); darling_screen_capture_close(_capture); _capture = NULL; }
 #endif
+    @synchronized (_pending) { [_pending removeAllObjects]; }
+    if (!deliver) return kCGErrorSuccess;
     if (_queue != NULL) {
         CGDisplayStreamFrameAvailableHandler handler = [_handler retain];
-        dispatch_async(_queue, ^{ handler(kCGDisplayStreamFrameStatusStopped, 0, NULL, NULL); [handler release]; });
+        dispatch_async(_queue, ^{
+            handler(kCGDisplayStreamFrameStatusStopped, 0, NULL, NULL);
+            [handler release];
+            CFRelease(self);
+        });
     } else if (_runLoopSource != NULL) {
-        _stopPending = YES;
         CFRunLoopSourceSignal(_runLoopSource);
         CFRunLoopWakeUp(CFRunLoopGetMain());
         CFRunLoopWakeUp(CFRunLoopGetCurrent());
+    } else {
+        _handler(kCGDisplayStreamFrameStatusStopped, 0, NULL, NULL);
+        CFRelease(self);
     }
-    CFRelease(self);
     return kCGErrorSuccess;
 }
-- (void) deliverStop { if (!_stopPending) return; _stopPending = NO; _handler(kCGDisplayStreamFrameStatusStopped, 0, NULL, NULL); }
+- (void) stopFromBackend {
+    /* Called on the capture thread, which stop() would have to join. */
+    [self retain];
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self stop];
+        [self release];
+    });
+}
+- (void) deliverStop {
+    BOOL deliver = NO;
+    @synchronized (self) {
+        if (_stopPending) { _stopPending = NO; deliver = YES; }
+    }
+    if (!deliver) return;
+    _handler(kCGDisplayStreamFrameStatusStopped, 0, NULL, NULL);
+    CFRelease(self);
+}
 - (void) deliverPendingFrame {
     DarlingDisplayFrame *frame = nil;
     @synchronized (_pending) {
-        if ([_pending count] > 0) { frame = [[_pending objectAtIndex: 0] retain]; [_pending removeObjectAtIndex: 0]; }
+        if (!_stopPending && [_pending count] > 0) {
+            frame = [[_pending objectAtIndex: 0] retain];
+            [_pending removeObjectAtIndex: 0];
+        }
     }
     if (frame == nil) return;
+    @synchronized (self) { if (_inFlight > 0) _inFlight--; }
     _handler(kCGDisplayStreamFrameStatusFrameComplete, frame->displayTime, frame->surface, (CGDisplayStreamUpdateRef) frame->update);
     [frame release];
 }
@@ -342,39 +461,83 @@ static IOSurfaceRef createSurface(size_t width, size_t height, uint32_t pixelFor
     CGRect destination = _hasDestinationRect ? _destinationRect : CGRectMake(0, 0, _outputWidth, _outputHeight);
     CGRect fullSurface = CGRectMake(0, 0, _outputWidth, _outputHeight);
     CGDisplayStreamUpdate *update;
+    IOSurfaceRef surface = NULL;
+    uint8_t *base;
+    uint32_t stride;
+    struct timespec arrival;
+    uint64_t pts, nowNs;
+    clock_gettime(CLOCK_MONOTONIC, &arrival);
+    nowNs = (uint64_t) arrival.tv_sec * 1000000000ull + (uint64_t) arrival.tv_nsec;
+    /* The display time is the compositor's buffer timestamp when it advances, otherwise the
+     * arrival time (a stream may repeat one timestamp for every buffer). */
+    pts = frame->pts_ns > 0 ? (uint64_t) frame->pts_ns : nowNs;
+    size_t slot = 0, i, drops = 0;
     uint32_t dx, dy, dw, dh;
     int32_t sx, sy;
     if (CGRectIsNull(source) || CGRectIsEmpty(source)) return;
     destination = CGRectIntersection(fittedRect(source, destination, _preserveAspectRatio), fullSurface);
     if (CGRectIsNull(destination) || CGRectIsEmpty(destination)) return;
+    @synchronized (self) {
+        if (!_running) return;
+        if (pts <= _lastDisplayTime)
+            pts = nowNs > _lastDisplayTime ? nowNs : _lastDisplayTime + 1;
+        /* The minimum frame time is wall-clock time between deliveries. */
+        if (_minimumFrameIntervalNs > 0 && _lastFrameTimeNs != 0 &&
+            nowNs < _lastFrameTimeNs + _minimumFrameIntervalNs)
+            return;
+        _lastFrameTimeNs = nowNs;
+        _lastDisplayTime = pts;
+        if (_inFlight >= _queueDepth) { _pendingDrops++; return; }
+        for (i = 0; i < _surfaceCount; i++) {
+            size_t candidate = (_nextSurface + i) % _surfaceCount;
+            if (IOSurfaceGetUseCount(_surfaces[candidate]) == 0) {
+                surface = _surfaces[candidate];
+                slot = candidate;
+                _nextSurface = (candidate + 1) % _surfaceCount;
+                break;
+            }
+        }
+        if (surface == NULL) { _pendingDrops++; return; }
+        /* Reserve the surface for this delivery. Clients that keep working
+         * with it increment the count themselves, so a nonzero count tells
+         * the pool not to overwrite it yet. */
+        IOSurfaceIncrementUseCount(surface);
+        _inFlight++;
+        drops = _pendingDrops;
+        _pendingDrops = 0;
+    }
+    base = _surfaceBases[slot];
+    stride = _surfaceStrides[slot];
     sx = (int32_t) (source.origin.x - bounds.origin.x);
     sy = (int32_t) (source.origin.y - bounds.origin.y);
     dx = (uint32_t) destination.origin.x; dy = (uint32_t) destination.origin.y;
     dw = (uint32_t) destination.size.width; dh = (uint32_t) destination.size.height;
-    IOSurfaceLock(_surface, 0, NULL);
-    if (darling_screen_capture_convert_bgra_rect(frame, _surfaceBase, _surfaceStride, (uint32_t) _outputWidth, (uint32_t) _outputHeight, sx, sy, (uint32_t) source.size.width, (uint32_t) source.size.height, dx, dy, dw, dh) == 0) {
+    IOSurfaceLock(surface, 0, NULL);
+    if (darling_screen_capture_convert_bgra_rect(frame, base, stride, (uint32_t) _outputWidth, (uint32_t) _outputHeight, sx, sy, (uint32_t) source.size.width, (uint32_t) source.size.height, dx, dy, dw, dh) == 0) {
         uint32_t y;
-        for (y = 0; y < dh; y++) swizzleBGRA(_surfaceBase + (dy + y) * _surfaceStride + dx * 4, dw, _pixelFormat);
+        for (y = 0; y < dh; y++) swizzleBGRA(base + (dy + y) * stride + dx * 4, dw, _pixelFormat);
     }
-    IOSurfaceUnlock(_surface, 0, NULL);
-    update = [[CGDisplayStreamUpdate alloc] initWithRect: destination dropCount: 0];
+    IOSurfaceUnlock(surface, 0, NULL);
+    update = [[CGDisplayStreamUpdate alloc] initWithRect: destination dropCount: drops];
     if (_queue != NULL) {
         CGDisplayStreamFrameAvailableHandler handler = [_handler retain];
-        CFRetain(_surface); [update retain];
+        CFRetain(surface); [update retain];
         dispatch_async(_queue, ^{
-            handler(kCGDisplayStreamFrameStatusFrameComplete, (uint64_t) frame->pts_ns, _surface, (CGDisplayStreamUpdateRef) update);
-            CFRelease(_surface); [update release]; [handler release];
+            @synchronized (self) { if (_inFlight > 0) _inFlight--; }
+            handler(kCGDisplayStreamFrameStatusFrameComplete, pts, surface, (CGDisplayStreamUpdateRef) update);
+            IOSurfaceDecrementUseCount(surface);
+            CFRelease(surface); [update release]; [handler release];
         });
         [update release];
     } else {
-        CFRunLoopSourceRef source = [self runLoopSource];
+        CFRunLoopSourceRef sourceRef = [self runLoopSource];
         DarlingDisplayFrame *item = [[DarlingDisplayFrame alloc] init];
-        item->surface = (IOSurfaceRef) CFRetain(_surface);
+        item->surface = (IOSurfaceRef) CFRetain(surface);
         item->update = update;
-        item->displayTime = (uint64_t) frame->pts_ns;
+        item->displayTime = pts;
         @synchronized (_pending) { [_pending addObject: item]; }
         [item release];
-        if (source != NULL) { CFRunLoopSourceSignal(source); CFRunLoopWakeUp(CFRunLoopGetMain()); CFRunLoopWakeUp(CFRunLoopGetCurrent()); }
+        if (sourceRef != NULL) { CFRunLoopSourceSignal(sourceRef); CFRunLoopWakeUp(CFRunLoopGetMain()); CFRunLoopWakeUp(CFRunLoopGetCurrent()); }
     }
 }
 #endif
@@ -402,7 +565,8 @@ CGError CGDisplayStreamStart(CGDisplayStreamRef displayStream) { if (displayStre
 CGError CGDisplayStreamStop(CGDisplayStreamRef displayStream) { if (displayStream == NULL) return kCGErrorIllegalArgument; return [(CGDisplayStream *) displayStream stop]; }
 const CGRect *CGDisplayStreamUpdateGetRects(CGDisplayStreamUpdateRef updateRef, CGDisplayStreamUpdateRectType rectType, size_t *rectCount) {
     CGDisplayStreamUpdate *update = (CGDisplayStreamUpdate *) updateRef;
-    if (rectType != kCGDisplayStreamUpdateRefreshedRects && rectType != kCGDisplayStreamUpdateReducedDirtyRects) {
+    if (rectType < kCGDisplayStreamUpdateRefreshedRects ||
+        rectType > kCGDisplayStreamUpdateReducedDirtyRects) {
         if (rectCount != NULL) *rectCount = 0; return NULL;
     }
     if (rectCount != NULL) *rectCount = update != nil ? update->_count : 0;

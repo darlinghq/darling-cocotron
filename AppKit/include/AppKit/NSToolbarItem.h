@@ -110,6 +110,13 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 
 @end
 
+// A controller that validates the toolbar items it owns. AppKit sends
+// -validateToolbarItem: to the item's target (or to the toolbar delegate) when
+// the toolbar is about to be displayed.
+@protocol NSToolbarItemValidation <NSObject>
+- (BOOL) validateToolbarItem: (NSToolbarItem *) item;
+@end
+
 @interface NSObject (NSToolbarItem_validation)
 - (BOOL) validateToolbarItem: (NSToolbarItem *) item;
 @end

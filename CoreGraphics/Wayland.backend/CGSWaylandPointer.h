@@ -60,6 +60,9 @@ struct wl_proxy;
     // position in the surface in points.
     struct wl_proxy *_focus;
     uint32_t _enterSerial;
+    // The serial of the latest button press while a button is still down in a surface of the process, 0 otherwise: what a
+    // drag that starts from the press is tied to.
+    uint32_t _dragSerial;
     CGPoint _point;
     // The buttons that are down: 1 left, 2 right, 4 middle, 8 any other, and the code of the last other one.
     unsigned _pressed;
@@ -165,6 +168,10 @@ struct wl_proxy;
 - (void) cursorGlobalsChanged;
 // The serial of the latest wl_pointer.enter, 0 while the pointer is over no surface of the process.
 - (uint32_t) enterSerial;
+// The serial of the button press that a drag started now would be tied to, 0 when no button is down (or a drag took the
+// press already).
+- (uint32_t) dragSerial;
+- (void) consumeDragSerial;
 
 @property (readonly) struct wl_proxy *pointerProxy;
 

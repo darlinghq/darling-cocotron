@@ -195,6 +195,9 @@ typedef enum {
 // Where the window's content starts in the surface, when the UI layer draws the window's frame inside it (see
 // -setToplevelContentOffset:).
 - (CGPoint) toplevelContentOffset;
+// Whether the point of the surface (in points from its top left corner) is in the window's content and not in the frame
+// the UI layer draws around it.
+- (BOOL) toplevelContentContainsSurfacePoint: (CGPoint) point;
 
 // The window's objects of the window system, for the UI layer that owns the window's content and what the protocol
 // has beyond CGSWindow.h (the toplevel's fullscreen, parent and move requests, the objects that must be made

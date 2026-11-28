@@ -40,6 +40,10 @@ struct wl_egl_window;
     CGSWindowWayland *_waylandWindow; // Not retained; it owns us.
     struct wl_egl_window *_eglWindow;
     CGSize _size;
+    // A surface of a toplevel window is a wl_surface of its own, a subsurface above the window's contents; the
+    // window's own wl_surface carries what the window drew (-drawImage:atPoint:)
+    struct wl_proxy *_ownSurface;
+    struct wl_proxy *_subsurface;
 }
 
 - (void) windowResizedTo: (CGSize) size;

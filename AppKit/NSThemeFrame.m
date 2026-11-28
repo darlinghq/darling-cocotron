@@ -56,11 +56,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     CGFloat cheatSheet = 0;
 
     [[[self window] backgroundColor] setFill];
-    NSRectFill(bounds);
+    NSRectFill(rect);
 
     switch (_borderType) {
     case NSNoBorder:
-        break;
+        return;
 
     case NSWindowToolTipBorderType:
         [[NSColor blackColor] setStroke];
@@ -79,8 +79,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     if ([[self window] isSheet])
         bounds.size.height += cheatSheet;
 
-    [[[self window] backgroundColor] setFill];
-    NSRectFill([[[self window] contentView] frame]);
+    NSRect contentRect = NSIntersectionRect(rect, bounds);
+    if (!NSIsEmptyRect(contentRect)) {
+        [[[self window] backgroundColor] setFill];
+        NSRectFill(contentRect);
+    }
 }
 
 - (void) resizeSubviewsWithOldSize: (NSSize) oldSize {

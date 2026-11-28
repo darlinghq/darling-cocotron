@@ -61,6 +61,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGWindowPrivate.h>
 #import <CoreGraphics/CGSWindow.h>
+#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGDirectDisplay.h>
+#include <unistd.h>
 #include <math.h>
 #import "NSGestureRecognizer-Private.h"
 #import "private-include/AppKit/NSEventTime.h"
@@ -721,16 +724,64 @@ static NSString *menuBarStylePreference(void) {
     return 0;
 }
 
+// The windows that are ordered in, as CoreGraphics lists them: front to back, each by its window number (which is the
+// number of the NSWindow of this application that it is). AppKit has no list of its own, so what other applications show
+// is seen as well.
+static NSArray *onScreenWindowDescriptions(void) {
+    CFArrayRef list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+
+    return [(NSArray *) list autorelease];
+}
+
+// The window at a point of the screen (the lower left corner of the main screen is its origin, as for all of AppKit's
+// points): the frontmost window below the given one that has the point, or 0 when no window has it. A window number
+// that names no window starts at the frontmost window.
 + (NSInteger) windowNumberAtPoint: (NSPoint) point
         belowWindowWithWindowNumber: (NSInteger) window
 {
-    NSUnimplementedMethod();
+    NSArray *descriptions = onScreenWindowDescriptions();
+    CGFloat mainHeight = CGDisplayBounds(CGMainDisplayID()).size.height;
+    CGPoint cgPoint = CGPointMake(point.x, mainHeight - point.y);
+    NSUInteger start = 0;
+
+    if (window > 0) {
+        for (NSUInteger i = 0; i < [descriptions count]; i++) {
+            NSNumber *number = [[descriptions objectAtIndex: i] objectForKey: (NSString *) kCGWindowNumber];
+
+            if ([number integerValue] == window) {
+                start = i + 1;
+                break;
+            }
+        }
+    }
+
+    for (NSUInteger i = start; i < [descriptions count]; i++) {
+        NSDictionary *description = [descriptions objectAtIndex: i];
+        CGRect bounds = CGRectNull;
+
+        if (!CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) [description objectForKey: (NSString *) kCGWindowBounds],
+                                                    &bounds))
+            continue;
+        if (CGRectContainsPoint(bounds, cgPoint))
+            return [[description objectForKey: (NSString *) kCGWindowNumber] integerValue];
+    }
     return 0;
 }
 
+// The numbers of the windows that are ordered in, front to back: the application's own, or, for
+// NSWindowNumberListAllApplications, every application's. There is a single space here, so the all-spaces option
+// changes nothing.
 + (NSArray *) windowNumbersWithOptions: (NSWindowNumberListOptions) options {
-    NSUnimplementedMethod();
-    return nil;
+    NSMutableArray *numbers = [NSMutableArray array];
+    pid_t pid = getpid();
+
+    for (NSDictionary *description in onScreenWindowDescriptions()) {
+        if (!(options & NSWindowNumberListAllApplications) &&
+            [[description objectForKey: (NSString *) kCGWindowOwnerPID] intValue] != pid)
+            continue;
+        [numbers addObject: [description objectForKey: (NSString *) kCGWindowNumber]];
+    }
+    return numbers;
 }
 
 // -_autosaveFrameKeyWithName: gives a saved frame one defaults key per screen

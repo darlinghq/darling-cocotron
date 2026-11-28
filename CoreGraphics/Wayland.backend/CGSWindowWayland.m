@@ -1493,15 +1493,19 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 }
 
 - (CGSSurface *) createSurface {
-    if (_surfaceObject != nil) {
+    // The surfaces of a toplevel window are subsurfaces (any number); the surface of any other window is the
+    // window's own, and there is one
+    BOOL sub = _role == CGSWaylandRoleToplevel && _waylandConnection->_subcompositor != NULL;
+    if (!sub && _surfaceObject != nil) {
         NSLog(@"CoreGraphics Wayland backend: window %d already has a surface; "
-              @"more than one surface per window would need subsurfaces, which "
-              @"are not implemented", (int) self.windowId);
+              @"more than one surface per window needs subsurfaces, which a toplevel window has",
+              (int) self.windowId);
         return nil;
     }
 
     if (![self ensureRole])
         return nil;
+    sub = _role == CGSWaylandRoleToplevel && _waylandConnection->_subcompositor != NULL;
     CGSSurfaceID surfaceID = _nextSurfaceId++;
     CGSSurfaceWayland *surface =
             [[CGSSurfaceWayland alloc] initWithWindow: self surfaceID: surfaceID];
@@ -1512,7 +1516,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         [_surfaces setObject: surface
                       forKey: [NSNumber numberWithInt: surfaceID]];
     }
-    _surfaceObject = surface;
+    if (!sub)
+        _surfaceObject = surface;
     [surface release];
     return surface;
 }
@@ -1755,6 +1760,13 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         return kCGSErrorSuccess;
     }
     return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelContentContainsSurfacePoint: (CGPoint) point {
+    if (!_ui || (_uiContentOffset.x == 0 && _uiContentOffset.y == 0))
+        return YES;
+    return point.x >= _uiContentOffset.x && point.y >= _uiContentOffset.y &&
+           point.x < _uiContentOffset.x + _uiFrame.size.width && point.y < _uiContentOffset.y + _uiFrame.size.height;
 }
 
 - (CGPoint) frameOrigin {

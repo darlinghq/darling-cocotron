@@ -168,6 +168,7 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 	// _NET_WM_PID and WM_CLIENT_MACHINE, so that other clients, and other Darling processes listing windows or
 	// following the focus, know whose window this is (the process' own windows are told from the others by it).
 	X11WindowOwnerPublish(_display, _window);
+	X11WindowOwnerPublishWindowID(_display, _window, windowID);
 
 	[self _setSizeHints];
 
@@ -854,6 +855,7 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	// _NET_WM_PID and WM_CLIENT_MACHINE, so that other clients, and other Darling processes listing windows,
 	// know whose window this is.
 	X11WindowOwnerPublish(_display, window);
+	X11WindowOwnerPublishWindowID(_display, window, (unsigned) [self windowId]);
 
 	// Until the first frame, a translucent window shows its background: make that transparent rather than
 	// black.

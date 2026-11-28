@@ -83,6 +83,8 @@ typedef struct {
 	// left corner is from the pointer, in points, y down (usually negative).
 	CGImageRef image;
 	CGPoint imageOffset;
+	// How many pixels of the image make a point (the scale it was drawn at); 0 is the same as 1.
+	CGFloat imageScale;
 } CGSDragDescription;
 
 // A drag that is running. It follows the pointer by itself where the window system makes the source do so

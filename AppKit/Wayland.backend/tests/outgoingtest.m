@@ -18,8 +18,6 @@ static int ended, failures, ticks, attempts;
 static NSPasteboard *retainedBoard;
 static NSData *expectedLocalBytes;
 static NSString *expectedLocalType;
-static id teardownDisplay;
-static Ivar managerIvar;
 static id sourceView;
 static NSString *fileEnv(const char *key) { return [NSString stringWithUTF8String:getenv(key)]; }
 static NSArray *filePaths(void) { return getenv("LOCAL_FILES") ? @[@"/guest-only-not-exportable",@"/tmp/private-selection"] : @[fileEnv("FILE_ONE"),fileEnv("FILE_TWO")]; }
@@ -57,14 +55,6 @@ static BOOL unexportableFiles(void) { return getenv("FILE_BAD") != NULL; }
     if([info draggingSourceOperationMask]!=expected)failures++;
     printf("PREPARE mask=%lu\n",(unsigned long)[info draggingSourceOperationMask]);fflush(stdout);
     if(getenv("PREPARE_UNMAP"))[[self window]orderOut:nil];
-    if(getenv("LIVE_TEARDOWN")) {
-        retainedBoard=[[info draggingPasteboard]retain];
-        teardownDisplay=[NSClassFromString(@"NSDisplay")currentDisplay];
-        managerIvar=class_getInstanceVariable([teardownDisplay class],"_draggingManager");
-        id manager=object_getIvar(teardownDisplay,managerIvar);
-        [manager invalidate];[manager release]; // Model display's release-before-pasteboards order.
-        puts("MANAGER_OWNER_RELEASED");fflush(stdout);
-    }
     return YES;
 }
 - (BOOL)performDragOperation:(id<NSDraggingInfo>)info {
@@ -152,12 +142,6 @@ static BOOL unexportableFiles(void) { return getenv("FILE_BAD") != NULL; }
     }
     [self dragImage:image at:imageLocation offset:NSZeroSize event:event
         pasteboard:pb source:self slideBack:NO];
-    if(getenv("LIVE_TEARDOWN")) {
-        [retainedBoard invalidate];
-        object_setIvar(teardownDisplay,managerIvar,nil);
-        [retainedBoard release];retainedBoard=nil;
-        puts("RETAINED_SESSION_CLEANED");fflush(stdout);
-    }
     if(getenv("TWO_DRAGS") && attempts==1) {
         if(ended!=1 || failures)exit(1);
         puts("NEXT_READY");fflush(stdout);return;

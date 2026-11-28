@@ -193,4 +193,8 @@ void NSColorInitializeDynamicSystemColors(void);
     return [_color _resolvedColor];
 }
 
+- (CGFloat) alphaComponent {
+    return [[self _resolvedColor] alphaComponent];
+}
+
 @end
