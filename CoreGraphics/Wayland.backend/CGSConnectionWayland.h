@@ -58,7 +58,6 @@ typedef enum {
     CGSWaylandObjectNone = 0, // Install no dispatcher.
     CGSWaylandObjectRegistry,
     CGSWaylandObjectOutput,
-    CGSWaylandObjectWmBase,
     CGSWaylandObjectXdgSurface,
     CGSWaylandObjectToplevel,
     CGSWaylandObjectLogicalOutput,
@@ -105,7 +104,11 @@ typedef enum {
     struct wl_proxy *_compositor;
     struct wl_proxy *_subcompositor; // wl_subcompositor, for the surfaces that draw GL next to a window's contents
     struct wl_proxy *_shm; // wl_shm, for the pixels of the windows that are drawn into
+    // xdg_wm_base lives on a queue of its own that a thread dispatches, so that its pings are answered while the main
+    // thread is busy (see CGSWaylandPingResponder). Its requests go through _wmBaseRequests, which stays on the default queue.
     struct wl_proxy *_wmBase;
+    struct wl_proxy *_wmBaseRequests;
+    void *_pingResponder;
     // What places and frames the windows beyond xdg-shell, NULL when the compositor offers none:
     // wlr-layer-shell (a surface along an edge of the output: the menu bar), the KDE plasma shell
     // (a position for a toplevel), xdg-decoration (the frame is the compositor's).

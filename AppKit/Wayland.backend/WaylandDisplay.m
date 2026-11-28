@@ -222,11 +222,10 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         [self release];
         return nil;
     }
-    if (_compositor == NULL || _shm == NULL || _wmBase == NULL) {
-        NSLog(@"Wayland backend: the compositor lacks%s%s%s, trying the next "
+    if (_compositor == NULL || _shm == NULL) {
+        NSLog(@"Wayland backend: the compositor lacks%s%s, trying the next "
               @"backend",
-              _compositor ? "" : " wl_compositor", _shm ? "" : " wl_shm",
-              _wmBase ? "" : " xdg_wm_base");
+              _compositor ? "" : " wl_compositor", _shm ? "" : " wl_shm");
         [self release];
         return nil;
     }
@@ -278,7 +277,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                       _toplevelTagManager, _idleInhibitManager,
                                       _contentTypeManager,
                                       _shortcutsInhibitManager,
-                                      _seat, _decorationManager, _wmBase,
+                                      _seat, _decorationManager,
                                       _shm, _viewporter, _fractionalScaleManager, _subcompositor, _compositor,
                                        _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
@@ -703,12 +702,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                         version: 1
                            kind: 0
                          object: nil];
-    } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
-        _wmBase = [self bindGlobal: name
-                         interface: &xdg_wm_base_interface
-                           version: MIN(version, 7)
-                              kind: WaylandObjectWmBase
-                            object: self];
     } else if (strcmp(interface, "zxdg_decoration_manager_v1") == 0 &&
                _decorationManager == NULL)
     {
@@ -943,13 +936,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                          version: args[2].u];
         else if (opcode == WP_REGISTRY_EV_GLOBAL_REMOVE)
             [self registryGlobalRemoved: args[0].u];
-        break;
-
-    case WaylandObjectWmBase:
-        if (opcode == WP_WM_BASE_EV_PING) {
-            union wl_argument pong[1] = {{.u = args[0].u}};
-            WaylandMarshal(_wmBase, WP_WM_BASE_PONG, NULL, 0, pong);
-        }
         break;
 
     case WaylandObjectOutput:
