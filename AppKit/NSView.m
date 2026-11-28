@@ -60,6 +60,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutGuide.h>
 #import "NSLayoutConstraintInternal.h"
+
+// Private to the print operation: whether a page of its PrintCore session is open
+@interface NSPrintOperation (NSViewPrinting)
+- (BOOL) _printCorePageIsOpen;
+@end
 #import "NSViewLayoutInternal.h"
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
@@ -3794,7 +3799,10 @@ display_subviews:
 
     [NSCurrentFocusStack() addObject: self];
 
-    CGContextBeginPage(graphicsPort, &mediaBox);
+    // A page of a PrintCore job is begun by the operation, in the session that owns the context; a second begin
+    // would leave that page open
+    if (![[NSPrintOperation currentOperation] _printCorePageIsOpen])
+        CGContextBeginPage(graphicsPort, &mediaBox);
     CGContextSaveGState(graphicsPort);
 
     transform = CGAffineTransformIdentity;
@@ -3815,7 +3823,8 @@ display_subviews:
     CGContextRef graphicsPort = NSCurrentGraphicsPort();
 
     CGContextRestoreGState(graphicsPort);
-    CGContextEndPage(graphicsPort);
+    if (![[NSPrintOperation currentOperation] _printCorePageIsOpen])
+        CGContextEndPage(graphicsPort);
     [NSCurrentFocusStack() removeLastObject];
 }
 

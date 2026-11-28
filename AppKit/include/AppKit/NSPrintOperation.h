@@ -50,6 +50,7 @@ typedef NS_ENUM(NSInteger, NSPrintRenderingQuality) {
     int _type;
     BOOL _showsPrintProgressPanel;
     NSString *_jobTitle;
+    BOOL _printCorePageOpen;
     NS_SIDE_IVARS_END(NSPrintOperation)
 }
 
