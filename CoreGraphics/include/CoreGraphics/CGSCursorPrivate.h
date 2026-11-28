@@ -24,8 +24,22 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSData.h>
 #include <CoreGraphics/CGSCursor.h>
+#include <CoreGraphics/CGSServerSPI.h>
 
 @class CGSCursor;
+
+// An internal shape appended after the public shape values so their ABI does not change. It uses the wait/watch
+// theme names and remains visible only to the backends and AppKit's standard-cursor table.
+enum { kCGSCursorShapeBusy = kCGSCursorShapeCount };
+
+// QUIRK: CGSGetCursorScale/CGSSetCursorScale expose a pointer-size factor that starts at 1 and is bounded by the
+// Universal Access maximum of 4.0. Not documented. Evidence: the MIT-licensed CGSCursor.h of NUIKit declares
+// these exact signatures and states the 4.0 cap (tier 3, public source of a Cocoa compatibility project), and
+// Blender's GPL-2.0-or-later GHOST_SystemCocoa.mm calls the getter to follow the system pointer size. No OS-version
+// dependence is known. Values below 1 are clamped to the neutral scale. Test: coregraphics-cursor-scale.
+// https://github.com/NUIKit/CGSInternal/blob/master/CGSCursor.h
+COREGRAPHICS_EXPORT CGError CGSGetCursorScale(CGSConnectionID connection, CGFloat *outScale);
+COREGRAPHICS_EXPORT CGError CGSSetCursorScale(CGSConnectionID connection, CGFloat scale);
 
 // What makes the window system's object of a cursor: the backend's connection. The object belongs to the cursor
 // and is destroyed through the same owner when the cursor goes.

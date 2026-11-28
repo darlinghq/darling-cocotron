@@ -30,6 +30,7 @@
 #import "../DarlingUnicodeKeyLayout.h"
 #import "../DarlingUnicodeKeyLayoutCompose.h"
 #import <CoreGraphics/CGSKeySymToUnicodePrivate.h>
+#import <CoreGraphics/CGSCursorPrivate.h>
 #import <Foundation/NSDebug.h>
 #import <Foundation/NSString.h>
 #include <stdlib.h>
@@ -2138,12 +2139,16 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 }
 
 // The cursor the process shows now: the blank one while it is hidden, else the selected cursor at the display's
-// scale (the arrow when none is selected). None when the window system could not make it.
+// scale times the Accessibility pointer-size factor (the arrow when none is selected). None when the window
+// system could not make it.
 -(Cursor) _cursorToShow
 {
 	if (![self cursorIsVisible])
 		return [self _blankCursorMade];
 	CGFloat scale = backingScaleFactor();
+	CGFloat pointerScale = 1.0;
+	if (CGSGetCursorScale(CGSMainConnectionID(), &pointerScale) == kCGErrorSuccess && pointerScale > 0.0)
+		scale *= pointerScale;
 	CGSCursor* cursor = [self cursor];
 	if (cursor != nil)
 		return (Cursor) (uintptr_t) [cursor nativeCursorFor: self scale: scale];

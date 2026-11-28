@@ -2,6 +2,7 @@
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSImage.h>
 #import <AppKit/NSRunningApplication.h>
+#import <AppKit/NSWorkspace+Private.h>
 #import <AppKit/NSRaise.h>
 #import "NSWorkspaceVolumeEvents.h"
 #include <LaunchServices/LaunchServices.h>
@@ -670,7 +671,7 @@ static OSStatus openURLsWithFlags(NSArray *urls, NSURL *appURL,
     return LSOpenFromURLSpec(&spec, NULL);
 }
 
-static LSLaunchFlags launchFlagsForConfiguration(
+LSLaunchFlags NSWorkspaceLaunchFlagsForConfiguration(
         NSWorkspaceOpenConfiguration *configuration) {
     LSLaunchFlags flags = kLSLaunchDefaults;
     if (configuration == nil)
@@ -687,6 +688,19 @@ static LSLaunchFlags launchFlagsForConfiguration(
         flags |= kLSLaunchDontAddToRecents;
     if ([configuration isForPrinting])
         flags |= kLSLaunchAndPrint;
+
+    // QUIRK: _additionalLSOpenOptions carries a _kLSOpenOptionBackgroundLaunchKey whose truthy value keeps
+    // the launched application in the background. Not documented. Evidence: Chromium's BSD-licensed
+    // launch_application.mm and WebKit's BSD-licensed LaunchServicesSPI.h declare and set it (tier 3,
+    // public source of independent Cocoa clients). No OS-version dependence is known. The public equivalent
+    // used here is kLSLaunchDontSwitch; only -boolValue is treated as truthy.
+    // https://chromium.googlesource.com/chromium/src/+/731fa51dac6814748b0943d8e4a61698fbe099c5/base/mac/launch_services_spi.h
+    // https://github.com/WebKit/WebKit/blob/main/Source/WebCore/PAL/pal/spi/cocoa/LaunchServicesSPI.h
+    // Test: appkit-launchservices-background-option
+    NSDictionary<NSString *, id> *options = [configuration _additionalLSOpenOptions];
+    id background = [options objectForKey: (NSString *) _kLSOpenOptionBackgroundLaunchKey];
+    if ([background respondsToSelector: @selector(boolValue)] && [background boolValue])
+        flags |= kLSLaunchDontSwitch;
     return flags;
 }
 
@@ -696,7 +710,7 @@ static LSLaunchFlags launchFlagsForConfiguration(
         configuration: (NSWorkspaceOpenConfiguration *) configuration
     completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler
 {
-    LSLaunchFlags flags = launchFlagsForConfiguration(configuration);
+    LSLaunchFlags flags = NSWorkspaceLaunchFlagsForConfiguration(configuration);
     [url retain];
     void (^handler)(NSRunningApplication *, NSError *) = [completionHandler copy];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -1281,7 +1295,7 @@ static void runOnConcurrentQueue(dispatch_block_t block) {
                configuration: (NSWorkspaceOpenConfiguration *) configuration
            completionHandler: (void (^)(NSRunningApplication *app, NSError *error)) completionHandler
 {
-    LSLaunchFlags flags = launchFlagsForConfiguration(configuration);
+    LSLaunchFlags flags = NSWorkspaceLaunchFlagsForConfiguration(configuration);
     NSArray *items = [urls copy];
     NSURL *application = [applicationURL retain];
     void (^handler)(NSRunningApplication *, NSError *) = [completionHandler copy];

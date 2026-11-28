@@ -29,6 +29,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import <CoreGraphics/CGSCursor.h>
 #import <CoreGraphics/CGSNativeConnection.h>
+#import <CoreGraphics/CGSCursorPrivate.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
 #import "NSEventQueue.h"
@@ -458,6 +459,7 @@ static CGSCursorShape CursorShapeForName(NSString *name) {
             [NSNumber numberWithInt: kCGSCursorShapeVerticalIBeam], @"IBeamCursorForVerticalLayout",
             [NSNumber numberWithInt: kCGSCursorShapeZoomIn], @"zoomInCursor",
             [NSNumber numberWithInt: kCGSCursorShapeZoomOut], @"zoomOutCursor",
+            [NSNumber numberWithInt: kCGSCursorShapeBusy], @"busyButClickableCursor",
             [NSNumber numberWithInt: kCGSCursorShapeOpenHand], @"openHandCursor",
             [NSNumber numberWithInt: kCGSCursorShapePointingHand], @"pointingHandCursor",
             [NSNumber numberWithInt: kCGSCursorShapeResizeDown], @"resizeDownCursor",

@@ -25,6 +25,14 @@
 // it leads back to NSView.h, which imports this header.
 @class NSArray, NSString, NSAccessibilityCustomAction;
 
+// The orientation reported by -accessibilityOrientation and NSAccessibilityOrientationAttribute.
+// The raw values are those of AppKit's public enum (unknown, horizontal, vertical).
+typedef NS_ENUM(NSInteger, NSAccessibilityOrientation) {
+    NSAccessibilityOrientationUnknown = 0,
+    NSAccessibilityOrientationHorizontal = 1,
+    NSAccessibilityOrientationVertical = 2,
+};
+
 // The minimum an object exposed to assistive applications provides.
 @protocol NSAccessibilityElement <NSObject>
 
@@ -82,4 +90,40 @@
 
 // An element that groups others (the group role); it asks for nothing more.
 @protocol NSAccessibilityGroup <NSAccessibilityElement>
+@end
+
+// Role protocols. Adopting one identifies the element's role to AppKit; the values of the role's attributes
+// are read through the NSAccessibility property API and the legacy attribute methods, not through extra
+// required methods. An object can adopt several roles (a control can be a button and a checkbox, for example)
+// and answer only for the attributes it has.
+@protocol NSAccessibilityButton <NSAccessibilityElement>
+@end
+
+@protocol NSAccessibilitySwitch <NSAccessibilityElement>
+@end
+
+@protocol NSAccessibilityRadioButton <NSAccessibilityElement>
+@end
+
+@protocol NSAccessibilityCheckBox <NSAccessibilityElement>
+@end
+
+@protocol NSAccessibilityStaticText <NSAccessibilityElement>
+@end
+
+@protocol NSAccessibilityNavigableStaticText <NSAccessibilityStaticText>
+@end
+
+@protocol NSAccessibilityProgressIndicator <NSAccessibilityElement>
+@end
+
+@protocol NSAccessibilityStepper <NSAccessibilityElement>
+@end
+
+@protocol NSAccessibilitySlider <NSAccessibilityElement>
+@optional
+- (NSAccessibilityOrientation) accessibilityOrientation;
+@end
+
+@protocol NSAccessibilityImage <NSAccessibilityElement>
 @end
