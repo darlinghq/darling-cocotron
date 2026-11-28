@@ -693,13 +693,13 @@ static LSLaunchFlags launchFlagsForConfiguration(
     // the launched application in the background. Not documented. Evidence: Chromium's BSD-licensed
     // launch_application.mm and WebKit's BSD-licensed LaunchServicesSPI.h declare and set it (tier 3,
     // public source of independent Cocoa clients). No OS-version dependence is known. The public equivalent
-    // used here is kLSLaunchDontSwitch; only -boolValue is treated as truthy.
+    // used here is kLSLaunchDontSwitch; only a true NSNumber counts.
     // https://chromium.googlesource.com/chromium/src/+/731fa51dac6814748b0943d8e4a61698fbe099c5/base/mac/launch_services_spi.h
     // https://github.com/WebKit/WebKit/blob/main/Source/WebCore/PAL/pal/spi/cocoa/LaunchServicesSPI.h
     // Test: appkit-launchservices-background-option
     NSDictionary<NSString *, id> *options = [configuration _additionalLSOpenOptions];
     id background = [options objectForKey: (NSString *) _kLSOpenOptionBackgroundLaunchKey];
-    if ([background respondsToSelector: @selector(boolValue)] && [background boolValue])
+    if ([background isKindOfClass: [NSNumber class]] && [background boolValue])
         flags |= kLSLaunchDontSwitch;
     return flags;
 }

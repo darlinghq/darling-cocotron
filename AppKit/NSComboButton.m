@@ -174,6 +174,13 @@ static const CGFloat kMenuSegmentWidth = 20.0;
     [triangle fill];
 }
 
+// A click on the button performs its primary action, whatever the style.
+- (void) performClick: (id) sender
+{
+    if ([self isEnabled])
+        [self sendAction: [self action] to: [self target]];
+}
+
 // The unified style shows the menu wherever it is clicked; the split style only in its menu part.
 - (void) mouseDown: (NSEvent *) event
 {
