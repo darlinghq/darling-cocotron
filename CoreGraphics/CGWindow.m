@@ -209,6 +209,13 @@ static NSInteger nextWindowNumber = 1;
     return number;
 }
 
+- (void) setTitlebarKind: (int) kind {
+}
+
+- (BOOL) moveByWindowSystem {
+    return NO;
+}
+
 - (NSString *) ensureSessionToplevelName {
     return nil;
 }

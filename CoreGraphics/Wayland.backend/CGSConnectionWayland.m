@@ -1711,6 +1711,17 @@ static BOOL ProcessHoldsDisplaySleepAssertion(void) {
     return 0;
 }
 
+- (uint32_t) heldLeftPressSerialForSurface: (struct wl_proxy *) surface {
+    return [(CGSWaylandPointer *) _pointerDecoder heldLeftPressSerialForSurface: surface];
+}
+
+- (CGSWindowWayland *) toplevelForSurface: (struct wl_proxy *) surface {
+    uint32_t windowID = [self windowIDForSurface: surface];
+    CGSWindow *window = windowID != 0 ? [self windowForId: (CGSWindowID) windowID] : nil;
+
+    return [window isKindOfClass: [CGSWindowWayland class]] ? (CGSWindowWayland *) window : nil;
+}
+
 - (BOOL) isDisplayOverlaySurface: (struct wl_proxy *) surface {
     uint32_t windowID = [self windowIDForSurface: surface];
     CGSWindow *window = windowID != 0 ? [self windowForId: (CGSWindowID) windowID] : nil;

@@ -281,6 +281,11 @@ typedef enum {
 - (CGSWindowWayland *) windowForActivation;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
+// The serial of the left pointer button press that is held down on a surface of this connection, 0 when the button is not
+// down or the pointer is not in that surface.
+- (uint32_t) heldLeftPressSerialForSurface: (struct wl_proxy *) surface;
+// The window of a surface of this connection, nil for none.
+- (CGSWindowWayland *) toplevelForSurface: (struct wl_proxy *) surface;
 // Whether the surface is that of a display overlay (a window made with -becomeDisplayOverlay:), and the
 // surface of the display overlay shown last, NULL when there is none. The input of an overlay belongs to no
 // window of the application.

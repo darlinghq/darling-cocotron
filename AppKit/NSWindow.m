@@ -60,6 +60,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindowAnimationContext.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGWindowPrivate.h>
+#import <CoreGraphics/CGSWindow.h>
 #import <CoreGraphics/CGWindow.h>
 #import <CoreGraphics/CGDirectDisplay.h>
 #include <unistd.h>
@@ -165,9 +166,6 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @interface CGWindow (private)
 - (void) dirtyRect: (CGRect) rect;
-// Optional, for backends whose window system can do it.
-- (void) updateDecorationsForStyleMask: (NSUInteger) styleMask;
-- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event;
 @end
 
 @interface NSToolbar (NSToolbar_privateForWindow)
@@ -1075,6 +1073,7 @@ static NSArray *onScreenWindowDescriptions(void) {
     if (_platformWindow != nil)
         return;
     _platformWindow = [[NSDisplay currentDisplay] newWindowWithDelegate: self];
+    [self _updatePlatformTitlebarKindForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 
     // A window recreated from saved state can have its session name before the native window
     // exists. The session request must precede the first surface commit.
@@ -1092,8 +1091,21 @@ static NSArray *onScreenWindowDescriptions(void) {
     return [[self platformWindow] cgContext];
 }
 
+// What the window shows of a title bar, for the window system's window to follow (see CGSToplevelTitlebarKind): none, the
+// standard one, or a title bar that is there but shows nothing of its own (the application draws its header).
+- (int) _titlebarKindForStyleMask: (NSUInteger) styleMask {
+    if (![self _hasTitlebarForStyleMask: styleMask])
+        return kCGSToplevelTitlebarNone;
+    return [self _hasInvisibleTitlebarForStyleMask: styleMask] ? kCGSToplevelTitlebarHidden : kCGSToplevelTitlebarStandard;
+}
+
+- (void) _updatePlatformTitlebarKindForStyleMask: (NSUInteger) styleMask {
+    [_platformWindow setTitlebarKind: [self _titlebarKindForStyleMask: styleMask]];
+}
+
 - (void) setStyleMask: (NSWindowStyleMask) mask {
     NS_EXTRA(NSWindow, self)->_styleMask = mask;
+    [self _updatePlatformTitlebarKindForStyleMask: mask];
     [_platformWindow setStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
     // What the frame adds around the content, and so the frame size limits, depend on the style.
     [self _sizeLimitsChanged];
@@ -1779,8 +1791,7 @@ static NSArray *onScreenWindowDescriptions(void) {
     // server does on macOS: the window manager or compositor then keeps the
     // window under the pointer until the button is released, and the release
     // goes to it rather than to the application.
-    if ([_platformWindow respondsToSelector: @selector(moveByWindowManagerForEvent:)] &&
-        [_platformWindow moveByWindowManagerForEvent: event])
+    if ([_platformWindow moveByWindowSystem])
         return;
 
     // Otherwise follow the pointer in screen coordinates. An event's location in the
@@ -2564,8 +2575,7 @@ static NSArray *onScreenWindowDescriptions(void) {
 // Whether the platform draws a title bar depends on the transparency of the
 // title bar, the title's visibility and the standard buttons.
 - (void) _titlebarVisibilityChanged {
-    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
-        [_platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    [self _updatePlatformTitlebarKindForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
     if ([_backgroundView isKindOfClass: [NSThemeFrame class]])
         [(NSThemeFrame *) _backgroundView _updateStandardWindowButtons];
 }
