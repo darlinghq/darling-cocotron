@@ -498,6 +498,12 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
     CGFloat total = [self _fittedSegmentWidthsForWidth: NSWidth(cellFrame) into: widths];
     NSGraphicsStyle *style = [controlView graphicsStyle];
     BOOL active = [[controlView window] isKeyWindow] && [self isEnabled];
+    // QUIRK: under DarkAqua the selected segment of a window that is not active is a light one with dark text
+    // (see -[NSGraphicsStyle drawSelectedTabInRect:stripRect:active:]); the other labels are light. Not
+    // documented. Evidence: black-box renders on macOS 10.14.4 (tier 2). Test: appkit-dark-segmented-tabs.m
+    BOOL dark = [[[NSAppearance currentDrawingAppearance]
+        bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]]
+        isEqualToString: NSAppearanceNameDarkAqua];
 
     NSRect strip = NSMakeRect(NSMinX(cellFrame), floor(NSMidY(cellFrame) - heights[index] / 2), total, heights[index]);
     CGFloat x = NSMinX(strip);
@@ -522,6 +528,7 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
                                                     NSHeight(segmentFrame) - 2)];
         NSButtonCell *cell = [self _cellForSegment: i];
         BOOL white = i == selected && active;
+        BOOL darkText = dark && i == selected && !white;
         NSString *label = [[_segments objectAtIndex: i] label];
 
         if ([label length] > 0) {
@@ -534,7 +541,8 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
             [title addAttribute: NSFontAttributeName value: [self _aquaFont] range: NSMakeRange(0, [label length])];
             [title addAttribute: NSForegroundColorAttributeName
                           value: white ? [NSColor whiteColor]
-                                       : ([self isEnabled] ? [NSColor controlTextColor] : [NSColor disabledControlTextColor])
+                                       : (darkText ? [NSColor colorWithCalibratedWhite: 0 alpha: [self isEnabled] ? 0.75 : 0.35]
+                                                   : ([self isEnabled] ? [NSColor controlTextColor] : [NSColor disabledControlTextColor]))
                           range: NSMakeRange(0, [label length])];
             [cell setAttributedTitle: title];
         }
@@ -542,7 +550,8 @@ static void initSegmentedCellState(NSSegmentedCell *self) {
         NSImage *image = [[_segments objectAtIndex: i] image];
         if ([image isTemplate])
             [cell setImage: [image _imageTintedWithColor: white ? [NSColor whiteColor]
-                                                                : [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.8]]];
+                                                                : (darkText ? [NSColor colorWithCalibratedWhite: 0.0 alpha: 0.75]
+                                                                            : [NSColor colorWithCalibratedWhite: dark ? 1.0 : 0.0 alpha: dark ? 0.85 : 0.8])]];
         [cell setHighlighted: NO];
         [cell setBordered: NO];
         [cell setControlView: controlView];
