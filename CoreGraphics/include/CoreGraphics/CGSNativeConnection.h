@@ -132,6 +132,10 @@ typedef enum {
 // X11: the pointer grab of the disassociated mouse was taken (active) on a window, with the frozen cursor in
 // root pixels, or released. The observer forgets the pointer position it knew.
 - (void) nativeConnectionRelativeMouseGrabChanged: (BOOL) active window: (unsigned long) window rootX: (int) x rootY: (int) y;
+// X11: the pointer was grabbed for the window of a menu that is being tracked (active), or the grab ended (see
+// -[CGSWindow setToplevelHoldsInputForMenu:]). Another grab of the observer's (the confinement of the pointer to a window)
+// is replaced by it and has to be taken again when it ends.
+- (void) nativeConnectionMenuGrabChanged: (BOOL) active;
 @end
 
 // The kind of the process' connection to the window system, opening it if needed.
@@ -157,6 +161,17 @@ extern void _CGSNativeConnectionFlushPendingKeyboardEvents(void);
 // then *frozenRoot is the frozen cursor in root pixels. *requested says whether the application wants it
 // (the grab is held only while the focus is). Either may be NULL.
 extern BOOL _CGSNativeConnectionRelativeMouseState(BOOL *requested, CGPoint *frozenRoot);
+// The desktop's application menu. Whether the window system can carry the address of a window's application menu (a
+// property of the window on X11, KDE's appmenu protocol on Wayland), for a desktop that shows application menus outside
+// the application (see -[CGSWindow setToplevelApplicationMenuServiceName:objectPath:]).
+extern BOOL _CGSNativeConnectionCarriesApplicationMenuAddress(void);
+// Whether the window system places a menu bar window of the application along the top of the screen (X11: the window
+// manager handles dock windows; Wayland: the compositor has a layer shell).
+extern BOOL _CGSNativeConnectionPlacesMenuBar(void);
+// Whether the session has a desktop that shows application menus, as the framework above found out (a registrar of
+// application menus on the session bus: CoreGraphics has no bus connection of its own). NO until it says.
+extern BOOL _CGSNativeConnectionGlobalMenuAvailable(void);
+extern void _CGSNativeConnectionSetGlobalMenuAvailable(BOOL available);
 // X11: the windows the pointer can be grabbed for changed (a display overlay appeared or went): a wanted
 // grab that is not held is retried.
 extern void _CGSNativeConnectionPointerWindowsChanged(void);

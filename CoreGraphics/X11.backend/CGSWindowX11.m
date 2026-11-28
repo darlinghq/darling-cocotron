@@ -179,6 +179,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 
 -(void) dealloc
 {
+	if (_holdsMenuInput)
+		[(CGSConnectionX11*) _connection menuWindowHidden: self];
 	// The surfaces destroy X11 child windows of ours, which have to go first.
 	// -[CGSWindow dealloc] would only release _surfaces after this body.
 	@synchronized (_surfaces)
@@ -187,6 +189,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 	}
 
 	[_title release];
+	[_menuService release];
+	[_menuPath release];
 
 	// The input context belongs to the X window.
 	[_inputContext destroy];
@@ -257,6 +261,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 		case kCGSOrderOut:
 			XUnmapWindow(_display, _window);
 			_toplevelShown = NO;
+			if (_holdsMenuInput)
+				[(CGSConnectionX11*) _connection menuWindowHidden: self];
 			if (_toplevel)
 			{
 				// The manager drops the fullscreen state of a withdrawn window, and nothing covers it or
@@ -272,6 +278,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 			XMapWindow(_display, _window);
 			_toplevelShown = YES;
 			_miniaturizedKnown = NO;
+			if (_holdsMenuInput)
+				[(CGSConnectionX11*) _connection menuWindowShown: self];
 			return kCGSErrorSuccess;
 		case kCGSOrderAbove:
 			// The window system asks for the contents with an expose event once it is shown
@@ -283,6 +291,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 			XSync(_display, False);
 			if (_displayOverlay)
 				[self _displayOverlayShown];
+			if (_holdsMenuInput)
+				[(CGSConnectionX11*) _connection menuWindowShown: self];
 			return kCGSErrorSuccess;
 		case kCGSOrderBelow:
 		default:
@@ -892,12 +902,15 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 
 	// The new window has no shape, opaque region, input region or manager hints yet, is not shown and has
 	// received no expose event.
+	if (_holdsMenuInput)
+		[(CGSConnectionX11*) _connection menuWindowHidden: self];
 	_toplevelShown = NO;
 	_hasPendingExpose = NO;
 	_opaqueRegionSize = CGSizeZero;
 	_roundedShapeSet = NO;
 	_shapeEmpty = NO;
 	_ignoresMouse = NO;
+	[self _applyApplicationMenu];
 	_skipsTaskList = NO;
 	_wantsInputFocus = NO;
 	_fullscreenRequested = NO;
@@ -1583,6 +1596,64 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	return kCGSErrorSuccess;
 }
 
+// Atoms KDE reads to find the menu of a window.
+#define APPMENU_SERVICE_NAME_PROPERTY "_KDE_NET_WM_APPMENU_SERVICE_NAME"
+#define APPMENU_OBJECT_PATH_PROPERTY "_KDE_NET_WM_APPMENU_OBJECT_PATH"
+
+-(void) _applyApplicationMenu
+{
+	if (!_toplevel || _window == None)
+		return;
+	Atom serviceAtom = XInternAtom(_display, APPMENU_SERVICE_NAME_PROPERTY, False);
+	Atom pathAtom = XInternAtom(_display, APPMENU_OBJECT_PATH_PROPERTY, False);
+	if (_menuService == nil || _menuPath == nil)
+	{
+		XDeleteProperty(_display, _window, serviceAtom);
+		XDeleteProperty(_display, _window, pathAtom);
+	}
+	else
+	{
+		NSData* service = [_menuService dataUsingEncoding: NSUTF8StringEncoding];
+		NSData* path = [_menuPath dataUsingEncoding: NSUTF8StringEncoding];
+		XChangeProperty(_display, _window, serviceAtom, XA_STRING, 8, PropModeReplace, (const unsigned char*) [service bytes],
+			(int) [service length]);
+		XChangeProperty(_display, _window, pathAtom, XA_STRING, 8, PropModeReplace, (const unsigned char*) [path bytes],
+			(int) [path length]);
+	}
+	XFlush(_display);
+}
+
+-(CGError) setToplevelApplicationMenuServiceName:(NSString*) service objectPath:(NSString*) path
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	[_menuService release];
+	[_menuPath release];
+	_menuService = [service copy];
+	_menuPath = [path copy];
+	[self _applyApplicationMenu];
+	return kCGSErrorSuccess;
+}
+
+// The menu's window holds the pointer and the keyboard of the connection while it is shown (see
+// -[CGSConnectionX11 menuWindowShown:]).
+-(CGError) setToplevelHoldsInputForMenu:(BOOL) holds
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if (holds == _holdsMenuInput)
+		return kCGSErrorSuccess;
+	_holdsMenuInput = holds;
+	if (_toplevelShown)
+	{
+		if (holds)
+			[(CGSConnectionX11*) _connection menuWindowShown: self];
+		else
+			[(CGSConnectionX11*) _connection menuWindowHidden: self];
+	}
+	return kCGSErrorSuccess;
+}
+
 // _NET_WM_ICON: for each icon its width and height and then its pixels, one long each, not premultiplied.
 -(CGError) setToplevelIcons:(NSArray<NSData*>*) icons
 {
@@ -1732,6 +1803,8 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 // reference to this object is gone.
 -(void) invalidate
 {
+	if (_holdsMenuInput)
+		[(CGSConnectionX11*) _connection menuWindowHidden: self];
 	if (_toplevel && _window != None)
 	{
 		@synchronized (_surfaces)

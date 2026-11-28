@@ -137,6 +137,8 @@ static uint64_t sOrderCounter;
     _surfaceObject = nil;
 
     [_title release];
+    [_uiMenuService release];
+    [_uiMenuPath release];
     WaylandColorManager *color = [_waylandConnection colorManager];
     [color destroyColorSurface: _colorSurface];
     [color destroyRepresentationSurface: _representationSurface];
@@ -379,6 +381,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 }
 
 - (void) destroyRole {
+    destroyProxy(&_uiAppMenu, WP_APPMENU_RELEASE);
     destroyProxy(&_decoration, WP_TOPLEVEL_DECORATION_DESTROY);
     destroyProxy(&_plasmaSurface, WP_PLASMA_SURFACE_DESTROY);
     destroyProxy(&_toplevel, WP_TOPLEVEL_DESTROY);
@@ -730,6 +733,43 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     return kCGSErrorSuccess;
 }
 
+#pragma mark - Application menu
+
+// The compositor is told the address of the menu while the window is a toplevel and has a manager for it; the object is
+// released when either is gone.
+- (void) applyApplicationMenu {
+    if (_toplevel == NULL || _waylandConnection->_appMenuManager == NULL || _uiMenuService == nil || _uiMenuPath == nil) {
+        destroyProxy(&_uiAppMenu, WP_APPMENU_RELEASE);
+        return;
+    }
+    if (_uiAppMenu == NULL) {
+        union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
+        _uiAppMenu = [_waylandConnection createObject: _waylandConnection->_appMenuManager
+                                               opcode: WP_APPMENU_MANAGER_CREATE
+                                            interface: &org_kde_kwin_appmenu_interface
+                                            arguments: args
+                                                 kind: CGSWaylandObjectNone
+                                               object: nil];
+        if (_uiAppMenu == NULL)
+            return;
+    }
+    // Both are ASCII: a unique bus name and an object path.
+    union wl_argument address[2] = {{.s = [_uiMenuService UTF8String]}, {.s = [_uiMenuPath UTF8String]}};
+    WaylandMarshal(_uiAppMenu, WP_APPMENU_SET_ADDRESS, NULL, 0, address);
+    [_waylandConnection flush];
+}
+
+- (CGError) setToplevelApplicationMenuServiceName: (NSString *) service objectPath: (NSString *) path {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    [_uiMenuService release];
+    [_uiMenuPath release];
+    _uiMenuService = [service copy];
+    _uiMenuPath = [path copy];
+    [self applyApplicationMenu];
+    return kCGSErrorSuccess;
+}
+
 - (void) unsetToplevelDecoration {
     _uiDecorationRequest = 3;
     [self applyUIDecoration];
@@ -966,6 +1006,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         WaylandMarshal(_toplevel, WP_TOPLEVEL_SET_APP_ID, NULL, 0, appID);
     [self applyUIToplevelLimits];
     [self applyUIDecoration];
+    [self applyApplicationMenu];
 }
 
 - (CGError) showToplevel {

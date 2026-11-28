@@ -21,7 +21,7 @@
 #import "../private-include/AppKit/NSMenuBarController.h"
 #import <X11/Xlib.h>
 
-@class NSMenu, NSDBusMenu, NSMenuBarController;
+@class NSMenu, NSDBusMenu, NSMenuBarController, CGSWindow;
 
 // Shows the application's main menu outside its windows: in the desktop's
 // global menu when the session has one, and otherwise in the bar of an
@@ -38,7 +38,7 @@
     BOOL _exporting;
     BOOL _connectionTried;
     NSMenuBarController *_bar;
-    NSMutableSet *_windows;
+    NSMutableDictionary *_windows; // the CoreGraphics windows that carry the menu, by their X window
 }
 
 // Without exporting the menu is only shown in the menu bar window (the windows
@@ -53,7 +53,7 @@
 
 // A top-level window of the application was created or destroyed (not a popup
 // or the bar).
-- (void) windowCreated: (Window) window;
+- (void) windowCreated: (Window) window cgsWindow: (CGSWindow *) cgsWindow;
 - (void) windowDestroyed: (Window) window;
 
 @end

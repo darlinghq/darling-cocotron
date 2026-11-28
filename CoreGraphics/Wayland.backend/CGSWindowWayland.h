@@ -107,6 +107,10 @@ typedef enum {
     // The window's frame drawn by the UI layer inside the surface: where the content starts, in points from the top left
     // corner of the surface.
     CGPoint _uiContentOffset;
+    // The address of the window's application menu (see -setToplevelApplicationMenuServiceName:objectPath:) and the
+    // org_kde_kwin_appmenu object that tells the compositor, while the window is a toplevel and there is a manager.
+    NSString *_uiMenuService, *_uiMenuPath;
+    struct wl_proxy *_uiAppMenu;
     uint32_t _uiPopupGrabSerial;
     uint32_t _uiRepositionToken;
     // What the events of the configure sequence in progress said.
@@ -204,6 +208,8 @@ typedef enum {
 // Where the window's content starts inside its surface when the UI layer draws a frame of its own, in points from the
 // top left corner: pop-ups of the window are placed relative to the content.
 - (void) setToplevelContentOffset: (CGPoint) offset;
+// Tells the compositor where the window's application menu is, or that there is none (the appmenu manager came or went).
+- (void) applyApplicationMenu;
 // Replaces CGSWindow's -setToplevelFrame: for a frame the window system itself reported (the UI layer's window
 // follows it): remembers it without asking the window system for it.
 - (void) noteToplevelFrame: (CGRect) frame;

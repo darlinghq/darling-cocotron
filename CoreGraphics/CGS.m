@@ -831,6 +831,26 @@ BOOL _CGSNativeConnectionRelativeMouseState(BOOL* requested, CGPoint* frozenRoot
 	return [nativeConnection() relativeMouseState: requested frozenRoot: frozenRoot];
 }
 
+BOOL _CGSNativeConnectionCarriesApplicationMenuAddress(void)
+{
+	return [nativeConnection() carriesApplicationMenuAddress];
+}
+
+BOOL _CGSNativeConnectionPlacesMenuBar(void)
+{
+	return [nativeConnection() placesMenuBar];
+}
+
+BOOL _CGSNativeConnectionGlobalMenuAvailable(void)
+{
+	return [nativeConnection() globalMenuAvailable];
+}
+
+void _CGSNativeConnectionSetGlobalMenuAvailable(BOOL available)
+{
+	[nativeConnection() setGlobalMenuAvailable: available];
+}
+
 void _CGSNativeConnectionPointerWindowsChanged(void)
 {
 	[nativeConnection() pointerWindowsChanged];

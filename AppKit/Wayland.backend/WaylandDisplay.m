@@ -292,7 +292,7 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
                                       _contentTypeManager,
                                       _shortcutsInhibitManager,
                                       _seat, _decorationManager, _dataDeviceManager, _wmBase,
-                                      _shm, _viewporter, _fractionalScaleManager, _appMenuManager, _subcompositor, _compositor,
+                                      _shm, _viewporter, _fractionalScaleManager, _subcompositor, _compositor,
                                        _registry};
         for (size_t i = 0; i < sizeof(proxies) / sizeof(proxies[0]); i++)
             if (proxies[i] != NULL)
@@ -696,12 +696,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         _fractionalScaleManagerName = name;
         _fractionalScaleManager = [self bindGlobal: name interface: &wp_fractional_scale_manager_v1_interface
                                           version: 1 kind: 0 object: nil];
-    } else if (strcmp(interface, "org_kde_kwin_appmenu_manager") == 0 && _appMenuManager == NULL) {
-        // Version 2 adds the manager's release request.
-        _appMenuManagerName = name;
-        _appMenuManagerVersion = MIN(version, 2);
-        _appMenuManager = [self bindGlobal: name interface: &org_kde_kwin_appmenu_manager_interface
-                                   version: _appMenuManagerVersion kind: 0 object: nil];
     } else if (strcmp(interface, "xdg_toplevel_icon_manager_v1") == 0 && _toplevelIcons == nil) {
         _toplevelIcons = [[WaylandToplevelIcons alloc] initWithDisplay: self];
         [_toplevelIcons setManager: [self bindGlobal: name interface: &xdg_toplevel_icon_manager_v1_interface
@@ -837,18 +831,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
         WaylandMarshal(_fractionalScaleManager, WP_FRACTIONAL_MANAGER_DESTROY, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
         _fractionalScaleManager = NULL; _fractionalScaleManagerName = 0;
         return; // Existing surface preferences survive factory removal.
-    }
-    if (_appMenuManager && name == _appMenuManagerName) {
-        struct wl_proxy *manager = _appMenuManager;
-        _appMenuManager = NULL; _appMenuManagerName = 0;
-        // The windows release their appmenu objects while the manager is gone.
-        for (CFIndex i = 0; i < CFArrayGetCount(_windows); i++)
-            [(WaylandWindow *) CFArrayGetValueAtIndex(_windows, i) updateApplicationMenu];
-        if (_appMenuManagerVersion >= 2)
-            WaylandMarshal(manager, WP_APPMENU_MANAGER_RELEASE, NULL, WL_MARSHAL_FLAG_DESTROY, NULL);
-        else
-            WL.wl_proxy_destroy(manager);
-        return;
     }
     if (_toplevelIcons && name == [_toplevelIcons name]) {
         // The windows keep the icons they were given.
@@ -1616,32 +1598,20 @@ static NSUInteger buttonMaskForNumber(int64_t number) {
 
 #pragma mark - Main menu
 
-// The main menu goes to the desktop's global menu when the compositor takes the
-// address of a window's menu (KDE's appmenu protocol) and something on the
-// session bus shows application menus (the com.canonical.AppMenu.Registrar
-// name has an owner). Plasma's appmenu service owns that name only while a
-// global menu view, the Global Menu applet or the application menu button of
-// the window title bars, is in use. Otherwise nothing outside the application
-// would show the menu, and a client cannot put a bar of its own along the top
-// of the screen with xdg-shell, so the windows draw it themselves.
-- (BOOL) _showsMainMenuOutsideWindows {
-    // With a layer shell the menu bar window shows the menu when the desktop does not.
-    return _layerShell != NULL || [self _desktopShowsMainMenu];
-}
+// The main menu goes to the desktop's global menu when the compositor takes the address of a window's menu (KDE's
+// appmenu protocol) and something on the session bus shows application menus (the com.canonical.AppMenu.Registrar
+// name has an owner). Plasma's appmenu service owns that name only while a global menu view, the Global Menu applet
+// or the application menu button of the window title bars, is in use. Otherwise nothing outside the application
+// would show the menu, and a client cannot put a bar of its own along the top of the screen with xdg-shell without a
+// layer shell, so the windows draw it themselves (see -[NSDisplay _showsMainMenuOutsideWindows]).
+//
+// Whether a registrar owns its name is asked with a throw-away exporter.
+- (BOOL) _probeGlobalMenuRegistrar {
+    WaylandAppMenu *probe = [[WaylandAppMenu alloc] initWithDisplay: self exporting: YES];
+    BOOL present = [probe globalMenuPresent];
 
-// Asked once, with a throw-away exporter, because the answer decides whether the application exports its
-// menu at all.
-- (BOOL) _desktopShowsMainMenu {
-    if (!_desktopMenuProbed) {
-        _desktopMenuProbed = YES;
-        if (_appMenuManager != NULL) {
-            WaylandAppMenu *probe = [[WaylandAppMenu alloc] initWithDisplay: self exporting: YES];
-
-            _desktopMenuPresent = [probe globalMenuPresent];
-            [probe release];
-        }
-    }
-    return _desktopMenuPresent;
+    [probe release];
+    return present;
 }
 
 // The menu is exported for the desktop's global menu unless the windows carry it as strips. The menu bar
@@ -1650,7 +1620,7 @@ static NSUInteger buttonMaskForNumber(int64_t number) {
     if (_appMenu == nil) {
         BOOL strips = [NSWindow _usesInWindowMenuBar];
 
-        if (strips && _layerShell == NULL)
+        if (strips && !_CGSNativeConnectionPlacesMenuBar())
             return;
         _appMenu = [[WaylandAppMenu alloc] initWithDisplay: self exporting: !strips];
     }

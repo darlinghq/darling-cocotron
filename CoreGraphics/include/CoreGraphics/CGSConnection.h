@@ -55,6 +55,9 @@
 	NSArray<CGSScreen*>* _reportedScreens;
 	// Non-zero while this process changes a mode itself, which it reports itself.
 	_Atomic int _suppressLayoutReports;
+	// Whether the desktop shows application menus, as the framework above said (see -setGlobalMenuAvailable:). Guarded by
+	// @synchronized(self).
+	BOOL _globalMenuAvailable;
 }
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
 -(void) dealloc;
@@ -189,6 +192,12 @@
 // Whether the mouse is disassociated from the cursor with the cursor held (the frozen position in
 // *frozenRoot, window system pixels), and whether the application wants that; for the framework above.
 -(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot;
+// What the window system does for the application's menu (see _CGSNativeConnectionCarriesApplicationMenuAddress() and
+// the ones that follow it). The defaults are for a window system that does neither.
+-(BOOL) carriesApplicationMenuAddress;
+-(BOOL) placesMenuBar;
+-(BOOL) globalMenuAvailable;
+-(void) setGlobalMenuAvailable:(BOOL) available;
 // The windows the pointer could be confined to changed.
 -(void) pointerWindowsChanged;
 -(void) selectTouchInputOnNativeWindow:(unsigned long)window;

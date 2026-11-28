@@ -26,7 +26,6 @@
 #import "../private-include/AppKit/NSEventTime.h"
 #import "X11Window.h"
 #import "X11AppMenu.h"
-#import "X11DockSupport.h"
 #import "../private-include/AppKit/NSGlobalMenu+Private.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSScreen.h>
@@ -354,6 +353,16 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
 
 // The grab was taken or released: a confinement grab was replaced, and the window's cursor position is where the
 // cursor froze (absolute motion after the release starts from there).
+// The pointer is held for the window of a menu that is being tracked (see -[CGSWindow setToplevelHoldsInputForMenu:]):
+// the grab replaced the confinement of the pointer, which is taken again when the menus are gone.
+- (void) nativeConnectionMenuGrabChanged: (BOOL) active {
+    if (active) {
+        _confinedWindow = None;
+        return;
+    }
+    [self updatePointerConfinement];
+}
+
 - (void) nativeConnectionRelativeMouseGrabChanged: (BOOL) active window: (unsigned long) window rootX: (int) x rootY: (int) y {
     if (!active)
         return;
@@ -426,26 +435,14 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     }
 }
 
-// Whether the session has a desktop that shows application menus: a registrar owns its name on the session
-// bus. Asked once, with a throw-away exporter, because the answer decides whether the application exports its
-// menu at all. -appMenu is not used: it asks +[NSWindow _usesInWindowMenuBar], which is being answered.
-- (BOOL) _desktopShowsMainMenu {
-    if (!_desktopMenuProbed) {
-        X11AppMenu *probe = [[X11AppMenu alloc] initWithDisplay: _display exporting: YES];
+// Whether a registrar owns its name on the session bus. Asked with a throw-away exporter. -appMenu is not used: it asks
+// +[NSWindow _usesInWindowMenuBar], which is being answered.
+- (BOOL) _probeGlobalMenuRegistrar {
+    X11AppMenu *probe = [[X11AppMenu alloc] initWithDisplay: _display exporting: YES];
+    BOOL present = [probe globalMenuPresent];
 
-        _desktopMenuPresent = [probe globalMenuPresent];
-        _desktopMenuProbed = YES;
-        [probe release];
-    }
-    return _desktopMenuPresent;
-}
-
-// The menu bar window is a dock that the window manager has to place at the top of the screen. Under a manager
-// that does not handle docks it would float over the windows of the application (see X11DockSupport.h), so
-// there the menu is outside the windows only when the desktop has a global menu, as on Wayland, and the
-// windows draw it themselves otherwise.
-- (BOOL) _showsMainMenuOutsideWindows {
-    return X11WindowManagerPlacesDocks(_display) || [self _desktopShowsMainMenu];
+    [probe release];
+    return present;
 }
 
 // The menu is exported for the desktop's global menu unless the windows carry it as strips. The menu bar is
@@ -454,7 +451,7 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     if (_appMenu == nil) {
         BOOL strips = [NSWindow _usesInWindowMenuBar];
 
-        if (!strips || X11WindowManagerPlacesDocks(_display))
+        if (!strips || _CGSNativeConnectionPlacesMenuBar())
             _appMenu = [[X11AppMenu alloc] initWithDisplay: _display exporting: !strips];
     }
     return _appMenu;
@@ -900,59 +897,6 @@ void CGNativeBorderFrameWidthsForStyle(NSUInteger styleMask, CGFloat *top,
         if (result == GrabSuccess)
             _confinedWindow = target;
     }
-}
-
-// Holds the pointer for the application while a menu is open, on the newest
-// menu window. Relative mouse mode holds the pointer already; it is not
-// disturbed, an open menu then only sees the pointer inside its windows.
-- (void) grabPointerForMenus {
-    if ([_openMenuWindows count] == 0 || _CGSNativeConnectionRelativeMouseState(NULL, NULL))
-        return;
-    Window target = [(X11Window *) [_openMenuWindows lastObject] windowHandle];
-    if (target == None)
-        return;
-    // The grab replaces the confinement grab, if there was one.
-    _confinedWindow = None;
-    XGrabPointer(_display, target, True,
-                 ButtonPressMask | ButtonReleaseMask | PointerMotionMask,
-                 GrabModeAsync, GrabModeAsync, None, None, CurrentTime);
-}
-
-// Holds the keyboard for the application while a menu is open, so that its keys reach the menu
-// whichever client has the input focus (an application that only owns the menu bar has none). The
-// keys still go to the application's own windows while one has the focus (owner_events), and the
-// focus events the grab causes are not taken for the focus moving (see the FocusIn and FocusOut cases).
-- (void) grabKeyboardForMenus {
-    if ([_openMenuWindows count] == 0)
-        return;
-    Window target = [(X11Window *) [_openMenuWindows lastObject] windowHandle];
-    if (target == None)
-        return;
-    XGrabKeyboard(_display, target, True, GrabModeAsync, GrabModeAsync, CurrentTime);
-}
-
-- (void) menuWindowMapped: (X11Window *) window {
-    if (_openMenuWindows == nil)
-        _openMenuWindows = [NSMutableArray new];
-    [_openMenuWindows removeObjectIdenticalTo: window];
-    [_openMenuWindows addObject: window];
-    [self grabPointerForMenus];
-    [self grabKeyboardForMenus];
-}
-
-- (void) menuWindowUnmapped: (X11Window *) window {
-    if ([_openMenuWindows indexOfObjectIdenticalTo: window] == NSNotFound)
-        return;
-    [_openMenuWindows removeObjectIdenticalTo: window];
-    if ([_openMenuWindows count] > 0) {
-        [self grabPointerForMenus];
-        [self grabKeyboardForMenus];
-        return;
-    }
-    XUngrabKeyboard(_display, CurrentTime);
-    if (!_CGSNativeConnectionRelativeMouseState(NULL, NULL))
-        XUngrabPointer(_display, CurrentTime);
-    [self updatePointerConfinement];
 }
 
 @end

@@ -352,6 +352,32 @@ extern void _CGSPostHotKeyEvent(CGSConnectionID connection, int uid, BOOL presse
 	return NO;
 }
 
+-(BOOL) carriesApplicationMenuAddress
+{
+	return NO;
+}
+
+-(BOOL) placesMenuBar
+{
+	return NO;
+}
+
+-(BOOL) globalMenuAvailable
+{
+	@synchronized (self)
+	{
+		return _globalMenuAvailable;
+	}
+}
+
+-(void) setGlobalMenuAvailable:(BOOL) available
+{
+	@synchronized (self)
+	{
+		_globalMenuAvailable = available;
+	}
+}
+
 -(void) pointerWindowsChanged
 {
 }
