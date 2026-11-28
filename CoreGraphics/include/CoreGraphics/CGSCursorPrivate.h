@@ -32,12 +32,10 @@
 // theme names and remains visible only to the backends and AppKit's standard-cursor table.
 enum { kCGSCursorShapeBusy = kCGSCursorShapeCount };
 
-// QUIRK: CGSGetCursorScale/CGSSetCursorScale expose a pointer-size factor that starts at 1 and is bounded by the
-// Universal Access maximum of 4.0. Not documented. Evidence: the MIT-licensed CGSCursor.h of NUIKit declares
-// these functions (typing the scale as CGFloat, unlike the float the real getter writes) and states the 4.0 cap (tier 3, public source of a Cocoa compatibility project), and
-// Blender's GPL-2.0-or-later GHOST_SystemCocoa.mm calls the getter to follow the system pointer size. No OS-version
-// dependence is known. Values below 1 are clamped to the neutral scale. Test: coregraphics-cursor-scale.
-// https://github.com/NUIKit/CGSInternal/blob/master/CGSCursor.h
+// QUIRK: CGSGetCursorScale/CGSSetCursorScale expose the system-wide pointer-size factor, starting at 1, shared by
+// all processes. Not documented. The accepted range and the results are described, with the evidence (black-box on
+// macOS 26.7.3, tier 2), at the implementation in CGSCursor.m. The SPI exists because Blender calls the getter.
+// Test: coregraphics-cursor-scale.
 // The scale is a 4-byte float: the getter on macOS 26.7.3 writes one float, not a CGFloat (tier 2, black-box).
 COREGRAPHICS_EXPORT CGError CGSGetCursorScale(CGSConnectionID connection, float *outScale);
 COREGRAPHICS_EXPORT CGError CGSSetCursorScale(CGSConnectionID connection, float scale);
