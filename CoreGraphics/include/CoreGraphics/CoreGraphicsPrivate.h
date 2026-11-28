@@ -42,6 +42,10 @@ extern void CGSInitialize(void);
 extern CGError CGSNewConnection(_Nullable CGSDictionaryObj attribs, CGSConnectionID* connId);
 extern CGError CGSReleaseConnection(CGSConnectionID connId);
 extern CGSConnectionID _CGSDefaultConnection(void);
+// Accessibility cursor scale (1.0 .. 4.0). This is a documented SPI used by
+// clients that draw their own cursors; Darling has no scaling setting and
+// reports the unscaled value.
+extern CGError CGSGetCursorScale(CGSConnectionID connection, CGFloat *scale);
 extern CGError CGSSetDenyWindowServerConnections(Boolean deny);
 // Whether CGSSetDenyWindowServerConnections() denied the process connections to the window system.
 extern Boolean _CGSWindowServerConnectionsDenied(void);

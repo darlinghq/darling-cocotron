@@ -160,6 +160,13 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 - (BOOL) validateMenuItem: (NSMenuItem *) item;
 @end
 
+// The informal menu validation protocol: objects that validate menu items
+// implement -validateMenuItem:. NSMenu sends it before displaying the menu.
+@protocol NSMenuValidation <NSObject>
+@optional
+- (BOOL) validateMenuItem: (NSMenuItem *) item;
+@end
+
 @protocol NSMenuDelegate <NSObject>
 
 @optional

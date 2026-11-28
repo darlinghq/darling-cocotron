@@ -49,6 +49,34 @@ static NSString *const NSButtonBorderTrackingKey = @"NSButtonBorderTracking";
 
 @implementation NSButton
 
+- (NSControlBorderShape) borderShape
+{
+    @synchronized(self) {
+        return NS_EXTRA(NSControl, self)->_borderShape;
+    }
+}
+
+- (void) setBorderShape: (NSControlBorderShape) value
+{
+    @synchronized(self) {
+        NS_EXTRA(NSControl, self)->_borderShape = value;
+    }
+}
+
+- (NSTintProminence) tintProminence
+{
+    @synchronized(self) {
+        return NS_EXTRA(NSControl, self)->_tintProminence;
+    }
+}
+
+- (void) setTintProminence: (NSTintProminence) value
+{
+    @synchronized(self) {
+        NS_EXTRA(NSControl, self)->_tintProminence = value;
+    }
+}
+
 // Operated at once: the click that activates the window is delivered to it
 // (see -[NSWindow sendEvent:]).
 - (BOOL) acceptsFirstMouse: (NSEvent *) event {
