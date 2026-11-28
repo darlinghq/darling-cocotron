@@ -2083,6 +2083,7 @@ void O2ContextSetupPaintAndBlendMode(O2Context_builtin *self, O2PaintRef paint,
         break;
 
     case kO2BlendModeSourceAtop:
+        self->_blend_argb8u_PRE = O2BlendSpanSourceAtop_8888;
         self->_blend_argb32f_PRE = O2BlendSpanSourceAtop_ffff;
         break;
 

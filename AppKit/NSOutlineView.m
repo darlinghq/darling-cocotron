@@ -81,10 +81,6 @@ NSString *const NSOutlineViewShowHideButtonKey =
                    forTableColumn: (NSTableColumn *) tableColumn
                               row: (NSInteger) row;
 
-- (void) drawHighlightedSelectionForColumn: (NSInteger) column
-                                       row: (NSInteger) row
-                                    inRect: (NSRect) rect;
-
 @end
 
 @interface NSTableView (NSOutlineViewBindings)
@@ -1031,23 +1027,6 @@ static void loadItemIntoMapTables(NSOutlineView *self, id item,
         frame.size.width -= inset;
     }
     return frame;
-}
-
-- (void) drawHighlightedSelectionForColumn: (NSInteger) column
-                                       row: (NSInteger) row
-                                    inRect: (NSRect) rect
-{
-    if ([_tableColumns objectAtIndex: column] == _outlineTableColumn) {
-        NSRect newRect = NSInsetRect(rect, 1, 0);
-        // NSDottedFrameRect is kinda weird
-        newRect.origin.y++;
-        newRect.size.height--;
-        [super drawHighlightedSelectionForColumn: column
-                                             row: row
-                                          inRect: newRect];
-        NSDottedFrameRect(rect);
-    } else
-        [super drawHighlightedSelectionForColumn: column row: row inRect: rect];
 }
 
 - (void) _drawGridForItem: (id) item
