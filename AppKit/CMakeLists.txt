@@ -673,6 +673,8 @@ add_framework(AppKit
 		QuartzCore
 		CoreGraphics
 		ImageIO
+		AudioToolbox
+		CoreAudio
 		# native libraries
 		FreeType
 		fontconfig
