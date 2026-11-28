@@ -75,8 +75,10 @@ struct wl_proxy;
 // A window's input method state (enabled, cursor rectangle, surrounding text, content type) changed: it is sent when
 // the window has the text input focus.
 - (void) windowChanged: (CGSWindow *) window;
-// The window's surface goes away (or the window is unmapped): a composition it showed is over.
-- (void) windowGone: (CGSWindow *) window;
+// The window is unmapped: a composition it showed is over.
+- (void) windowUnmapped: (CGSWindow *) window;
+// The window with this identifier is destroyed: the text input it had is gone.
+- (void) windowDestroyed: (uint32_t) windowID;
 // One event of the zwp_text_input_v3.
 - (void) textInputEvent: (uint32_t) opcode arguments: (union wl_argument *) args;
 // Destroys the text input.

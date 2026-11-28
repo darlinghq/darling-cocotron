@@ -504,6 +504,16 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
 @end
 
 // The SPI protocol of views that register with -registerScrollViewSeparatorTrackingAdapter:.
+// What a platform window can be asked, once it says it can answer (-respondsToSelector:); the replies are BOOLs, and a
+// call that the compiler cannot see the declaration of reads them as pointers
+@protocol NSWindowPlatformWindowQueries <NSObject>
+@optional
+- (BOOL) isFullScreen;
+- (BOOL) takeKeyRequest;
+- (BOOL) isFullyTransparent;
+- (void) presentationChanged;
+@end
+
 @protocol NSScrollViewSeparatorTrackingAdapter
 - (NSRect) scrollViewFrame;
 - (BOOL) hasScrolledContentsUnderTitlebar;
@@ -2501,7 +2511,7 @@ static NSArray *onScreenWindowDescriptions(void) {
     NS_EXTRA(NSWindow, self)->_collectionBehavior = behavior;
     // The collection behavior decides whether the window is an application window (see
     // -_windowPresentation), which a window that is already on screen has to tell the window system.
-    id platform = [self platformWindow];
+    id<NSWindowPlatformWindowQueries> platform = [self platformWindow];
     if ([platform respondsToSelector: @selector(presentationChanged)])
         [platform presentationChanged];
 }
@@ -4483,7 +4493,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     // The window system may already be in the requested state.
     if ([_platformWindow respondsToSelector: @selector(isFullScreen)] &&
-        [(id) _platformWindow isFullScreen] == entering) {
+        [(id<NSWindowPlatformWindowQueries>) _platformWindow isFullScreen] == entering) {
         [self platformWindow: _platformWindow didChangeFullScreen: entering];
         return;
     }
@@ -4911,11 +4921,11 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     // application must not take the key status away from it (ordering a window in does not make
     // it key). A window the application asked to make key (-makeKeyWindow,
     // -makeKeyAndOrderFront:, a modal session) does take it.
-    id platform = [self platformWindow];
+    id<NSWindowPlatformWindowQueries> platform = [self platformWindow];
     BOOL requested = [platform respondsToSelector: @selector(takeKeyRequest)] &&
                      [platform takeKeyRequest];
     NSWindow *currentKey = [NSApp keyWindow];
-    id currentKeyPlatform = currentKey != self ? [currentKey platformWindow] : nil;
+    id<NSWindowPlatformWindowQueries> currentKeyPlatform = currentKey != self ? [currentKey platformWindow] : nil;
     BOOL keyStays = !requested &&
                     [currentKeyPlatform respondsToSelector: @selector(isFullyTransparent)] &&
                     [currentKeyPlatform isFullyTransparent];

@@ -27,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTabView.h>
 #import <AppKit/NSTabViewItem.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSWindow.h>
 #import <AppKit/NSViewController.h>
 #import <Foundation/NSKeyedArchiver.h>
 
