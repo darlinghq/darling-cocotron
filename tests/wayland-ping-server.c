@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2026 Lubos Dolezel
 // A minimal Wayland compositor for tests/appkit-wayland-ping.sh. It offers wl_compositor, wl_shm, one wl_output and
-// xdg_wm_base version 6, shows nothing, and tests whether the client answers xdg_wm_base.ping: from the first
+// xdg_wm_base version 6, shows nothing, and tests when the client answers xdg_wm_base.ping: from the first
 // acknowledged configure of a toplevel on, it sends a ping every 400 ms and prints "PONG <serial> <latency in ms>" for
-// each answer. 300 ms after the first acknowledgement it also configures the toplevel to 400x300 (a client whose
-// xdg_surface events are dispatched on the wrong thread shows that in the test). When the client disconnects, it prints
-// "SUMMARY pings=<n> answered=<n> max_latency_ms=<n>" and exits. Usage: wayland-ping-server <socket name>
+// each answer. The client announces the start and the end of the interval in which it blocks its main thread by
+// setting the toplevel's title to "STALL" and then "UNSTALLED"; the requests of one connection arrive in order, so the
+// server knows exactly which pongs came inside the interval. 300 ms after the first acknowledgement it also
+// configures the toplevel to 400x300. When the client disconnects, it prints
+//   SUMMARY idle_pings=<n> idle_answered=<n> idle_max_ms=<n> stall_pings=<n> stall_pongs=<n> late_pending=<n>
+//           late_answered=<n> late_max_ms=<n>
+// (one line): the pings sent before the interval that were due at its start and how many of them were answered by
+// then, the pings sent during the interval and the pongs that arrived during it, and the pings that were still
+// unanswered when the interval ended, how many of those were answered afterwards, and the slowest of these answers
+// counted from the end of the interval. Usage: wayland-ping-server <socket name>
 // Build: cc wayland-ping-server.c xdg-shell-server.c -lwayland-server (xdg-shell-server-protocol.h and xdg-shell-server.c
 // come from wayland-scanner server-header and private-code on xdg-shell.xml)
 #include <stdio.h>
@@ -19,15 +26,21 @@
 static struct wl_display *display;
 static struct wl_resource *wm_base, *toplevel_surface, *toplevel;
 static struct wl_event_source *ping_timer, *resize_timer;
-static int pings, answered;
-static long max_latency_ms;
+static int pings;
+static long idle_max_ms;
 static int resized;
+static int phase; // 0 before the client's stall, 1 during it, 2 after it
+static int idle_due, idle_answered, stall_pings, stall_pongs, late_pending, late_answered;
+static long late_max_ms;
+static struct timespec stalled_at, unstalled_at;
 
 #define MAX_PINGS 256
 static struct {
     uint32_t serial;
     struct timespec sent;
     int open;
+    int phase_sent; // 1: sent while the client was blocked
+    int pending_at_unstall;
 } outstanding[MAX_PINGS];
 
 static long ms_since(const struct timespec *then) {
@@ -41,6 +54,11 @@ static int send_ping(void *data) {
         uint32_t serial = wl_display_next_serial(display);
         outstanding[pings].serial = serial;
         outstanding[pings].open = 1;
+        // The client needs a moment after announcing the stall to block: only pings sent after that count.
+        outstanding[pings].phase_sent = phase == 1 && ms_since(&stalled_at) >= 250 ? 1 : 0;
+        outstanding[pings].pending_at_unstall = 0;
+        if (outstanding[pings].phase_sent)
+            stall_pings++;
         clock_gettime(CLOCK_MONOTONIC, &outstanding[pings].sent);
         pings++;
         xdg_wm_base_send_ping(wm_base, serial);
@@ -115,6 +133,28 @@ static void bind_output(struct wl_client *c, void *data, uint32_t version, uint3
 
 static void toplevel_parent(struct wl_client *c, struct wl_resource *r, struct wl_resource *p) {}
 static void toplevel_string(struct wl_client *c, struct wl_resource *r, const char *s) {}
+static void toplevel_title(struct wl_client *c, struct wl_resource *r, const char *s) {
+    if (strcmp(s, "STALL") == 0 && phase == 0) {
+        phase = 1;
+        clock_gettime(CLOCK_MONOTONIC, &stalled_at);
+        // A ping sent in the last 300 ms before the stall may not have had time to be answered: it is not due.
+        for (int i = 0; i < pings; i++) {
+            if (outstanding[i].open && ms_since(&outstanding[i].sent) < 300)
+                continue;
+            idle_due++;
+            if (!outstanding[i].open)
+                idle_answered++;
+        }
+    } else if (strcmp(s, "UNSTALLED") == 0 && phase == 1) {
+        phase = 2;
+        clock_gettime(CLOCK_MONOTONIC, &unstalled_at);
+        for (int i = 0; i < pings; i++)
+            if (outstanding[i].open) {
+                outstanding[i].pending_at_unstall = 1;
+                late_pending++;
+            }
+    }
+}
 static void toplevel_menu(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat, uint32_t serial,
                           int32_t x, int32_t y) {}
 static void toplevel_move(struct wl_client *c, struct wl_resource *r, struct wl_resource *seat, uint32_t serial) {}
@@ -123,7 +163,7 @@ static void toplevel_resize(struct wl_client *c, struct wl_resource *r, struct w
 static void toplevel_size(struct wl_client *c, struct wl_resource *r, int32_t w, int32_t h) {}
 static void toplevel_fullscreen(struct wl_client *c, struct wl_resource *r, struct wl_resource *output) {}
 static const struct xdg_toplevel_interface toplevel_impl = {
-    .destroy = destroy_request, .set_parent = toplevel_parent, .set_title = toplevel_string,
+    .destroy = destroy_request, .set_parent = toplevel_parent, .set_title = toplevel_title,
     .set_app_id = toplevel_string, .show_window_menu = toplevel_menu, .move = toplevel_move,
     .resize = toplevel_resize, .set_max_size = toplevel_size, .set_min_size = toplevel_size,
     .set_maximized = noop, .unset_maximized = noop, .set_fullscreen = toplevel_fullscreen,
@@ -160,9 +200,16 @@ static void wm_pong(struct wl_client *c, struct wl_resource *r, uint32_t serial)
         if (outstanding[i].open && outstanding[i].serial == serial) {
             long latency = ms_since(&outstanding[i].sent);
             outstanding[i].open = 0;
-            answered++;
-            if (latency > max_latency_ms)
-                max_latency_ms = latency;
+            if (phase == 0 && latency > idle_max_ms)
+                idle_max_ms = latency;
+            if (phase == 1 && outstanding[i].phase_sent)
+                stall_pongs++;
+            if (phase == 2 && outstanding[i].pending_at_unstall) {
+                late_answered++;
+                long since = ms_since(&unstalled_at);
+                if (since > late_max_ms)
+                    late_max_ms = since;
+            }
             printf("PONG %u %ld\n", serial, latency);
             fflush(stdout);
             return;
@@ -188,12 +235,10 @@ static void bind_wm(struct wl_client *c, void *data, uint32_t version, uint32_t 
 
 static struct wl_listener client_destroyed;
 static void client_gone(struct wl_listener *listener, void *data) {
-    // A ping sent just before the client left may have had no time to be answered: it does not count.
-    int counted = 0;
-    for (int i = 0; i < pings; i++)
-        if (!outstanding[i].open || ms_since(&outstanding[i].sent) >= 300)
-            counted++;
-    printf("SUMMARY pings=%d answered=%d max_latency_ms=%ld\n", counted, answered, max_latency_ms);
+    // The idle pings were counted when the stall began.
+    printf("SUMMARY idle_pings=%d idle_answered=%d idle_max_ms=%ld stall_pings=%d stall_pongs=%d late_pending=%d "
+           "late_answered=%d late_max_ms=%ld\n",
+           idle_due, idle_answered, idle_max_ms, stall_pings, stall_pongs, late_pending, late_answered, late_max_ms);
     fflush(stdout);
     wl_display_terminate(display);
 }

@@ -4,17 +4,17 @@
  Licensed under the MIT license, the same as the rest of this project.
 */
 // A compositor can ping a client (xdg_wm_base.ping) to find out whether it still responds, and treats one that does
-// not pong in time as hung. The Wayland backend must answer from a thread of its own, so a client whose main thread
-// is busy (here: blocked in sleep(), not running the run loop) still answers. Opens a window, lets it be shown and
-// resized by the compositor, then blocks the main thread. The harness appkit-wayland-ping.sh runs it against
-// wayland-ping-server, which pings repeatedly and measures the answers.
+// not pong in time as hung. The Wayland backend answers from the main thread's run loop only, so a client whose main
+// thread is busy (here: blocked in sleep(), not running the run loop) looks hung, as it does on macOS. Opens a window,
+// lets it be shown and resized by the compositor, runs the run loop for a while, blocks the main thread, then runs the
+// run loop again. The start and the end of the block are announced to the compositor by setting the window's title to
+// "STALL" and "UNSTALLED". The harness appkit-wayland-ping.sh runs it against wayland-ping-server, which pings
+// repeatedly and records which pings were answered when.
 //
 //   appkit-wayland-ping stall     blocks the main thread for 2.5 s
-//   appkit-wayland-ping fork      forks (and execs in one case) with the connection open, then blocks the main
-//                                 thread: the parent still answers, the children neither crash nor hang
+//   appkit-wayland-ping fork      forks (and execs in one case) with the connection open before the block and after
+//                                 it: the children neither crash nor hang, and the parent's connection keeps working
 //
-// The compositor also resizes the window; the program checks that the resize reaches the window's delegate on
-// the main thread, which is where the objects of the connection other than the one that is pinged are served.
 // Needs DARLING_APPKIT_BACKEND=wayland and WAYLAND_DISPLAY; prints SKIP otherwise. Build without ARC.
 #import <AppKit/AppKit.h>
 #include <pthread.h>
@@ -26,7 +26,6 @@
 
 static int failures;
 static int resizeCount;
-static int resizesOffMain;
 
 static void expect(BOOL condition, const char *what) {
     if (!condition) {
@@ -40,8 +39,6 @@ static void expect(BOOL condition, const char *what) {
 @implementation PingDelegate
 - (void) windowDidResize: (NSNotification *) note {
     resizeCount++;
-    if (![NSThread isMainThread])
-        resizesOffMain++;
 }
 @end
 
@@ -101,7 +98,11 @@ int main(int argc, char **argv) {
 
         if (fork_mode)
             forkChildren();
+        // Several pings arrive while the run loop is idle.
+        spin(2.0);
 
+        window.title = @"STALL";
+        spin(0.2); // the title is on the wire before the thread blocks
         // The main thread does not run the run loop for longer than several of the compositor's pings.
         printf("STALL\n");
         fflush(stdout);
@@ -110,10 +111,11 @@ int main(int argc, char **argv) {
         printf("UNSTALLED\n");
         fflush(stdout);
 
+        window.title = @"UNSTALLED";
         if (fork_mode)
             forkChildren();
-        spin(0.5);
-        expect(resizesOffMain == 0, "every resize was delivered on the main thread");
+        // The pings that arrived during the block are answered now.
+        spin(1.5);
         [window close];
         printf(failures == 0 ? "PASS\n" : "FAILED\n");
     }
