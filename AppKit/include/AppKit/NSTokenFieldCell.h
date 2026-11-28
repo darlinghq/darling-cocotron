@@ -31,7 +31,7 @@ typedef NS_ENUM(NSUInteger, NSTokenStyle) {
 // Names used before the modern spellings; plain constants, so Swift does not see them.
 enum {
     NSDefaultTokenStyle = NSTokenStyleDefault,
-    NSPlainTextTokenStyle = NSTokenStylePlainSquared,
+    NSPlainTextTokenStyle = NSTokenStyleNone,
     NSRoundedTokenStyle = NSTokenStyleRounded,
 };
 

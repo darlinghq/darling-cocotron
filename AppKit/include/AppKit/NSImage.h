@@ -243,9 +243,6 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
                              variableValue: (double) value;
 - (nullable NSImage *) imageWithSymbolConfiguration:
         (NSImageSymbolConfiguration *) configuration;
-// The spelling used by AppKit on macOS 26 and later.
-- (nullable NSImage *) imageByApplyingSymbolConfiguration:
-        (NSImageSymbolConfiguration *) configuration;
 @property(nonatomic, readonly) NSImageSymbolConfiguration *symbolConfiguration;
 // Private AppKit spelling of imageWithSystemSymbolName:accessibilityDescription:.
 + (null_unspecified instancetype) _imageWithSystemSymbolName: (null_unspecified NSString *) name;

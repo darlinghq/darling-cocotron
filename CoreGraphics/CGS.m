@@ -1172,14 +1172,6 @@ CGSConnectionID _CGSDefaultConnection(void)
 	return CGSMainConnectionID();
 }
 
-CGError CGSGetCursorScale(CGSConnectionID connection, CGFloat *scale)
-{
-	if (scale == NULL)
-		return kCGErrorRangeCheck;
-	*scale = 1.0;
-	return kCGErrorSuccess;
-}
-
 CGPoint CGSCurrentInputPointerPosition(void)
 {
 	return [_CGSConnectionForID(CGSMainConnectionID()) mouseLocation];

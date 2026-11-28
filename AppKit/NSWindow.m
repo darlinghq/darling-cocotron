@@ -131,8 +131,6 @@ const NSNotificationName NSWindowDidOrderOffScreenNotification =
         @"NSWindowDidOrderOffScreenNotification";
 const NSNotificationName NSWindowDidOrderOnScreenNotification =
         @"_NSWindowDidBecomeVisible";
-const NSNotificationName NSWindowDidOrderOnScreenAndFinishAnimatingNotification =
-        @"NSWindowDidOrderOnScreenAndFinishAnimatingNotification";
 // Not in the macOS SDK either. The names are the ones macOS 26.7.3 and
 // Mac OS X 10.14.4 give them; the first does not match its symbol.
 const NSNotificationName NSWindowWillOrderOnScreenNotification = @"_NSWindowWillBecomeVisible";

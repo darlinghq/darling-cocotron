@@ -509,7 +509,7 @@ static NSView *copyToolbarItemView(NSView *view) {
 
 - (void) setBadge: (NSItemBadge *) badge
 {
-    [badge retain];
+    badge = [badge copy];
     [NS_EXTRA(NSToolbarItem, self)->_badge release];
     NS_EXTRA(NSToolbarItem, self)->_badge = badge;
 }

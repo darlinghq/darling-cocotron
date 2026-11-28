@@ -104,7 +104,7 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 @property(nonatomic) NSInteger tag;
 @property(nonatomic, getter=isEnabled) BOOL enabled;
 @property(nullable, nonatomic, copy) NSString *toolTip;
-@property(nullable, nonatomic, retain) NSItemBadge *badge API_AVAILABLE(macos(26.0));
+@property(nullable, nonatomic, copy) NSItemBadge *badge API_AVAILABLE(macos(26.0));
 
 - (void) setTarget: (nullable id) target;
 

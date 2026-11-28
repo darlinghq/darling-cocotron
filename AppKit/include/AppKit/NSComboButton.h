@@ -18,21 +18,23 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSControl.h>
+#import <AppKit/NSImageCell.h>
 
 @class NSMenu, NSImage, NSString;
+
+NS_ASSUME_NONNULL_BEGIN
 
 typedef NS_ENUM(NSInteger, NSComboButtonStyle) {
     NSComboButtonStyleSplit = 0,
     NSComboButtonStyleUnified = 1,
 };
 
-// A control combining a primary action with a pull-down menu.
+// A button with a primary action and an additional menu.
 
 APPKIT_EXPORT
 @interface NSComboButton : NSControl {
-    NSComboButtonStyle _style;
+    NSComboButtonStyle _comboStyle;
     NSMenu *_comboMenu;
-    NSString *_comboTitle;
 }
 
 + (instancetype) comboButtonWithTitle: (NSString *) title
@@ -49,8 +51,12 @@ APPKIT_EXPORT
                                target: (nullable id) target
                                action: (nullable SEL) action;
 
-@property(nonatomic) NSComboButtonStyle style;
-@property(nullable, nonatomic, retain) NSMenu *menu;
-@property(nullable, nonatomic, copy) NSString *comboTitle;
+@property(copy) NSString *title;
+@property(nullable, strong) NSImage *image;
+@property NSImageScaling imageScaling;
+@property(strong) NSMenu *menu;
+@property NSComboButtonStyle style;
 
 @end
+
+NS_ASSUME_NONNULL_END

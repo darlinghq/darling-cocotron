@@ -229,14 +229,13 @@ APPKIT_EXPORT const NSNotificationName NSWindowDidEnterFullScreenNotification
         NS_SWIFT_NAME(NSWindow.didEnterFullScreenNotification);
 APPKIT_EXPORT const NSNotificationName NSWindowDidExitFullScreenNotification
         NS_SWIFT_NAME(NSWindow.didExitFullScreenNotification);
-// Window ordering notifications observed by Cocoa clients. Apple's public
-// headers do not expose all of them, so exposing them here lets clients use
-// one consistent spelling without redeclaring the constants themselves.
+#ifdef DARLING
+// not in the macOS SDK; code built against it declares them itself
 APPKIT_EXPORT const NSNotificationName NSWindowDidOrderOffScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowDidOrderOnScreenNotification;
-APPKIT_EXPORT const NSNotificationName NSWindowDidOrderOnScreenAndFinishAnimatingNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowWillOrderOffScreenNotification;
 APPKIT_EXPORT const NSNotificationName NSWindowWillOrderOnScreenNotification;
+#endif
 APPKIT_EXPORT const NSNotificationName NSWindowWillEnterFullScreenNotification
         NS_SWIFT_NAME(NSWindow.willEnterFullScreenNotification);
 APPKIT_EXPORT const NSNotificationName NSWindowWillExitFullScreenNotification

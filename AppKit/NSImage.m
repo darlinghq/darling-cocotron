@@ -2469,11 +2469,6 @@ static NSUInteger scaledRepCacheBytes(NSArray *cache) {
                       configuration: merged];
 }
 
-- (NSImage *) imageByApplyingSymbolConfiguration:
-        (NSImageSymbolConfiguration *) configuration {
-    return [self imageWithSymbolConfiguration: configuration];
-}
-
 - (NSImageSymbolConfiguration *) symbolConfiguration {
     return NS_EXTRA(NSImage, self)->_symbolConfiguration;
 }

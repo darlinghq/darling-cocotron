@@ -27,7 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // equivalent class for menu items.
 
 APPKIT_EXPORT
-@interface NSItemBadge : NSObject {
+@interface NSItemBadge : NSObject <NSCopying> {
     NSString *_text;
 }
 

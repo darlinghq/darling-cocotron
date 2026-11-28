@@ -19,6 +19,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSItemBadge.h>
 #import <Foundation/NSString.h>
+#import <Foundation/NSNumberFormatter.h>
 
 @interface NSItemBadge ()
 - (instancetype) initWithText: (NSString *) text;
@@ -30,8 +31,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 + (instancetype) badgeWithCount: (NSInteger) count
 {
-    return [[[self alloc] initWithText: [NSString stringWithFormat: @"%ld", (long)count]]
-            autorelease];
+    NSString *text = [NSNumberFormatter localizedStringFromNumber: [NSNumber numberWithInteger: count]
+                                                      numberStyle: NSNumberFormatterDecimalStyle];
+    return [[[self alloc] initWithText: text] autorelease];
 }
 
 + (instancetype) badgeWithText: (NSString *) text
@@ -52,6 +54,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
     _text = [text copy];
     return self;
+}
+
+- (id) copyWithZone: (NSZone *) zone
+{
+    return [self retain];
 }
 
 - (void) dealloc
