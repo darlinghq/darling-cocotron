@@ -1653,15 +1653,22 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
     if ([render preferredFormat: &drmFormat modifier: &modifier forSurface: _surface
                       needsAlpha: needsAlpha
                      pixelFormat: WaylandRenderPixelFormat8Bit]) {
+        // GPU drivers that import a linear dma-buf need its rows to start at a multiple of the
+        // hardware pitch alignment (up to 256 bytes); a compositor that samples the buffer with
+        // a GPU shows a window sheared when its row length is not so aligned. Pad the rows of
+        // the surface: the compositor is given the real stride of the surface, and the pixel
+        // copy below already honours it.
+        size_t pitch = ((size_t) stride + 255) & ~(size_t) 255;
+        size_t surfaceSize = pitch * (size_t) height;
         size_t pageSize = (size_t) getpagesize();
-        size_t allocSize = (size_t) ((size + pageSize - 1) / pageSize) * pageSize;
-        if (allocSize >= size) {
+        size_t allocSize = (size_t) ((surfaceSize + pageSize - 1) / pageSize) * pageSize;
+        if (allocSize >= surfaceSize) {
             NSMutableDictionary *properties = [NSMutableDictionary dictionary];
             [properties setObject: [NSNumber numberWithInt: width] forKey: (id) kIOSurfaceWidth];
             [properties setObject: [NSNumber numberWithInt: height] forKey: (id) kIOSurfaceHeight];
             [properties setObject: [NSNumber numberWithUnsignedInt: 4]
                            forKey: (id) kIOSurfaceBytesPerElement];
-            [properties setObject: [NSNumber numberWithInt: stride]
+            [properties setObject: [NSNumber numberWithUnsignedLong: pitch]
                            forKey: (id) kIOSurfaceBytesPerRow];
             [properties setObject: [NSNumber numberWithUnsignedLongLong: allocSize]
                            forKey: (id) kIOSurfaceAllocSize];
@@ -1678,7 +1685,7 @@ static int32_t WaylandToplevelLimit(CGFloat limit, CGFloat decoration) {
                                                 width: width
                                                height: height
                                                offset: 0
-                                               stride: stride];
+                                               stride: (uint32_t) pitch];
                 if (proxy != NULL) {
                     // create_immed has no dispatcher of its own. Without explicit synchronization
                     // the compositor still sends wl_buffer.release, which frees this slot.
