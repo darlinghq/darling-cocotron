@@ -168,6 +168,7 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 	// _NET_WM_PID and WM_CLIENT_MACHINE, so that other clients, and other Darling processes listing windows or
 	// following the focus, know whose window this is (the process' own windows are told from the others by it).
 	X11WindowOwnerPublish(_display, _window);
+	X11WindowOwnerPublishWindowID(_display, _window, windowID);
 
 	[self _setSizeHints];
 
@@ -179,6 +180,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 
 -(void) dealloc
 {
+	if (_holdsMenuInput)
+		[(CGSConnectionX11*) _connection menuWindowHidden: self];
 	// The surfaces destroy X11 child windows of ours, which have to go first.
 	// -[CGSWindow dealloc] would only release _surfaces after this body.
 	@synchronized (_surfaces)
@@ -187,6 +190,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 	}
 
 	[_title release];
+	[_menuService release];
+	[_menuPath release];
 
 	// The input context belongs to the X window.
 	[_inputContext destroy];
@@ -257,6 +262,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 		case kCGSOrderOut:
 			XUnmapWindow(_display, _window);
 			_toplevelShown = NO;
+			if (_holdsMenuInput)
+				[(CGSConnectionX11*) _connection menuWindowHidden: self];
 			if (_toplevel)
 			{
 				// The manager drops the fullscreen state of a withdrawn window, and nothing covers it or
@@ -272,6 +279,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 			XMapWindow(_display, _window);
 			_toplevelShown = YES;
 			_miniaturizedKnown = NO;
+			if (_holdsMenuInput)
+				[(CGSConnectionX11*) _connection menuWindowShown: self];
 			return kCGSErrorSuccess;
 		case kCGSOrderAbove:
 			// The window system asks for the contents with an expose event once it is shown
@@ -283,6 +292,8 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 			XSync(_display, False);
 			if (_displayOverlay)
 				[self _displayOverlayShown];
+			if (_holdsMenuInput)
+				[(CGSConnectionX11*) _connection menuWindowShown: self];
 			return kCGSErrorSuccess;
 		case kCGSOrderBelow:
 		default:
@@ -882,6 +893,7 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	// _NET_WM_PID and WM_CLIENT_MACHINE, so that other clients, and other Darling processes listing windows,
 	// know whose window this is.
 	X11WindowOwnerPublish(_display, window);
+	X11WindowOwnerPublishWindowID(_display, window, (unsigned) [self windowId]);
 
 	// Until the first frame, a translucent window shows its background: make that transparent rather than
 	// black.
@@ -920,12 +932,15 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 
 	// The new window has no shape, opaque region, input region or manager hints yet, is not shown and has
 	// received no expose event.
+	if (_holdsMenuInput)
+		[(CGSConnectionX11*) _connection menuWindowHidden: self];
 	_toplevelShown = NO;
 	_hasPendingExpose = NO;
 	_opaqueRegionSize = CGSizeZero;
 	_roundedShapeSet = NO;
 	_shapeEmpty = NO;
 	_ignoresMouse = NO;
+	[self _applyApplicationMenu];
 	_skipsTaskList = NO;
 	_wantsInputFocus = NO;
 	_fullscreenRequested = NO;
@@ -1611,6 +1626,145 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 	return kCGSErrorSuccess;
 }
 
+// Atoms KDE reads to find the menu of a window.
+#define APPMENU_SERVICE_NAME_PROPERTY "_KDE_NET_WM_APPMENU_SERVICE_NAME"
+#define APPMENU_OBJECT_PATH_PROPERTY "_KDE_NET_WM_APPMENU_OBJECT_PATH"
+
+-(void) _applyApplicationMenu
+{
+	if (!_toplevel || _window == None)
+		return;
+	Atom serviceAtom = XInternAtom(_display, APPMENU_SERVICE_NAME_PROPERTY, False);
+	Atom pathAtom = XInternAtom(_display, APPMENU_OBJECT_PATH_PROPERTY, False);
+	if (_menuService == nil || _menuPath == nil)
+	{
+		XDeleteProperty(_display, _window, serviceAtom);
+		XDeleteProperty(_display, _window, pathAtom);
+	}
+	else
+	{
+		NSData* service = [_menuService dataUsingEncoding: NSUTF8StringEncoding];
+		NSData* path = [_menuPath dataUsingEncoding: NSUTF8StringEncoding];
+		XChangeProperty(_display, _window, serviceAtom, XA_STRING, 8, PropModeReplace, (const unsigned char*) [service bytes],
+			(int) [service length]);
+		XChangeProperty(_display, _window, pathAtom, XA_STRING, 8, PropModeReplace, (const unsigned char*) [path bytes],
+			(int) [path length]);
+	}
+	XFlush(_display);
+}
+
+-(CGError) setToplevelApplicationMenuServiceName:(NSString*) service objectPath:(NSString*) path
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	[_menuService release];
+	[_menuPath release];
+	_menuService = [service copy];
+	_menuPath = [path copy];
+	[self _applyApplicationMenu];
+	return kCGSErrorSuccess;
+}
+
+// The menu's window holds the pointer and the keyboard of the connection while it is shown (see
+// -[CGSConnectionX11 menuWindowShown:]).
+-(CGError) setToplevelHoldsInputForMenu:(BOOL) holds
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	if (holds == _holdsMenuInput)
+		return kCGSErrorSuccess;
+	_holdsMenuInput = holds;
+	if (_toplevelShown)
+	{
+		if (holds)
+			[(CGSConnectionX11*) _connection menuWindowShown: self];
+		else
+			[(CGSConnectionX11*) _connection menuWindowHidden: self];
+	}
+	return kCGSErrorSuccess;
+}
+
+// The title bar the window shows (see CGSToplevelTitlebarKind): the manager's frame for a standard one, none for the
+// others, and the rounded corners of a window that has no frame because it shows no title bar of its own.
+// QUIRK: macOS draws a titled window that shows no title bar of its own with rounded corners of about 5 points; the window
+// manager draws none of that for a window it was asked not to decorate, so the corners are cut with the SHAPE extension,
+// which needs no compositor. Evidence: black-box observation of such windows on macOS 10.14.4 (tier 2).
+// Test: tests/coregraphics-x11-toplevel-decorations.sh (the corners of a hidden title bar are cut, those of the other kinds
+// are not).
+-(CGError) setToplevelTitlebarKind:(CGSToplevelTitlebarKind) kind
+{
+	if (!_toplevel)
+		return kCGErrorIllegalArgument;
+	_titlebarKind = kind;
+	CGError error = [self setToplevelDecorated: kind == kCGSToplevelTitlebarStandard];
+	if (error == kCGSErrorSuccess)
+		error = [self setToplevelCornerRadius: kind == kCGSToplevelTitlebarHidden ? kCGSToplevelHiddenTitlebarCornerRadius : 0];
+	XFlush(_display);
+	return error;
+}
+
+-(CGSToplevelTitlebarKind) toplevelTitlebarKind
+{
+	return _titlebarKind;
+}
+
+// The window manager frames a window the way the UI layer asked, whatever the preference.
+-(CGError) setToplevelPrefersClientDecoration:(BOOL) prefers
+{
+	return _toplevel ? kCGSErrorSuccess : kCGErrorIllegalArgument;
+}
+
+// Whether the manager lists the atom in _NET_SUPPORTED on the root window (EWMH).
+static BOOL X11ManagerSupports(Display* display, const char* name)
+{
+	Atom wanted = XInternAtom(display, name, False);
+	Atom type;
+	int format;
+	unsigned long count, after;
+	unsigned char* data = NULL;
+	BOOL found = NO;
+	if (XGetWindowProperty(display, DefaultRootWindow(display), XInternAtom(display, "_NET_SUPPORTED", False), 0, 4096, False,
+						   XA_ATOM, &type, &format, &count, &after, &data) == Success &&
+		data != NULL && type == XA_ATOM && format == 32)
+	{
+		Atom* atoms = (Atom*) data;
+		for (unsigned long i = 0; i < count && !found; i++)
+			found = atoms[i] == wanted;
+	}
+	if (data != NULL)
+		XFree(data);
+	return found;
+}
+
+// EWMH _NET_WM_MOVERESIZE. The pointer grab the press gave this client is released first, as EWMH asks, so that the
+// button's release goes to the window manager.
+-(CGError) beginToplevelMoveByWindowSystem
+{
+	if (!_toplevel || _window == None || _toplevelUnmanaged || !X11ManagerSupports(_display, "_NET_WM_MOVERESIZE"))
+		return kCGErrorFailure;
+
+	Window root, child;
+	int rootX, rootY, winX, winY;
+	unsigned int mask = 0;
+	if (!XQueryPointer(_display, _window, &root, &child, &rootX, &rootY, &winX, &winY, &mask) || !(mask & Button1Mask))
+		return kCGErrorFailure;
+
+	XUngrabPointer(_display, CurrentTime);
+	XEvent message = {0};
+	message.xclient.type = ClientMessage;
+	message.xclient.window = _window;
+	message.xclient.message_type = XInternAtom(_display, "_NET_WM_MOVERESIZE", False);
+	message.xclient.format = 32;
+	message.xclient.data.l[0] = rootX;
+	message.xclient.data.l[1] = rootY;
+	message.xclient.data.l[2] = 8; // _NET_WM_MOVERESIZE_MOVE
+	message.xclient.data.l[3] = Button1;
+	message.xclient.data.l[4] = 1; // source indication: application
+	XSendEvent(_display, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &message);
+	XFlush(_display);
+	return kCGSErrorSuccess;
+}
+
 // _NET_WM_ICON: for each icon its width and height and then its pixels, one long each, not premultiplied.
 -(CGError) setToplevelIcons:(NSArray<NSData*>*) icons
 {
@@ -1760,6 +1914,8 @@ static CGFloat toplevelDeviceExtent(CGFloat points, CGFloat scale)
 // reference to this object is gone.
 -(void) invalidate
 {
+	if (_holdsMenuInput)
+		[(CGSConnectionX11*) _connection menuWindowHidden: self];
 	if (_toplevel && _window != None)
 	{
 		@synchronized (_surfaces)

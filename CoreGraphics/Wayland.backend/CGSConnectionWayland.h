@@ -103,6 +103,7 @@ typedef enum {
 @public
     struct wl_display *_wlDisplay;
     struct wl_proxy *_compositor;
+    struct wl_proxy *_subcompositor; // wl_subcompositor, for the surfaces that draw GL next to a window's contents
     struct wl_proxy *_shm; // wl_shm, for the pixels of the windows that are drawn into
     struct wl_proxy *_wmBase;
     // What places and frames the windows beyond xdg-shell, NULL when the compositor offers none:
@@ -110,6 +111,10 @@ typedef enum {
     // (a position for a toplevel), xdg-decoration (the frame is the compositor's).
     struct wl_proxy *_layerShell, *_plasmaShell, *_decorationManager;
     uint32_t _plasmaShellVersion;
+    // KDE's appmenu protocol, when the compositor has it: a window tells where its application menu is (see
+    // -[CGSWindow setToplevelApplicationMenuServiceName:objectPath:]).
+    struct wl_proxy *_appMenuManager;
+    uint32_t _appMenuManagerName, _appMenuManagerVersion;
     // alpha-modifier-v1, when the compositor offers it: the opacity of a window's surface (-[CGSWindow setToplevelAlpha:]).
     struct wl_proxy *_alphaModifierManager;
     uint32_t _alphaModifierManagerName;
@@ -280,6 +285,11 @@ typedef enum {
 - (CGSWindowWayland *) windowForActivation;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
+// The serial of the left pointer button press that is held down on a surface of this connection, 0 when the button is not
+// down or the pointer is not in that surface.
+- (uint32_t) heldLeftPressSerialForSurface: (struct wl_proxy *) surface;
+// The window of a surface of this connection, nil for none.
+- (CGSWindowWayland *) toplevelForSurface: (struct wl_proxy *) surface;
 // Whether the surface is that of a display overlay (a window made with -becomeDisplayOverlay:), and the
 // surface of the display overlay shown last, NULL when there is none. The input of an overlay belongs to no
 // window of the application.

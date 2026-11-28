@@ -168,6 +168,8 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     BOOL isSheetPanel = isPanel && (_styleMask & NSDocModalWindowMask);
     if (isSheetPanel)
         _styleMask = NSBorderlessWindowMask;
+    // Until NSWindow says what the window shows of a title bar, a titled window has a standard one.
+    _titlebarKind = (_styleMask & NSWindowStyleMaskTitled) ? kCGSToplevelTitlebarStandard : kCGSToplevelTitlebarNone;
     _hasAlpha = [self wantsAlphaVisual];
     _appliedAlpha = 1.0;
     if (![self createXWindow]) {
@@ -260,6 +262,9 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     [_cgsWindow setToplevelStacksByLevel: !_dock && !_menuWindow];
     // The level may have been set before the window system window was made.
     [_cgsWindow setToplevelLevel: _level];
+    // The pointer and the keyboard are held for a menu while it is shown, so that a click outside it reaches the menu's
+    // tracking and not another client, and its keys reach it.
+    [_cgsWindow setToplevelHoldsInputForMenu: _menuWindow];
 
     [self updateWindowManagerHints];
 
@@ -270,7 +275,7 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     // A window of the application's own, not a popup or its menu bar, shows
     // the application's menu in the desktop's global menu.
     if (!_dock && !_overrideRedirect && !isMenuWindow)
-        [[x11disp appMenu] windowCreated: _window];
+        [[x11disp appMenu] windowCreated: _window cgsWindow: _cgsWindow];
 
     [self setStyleMaskInternal: _styleMask force: YES];
 
@@ -511,42 +516,30 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
     [self updateLayerPresentationHints];
 }
 
-// A window gets the window manager's full frame (with a title bar) when it
-// has a title bar (see -[NSWindow _hasTitlebarForStyleMask:]: a titled
-// window, or a resizable one in a program built against an old SDK); other
-// masks ask for no frame. The mask is passed in rather than read from
-// _styleMask because -setStyleMask: hands the new mask here before it stores
-// it.
-- (void) updateDecorationsForStyleMask: (NSUInteger) mask {
-    // A window that shows nothing of a title bar of its own (see NSWindow) has the content as all
-    // there is (the application draws its own header), so the window manager's frame would be a
-    // second title bar on top of it.
-    BOOL titlebarInvisible = [self hasInvisibleTitlebarForStyleMask: mask];
+// What the window shows of a title bar (see CGSToplevelTitlebarKind): a window gets the window manager's full frame when
+// NSWindow says it has a standard title bar (a titled window, or a resizable one in a program built against an old SDK);
+// other windows ask for no frame. A window that shows nothing of a title bar of its own has the content as all there is (the
+// application draws its own header), so the window manager's frame would be a second title bar on top of it.
+- (void) setTitlebarKind: (int) kind {
+    _titlebarKind = kind;
+    [self updateDecorationsForStyleMask: _styleMask];
+}
 
-    [_cgsWindow setToplevelDecorated: [self hasTitlebarForStyleMask: mask] && !_invisibleWithoutCompositor &&
-                                      !titlebarInvisible];
-    BOOL chromeless = titlebarInvisible && (mask & NSWindowStyleMaskTitled) != 0;
+- (void) updateDecorationsForStyleMask: (NSUInteger) mask {
+    // The window system's window follows the kind, but a window that is invisible for want of a compositor has no frame.
+    [_cgsWindow setToplevelTitlebarKind: _invisibleWithoutCompositor ? kCGSToplevelTitlebarNone : _titlebarKind];
+    BOOL chromeless = _titlebarKind == kCGSToplevelTitlebarHidden;
     if (_window != 0 && chromeless != _chromeless) {
         _chromeless = chromeless;
         // Whether the window positions itself depends on it.
         [self updateSizeHints: mask];
     }
     _chromeless = chromeless;
-    [self updateWindowShape];
 }
 
-- (BOOL) hasTitlebarForStyleMask: (NSUInteger) mask {
-    if ([_delegate respondsToSelector: @selector(_hasTitlebarForStyleMask:)])
-        return [(NSWindow *) _delegate _hasTitlebarForStyleMask: mask];
-    return (mask & NSWindowStyleMaskTitled) != 0;
-}
-
-- (BOOL) hasInvisibleTitlebarForStyleMask: (NSUInteger) mask {
-    return [_delegate respondsToSelector: @selector(_hasInvisibleTitlebarForStyleMask:)] &&
-           [(NSWindow *) _delegate _hasInvisibleTitlebarForStyleMask: mask];
-}
-
-// Corner radius, in points, of a window that has no frame of its own to be drawn by the window manager.
+// Corner radius, in points, of a window that has no frame of its own to be drawn by the window manager: the window
+// system's window cuts the corners (see kCGSToplevelTitlebarHidden) and the outline is drawn into the window
+// (-flushBuffer).
 // QUIRK: macOS draws such a window (a titled window that shows no title bar of its own, see
 // -[NSWindow _hasInvisibleTitlebarForStyleMask:]) with rounded corners of about 5 points, a thin outline and
 // a shadow; the window manager draws none of them for a window it was asked not to decorate. The corners are
@@ -554,15 +547,7 @@ static NSArray<NSData *> *windowIconImages(X11Display *display) {
 // a compositor; the shadow can only come from a compositor and is not drawn. Evidence: black-box observation
 // of such windows on macOS 10.14.4 (tier 2).
 // Test: tests/x11-chromeless-corners.sh (shape of the window), tests/x11-rounded-shape.c (the shape).
-static const int X11ChromelessCornerRadius = 5;
-
-// The window's corners are rounded while it is drawn without a frame (the window keeps an empty shape that
-// it was given for being invisible).
-- (void) updateWindowShape {
-    if (_window == 0)
-        return;
-    [_cgsWindow setToplevelCornerRadius: _chromeless ? X11ChromelessCornerRadius : 0];
-}
+static const int X11ChromelessCornerRadius = (int) kCGSToplevelHiddenTitlebarCornerRadius;
 
 // Whether the window promises a compositing manager that all of it is opaque, an occlusion hint it may
 // ignore; the window system's window follows its size.
@@ -731,8 +716,6 @@ static const int X11ChromelessCornerRadius = 5;
         [_cgsWindow orderWindow: kCGSOrderIn relativeTo: nil];
         _mapped = YES;
         _wasMapped = YES;
-        if (_menuWindow)
-            [(X11Display *) [NSDisplay currentDisplay] menuWindowMapped: self];
     }
 }
 
@@ -870,8 +853,6 @@ static const int X11ChromelessCornerRadius = 5;
         [_inputMethod release];
         _inputMethod = nil;
 
-        if (_menuWindow)
-            [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
         [(X11Display *) [NSDisplay currentDisplay] setWindow: nil
                                                        forID: _window];
         // CoreGraphics destroys the window system's window, with its children.
@@ -1042,8 +1023,6 @@ static const int X11ChromelessCornerRadius = 5;
         return;
     [_cgsWindow orderWindow: kCGSOrderOut relativeTo: nil];
     _mapped = NO;
-    if (_menuWindow)
-        [(X11Display *) [NSDisplay currentDisplay] menuWindowUnmapped: self];
     // A key request still waiting for the focus is void once the window is ordered out; otherwise a later
     // non-key orderFront would take focus. (The window system's window forgets what it was waiting for, and the
     // fullscreen state, which the window manager drops for a withdrawn window.)
@@ -1139,58 +1118,10 @@ static const int X11ChromelessCornerRadius = 5;
     XFlush(_display);
 }
 
-// Whether the window manager lists the atom in _NET_SUPPORTED on the root window (EWMH).
-static BOOL X11WindowManagerSupports(Display *display, const char *name) {
-    Atom wanted = XInternAtom(display, name, False);
-    Atom type;
-    int format;
-    unsigned long count, after;
-    unsigned char *data = NULL;
-    BOOL found = NO;
-    if (XGetWindowProperty(display, DefaultRootWindow(display),
-                           XInternAtom(display, "_NET_SUPPORTED", False), 0, 4096, False, XA_ATOM,
-                           &type, &format, &count, &after, &data) == Success &&
-        data != NULL && type == XA_ATOM && format == 32) {
-        Atom *atoms = (Atom *) data;
-        for (unsigned long i = 0; i < count && !found; i++)
-            found = atoms[i] == wanted;
-    }
-    if (data != NULL)
-        XFree(data);
-    return found;
-}
-
-// -[NSWindow performWindowDragWithEvent:]: the window manager moves the window
-// for as long as the left button stays down (EWMH _NET_WM_MOVERESIZE). The
-// pointer grab the press gave this client is released first, as EWMH asks, so
-// the button release goes to the window manager. NO when the window manager
-// cannot do it, the window is not managed, or the button is already up.
-- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event {
-    if (_window == 0 || _overrideRedirect ||
-        !X11WindowManagerSupports(_display, "_NET_WM_MOVERESIZE"))
-        return NO;
-
-    Window root, child;
-    int rootX, rootY, winX, winY;
-    unsigned int mask = 0;
-    if (!XQueryPointer(_display, _window, &root, &child, &rootX, &rootY, &winX, &winY, &mask) ||
-        !(mask & Button1Mask))
-        return NO;
-
-    XUngrabPointer(_display, CurrentTime);
-    XEvent message = {0};
-    message.xclient.type = ClientMessage;
-    message.xclient.window = _window;
-    message.xclient.message_type = XInternAtom(_display, "_NET_WM_MOVERESIZE", False);
-    message.xclient.format = 32;
-    message.xclient.data.l[0] = rootX;
-    message.xclient.data.l[1] = rootY;
-    message.xclient.data.l[2] = 8; // _NET_WM_MOVERESIZE_MOVE
-    message.xclient.data.l[3] = Button1;
-    message.xclient.data.l[4] = 1; // source indication: application
-    XSendEvent(_display, root, False, SubstructureRedirectMask | SubstructureNotifyMask, &message);
-    XFlush(_display);
-    return YES;
+// -[NSWindow performWindowDragWithEvent:]: the window manager moves the window for as long as the left button stays
+// down. NO when the window manager cannot do it, the window is not managed, or the button is already up.
+- (BOOL) moveByWindowSystem {
+    return [_cgsWindow beginToplevelMoveByWindowSystem] == kCGSErrorSuccess;
 }
 
 - (void) miniaturize {

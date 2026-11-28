@@ -74,6 +74,10 @@
 	// The connection's input method (see CGSX11InputMethod.h), made when the first window uses it.
 	CGSX11InputMethod* _inputMethodSupport;
 
+	// The windows of the menus that are shown (see -[CGSWindow setToplevelHoldsInputForMenu:]), oldest first (not retained
+	// beyond the window's own call to -menuWindowHidden:).
+	NSMutableArray* _openMenuWindows;
+
 @private
 	// The main monitor in root coordinates, cached for -mouseLocation. Guarded by
 	// @synchronized(self); the cache is dropped when XRandR reports a
@@ -154,6 +158,11 @@
 // dead keys and Compose sequences (see CGSX11InputMethod.h).
 -(CGSX11InputMethod*) _inputMethod;
 -(BOOL) _inputMethodComposes;
+
+// A window that holds the input for its menu was shown or hidden: the pointer and the keyboard are held for the newest
+// shown one, and let go when none is left.
+-(void) menuWindowShown:(CGSWindowX11*) window;
+-(void) menuWindowHidden:(CGSWindowX11*) window;
 
 @end
 

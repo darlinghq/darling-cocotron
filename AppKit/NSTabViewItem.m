@@ -17,6 +17,7 @@ COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
 IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
+#import <AppKit/NSAppearance.h>
 #import <AppKit/NSAttributedString.h>
 #import <AppKit/NSColor.h>
 #import <AppKit/NSFont.h>
@@ -26,6 +27,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSTabView.h>
 #import <AppKit/NSTabViewItem.h>
 #import <AppKit/NSView.h>
+#import <AppKit/NSWindow.h>
 #import <AppKit/NSViewController.h>
 #import <Foundation/NSKeyedArchiver.h>
 
@@ -219,8 +221,18 @@ NSString *_NSTruncatedStringWithAttributesInRect(NSString *string,
 - _labelColor {
     // QUIRK: the selected tab of an active window is drawn on a blue segment, so its label is white.
     // Evidence: black-box renders on macOS 10.14.4 (tier 2). Test: appkit-tabview-aqua.m
-    if ([_tabView selectedTabViewItem] == self && [[_tabView window] isKeyWindow])
+    BOOL selected = [_tabView selectedTabViewItem] == self;
+    BOOL active = [[_tabView window] isKeyWindow];
+
+    if (selected && active)
         return [NSColor whiteColor];
+    // QUIRK: under DarkAqua the labels are light on the translucent strip, and the label of the selected tab of an
+    // inactive window is dark on its light segment. Not documented. Evidence: black-box renders of NSTabView on
+    // macOS 10.14.4 (tier 2). Test: appkit-dark-segmented-tabs.m
+    if ([[[NSAppearance currentDrawingAppearance]
+            bestMatchFromAppearancesWithNames: [NSArray arrayWithObjects: NSAppearanceNameAqua, NSAppearanceNameDarkAqua, nil]]
+            isEqualToString: NSAppearanceNameDarkAqua])
+        return selected ? [NSColor colorWithCalibratedWhite: 0 alpha: 0.75] : [NSColor colorWithCalibratedWhite: 1 alpha: 0.85];
     return [NSColor blackColor];
 }
 

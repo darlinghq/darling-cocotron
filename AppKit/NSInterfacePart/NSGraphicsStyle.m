@@ -1257,9 +1257,14 @@ static NSBezierPath *NSAquaRoundedPath(NSRect rect, CGFloat radius) {
 - (void) drawTabViewBoxInRect: (NSRect) rect {
     NSBezierPath *path = NSAquaRoundedPath(NSInsetRect(rect, 0.5, 0.5), NSAquaTabCornerRadius);
 
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.04] setFill];
+    // QUIRK: under DarkAqua the box is a white fill at 3% with a white outline at about 15% (the light look
+    // with white in place of black). Not documented. Evidence: black-box renders of NSTabView on macOS 10.14.4
+    // at 3x (tier 2). Test: appkit-dark-segmented-tabs.m
+    BOOL dark = NSAquaDrawsDark();
+
+    [[NSColor colorWithCalibratedWhite: dark ? 1 : 0 alpha: dark ? 0.03 : 0.04] setFill];
     [path fill];
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07] setStroke];
+    [[NSColor colorWithCalibratedWhite: dark ? 1 : 0 alpha: dark ? 0.12 : 0.07] setStroke];
     [path setLineWidth: 1];
     [path stroke];
 }
@@ -1267,6 +1272,29 @@ static NSBezierPath *NSAquaRoundedPath(NSRect rect, CGFloat radius) {
 - (void) drawTabStripInRect: (NSRect) rect {
     BOOL flipped = [[NSGraphicsContext currentContext] isFlipped];
 
+    if (NSAquaDrawsDark()) {
+        // QUIRK: under DarkAqua the strip is translucent white (25%) over the window colour with a lighter line
+        // along its top edge, and its shadow is only the part outside it. Not documented. Evidence: black-box
+        // renders of NSTabView and NSSegmentedControl on macOS 10.14.4 at 3x (tier 2).
+        // Test: appkit-dark-segmented-tabs.m
+        NSBezierPath *shape = NSAquaRoundedPath(NSInsetRect(rect, 0.5, 0.5), NSAquaTabCornerRadius - 0.5);
+        NSBezierPath *shadow = NSAquaRoundedPath(NSOffsetRect(rect, 0, flipped ? 0.5 : -0.5), NSAquaTabCornerRadius);
+        CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+
+        [shadow appendBezierPath: shape];
+        [shadow setWindingRule: NSEvenOddWindingRule];
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.14] setFill];
+        [shadow fill];
+        [[NSColor colorWithCalibratedWhite: 1 alpha: 0.25] setFill];
+        [shape fill];
+        CGContextSaveGState(ctx);
+        [shape addClip];
+        [[NSColor colorWithCalibratedWhite: 1 alpha: 0.1] setFill];
+        NSRectFillUsingOperation(NSMakeRect(NSMinX(rect), flipped ? NSMinY(rect) : NSMaxY(rect) - 1, NSWidth(rect), 1),
+                                 NSCompositeSourceOver);
+        CGContextRestoreGState(ctx);
+        return;
+    }
     [[NSColor colorWithCalibratedWhite: 0 alpha: 0.14] setFill];
     [NSAquaRoundedPath(NSOffsetRect(rect, 0, flipped ? 0.5 : -0.5), NSAquaTabCornerRadius) fill];
     [[NSColor whiteColor] setFill];
@@ -1283,6 +1311,19 @@ static NSBezierPath *NSAquaRoundedPath(NSRect rect, CGFloat radius) {
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
     CGFloat blue[8] = {110 / 255.0, 163 / 255.0, 250 / 255.0, 1, 13 / 255.0, 97 / 255.0, 1, 1};
     CGFloat gray[8] = {0.93, 0.93, 0.93, 1, 0.87, 0.87, 0.87, 1};
+
+    if (NSAquaDrawsDark()) {
+        // QUIRK: under DarkAqua the selected tab is a deeper blue gradient in an active window (the blue of the dark
+        // default button) and translucent white (33% over the strip) in an inactive one. Not documented. Evidence:
+        // black-box renders of NSTabView and NSSegmentedControl on macOS 10.14.4 at 3x (tier 2): the inactive
+        // look; the active blue is that of the dark push button (tier 2 for the button, inference for the tab).
+        // Test: appkit-dark-segmented-tabs.m
+        CGFloat darkBlue[8] = {26 / 255.0, 98 / 255.0, 231 / 255.0, 1, 23 / 255.0, 89 / 255.0, 206 / 255.0, 1};
+        CGFloat darkGray[8] = {1, 1, 1, 0.33, 1, 1, 1, 0.33};
+
+        memcpy(blue, darkBlue, sizeof(blue));
+        memcpy(gray, darkGray, sizeof(gray));
+    }
     CGGradientRef gradient = CGGradientCreateWithColorComponents(space, active ? blue : gray, NULL, 2);
     NSRect inner = NSInsetRect(stripRect, 0.5, 0.5);
 
@@ -1298,6 +1339,13 @@ static NSBezierPath *NSAquaRoundedPath(NSRect rect, CGFloat radius) {
 }
 
 - (void) drawTabDividerInRect: (NSRect) rect {
+    if (NSAquaDrawsDark()) {
+        // QUIRK: under DarkAqua the divider is black at 16% over the strip. Not documented. Evidence: black-box
+        // renders on macOS 10.14.4 at 3x (tier 2). Test: appkit-dark-segmented-tabs.m
+        [[NSColor colorWithCalibratedWhite: 0 alpha: 0.16] setFill];
+        NSRectFillUsingOperation(rect, NSCompositeSourceOver);
+        return;
+    }
     [[NSColor colorWithCalibratedWhite: 0.898 alpha: 1] setFill];
     NSRectFill(rect);
 }
@@ -1749,9 +1797,14 @@ static void NSAquaDrawToggle(NSRect rect, BOOL radio, NSInteger state, BOOL high
 - (void) drawAquaBoxInRect: (NSRect) rect {
     NSBezierPath *path = [NSBezierPath bezierPathWithRoundedRect: NSInsetRect(rect, 0.5, 0.5) xRadius: 4 yRadius: 4];
 
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.04] setFill];
+    // QUIRK: under DarkAqua the box is a white fill at 3% with a white outline at about 15% (the light look
+    // with white in place of black). Not documented. Evidence: black-box renders of NSTabView on macOS 10.14.4
+    // at 3x (tier 2). Test: appkit-dark-segmented-tabs.m
+    BOOL dark = NSAquaDrawsDark();
+
+    [[NSColor colorWithCalibratedWhite: dark ? 1 : 0 alpha: dark ? 0.03 : 0.04] setFill];
     [path fill];
-    [[NSColor colorWithCalibratedWhite: 0 alpha: 0.07] setStroke];
+    [[NSColor colorWithCalibratedWhite: dark ? 1 : 0 alpha: dark ? 0.12 : 0.07] setStroke];
     [path setLineWidth: 1];
     [path stroke];
 }

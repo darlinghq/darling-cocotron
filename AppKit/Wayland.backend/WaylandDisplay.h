@@ -97,11 +97,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     BOOL _mappingForActivation;
     uint32_t _viewporterName, _fractionalScaleManagerName;
     struct wl_proxy *_subcompositor;
-    // KDE's appmenu protocol, when the compositor has it: each toplevel tells it
-    // where on the session bus the application's main menu is (see
-    // -[WaylandWindow updateApplicationMenu]).
-    struct wl_proxy *_appMenuManager;
-    uint32_t _appMenuManagerName, _appMenuManagerVersion;
     // KDE's plasma-shell protocol, when the compositor has it: a toplevel that is not an application
     // window asks it to keep the window out of task lists and switchers (xdg-shell has no way to).
     struct wl_proxy *_plasmaShell;
@@ -110,7 +105,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     WaylandToplevelIcons *_toplevelIcons;
     // The exported main menu; nil while the menu is drawn inside the windows.
     WaylandAppMenu *_appMenu;
-    BOOL _desktopMenuProbed, _desktopMenuPresent;
     BOOL _eglAvailable;
     struct wl_proxy *_shm;
     struct wl_proxy *_wmBase;

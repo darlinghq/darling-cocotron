@@ -55,6 +55,9 @@
 	NSArray<CGSScreen*>* _reportedScreens;
 	// Non-zero while this process changes a mode itself, which it reports itself.
 	_Atomic int _suppressLayoutReports;
+	// Whether the desktop shows application menus, as the framework above said (see -setGlobalMenuAvailable:). Guarded by
+	// @synchronized(self).
+	BOOL _globalMenuAvailable;
 }
 -(instancetype) initWithConnectionID:(CGSConnectionID)connId;
 -(void) dealloc;
@@ -62,6 +65,9 @@
 // A snapshot of the connection's windows (the caller releases it)
 -(NSArray<CGSWindow*>*) copyAllWindows;
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
+// A new window id: a positive number that fits 32 bits and that no window of any process of the system has, like the
+// ids the window server hands out (windows of different processes are told apart by their ids).
+-(CGSWindowID) _allocateWindowID;
 // A toplevel window for the application's UI layer (see CGSWindow.h), or nil when the window system cannot make
 // one, which is the default. The window's id is the number CGWindow gives the UI layer's platform window.
 -(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes;
@@ -189,6 +195,12 @@
 // Whether the mouse is disassociated from the cursor with the cursor held (the frozen position in
 // *frozenRoot, window system pixels), and whether the application wants that; for the framework above.
 -(BOOL) relativeMouseState:(BOOL*)requested frozenRoot:(CGPoint*)frozenRoot;
+// What the window system does for the application's menu (see _CGSNativeConnectionCarriesApplicationMenuAddress() and
+// the ones that follow it). The defaults are for a window system that does neither.
+-(BOOL) carriesApplicationMenuAddress;
+-(BOOL) placesMenuBar;
+-(BOOL) globalMenuAvailable;
+-(void) setGlobalMenuAvailable:(BOOL) available;
 // The windows the pointer could be confined to changed.
 -(void) pointerWindowsChanged;
 -(void) selectTouchInputOnNativeWindow:(unsigned long)window;

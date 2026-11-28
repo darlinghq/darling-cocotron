@@ -34,6 +34,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // window, or a resizable one in a program built against an SDK older than
 // 10.7 (see the QUIRK in NSWindow.m).
 - (BOOL) _hasTitlebarForStyleMask: (NSUInteger) styleMask;
+// The CGSToplevelTitlebarKind of the window, and telling the platform window of it.
+- (int) _titlebarKindForStyleMask: (NSUInteger) styleMask;
+- (void) _updatePlatformTitlebarKindForStyleMask: (NSUInteger) styleMask;
 // What the window is to the window system: a DarlingWindowPresentation (see
 // DarlingWindowPresentation.h), decided from the window's current state.
 - (int) _windowPresentation;

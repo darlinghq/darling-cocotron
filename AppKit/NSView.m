@@ -60,6 +60,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSLayoutGuide.h>
 #import "NSLayoutConstraintInternal.h"
+
+// Private to the print operation: whether a page of its PrintCore session is open
+@interface NSPrintOperation (NSViewPrinting)
+- (BOOL) _printCorePageIsOpen;
+- (BOOL) _usesPrintCore;
+@end
+
+@interface NSPrintInfo (NSViewPrinting)
+- (NSRect) _printableArea;
+@end
 #import "NSViewLayoutInternal.h"
 #import <AppKit/NSTextInput.h>
 #import <AppKit/NSTextInputClient.h>
@@ -3086,6 +3096,31 @@ static void removeRectFromInvalidInVisibleRect(NSView *self, NSRect rect,
     }
 }
 
+- (BOOL) _hasOnlyPartialInvalidRects {
+    return NS_EXTRA(NSView, self)->_needsDisplay &&
+           NS_EXTRA(NSView, self)->_invalidRectCount > 0;
+}
+
+- (void) _clipInvalidRectsToRect: (NSRect) clipRect {
+    int count = NS_EXTRA(NSView, self)->_invalidRectCount;
+    NSRect *rects = NS_EXTRA(NSView, self)->_invalidRects;
+    int out = 0;
+
+    for (int i = 0; i < count; i++) {
+        NSRect r = NSIntersectionRect(rects[i], clipRect);
+        if (!NSIsEmptyRect(r))
+            rects[out++] = r;
+    }
+    NS_EXTRA(NSView, self)->_invalidRectCount = out;
+    if (out == 0) {
+        if (rects != NULL) {
+            NSZoneFree(NULL, rects);
+            NS_EXTRA(NSView, self)->_invalidRects = NULL;
+        }
+        NS_EXTRA(NSView, self)->_needsDisplay = NO;
+    }
+}
+
 static void clearRectsBeingRedrawn(NSView *self) {
     if (NS_EXTRA(NSView, self)->_rectsBeingRedrawn) {
         NSZoneFree(NULL, NS_EXTRA(NSView, self)->_rectsBeingRedrawn);
@@ -3494,9 +3529,46 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
 
 - (void) _displayIfNeededWithoutViewWillDraw {
     if ([self needsDisplay]) {
+        int count = NS_EXTRA(NSView, self)->_invalidRectCount;
+        if (count > 1 && count <= 16) {
+            NSRect rects[16];
+            memcpy(rects, NS_EXTRA(NSView, self)->_invalidRects, sizeof(NSRect) * count);
+            BOOL merged;
+            do {
+                merged = NO;
+                for (int i = 0; i < count; i++) {
+                    for (int j = i + 1; j < count; j++) {
+                        if (NSIntersectsRect(rects[i], rects[j])) {
+                            rects[i] = NSUnionRect(rects[i], rects[j]);
+                            rects[j] = rects[--count];
+                            j = i;
+                            merged = YES;
+                        }
+                    }
+                }
+            } while (merged);
+            if (count > 1) {
+                NSRect uni = rects[0];
+                CGFloat sumArea = rects[0].size.width * rects[0].size.height;
+                for (int i = 1; i < count; i++) {
+                    uni = NSUnionRect(uni, rects[i]);
+                    sumArea += rects[i].size.width * rects[i].size.height;
+                }
+                CGFloat uniArea = uni.size.width * uni.size.height;
+                if (uniArea > sumArea * 1.5) {
+                    for (int i = 0; i < count; i++)
+                        [self displayRect: rects[i]];
+                    clearNeedsDisplay(self);
+                    goto display_subviews;
+                }
+            }
+        }
         [self displayRect: unionOfInvalidRects(self)];
         clearNeedsDisplay(self);
     }
+
+display_subviews:
+    ;
 
     SubviewSnapshot snapshot;
     takeSubviewSnapshot(self, &snapshot);
@@ -3726,34 +3798,49 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
 - (void) beginPageInRect: (NSRect) rect atPlacement: (NSPoint) placement {
     CGContextRef graphicsPort = NSCurrentGraphicsPort();
     CGRect mediaBox = NSMakeRect(0, 0, rect.size.width, rect.size.height);
-    NSPrintInfo *printInfo = [[NSPrintOperation currentOperation] printInfo];
-    NSRect imageableRect = [printInfo imageablePageBounds];
+    NSPrintOperation *operation = [NSPrintOperation currentOperation];
+    CGFloat scale = [self _printScaleOfOperation: operation];
     CGAffineTransform transform = CGAffineTransformIdentity;
 
     [NSCurrentFocusStack() addObject: self];
 
-    CGContextBeginPage(graphicsPort, &mediaBox);
+    // A page of a PrintCore job is begun by the operation, in the session that owns the context; a second begin
+    // would leave that page open
+    if (![operation _printCorePageIsOpen])
+        CGContextBeginPage(graphicsPort, &mediaBox);
     CGContextSaveGState(graphicsPort);
 
-    transform = CGAffineTransformIdentity;
+    // The rectangle of the view lands on the page at the placement (its lower left corner, or its upper left
+    // one for a flipped view), scaled by the scaling factor of the print info, and nothing outside it is drawn.
+    CGContextClipToRect(graphicsPort, CGRectMake(placement.x, placement.y, rect.size.width * scale,
+                                                 rect.size.height * scale));
     if ([self isFlipped]) {
-        transform = CGAffineTransformMake(1, 0, 0, -1, 0,
-                                          [printInfo paperSize].height);
+        transform = CGAffineTransformTranslate(transform, placement.x, placement.y + rect.size.height * scale);
+        transform = CGAffineTransformScale(transform, scale, -scale);
+    } else {
+        transform = CGAffineTransformTranslate(transform, placement.x, placement.y);
+        transform = CGAffineTransformScale(transform, scale, scale);
     }
-
-    transform = CGAffineTransformTranslate(transform, -rect.origin.x,
-                                           -rect.origin.y);
+    transform = CGAffineTransformTranslate(transform, -rect.origin.x, -rect.origin.y);
 
     CGContextConcatCTM(graphicsPort, transform);
 
     [self setUpGState];
 }
 
+// The scale the pages of a printing operation have; the PDF and EPS operations are made at the size of the view.
+- (CGFloat) _printScaleOfOperation: (NSPrintOperation *) operation {
+    CGFloat scale = [operation _usesPrintCore] ? [[operation printInfo] scalingFactor] : 1;
+
+    return scale > 0 ? scale : 1;
+}
+
 - (void) endPage {
     CGContextRef graphicsPort = NSCurrentGraphicsPort();
 
     CGContextRestoreGState(graphicsPort);
-    CGContextEndPage(graphicsPort);
+    if (![[NSPrintOperation currentOperation] _printCorePageIsOpen])
+        CGContextEndPage(graphicsPort);
     [NSCurrentFocusStack() removeLastObject];
 }
 
@@ -3813,8 +3900,26 @@ static void releaseSubviewSnapshot(SubviewSnapshot *snapshot) {
     return NO;
 }
 
+// The place of a page of the view on the paper: the upper left corner of the printable area (the page inside its
+// margins), or the middle of it in the direction the print info centers in. The rectangle is as large on the paper
+// as the scaling factor makes it. The operations that make PDF or EPS data have no paper: the rectangle is the page.
 - (NSPoint) locationOfPrintRect: (NSRect) rect {
-    return NSZeroPoint;
+    NSPrintOperation *operation = [NSPrintOperation currentOperation];
+
+    if (operation == nil || ![operation _usesPrintCore])
+        return NSZeroPoint;
+
+    NSPrintInfo *printInfo = [operation printInfo];
+    NSRect area = [printInfo _printableArea];
+    CGFloat scale = [self _printScaleOfOperation: operation];
+    CGFloat width = rect.size.width * scale;
+    CGFloat height = rect.size.height * scale;
+    NSPoint location;
+
+    location.x = [printInfo isHorizontallyCentered] ? NSMinX(area) + (NSWidth(area) - width) / 2 : NSMinX(area);
+    location.y = [printInfo isVerticallyCentered] ? NSMinY(area) + (NSHeight(area) - height) / 2
+                                                   : NSMaxY(area) - height;
+    return location;
 }
 
 - (NSRect) rectForPage: (NSInteger) page {

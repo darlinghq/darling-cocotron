@@ -18,6 +18,7 @@
 */
 #import "CGSConnectionX11.h"
 #import "CGSWindowX11.h"
+#import "X11DockSupport.h"
 #import "CGSX11Keyboard.h"
 #import "CGSX11Pointer.h"
 #import "CGSX11Selection.h"
@@ -212,6 +213,70 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 	return self;
 }
 
+#pragma mark - Menu grabs
+
+// Holds the pointer for the application while a menu is open, on the newest menu window. Relative mouse mode holds the
+// pointer already; it is not disturbed, an open menu then only sees the pointer inside its windows. The observer's grab
+// of its own (the pointer confined to a fullscreen window) is replaced, which it is told.
+-(void) grabPointerForMenus
+{
+	if ([_openMenuWindows count] == 0 || _CGSNativeConnectionRelativeMouseState(NULL, NULL))
+		return;
+	Window target = ((CGSWindowX11*) [_openMenuWindows lastObject])->_window;
+	if (target == None)
+		return;
+	id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
+	if ([observer respondsToSelector: @selector(nativeConnectionMenuGrabChanged:)])
+		[observer nativeConnectionMenuGrabChanged: YES];
+	XGrabPointer(_display, target, True, ButtonPressMask | ButtonReleaseMask | PointerMotionMask, GrabModeAsync, GrabModeAsync,
+		None, None, CurrentTime);
+}
+
+// Holds the keyboard for the application while a menu is open, so that its keys reach the menu whichever client has the
+// input focus (an application that only owns the menu bar has none). The keys still go to the application's own windows
+// while one has the focus (owner_events), and the focus events the grab causes are not taken for the focus moving.
+-(void) grabKeyboardForMenus
+{
+	if ([_openMenuWindows count] == 0)
+		return;
+	Window target = ((CGSWindowX11*) [_openMenuWindows lastObject])->_window;
+	if (target == None)
+		return;
+	XGrabKeyboard(_display, target, True, GrabModeAsync, GrabModeAsync, CurrentTime);
+}
+
+-(void) menuWindowShown:(CGSWindowX11*) window
+{
+	if (_openMenuWindows == nil)
+		_openMenuWindows = [NSMutableArray new];
+	[_openMenuWindows removeObjectIdenticalTo: window];
+	[_openMenuWindows addObject: window];
+	[self grabPointerForMenus];
+	[self grabKeyboardForMenus];
+	XFlush(_display);
+}
+
+-(void) menuWindowHidden:(CGSWindowX11*) window
+{
+	if ([_openMenuWindows indexOfObjectIdenticalTo: window] == NSNotFound)
+		return;
+	[_openMenuWindows removeObjectIdenticalTo: window];
+	if ([_openMenuWindows count] > 0)
+	{
+		[self grabPointerForMenus];
+		[self grabKeyboardForMenus];
+		XFlush(_display);
+		return;
+	}
+	XUngrabKeyboard(_display, CurrentTime);
+	if (!_CGSNativeConnectionRelativeMouseState(NULL, NULL))
+		XUngrabPointer(_display, CurrentTime);
+	id<CGSNativeConnectionObserver> observer = [CGSConnection nativeObserver];
+	if ([observer respondsToSelector: @selector(nativeConnectionMenuGrabChanged:)])
+		[observer nativeConnectionMenuGrabChanged: NO];
+	XFlush(_display);
+}
+
 -(void) dealloc
 {
 	pthread_mutex_lock(&g_processConnectionLock);
@@ -228,6 +293,7 @@ static void beforeWaitingCallback(CFRunLoopObserverRef observer, CFRunLoopActivi
 	// The input contexts of the windows are gone with them; the input method goes before XCloseDisplay().
 	[_inputMethodSupport release];
 	// Closing the display releases the grabs
+	[_openMenuWindows release];
 	[_hotKeys release];
 	[_grabbedHotKeys release];
 	[_pressedHotKeys release];
@@ -581,10 +647,11 @@ static double windowOpacity(Display* display, Window window)
 		CFDictionaryRef boundsDictionary = CGRectCreateDictionaryRepresentation(bounds);
 		BOOL own = owner == self_pid;
 
-		// A toplevel window of the UI layer is listed under its CGS window id, which is the number the UI layer
-		// gives the window.
+		// A window of a Darling process is listed under its CGS window id, which is the number its owner gives the
+		// window (the UI layer's window number too): the owner published it on the window. A window that does not
+		// say (one of the UI layer's that is not a CGS window, or of another program) has the id of its X window.
 		CGSWindowX11* toplevel = own ? [self _cgsWindowForNativeWindow: client] : nil;
-		NSInteger number = [toplevel isToplevel] ? (NSInteger) toplevel.windowId : 0;
+		NSInteger number = toplevel != nil ? (NSInteger) toplevel.windowId : (NSInteger) X11WindowOwnerWindowID(_display, client);
 		if (number == 0 && own)
 			number = [CGWindow windowNumberForPlatformWindowID: client];
 		if (number == 0)
@@ -2028,6 +2095,19 @@ static void crtcBoundingBox(Display* display, XRRScreenResources* resources, RRC
 	return [_pointer relativeMouseRequested: requested frozenRoot: frozenRoot];
 }
 
+// The address of an application menu is a property of the window.
+-(BOOL) carriesApplicationMenuAddress
+{
+	return YES;
+}
+
+// The menu bar of an application is a dock window, which only a window manager that handles docks places at the top of the
+// screen (see X11DockSupport.h).
+-(BOOL) placesMenuBar
+{
+	return X11WindowManagerPlacesDocks(_display);
+}
+
 -(void) pointerWindowsChanged
 {
 	[_pointer windowsChanged];
@@ -2174,7 +2254,7 @@ static BOOL windowBelongsToProcess(Display* display, Window window, int depth)
 
 -(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes
 {
-	CGSWindowID windowID = _nextWindowId++;
+	CGSWindowID windowID = [self _allocateWindowID];
 	CGSWindowX11* window = [[CGSWindowX11 alloc] initToplevelWithAttributes: attributes
 		connection: self
 		windowID: windowID];
@@ -2197,7 +2277,7 @@ static BOOL windowBelongsToProcess(Display* display, Window window, int depth)
 
 -(CGSWindow*) newWindow:(CGSRegionRef)region
 {
-	CGSWindowID windowID = _nextWindowId++;
+	CGSWindowID windowID = [self _allocateWindowID];
 	CGSWindowX11* window = [[CGSWindowX11 alloc] initWithRegion: region
 		connection: self
 		windowID: windowID];

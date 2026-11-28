@@ -60,6 +60,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSWindowAnimationContext.h>
 #import <ApplicationServices/ApplicationServices.h>
 #import <CoreGraphics/CGWindowPrivate.h>
+#import <CoreGraphics/CGSWindow.h>
+#import <CoreGraphics/CGWindow.h>
+#import <CoreGraphics/CGDirectDisplay.h>
+#include <unistd.h>
 #include <math.h>
 #import "NSGestureRecognizer-Private.h"
 #import "private-include/AppKit/NSEventTime.h"
@@ -162,9 +166,6 @@ NSInteger NSBitsPerPixelFromDepth(NSWindowDepth depth) {
 
 @interface CGWindow (private)
 - (void) dirtyRect: (CGRect) rect;
-// Optional, for backends whose window system can do it.
-- (void) updateDecorationsForStyleMask: (NSUInteger) styleMask;
-- (BOOL) moveByWindowManagerForEvent: (NSEvent *) event;
 @end
 
 @interface NSToolbar (NSToolbar_privateForWindow)
@@ -503,6 +504,16 @@ static void runPendingSourcesDuringDrag(NSTimeInterval budget) {
 @end
 
 // The SPI protocol of views that register with -registerScrollViewSeparatorTrackingAdapter:.
+// What a platform window can be asked, once it says it can answer (-respondsToSelector:); the replies are BOOLs, and a
+// call that the compiler cannot see the declaration of reads them as pointers
+@protocol NSWindowPlatformWindowQueries <NSObject>
+@optional
+- (BOOL) isFullScreen;
+- (BOOL) takeKeyRequest;
+- (BOOL) isFullyTransparent;
+- (void) presentationChanged;
+@end
+
 @protocol NSScrollViewSeparatorTrackingAdapter
 - (NSRect) scrollViewFrame;
 - (BOOL) hasScrolledContentsUnderTitlebar;
@@ -723,16 +734,64 @@ static NSString *menuBarStylePreference(void) {
     return 0;
 }
 
+// The windows that are ordered in, as CoreGraphics lists them: front to back, each by its window number (which is the
+// number of the NSWindow of this application that it is). AppKit has no list of its own, so what other applications show
+// is seen as well.
+static NSArray *onScreenWindowDescriptions(void) {
+    CFArrayRef list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly, kCGNullWindowID);
+
+    return [(NSArray *) list autorelease];
+}
+
+// The window at a point of the screen (the lower left corner of the main screen is its origin, as for all of AppKit's
+// points): the frontmost window below the given one that has the point, or 0 when no window has it. A window number
+// that names no window starts at the frontmost window.
 + (NSInteger) windowNumberAtPoint: (NSPoint) point
         belowWindowWithWindowNumber: (NSInteger) window
 {
-    NSUnimplementedMethod();
+    NSArray *descriptions = onScreenWindowDescriptions();
+    CGFloat mainHeight = CGDisplayBounds(CGMainDisplayID()).size.height;
+    CGPoint cgPoint = CGPointMake(point.x, mainHeight - point.y);
+    NSUInteger start = 0;
+
+    if (window > 0) {
+        for (NSUInteger i = 0; i < [descriptions count]; i++) {
+            NSNumber *number = [[descriptions objectAtIndex: i] objectForKey: (NSString *) kCGWindowNumber];
+
+            if ([number integerValue] == window) {
+                start = i + 1;
+                break;
+            }
+        }
+    }
+
+    for (NSUInteger i = start; i < [descriptions count]; i++) {
+        NSDictionary *description = [descriptions objectAtIndex: i];
+        CGRect bounds = CGRectNull;
+
+        if (!CGRectMakeWithDictionaryRepresentation((CFDictionaryRef) [description objectForKey: (NSString *) kCGWindowBounds],
+                                                    &bounds))
+            continue;
+        if (CGRectContainsPoint(bounds, cgPoint))
+            return [[description objectForKey: (NSString *) kCGWindowNumber] integerValue];
+    }
     return 0;
 }
 
+// The numbers of the windows that are ordered in, front to back: the application's own, or, for
+// NSWindowNumberListAllApplications, every application's. There is a single space here, so the all-spaces option
+// changes nothing.
 + (NSArray *) windowNumbersWithOptions: (NSWindowNumberListOptions) options {
-    NSUnimplementedMethod();
-    return nil;
+    NSMutableArray *numbers = [NSMutableArray array];
+    pid_t pid = getpid();
+
+    for (NSDictionary *description in onScreenWindowDescriptions()) {
+        if (!(options & NSWindowNumberListAllApplications) &&
+            [[description objectForKey: (NSString *) kCGWindowOwnerPID] intValue] != pid)
+            continue;
+        [numbers addObject: [description objectForKey: (NSString *) kCGWindowNumber]];
+    }
+    return numbers;
 }
 
 // -_autosaveFrameKeyWithName: gives a saved frame one defaults key per screen
@@ -1024,6 +1083,7 @@ static NSString *menuBarStylePreference(void) {
     if (_platformWindow != nil)
         return;
     _platformWindow = [[NSDisplay currentDisplay] newWindowWithDelegate: self];
+    [self _updatePlatformTitlebarKindForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
 
     // A window recreated from saved state can have its session name before the native window
     // exists. The session request must precede the first surface commit.
@@ -1041,8 +1101,21 @@ static NSString *menuBarStylePreference(void) {
     return [[self platformWindow] cgContext];
 }
 
+// What the window shows of a title bar, for the window system's window to follow (see CGSToplevelTitlebarKind): none, the
+// standard one, or a title bar that is there but shows nothing of its own (the application draws its header).
+- (int) _titlebarKindForStyleMask: (NSUInteger) styleMask {
+    if (![self _hasTitlebarForStyleMask: styleMask])
+        return kCGSToplevelTitlebarNone;
+    return [self _hasInvisibleTitlebarForStyleMask: styleMask] ? kCGSToplevelTitlebarHidden : kCGSToplevelTitlebarStandard;
+}
+
+- (void) _updatePlatformTitlebarKindForStyleMask: (NSUInteger) styleMask {
+    [_platformWindow setTitlebarKind: [self _titlebarKindForStyleMask: styleMask]];
+}
+
 - (void) setStyleMask: (NSWindowStyleMask) mask {
     NS_EXTRA(NSWindow, self)->_styleMask = mask;
+    [self _updatePlatformTitlebarKindForStyleMask: mask];
     [_platformWindow setStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
     // What the frame adds around the content, and so the frame size limits, depend on the style.
     [self _sizeLimitsChanged];
@@ -1728,8 +1801,7 @@ static NSString *menuBarStylePreference(void) {
     // server does on macOS: the window manager or compositor then keeps the
     // window under the pointer until the button is released, and the release
     // goes to it rather than to the application.
-    if ([_platformWindow respondsToSelector: @selector(moveByWindowManagerForEvent:)] &&
-        [_platformWindow moveByWindowManagerForEvent: event])
+    if ([_platformWindow moveByWindowSystem])
         return;
 
     // Otherwise follow the pointer in screen coordinates. An event's location in the
@@ -2439,7 +2511,7 @@ static NSString *menuBarStylePreference(void) {
     NS_EXTRA(NSWindow, self)->_collectionBehavior = behavior;
     // The collection behavior decides whether the window is an application window (see
     // -_windowPresentation), which a window that is already on screen has to tell the window system.
-    id platform = [self platformWindow];
+    id<NSWindowPlatformWindowQueries> platform = [self platformWindow];
     if ([platform respondsToSelector: @selector(presentationChanged)])
         [platform presentationChanged];
 }
@@ -2513,8 +2585,7 @@ static NSString *menuBarStylePreference(void) {
 // Whether the platform draws a title bar depends on the transparency of the
 // title bar, the title's visibility and the standard buttons.
 - (void) _titlebarVisibilityChanged {
-    if ([_platformWindow respondsToSelector: @selector(updateDecorationsForStyleMask:)])
-        [_platformWindow updateDecorationsForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
+    [self _updatePlatformTitlebarKindForStyleMask: NS_EXTRA(NSWindow, self)->_styleMask];
     if ([_backgroundView isKindOfClass: [NSThemeFrame class]])
         [(NSThemeFrame *) _backgroundView _updateStandardWindowButtons];
 }
@@ -4422,7 +4493,7 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
 
     // The window system may already be in the requested state.
     if ([_platformWindow respondsToSelector: @selector(isFullScreen)] &&
-        [(id) _platformWindow isFullScreen] == entering) {
+        [(id<NSWindowPlatformWindowQueries>) _platformWindow isFullScreen] == entering) {
         [self platformWindow: _platformWindow didChangeFullScreen: entering];
         return;
     }
@@ -4850,11 +4921,11 @@ static const NSTimeInterval FullScreenConfirmationTimeout = 3.0;
     // application must not take the key status away from it (ordering a window in does not make
     // it key). A window the application asked to make key (-makeKeyWindow,
     // -makeKeyAndOrderFront:, a modal session) does take it.
-    id platform = [self platformWindow];
+    id<NSWindowPlatformWindowQueries> platform = [self platformWindow];
     BOOL requested = [platform respondsToSelector: @selector(takeKeyRequest)] &&
                      [platform takeKeyRequest];
     NSWindow *currentKey = [NSApp keyWindow];
-    id currentKeyPlatform = currentKey != self ? [currentKey platformWindow] : nil;
+    id<NSWindowPlatformWindowQueries> currentKeyPlatform = currentKey != self ? [currentKey platformWindow] : nil;
     BOOL keyStays = !requested &&
                     [currentKeyPlatform respondsToSelector: @selector(isFullyTransparent)] &&
                     [currentKeyPlatform isFullyTransparent];

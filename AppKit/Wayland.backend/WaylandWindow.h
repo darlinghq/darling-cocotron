@@ -80,8 +80,6 @@ typedef enum {
     struct wl_proxy *_toplevel;
     // The menu bar, when the compositor has wlr-layer-shell: it has this role instead of the xdg ones.
     struct wl_proxy *_layerSurface;
-    // org_kde_kwin_appmenu of the toplevel, while the main menu is exported.
-    struct wl_proxy *_appMenu;
     // org_kde_plasma_surface of the toplevel while it is not an application window (see
     // -updateTaskbarPresence).
     struct wl_proxy *_plasmaSurface;
@@ -142,6 +140,7 @@ typedef enum {
     struct wl_proxy *_fractionalScale, *_viewport;
     BOOL _scaleUpdatePending, _subwindowRedrawPending, _subwindowRedrawNeeded;
     BOOL _clientDecorated, _pendingClientDecorated, _decorationForcedClient;
+    int _titlebarKind; // the CGSToplevelTitlebarKind NSWindow asked for
     BOOL _maximized, _pendingMaximized;
     // What the configure being applied said of fullscreen, what the last one applied said (told to the delegate), and the
     // size to go back to. Asking the compositor for fullscreen, the wait for its answer and the state the compositor holds
@@ -208,8 +207,8 @@ typedef enum {
 // The first responder or the caret changed: the input method is told whether the window takes text and where.
 - (void) updateInputMethodSpot;
 - (BOOL) isDecorationPoint: (CGPoint) point;
-- (BOOL) decorationButton: (uint32_t) button pressed: (BOOL) pressed
-                   serial: (uint32_t) serial atPoint: (CGPoint) point;
+// Tells the window system's window where the client-side frame's edges, title bar and buttons are.
+- (void) updateClientDecorationLayout;
 
 // Converts a surface-local point (origin top left) to window coordinates.
 - (NSPoint) transformPoint: (CGPoint) surfacePoint;

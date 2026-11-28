@@ -1,6 +1,7 @@
 #import <Onyx2D/O2Encoding.h>
 #import <Onyx2D/O2Font.h>
 #import <Onyx2D/O2PDFCharWidths.h>
+#import <Onyx2D/O2PDFArray.h>
 #import <Onyx2D/O2PDFDictionary.h>
 #import <Onyx2D/O2PDFFont.h>
 #import <Onyx2D/O2PDFObject_Name.h>

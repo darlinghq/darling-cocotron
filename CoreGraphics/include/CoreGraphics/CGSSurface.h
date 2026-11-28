@@ -31,6 +31,8 @@
 - (instancetype) initWithWindow: (CGSWindow *) window
                       surfaceID: (CGSSurfaceID) surfaceID;
 - (CGError) setBounds: (CGRect) rect;
+// Shows or hides the surface in its window (CGSOrderSurface); a surface that is the window's own drawing is always shown.
+- (CGError) setVisible: (BOOL) visible;
 // The bounds last set with -setBounds:, CGRectNull before that.
 - (CGError) getBounds: (CGRect *) outBounds;
 // For the backends' -setBounds: once the new bounds are in effect.

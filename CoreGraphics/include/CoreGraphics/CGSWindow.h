@@ -251,6 +251,51 @@ typedef struct {
 -(CGError) setToplevelIgnoresMouseEvents:(BOOL) ignores;
 // Whether the window system draws a title bar and frame around the window.
 -(CGError) setToplevelDecorated:(BOOL) decorated;
+
+// What the window shows of a title bar. The UI layer says it (the decision depends on the window's style, which the UI
+// layer knows); the window system's objects follow: the window manager's frame (X11), the decoration mode (Wayland).
+typedef enum {
+	// No title bar and no frame (a borderless window).
+	kCGSToplevelTitlebarNone,
+	// The window has a title bar, which the window system draws or, where it does not, the UI layer does (see
+	// -setToplevelPrefersClientDecoration: and -setToplevelClientDecorationLayout:).
+	kCGSToplevelTitlebarStandard,
+	// A titled window that shows nothing of a title bar of its own: the application draws its header, so there is no
+	// frame from the window system or the UI layer, and a window system that composites no frame of its own gives the
+	// window rounded corners (kCGSToplevelHiddenTitlebarCornerRadius).
+	kCGSToplevelTitlebarHidden,
+} CGSToplevelTitlebarKind;
+#define kCGSToplevelHiddenTitlebarCornerRadius 5.0
+-(CGError) setToplevelTitlebarKind:(CGSToplevelTitlebarKind) kind;
+-(CGSToplevelTitlebarKind) toplevelTitlebarKind;
+// Whether a window that has a standard title bar should have it drawn by the UI layer inside its surface (a window
+// system where a client can ask for that: Wayland) even when the window system offers to draw it. See
+// -setToplevelClientDecorationLayout:. Does nothing on a window system whose manager always draws the frame.
+-(CGError) setToplevelPrefersClientDecoration:(BOOL) prefers;
+
+// The frame the UI layer draws around a window in its surface, as hit-testing of the window system needs it, in points
+// from the top left corner of the surface. The UI layer draws the pixels (the theme is its); the window system answers the
+// pointer over the frame: a press on an edge resizes the window (when resizable), one on the title bar moves it, and the
+// buttons close, miniaturize and zoom it (a close request is a kCGSToplevelEventCloseRequested). The pointer over the frame
+// belongs to it: it is not posted as a mouse event of the window. A rectangle that is CGRectNull is a button the window
+// does not have or that is disabled; a press on the title bar there moves the window.
+typedef struct {
+	// The width of the border around the content and below the title bar, and the height of the title bar inside the border.
+	CGFloat border, titleHeight;
+	// The extents of the surface, in points: the content with the frame around it.
+	CGSize size;
+	bool resizable;
+	CGRect closeButton, miniaturizeButton, zoomButton;
+} CGSToplevelDecorationLayout;
+// Sets the frame (NULL: there is none, the surface is the content).
+-(CGError) setToplevelClientDecorationLayout:(const CGSToplevelDecorationLayout*) layout;
+// Whether a point of the surface is on the frame set by -setToplevelClientDecorationLayout:, not on the content.
+-(BOOL) toplevelClientDecorationContainsPoint:(CGPoint) point;
+
+// Asks the window system to move the window for as long as the pointer button that is down stays down, as when the user
+// drags the window's title bar (the window manager or compositor keeps the window under the pointer, and the button's
+// release goes to it). Fails when the window system cannot or the left button is not down on this window.
+-(CGError) beginToplevelMoveByWindowSystem;
 // The window's icons for the window system's task lists: square images of 32-bit premultiplied ARGB pixels
 // (alpha in the most significant byte), the side being the square root of the pixel count, one per size.
 // nil or an empty array leaves the choice to the window system.
@@ -292,6 +337,18 @@ typedef struct {
 
 // Ordering, levels, the keyboard focus, miniaturizing and fullscreen of a toplevel window. The UI layer decides
 // when; the window system's calls are made here. A backend that cannot do one of them keeps the default, which
+// The address of the window's application menu on the session bus (the bus name of the service and the object path), for
+// a desktop that shows application menus outside the application: the window system carries it (a property of the window
+// on X11, KDE's appmenu protocol on Wayland). nil for both withdraws it. The window system keeps it for as long as the
+// window exists (across the window being hidden and shown, and on X11 across -recreateToplevelWithAttributes:).
+-(CGError) setToplevelApplicationMenuServiceName:(NSString*) service objectPath:(NSString*) path;
+
+// Whether the window is the window of a menu that is being tracked while it is shown: the window system's pointer and
+// keyboard are held for the newest such window, so that a click elsewhere or a key reaches the menu whichever window has the
+// focus (X11; a window system with its own popup grab, Wayland, keeps it). The observer is told when the pointer is held or
+// let go (-nativeConnectionMenuGrabChanged:). Does nothing in a relative mouse mode, which holds the pointer itself.
+-(CGError) setToplevelHoldsInputForMenu:(BOOL) holds;
+
 // refuses (the queries answer for a window that is not so: not miniaturized, not fullscreen, not covered, not
 // holding the focus). The window must be shown (-orderWindow:relativeTo:) before it is stacked or given the focus.
 //
