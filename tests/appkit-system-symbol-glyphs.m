@@ -76,6 +76,33 @@ int main(void) {
         CHECK(clearAround(lens, 28, 4));
     }
 
+    NSBitmapImageRep *globe = render(@"globe");
+    CHECK(globe != nil);
+    if (globe != nil) {
+        CHECK(inkAround(globe, 16, 16));
+        CHECK(clearAround(globe, 2, 2));
+    }
+
+    NSBitmapImageRep *deleteLeft = render(@"delete.left");
+    CHECK(deleteLeft != nil);
+    if (deleteLeft != nil) {
+        CHECK(inkAround(deleteLeft, 18, 16));
+    }
+
+    NSBitmapImageRep *atom = render(@"atom");
+    CHECK(atom != nil);
+    if (atom != nil) {
+        CHECK(inkAround(atom, 16, 16));
+        CHECK(clearAround(atom, 2, 2));
+    }
+
+    NSBitmapImageRep *ruler = render(@"ruler");
+    CHECK(ruler != nil);
+    if (ruler != nil) {
+        CHECK(inkAround(ruler, 16, 16));
+        CHECK(clearAround(ruler, 4, 4));
+    }
+
     [pool release];
     if (failures == 0)
         printf("PASS\n");
