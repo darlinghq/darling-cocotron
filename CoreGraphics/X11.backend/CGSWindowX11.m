@@ -509,6 +509,9 @@ static XVisualInfo* translucentToplevelVisualInfo(Display* display)
 		(char*) bytes, (unsigned) width, (unsigned) height, 32, (int) rowBytes);
 	if (image == NULL)
 		return NO;
+	// The bytes are little-endian pixels whatever the server's own order is; Xlib converts when the two differ.
+	image->byte_order = LSBFirst;
+	image->bitmap_bit_order = LSBFirst;
 	XPutImage(_display, _window, _gc, image, (int) part.origin.x, (int) part.origin.y, (int) part.origin.x,
 		(int) part.origin.y, (unsigned) part.size.width, (unsigned) part.size.height);
 	// The pixels are the caller's
