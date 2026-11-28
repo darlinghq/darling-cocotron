@@ -27,6 +27,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSView.h>
 
 #import "NSPrintProgressPanelController.h"
+
+// Private to the print info: the page inside its margins and the imageable area
+@interface NSPrintInfo (NSPrintOperationPages)
+- (NSRect) _printableArea;
+@end
 #import <objc/message.h>
 
 enum {
@@ -62,8 +67,9 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
     NS_EXTRA(NSPrintOperation, self)->_view = [view retain];
     NS_EXTRA(NSPrintOperation, self)->_printInfo = [printInfo copy];
     if (type == NSPrintOperationPDFInRect ||
-        type == NSPrintOperationEPSInRect || type == NSPrintOperationFile) {
-        // the paper is the rectangle, as it is
+        type == NSPrintOperationEPSInRect) {
+        // the paper is the rectangle, as it is; a printing operation that saves its job has the paper of its print
+        // info like any other
         [NS_EXTRA(NSPrintOperation, self)->_printInfo setPaperSize: rect.size];
         [NS_EXTRA(NSPrintOperation, self)->_printInfo setOrientation: NSPortraitOrientation];
     }
@@ -218,10 +224,18 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
 {
     NSRange result = NSMakeRange(1, 0);
     NSRect bounds = [NS_EXTRA(NSPrintOperation, self)->_view bounds];
-    NSRect imageableRect = [NS_EXTRA(NSPrintOperation, self)->_printInfo imageablePageBounds];
+    CGFloat scale = [NS_EXTRA(NSPrintOperation, self)->_printInfo scalingFactor];
+    // The part of the view that fits a page: the printable area of the page, as large as the scaling factor lets
+    // it be in the view
+    NSRect imageableRect = [NS_EXTRA(NSPrintOperation, self)->_printInfo _printableArea];
     BOOL isFlipped = [NS_EXTRA(NSPrintOperation, self)->_view isFlipped];
     CGFloat top = isFlipped ? NSMinY(bounds) : NSMaxY(bounds);
     NSPrintingOrientation orientation = [NS_EXTRA(NSPrintOperation, self)->_printInfo orientation];
+
+    if (scale <= 0)
+        scale = 1;
+    imageableRect.size.width /= scale;
+    imageableRect.size.height /= scale;
 
     while (YES) {
         CGFloat heightAdjustLimit = [NS_EXTRA(NSPrintOperation, self)->_view heightAdjustLimit];
@@ -246,6 +260,10 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
             if (bottom < NSMinY(bounds))
                 bottom = NSMinY(bounds);
         }
+
+        // a view narrower than the page is a page as wide as the view
+        if (right > NSMaxX(bounds))
+            right = NSMaxX(bounds);
 
         [NS_EXTRA(NSPrintOperation, self)->_view adjustPageWidthNew: &right
                              left: left
