@@ -21,6 +21,7 @@
 #import "CGSWaylandPointer.h"
 #import "CGSWaylandCursor.h"
 #import "CGSConnectionWayland.h"
+#import "CGSWindowWayland.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #import <CoreGraphics/CGEvent.h>
@@ -234,6 +235,7 @@ static unsigned maskForCode(uint32_t code) {
         _focus = NULL;
         _enterSerial = 0;
         _pressed = 0;
+        _dragSerial = 0;
         [self setPressedNumbers: 0];
         _located = NO;
         [_downClickState removeAllObjects];
@@ -402,6 +404,7 @@ static unsigned maskForCode(uint32_t code) {
     case WP_POINTER_EV_LEAVE:
         [self cancelFingerScroll];
         _pressed = 0;
+        _dragSerial = 0;
         [self setPressedNumbers: 0];
         [_downClickState removeAllObjects];
         if ([observer respondsToSelector: @selector(nativeConnectionPointerLeft)])
@@ -460,6 +463,9 @@ static unsigned maskForCode(uint32_t code) {
     _point = CGPointMake(x, y);
     BOOL used = [observer respondsToSelector: @selector(nativeConnectionPointerMovedToX:y:)] &&
                 [observer nativeConnectionPointerMovedToX: x y: y];
+    // The pointer over a window's own frame is the frame's, not the content's.
+    if (!used && _focus != NULL && _pressed == 0)
+        used = [[_connection toplevelForSurface: _focus] toplevelClientDecorationContainsPoint: _point];
     if (_focus == NULL)
         return;
     [self noteGlobalLocation];
@@ -538,13 +544,24 @@ static unsigned maskForCode(uint32_t code) {
     return _clickCount;
 }
 
+- (uint32_t) heldLeftPressSerialForSurface: (struct wl_proxy *) surface {
+    return surface != NULL && _focus == surface && (_pressed & 1) != 0 ? _leftPressSerial : 0;
+}
+
 - (void) button: (uint32_t) code pressed: (BOOL) pressed time: (uint32_t) time serial: (uint32_t) serial {
     id<CGSNativeConnectionObserver> observer = [self observer];
 
     if (pressed)
         [_connection inputPressedWithSerial: serial];
 
-    // A window decoration (title bar buttons, resize edges) takes the button for itself.
+    // A window's own frame (title bar buttons, resize edges) takes the button for itself, as long as no other button of
+    // the pointer is down.
+    if (_focus != NULL && _pressed == 0) {
+        CGSWindowWayland *window = [_connection toplevelForSurface: _focus];
+
+        if (window != nil && [window handleToplevelDecorationButton: code pressed: pressed serial: serial atPoint: _point])
+            return;
+    }
     if ([observer respondsToSelector: @selector(nativeConnectionPointerButton:pressed:serial:)] &&
         [observer nativeConnectionPointerButton: code pressed: pressed serial: serial])
         return;
@@ -557,6 +574,8 @@ static unsigned maskForCode(uint32_t code) {
     [self setButtonNumber: button pressed: pressed];
     if (pressed) {
         _pressed |= mask;
+        if (mask == 1)
+            _leftPressSerial = serial;
         if (mask == 8)
             _otherButton = code;
         clickState = _focus != NULL ? [self clickStateForPressOf: code time: time] : 1;
@@ -569,6 +588,10 @@ static unsigned maskForCode(uint32_t code) {
         clickState = held != nil ? [held longLongValue] : 1;
         [_downClickState removeObjectForKey: key];
     }
+    if (pressed && _focus != NULL)
+        _dragSerial = serial;
+    else if (!pressed && _pressed == 0)
+        _dragSerial = 0;
     if (_focus == NULL)
         return;
 
@@ -812,6 +835,14 @@ static const double kNothing = 0;
 
 - (uint32_t) enterSerial {
     return _enterSerial;
+}
+
+- (uint32_t) dragSerial {
+    return _dragSerial;
+}
+
+- (void) consumeDragSerial {
+    _dragSerial = 0;
 }
 
 #pragma mark - Scroll

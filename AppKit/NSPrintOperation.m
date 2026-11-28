@@ -62,8 +62,11 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
     NS_EXTRA(NSPrintOperation, self)->_view = [view retain];
     NS_EXTRA(NSPrintOperation, self)->_printInfo = [printInfo copy];
     if (type == NSPrintOperationPDFInRect ||
-        type == NSPrintOperationEPSInRect || type == NSPrintOperationFile)
+        type == NSPrintOperationEPSInRect || type == NSPrintOperationFile) {
+        // the paper is the rectangle, as it is
         [NS_EXTRA(NSPrintOperation, self)->_printInfo setPaperSize: rect.size];
+        [NS_EXTRA(NSPrintOperation, self)->_printInfo setOrientation: NSPortraitOrientation];
+    }
     NS_EXTRA(NSPrintOperation, self)->_printPanel = [[NSPrintPanel printPanel] retain];
     NS_EXTRA(NSPrintOperation, self)->_showsPrintPanel = YES;
     NS_EXTRA(NSPrintOperation, self)->_currentPage = 0;
@@ -212,7 +215,6 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
 
 - (void) _autopaginatePageRange: (NSRange) pageRange
                 actualPageRange: (NSRange *) rangep
-                        context: (CGContextRef) context
 {
     NSRange result = NSMakeRange(1, 0);
     NSRect bounds = [NS_EXTRA(NSPrintOperation, self)->_view bounds];
@@ -254,15 +256,15 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
                             bottom: bottom
                              limit: bottomLimit];
 
-        if (context != nil &&
-            (pageRange.location == NSNotFound ||
-             NSLocationInRange(NSMaxRange(result), pageRange))) {
-            NSRect rect = NSMakeRect(left, top, right - left, bottom - top);
+        if (pageRange.location == NSNotFound ||
+            NSLocationInRange(NSMaxRange(result), pageRange)) {
+            // the rectangle of the page, whichever way the view runs
+            NSRect rect = NSMakeRect(left, MIN(top, bottom), right - left, fabs(bottom - top));
             NSPoint location = [NS_EXTRA(NSPrintOperation, self)->_view locationOfPrintRect: rect];
 
-            [NS_EXTRA(NSPrintOperation, self)->_view beginPageInRect: rect atPlacement: location];
+            [self _beginPageInRect: rect atPlacement: location];
             [NS_EXTRA(NSPrintOperation, self)->_view drawRect: rect];
-            [NS_EXTRA(NSPrintOperation, self)->_view endPage];
+            [self _endPage];
             NS_EXTRA(NSPrintOperation, self)->_currentPage++;
         }
 
@@ -283,7 +285,6 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
 }
 
 - (void) _paginateWithPageRange: (NSRange) pageRange
-                        context: (CGContextRef) context
 {
     int i;
 
@@ -305,9 +306,9 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
         NSRect rect = [NS_EXTRA(NSPrintOperation, self)->_view rectForPage: NS_EXTRA(NSPrintOperation, self)->_currentPage];
         NSPoint location = [NS_EXTRA(NSPrintOperation, self)->_view locationOfPrintRect: rect];
 
-        [NS_EXTRA(NSPrintOperation, self)->_view beginPageInRect: rect atPlacement: location];
+        [self _beginPageInRect: rect atPlacement: location];
         [NS_EXTRA(NSPrintOperation, self)->_view drawRect: rect];
-        [NS_EXTRA(NSPrintOperation, self)->_view endPage];
+        [self _endPage];
         [printProgressPanelController setCurrentPage: i];
     }
     [printProgressPanelController hidePanel];
@@ -315,105 +316,120 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
 
 // The PDF document info: the job title, else the view's window title. A view
 // outside any window has neither, and then there is no info dictionary.
-- (NSDictionary *) _documentInfo {
+- (NSString *) _documentTitle {
     NSString *title = [self jobTitle];
     if (title == nil)
         title = [[NS_EXTRA(NSPrintOperation, self)->_view window] title];
+    return title;
+}
+
+- (NSDictionary *) _documentInfo {
+    NSString *title = [self _documentTitle];
     if (title == nil)
         return nil;
     return [NSDictionary dictionaryWithObject: title
                                        forKey: (NSString *) kCGPDFContextTitle];
 }
 
-// The job as the print settings of the print info have it: a PDF file, the destination of the settings,
-// with the pages of the paper of the page format. There is no print queue to take the job otherwise.
-- (CGContextRef) _createPrintCoreContext {
+// Whether the job is made by PrintCore: the job of a printing operation (also one that saves the job), as
+// opposed to the PDF and EPS operations that make their data themselves.
+- (BOOL) _usesPrintCore {
+    return NS_EXTRA(NSPrintOperation, self)->_type == NSPrintOperationPrinter ||
+           NS_EXTRA(NSPrintOperation, self)->_type == NSPrintOperationFile;
+}
+
+// Whether a page of the PrintCore session is open: the page and its graphics context are PrintCore's, and the
+// view must not begin or end a page of the context itself (NSView's page methods ask).
+- (BOOL) _printCorePageIsOpen {
+    return NS_EXTRA(NSPrintOperation, self)->_printCorePageOpen;
+}
+
+// The job in a PrintCore session, as the print settings of the print info have it: a PDF file, the destination
+// of the settings. There is no print queue to take the job otherwise.
+- (BOOL) _beginPrintCoreDocument {
     NSPrintInfo *printInfo = NS_EXTRA(NSPrintOperation, self)->_printInfo;
     PMPrintSession session = [printInfo PMPrintSession];
     PMPrintSettings settings = [printInfo PMPrintSettings];
-    PMDestinationType destination = kPMDestinationPrinter;
-    CFURLRef url = NULL;
-    CGRect mediaBox;
-    CGContextRef context;
+    PMPageFormat format = [printInfo PMPageFormat];
+    NSString *title = [self _documentTitle];
 
-    if (PMSessionGetDestinationType(session, settings, &destination) != noErr || destination != kPMDestinationFile ||
-        PMSessionCopyDestinationLocation(session, settings, &url) != noErr || url == NULL)
-        return nil;
-    // the paper in the orientation of the page format
-    mediaBox = CGRectMake(0, 0, [printInfo orientation] == NSLandscapeOrientation ? [printInfo paperSize].height : [printInfo paperSize].width,
-                          [printInfo orientation] == NSLandscapeOrientation ? [printInfo paperSize].width : [printInfo paperSize].height);
-    context = CGPDFContextCreateWithURL(url, &mediaBox, (CFDictionaryRef) [self _documentInfo]);
-    CFRelease(url);
-    return (CGContextRef) [(id) context autorelease];
+    if (title != nil)
+        PMPrintSettingsSetJobName(settings, (CFStringRef) title);
+    return PMSessionBeginCGDocumentNoDialog(session, settings, format) == noErr;
 }
 
+// A page of the job: for a PrintCore job the page is begun in the session, whose graphics context is then the
+// current one, and the view sets itself up in it.
+- (void) _beginPageInRect: (NSRect) rect atPlacement: (NSPoint) placement {
+    if ([self _usesPrintCore]) {
+        NSPrintInfo *printInfo = NS_EXTRA(NSPrintOperation, self)->_printInfo;
+        PMPrintSession session = [printInfo PMPrintSession];
+        CGContextRef port = NULL;
+
+        if (PMSessionBeginPageNoDialog(session, [printInfo PMPageFormat], NULL) == noErr &&
+            PMSessionGetCGGraphicsContext(session, &port) == noErr && port != NULL) {
+            NS_EXTRA(NSPrintOperation, self)->_printCorePageOpen = YES;
+            [NS_EXTRA(NSPrintOperation, self)->_context release];
+            NS_EXTRA(NSPrintOperation, self)->_context = [[NSGraphicsContext graphicsContextWithGraphicsPort: port
+                                                                                                    flipped: NO] retain];
+            [NSGraphicsContext setCurrentContext: NS_EXTRA(NSPrintOperation, self)->_context];
+        }
+    }
+    [NS_EXTRA(NSPrintOperation, self)->_view beginPageInRect: rect atPlacement: placement];
+}
+
+- (void) _endPage {
+    [NS_EXTRA(NSPrintOperation, self)->_view endPage];
+    if (NS_EXTRA(NSPrintOperation, self)->_printCorePageOpen) {
+        PMSessionEndPageNoDialog([NS_EXTRA(NSPrintOperation, self)->_printInfo PMPrintSession]);
+        NS_EXTRA(NSPrintOperation, self)->_printCorePageOpen = NO;
+    }
+}
+
+// Shows the print panel when the operation does. NO when the user cancelled it.
+- (BOOL) _confirmedByPrintPanel {
+    if (!NS_EXTRA(NSPrintOperation, self)->_showsPrintPanel)
+        return YES;
+
+    NSPrintPanel *printPanel = [self printPanel];
+    int panelResult;
+
+    // We can't assume that there are valid titles on every window
+    NSString *title = [[NS_EXTRA(NSPrintOperation, self)->_view window] title];
+    if (title == nil) {
+        title = @"Printing View";
+    }
+
+    [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] setObject: NS_EXTRA(NSPrintOperation, self)->_view forKey: @"_NSView"];
+    [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] setObject: title forKey: @"_title"];
+    panelResult = [printPanel runModal];
+    [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] removeObjectForKey: @"_NSView"];
+    [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] removeObjectForKey: @"_title"];
+    return panelResult == NSOKButton;
+}
+
+// The graphics context of the PDF operations, which make their data without PrintCore (an EPS operation has none).
+// A PrintCore job has a context for each page, see -_beginPageInRect:atPlacement:.
 - (NSGraphicsContext *) createContext {
     CGContextRef context;
+    NSDictionary *auxiliaryInfo = [self _documentInfo];
+    CGDataConsumerRef consumer =
+            CGDataConsumerCreateWithCFData((CFMutableDataRef) NS_EXTRA(NSPrintOperation, self)->_mutableData);
 
-    if (NS_EXTRA(NSPrintOperation, self)->_type == NSPrintOperationPrinter) {
-        if (NS_EXTRA(NSPrintOperation, self)->_showsPrintPanel) {
-            NSPrintPanel *printPanel = [self printPanel];
-            int panelResult;
-
-            // We can't assume that there are valid titles on every window
-            NSString *title = [[NS_EXTRA(NSPrintOperation, self)->_view window] title];
-            if (title == nil) {
-                title = @"Printing View";
-            }
-
-            [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] setObject: NS_EXTRA(NSPrintOperation, self)->_view forKey: @"_NSView"];
-            [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] setObject: title forKey: @"_title"];
-            panelResult = [printPanel runModal];
-            [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] removeObjectForKey: @"_NSView"];
-            [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] removeObjectForKey: @"_title"];
-
-            if (panelResult != NSOKButton) {
-                return nil;
-            }
-        }
-
-        if ((context = (CGContextRef)
-                     [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] objectForKey: @"_KGContext"]) ==
-            nil)
-            context = [self _createPrintCoreContext];
-        if (context == nil)
-            return nil;
-    } else if (NS_EXTRA(NSPrintOperation, self)->_type == NSPrintOperationPDFInRect) {
-        NSDictionary *auxiliaryInfo = [self _documentInfo];
-
-        CGDataConsumerRef consumer =
-                CGDataConsumerCreateWithCFData((CFMutableDataRef) NS_EXTRA(NSPrintOperation, self)->_mutableData);
-
-        context = CGPDFContextCreate(consumer, &NS_EXTRA(NSPrintOperation, self)->_insideRect,
-                                     (CFDictionaryRef) auxiliaryInfo);
-        [(id) context autorelease];
-
+    if (NS_EXTRA(NSPrintOperation, self)->_type != NSPrintOperationPDFInRect || consumer == NULL) {
         CGDataConsumerRelease(consumer);
-    } else if (NS_EXTRA(NSPrintOperation, self)->_type == NSPrintOperationFile) {
-        NSDictionary *auxiliaryInfo = [self _documentInfo];
-
-        NSString *filePath =
-                [NS_EXTRA(NSPrintOperation, self)->_printInfo.dictionary objectForKey: NSPrintSavePath];
-        CGDataConsumerRef consumer = CGDataConsumerCreateWithURL(
-                (CFURLRef) [NSURL fileURLWithPath: filePath]);
-
-        context = CGPDFContextCreate(consumer, &NS_EXTRA(NSPrintOperation, self)->_insideRect,
-                                     (CFDictionaryRef) auxiliaryInfo);
-        [(id) context autorelease];
-
-        CGDataConsumerRelease(consumer);
-
-    } else {
         return nil;
     }
+    context = CGPDFContextCreate(consumer, &NS_EXTRA(NSPrintOperation, self)->_insideRect,
+                                 (CFDictionaryRef) auxiliaryInfo);
+    [(id) context autorelease];
+
+    CGDataConsumerRelease(consumer);
     return [NSGraphicsContext graphicsContextWithGraphicsPort: context
                                                       flipped: NO];
 }
 
 - (void) destroyContext {
-    if (NS_EXTRA(NSPrintOperation, self)->_type == NSPrintOperationPrinter) {
-        [[NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary] removeObjectForKey: @"_KGContext"];
-    }
     [NS_EXTRA(NSPrintOperation, self)->_context release];
     NS_EXTRA(NSPrintOperation, self)->_context = nil;
 }
@@ -425,7 +441,8 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
 - (BOOL) runOperation {
     NSRange pageRange = NSMakeRange(NSNotFound, NSNotFound);
     BOOL knowsPageRange;
-    CGContextRef cgContext;
+    BOOL printCore = [self _usesPrintCore];
+    CGContextRef cgContext = NULL;
     NSMutableDictionary *dict = [NS_EXTRA(NSPrintOperation, self)->_printInfo dictionary];
 
     [NSPrintOperation setCurrentOperation: self];
@@ -453,10 +470,19 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
         }
     }
 
-    NS_EXTRA(NSPrintOperation, self)->_context = [[self createContext] retain];
-    if (NS_EXTRA(NSPrintOperation, self)->_context == nil) {
-        // It'll be nil if the user cancelled the print panel for example.
-        return NO;
+    if (printCore) {
+        // The print panel may be cancelled by the user.
+        if (![self _confirmedByPrintPanel] || ![self _beginPrintCoreDocument]) {
+            [NSPrintOperation setCurrentOperation: nil];
+            return NO;
+        }
+    } else {
+        NS_EXTRA(NSPrintOperation, self)->_context = [[self createContext] retain];
+        if (NS_EXTRA(NSPrintOperation, self)->_context == nil) {
+            [NSPrintOperation setCurrentOperation: nil];
+            return NO;
+        }
+        cgContext = [NS_EXTRA(NSPrintOperation, self)->_context graphicsPort];
     }
 
     if (knowsPageRange) {
@@ -465,12 +491,12 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
         pageRange.location = firstPage;
         pageRange.length = lastPage - firstPage + 1;
     }
-    cgContext = [NS_EXTRA(NSPrintOperation, self)->_context graphicsPort];
 
     [NS_EXTRA(NSPrintOperation, self)->_printInfo setUpPrintOperationDefaultValues];
 
     [NSGraphicsContext saveGraphicsState];
-    [NSGraphicsContext setCurrentContext: NS_EXTRA(NSPrintOperation, self)->_context];
+    if (NS_EXTRA(NSPrintOperation, self)->_context != nil)
+        [NSGraphicsContext setCurrentContext: NS_EXTRA(NSPrintOperation, self)->_context];
     [NS_EXTRA(NSPrintOperation, self)->_view beginDocument];
 
     if (NS_EXTRA(NSPrintOperation, self)->_type == NSPrintOperationPDFInRect) {
@@ -479,15 +505,17 @@ static NSString *const NSPrintOperationCurrentKey = @"NSPrintOperationCurrent";
         [NS_EXTRA(NSPrintOperation, self)->_view endPage];
     } else {
         if (knowsPageRange)
-            [self _paginateWithPageRange: pageRange context: cgContext];
+            [self _paginateWithPageRange: pageRange];
         else
             [self _autopaginatePageRange: pageRange
-                         actualPageRange: &pageRange
-                                 context: cgContext];
+                         actualPageRange: &pageRange];
     }
 
     [NS_EXTRA(NSPrintOperation, self)->_view endDocument];
-    CGPDFContextClose(cgContext);
+    if (printCore)
+        PMSessionEndDocumentNoDialog([NS_EXTRA(NSPrintOperation, self)->_printInfo PMPrintSession]);
+    else
+        CGPDFContextClose(cgContext);
     [NSGraphicsContext restoreGraphicsState];
 
     [self destroyContext];

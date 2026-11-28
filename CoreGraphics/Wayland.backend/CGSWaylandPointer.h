@@ -60,9 +60,14 @@ struct wl_proxy;
     // position in the surface in points.
     struct wl_proxy *_focus;
     uint32_t _enterSerial;
+    // The serial of the latest button press while a button is still down in a surface of the process, 0 otherwise: what a
+    // drag that starts from the press is tied to.
+    uint32_t _dragSerial;
     CGPoint _point;
     // The buttons that are down: 1 left, 2 right, 4 middle, 8 any other, and the code of the last other one.
     unsigned _pressed;
+    // The compositor's serial of the press of the left button that is down.
+    uint32_t _leftPressSerial;
     // The Cocoa numbers of the buttons that are down (bit n: the button numbered n), and where the pointer was
     // last in a surface of the process, in global coordinates (the state queries; guarded by @synchronized(self)).
     uint32_t _pressedNumbers;
@@ -117,6 +122,8 @@ struct wl_proxy;
 }
 
 - (instancetype) initWithConnection: (CGSConnectionWayland *) connection;
+// The serial of the left button's press while it is held down with the pointer in the surface, else 0.
+- (uint32_t) heldLeftPressSerialForSurface: (struct wl_proxy *) surface;
 
 // The seat's capabilities changed. The pointer exists while the seat has one.
 - (void) seatCapabilities: (uint32_t) capabilities seat: (struct wl_proxy *) seat;
@@ -161,6 +168,10 @@ struct wl_proxy;
 - (void) cursorGlobalsChanged;
 // The serial of the latest wl_pointer.enter, 0 while the pointer is over no surface of the process.
 - (uint32_t) enterSerial;
+// The serial of the button press that a drag started now would be tied to, 0 when no button is down (or a drag took the
+// press already).
+- (uint32_t) dragSerial;
+- (void) consumeDragSerial;
 
 @property (readonly) struct wl_proxy *pointerProxy;
 

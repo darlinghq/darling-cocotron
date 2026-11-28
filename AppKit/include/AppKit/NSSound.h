@@ -20,23 +20,48 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSBundle.h>
 #import <AppKit/AppKitIvarLayout.h>
 
+@protocol NSSoundDelegate;
+
+typedef NSString *NSSoundName;
+typedef NSString *NSSoundPlaybackDeviceIdentifier;
+
 @interface NSSound : NSObject {
     NS_LEGACY_IVAR_PAD(_NSSoundReserved, 36)
 }
 
-+ (NSArray *) soundUnfilteredFileTypes;
+// The delegate is notified when playback finishes. It is not retained.
+@property(nonatomic, assign) id<NSSoundDelegate> delegate;
 
-+ (NSSound *) soundNamed: (NSString *) name;
++ (NSArray *) soundUnfilteredFileTypes;
+// Uniform Type Identifiers of the audio the class can play
++ (NSArray<NSString *> *) soundUnfilteredTypes;
+
+// The sound registered under the name (see -setName:), or else the sound file of that name found in the main
+// bundle, ~/Library/Sounds, /Library/Sounds, /Network/Library/Sounds and /System/Library/Sounds, in that order.
++ (NSSound *) soundNamed: (NSSoundName) name;
 
 - (id) initWithContentsOfFile: (NSString *) path
                   byReference: (BOOL) byReference;
 - (id) initWithContentsOfURL: (NSURL *) url byReference: (BOOL) byReference;
-- (BOOL) setName: (NSString *) name;
+- (id) initWithData: (NSData *) data;
+- (BOOL) setName: (NSSoundName) name;
+- (NSSoundName) name;
 
 - (BOOL) play;
 - (BOOL) pause;
 - (BOOL) resume;
 - (BOOL) stop;
+- (BOOL) isPlaying;
+
+// Seconds
+@property(readonly) NSTimeInterval duration;
+// 0 to 1, for this sound only
+@property float volume;
+@property NSTimeInterval currentTime;
+// A looping sound does not tell its delegate that it has finished, unless it is stopped.
+@property BOOL loops;
+// The UID of the audio device to play on; nil follows the default output device
+@property(copy) NSSoundPlaybackDeviceIdentifier playbackDeviceIdentifier;
 
 @end
 
@@ -46,6 +71,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @protocol NSSoundDelegate <NSObject>
 
-// TODO
+@optional
+- (void) sound: (NSSound *) sound didFinishPlaying: (BOOL) successfully;
 
 @end

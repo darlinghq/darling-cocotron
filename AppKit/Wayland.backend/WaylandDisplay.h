@@ -27,8 +27,8 @@
 // X11 backend (system colours, fontconfig font enumeration, metrics, click counts).
 //
 // Toplevel origins remain virtual because Wayland controls global placement.
-// Clipboard and incoming copy drops use wl_data_device; EGL subwindows use
-// synchronized subsurfaces. Outgoing drags are a follow-on.
+// EGL subwindows use synchronized subsurfaces. The clipboard and drag and drop are
+// CoreGraphics'.
 
 #import "../private-include/AppKit/DarlingDisplay.h"
 #import <CoreGraphics/CGSNativeConnection.h>
@@ -42,7 +42,7 @@ struct xkb_context;
 struct xkb_keymap;
 struct xkb_state;
 
-@class WaylandWindow, WaylandDataDevice, WaylandDraggingManager, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager, WaylandRenderManager;
+@class WaylandWindow, WaylandAppMenu, WaylandToplevelIcons, WaylandColorManager, WaylandRenderManager;
 
 @protocol WaylandFractionalScaleOwner
 - (void) preferredScaleChanged: (uint32_t) scale120;
@@ -61,9 +61,6 @@ typedef enum {
     WaylandObjectDecoration,
     WaylandObjectFrameCallback,
     WaylandObjectBuffer,
-    WaylandObjectDataDevice,
-    WaylandObjectDataOffer,
-    WaylandObjectDataSource,
     WaylandObjectFractionalScale,
     WaylandObjectLockedPointer,
     WaylandObjectRelativePointer,
@@ -115,7 +112,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     // wlr-layer-shell, when the compositor has it: the menu bar is a layer surface.
     struct wl_proxy *_layerShell;
     uint32_t _layerShellName;
-    struct wl_proxy *_dataDeviceManager;
     uint32_t _compositorVersion;
     // xdg-session-management: one session for the application, started when AppKit reports why the
     // application launched. Toplevels join it before their first commit.
@@ -169,7 +165,6 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
     NSEvent *_dragPressEvent;
     WaylandWindow *_dragPressWindow; // Nonretained; invalidated on unmap.
     uint32_t _dragPressSerial, _dragPressButton;
-    WaylandDraggingManager *_draggingManager;
 
     // The window the keyboard focus last went to, as CoreGraphics reported it; not retained, cleared when
     // the window is unmapped.
@@ -179,11 +174,9 @@ struct wl_proxy *WaylandCreateObject(struct wl_proxy *proxy, uint32_t opcode,
 
     // The pointer is over a window decoration, where the arrow is shown whatever cursor the application selected.
     BOOL _cursorOverDecoration;
-    WaylandDataDevice *_dataDevice;
 }
 
 - (WaylandWindow *) windowForSurface: (struct wl_proxy *) surface;
-- (struct wl_proxy *) dragDataDevice;
 - (WaylandWindow *) dragOriginForEvent: (NSEvent *) event;
 - (uint32_t) dragSerialForEvent: (NSEvent *) event;
 - (void) consumeDragPress;

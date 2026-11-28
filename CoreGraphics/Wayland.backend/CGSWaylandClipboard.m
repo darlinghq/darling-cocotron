@@ -18,6 +18,7 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #import "CGSWaylandClipboard.h"
+#import "CGSWaylandDrag.h"
 #import "WaylandLibrary.h"
 #import "WaylandProtocol.h"
 #include <errno.h>
@@ -49,6 +50,7 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
         _connection = connection;
         _manager = manager;
         _offers = [NSMutableDictionary new];
+        _offerActions = [NSMutableDictionary new];
         _types = [NSMutableArray new];
         union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) seat}};
         _device = [connection createObject: manager
@@ -71,8 +73,8 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
     for (NSValue *key in _offers)
         destroyProxy([key pointerValue], WP_DATA_OFFER_DESTROY);
     [_offers removeAllObjects];
+    [_offerActions removeAllObjects];
     _selection = NULL;
-    _dragOffer = NULL;
     if (_device != NULL) {
         if (WL.wl_proxy_get_version(_device) >= 2)
             destroyProxy(_device, WP_DATA_DEVICE_RELEASE);
@@ -87,9 +89,18 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
     [self invalidate];
     [_hostChangeHandler release];
     [_offers release];
+    [_offerActions release];
     [_types release];
     [_sourceData release];
     [super dealloc];
+}
+
+- (struct wl_proxy *) dataDevice {
+    return _device;
+}
+
+- (void) setDrag: (id) drag {
+    _drag = drag;
 }
 
 - (BOOL) ownsSelection {
@@ -204,19 +215,9 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
     [_connection flush];
 }
 
-// The data of a type the selection's owner offers, read from a pipe the owner writes to.
-- (NSData *) remoteDataForType: (NSString *) type {
-    [_connection processPendingEvents];
-    if (_owned || _device == NULL)
-        return nil;
-    NSString *mime = nil;
-    NSArray *offered = [_offers objectForKey: [NSValue valueWithPointer: _selection]];
-    for (NSString *candidate in _CGSSelectionMimeTypesForType(type))
-        if ([offered containsObject: candidate]) {
-            mime = candidate;
-            break;
-        }
-    if (mime == nil || _selection == NULL)
+// The data an offer gives for a MIME type, read from a pipe the offer's owner writes to.
+- (NSData *) readFromOffer: (struct wl_proxy *) offer mime: (NSString *) mime whileValid: (BOOL (^)(void)) valid {
+    if (offer == NULL || mime == nil || _device == NULL)
         return nil;
     int fds[2];
     if (pipe(fds) != 0)
@@ -230,15 +231,14 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
         return nil;
     }
     union wl_argument args[2] = {{.s = [mime UTF8String]}, {.h = fds[1]}};
-    WaylandMarshal(_selection, WP_DATA_OFFER_RECEIVE, NULL, 0, args);
+    WaylandMarshal(offer, WP_DATA_OFFER_RECEIVE, NULL, 0, args);
     close(fds[1]);
     [_connection flush];
-    NSUInteger generation = _selectionGeneration;
     NSMutableData *data = [NSMutableData data];
     BOOL complete = NO;
     NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + TransferTimeout;
     @try {
-        while ([NSDate timeIntervalSinceReferenceDate] < deadline && generation == _selectionGeneration) {
+        while ([NSDate timeIntervalSinceReferenceDate] < deadline && valid()) {
             char bytes[16384];
             ssize_t count = read(fds[0], bytes, sizeof(bytes));
             if (count == 0) {
@@ -265,13 +265,35 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
     } @finally {
         close(fds[0]);
     }
-    return complete && generation == _selectionGeneration ? _CGSSelectionDecodeData(data, type, mime) : nil;
+    return complete && valid() ? data : nil;
+}
+
+// The data of a type the selection's owner offers.
+- (NSData *) remoteDataForType: (NSString *) type {
+    [_connection processPendingEvents];
+    if (_owned || _device == NULL)
+        return nil;
+    NSString *mime = nil;
+    NSArray *offered = [_offers objectForKey: [NSValue valueWithPointer: _selection]];
+    for (NSString *candidate in _CGSSelectionMimeTypesForType(type))
+        if ([offered containsObject: candidate]) {
+            mime = candidate;
+            break;
+        }
+    if (mime == nil || _selection == NULL)
+        return nil;
+    NSUInteger generation = _selectionGeneration;
+    NSData *data = [self readFromOffer: _selection mime: mime whileValid: ^BOOL {
+        return generation == self->_selectionGeneration;
+    }];
+    return data != nil ? _CGSSelectionDecodeData(data, type, mime) : nil;
 }
 
 - (void) removeOffer: (struct wl_proxy *) offer {
     if (offer == NULL)
         return;
     [_offers removeObjectForKey: [NSValue valueWithPointer: offer]];
+    [_offerActions removeObjectForKey: [NSValue valueWithPointer: offer]];
     destroyProxy(offer, WP_DATA_OFFER_DESTROY);
 }
 
@@ -305,20 +327,40 @@ static void destroyProxy(struct wl_proxy *proxy, uint32_t opcode) {
             // A local source may receive its own offer. Cancellation tells us
             // when ownership actually changes; NULL on focus loss is not loss.
         } else if (opcode == WP_DATA_DEVICE_EV_ENTER) {
-            // A drag is the other data device's business (AppKit's), but this device is offered it too, and the
-            // offer must not go while the drag is on: a compositor that tracks one offer per drag source (wlroots
-            // does) takes the destruction of its offer before the drop is finished for the target giving up and
-            // cancels the drag. So the offer is destroyed when the drag leaves a window without dropping, and the one
-            // of a drop at the next drag's enter or when the clipboard goes away.
-            [self removeOffer: _dragOffer];
-            _dragOffer = (struct wl_proxy *) args[4].o;
-            _dragDropped = NO;
+            // The drag takes the offer, and destroys it when it is over with it: a compositor that tracks one offer
+            // per drag source (wlroots does) cancels the drag when the offer goes before the drop is finished.
+            struct wl_proxy *offer = (struct wl_proxy *) args[4].o;
+            NSValue *key = [NSValue valueWithPointer: offer];
+            NSArray *mimes = [[[_offers objectForKey: key] copy] autorelease];
+            uint32_t actions = [[_offerActions objectForKey: key] unsignedIntValue];
+            [_offers removeObjectForKey: key];
+            [_offerActions removeObjectForKey: key];
+            CGPoint point = CGPointMake(wl_fixed_to_double(args[2].f), wl_fixed_to_double(args[3].f));
+            if (_drag != nil) {
+                [(CGSWaylandDrag *) _drag deviceEnteredSurface: (struct wl_proxy *) args[1].o
+                                                        serial: args[0].u
+                                                         offer: offer
+                                                         mimes: mimes
+                                                 sourceActions: actions
+                                                       atPoint: point];
+            } else {
+                destroyProxy(offer, WP_DATA_OFFER_DESTROY);
+            }
+        } else if (opcode == WP_DATA_DEVICE_EV_MOTION) {
+            [(CGSWaylandDrag *) _drag deviceMovedToPoint: CGPointMake(wl_fixed_to_double(args[1].f),
+                                                                       wl_fixed_to_double(args[2].f))];
         } else if (opcode == WP_DATA_DEVICE_EV_DROP) {
-            _dragDropped = YES;
-        } else if (opcode == WP_DATA_DEVICE_EV_LEAVE && !_dragDropped) {
-            [self removeOffer: _dragOffer];
-            _dragOffer = NULL;
+            [(CGSWaylandDrag *) _drag deviceDropped];
+        } else if (opcode == WP_DATA_DEVICE_EV_LEAVE) {
+            [(CGSWaylandDrag *) _drag deviceLeft];
         }
+    } else if (kind == CGSWaylandObjectDataOffer && opcode == WP_DATA_OFFER_EV_SOURCE_ACTIONS) {
+        if ([(CGSWaylandDrag *) _drag ownsOffer: proxy])
+            [(CGSWaylandDrag *) _drag offer: proxy sourceActions: args[0].u];
+        else
+            [_offerActions setObject: [NSNumber numberWithUnsignedInt: args[0].u] forKey: [NSValue valueWithPointer: proxy]];
+    } else if (kind == CGSWaylandObjectDataOffer && opcode == WP_DATA_OFFER_EV_ACTION) {
+        [(CGSWaylandDrag *) _drag offer: proxy action: args[0].u];
     } else if (kind == CGSWaylandObjectDataOffer && opcode == WP_DATA_OFFER_EV_OFFER) {
         if (args[0].s) {
             NSString *mime = [NSString stringWithUTF8String: args[0].s];

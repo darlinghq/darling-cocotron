@@ -65,6 +65,9 @@
 // A snapshot of the connection's windows (the caller releases it)
 -(NSArray<CGSWindow*>*) copyAllWindows;
 -(CGSWindow*) newWindow:(CGSRegionRef)region;
+// A new window id: a positive number that fits 32 bits and that no window of any process of the system has, like the
+// ids the window server hands out (windows of different processes are told apart by their ids).
+-(CGSWindowID) _allocateWindowID;
 // A toplevel window for the application's UI layer (see CGSWindow.h), or nil when the window system cannot make
 // one, which is the default. The window's id is the number CGWindow gives the UI layer's platform window.
 -(CGSWindow*) newToplevelWindowWithAttributes:(const CGSToplevelAttributes*)attributes;

@@ -37,6 +37,8 @@ namespace IndiumKit {
 	id<MTLDevice> _device;
 	MTLPixelFormat _pixelFormat;
 	CGColorSpaceRef _colorspace;
+	// whether the application assigned the colorspace, which a later pixelFormat then leaves alone
+	BOOL _colorspaceAssigned;
 	BOOL _framebufferOnly;
 	CGSize _drawableSize;
 	BOOL _drawableSizeExplicitlySet;
@@ -67,6 +69,9 @@ namespace IndiumKit {
 	// OpenGL rendering: the swapchain's layer (null in the OpenGL mode), the provider of the native
 	// surface it presents to, that surface, and where it was last placed. Guarded by @synchronized(self).
 	std::shared_ptr<IndiumKit::Layer> _swapchainLayer;
+	// the colorspace and extended dynamic range setting the swapchain was last given
+	uint8_t _swapchainColorSpace; // an IndiumKit::ColorSpace
+	BOOL _swapchainExtendedDynamicRange;
 	id<CAMetalLayerSurfaceProvider> _surfaceProvider;
 	CANativeSurface _nativeSurface;
 	CGRect _surfaceFrame;

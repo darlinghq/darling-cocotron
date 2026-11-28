@@ -91,6 +91,7 @@ typedef enum {
     CGSWaylandObjectDecoration,
     CGSWaylandObjectTextInput,
     CGSWaylandObjectActivationToken,
+    CGSWaylandObjectDragSource,
 } CGSWaylandObjectKind;
 
 // Displays: the connection describes them from wl_output, xdg-output (the compositor's logical
@@ -102,6 +103,7 @@ typedef enum {
 @public
     struct wl_display *_wlDisplay;
     struct wl_proxy *_compositor;
+    struct wl_proxy *_subcompositor; // wl_subcompositor, for the surfaces that draw GL next to a window's contents
     struct wl_proxy *_shm; // wl_shm, for the pixels of the windows that are drawn into
     struct wl_proxy *_wmBase;
     // What places and frames the windows beyond xdg-shell, NULL when the compositor offers none:
@@ -168,6 +170,8 @@ typedef enum {
     // has no data device manager.
     struct wl_proxy *_dataDeviceManager;
     id _clipboard;
+    // The drag and drop of the data device (CGSWaylandDrag), made with the clipboard, whose device it shares.
+    id _drag;
     // The latest input event of the seat that entitles a client to set the clipboard (a key or button press), and
     // when it was.
     uint32_t _inputSerial;
@@ -227,6 +231,11 @@ typedef enum {
 // the keyboard focus, and for a short time after the focus went (as when the virtual keyboard that made the key is
 // removed a few milliseconds after it), 0 otherwise.
 - (uint32_t) clipboardSerial;
+// The serial of the button press that a drag started now is tied to, 0 when no button is down; a drag that is
+// started takes it (see CGSWaylandDrag).
+- (uint32_t) dragSerial;
+- (struct wl_proxy *) dataDeviceManager;
+- (void) consumeDragSerial;
 
 // The seat, NULL until the compositor has described it.
 - (struct wl_proxy *) seat;
@@ -276,6 +285,11 @@ typedef enum {
 - (CGSWindowWayland *) windowForActivation;
 // The window of this connection whose toplevel surface is the wl_surface, 0 when none is.
 - (uint32_t) windowIDForSurface: (struct wl_proxy *) surface;
+// The serial of the left pointer button press that is held down on a surface of this connection, 0 when the button is not
+// down or the pointer is not in that surface.
+- (uint32_t) heldLeftPressSerialForSurface: (struct wl_proxy *) surface;
+// The window of a surface of this connection, nil for none.
+- (CGSWindowWayland *) toplevelForSurface: (struct wl_proxy *) surface;
 // Whether the surface is that of a display overlay (a window made with -becomeDisplayOverlay:), and the
 // surface of the display overlay shown last, NULL when there is none. The input of an overlay belongs to no
 // window of the application.

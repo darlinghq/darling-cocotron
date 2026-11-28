@@ -775,6 +775,105 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     [self applyUIDecoration];
 }
 
+// A window with no title bar leaves the frame to the compositor's choice; one that shows no title bar of its own declares
+// that it draws its frame itself (compositors differ on the default for a window that says nothing); a standard title
+// bar is the compositor's unless the UI layer prefers to draw it.
+- (void) updateUIDecorationRequest {
+    switch (_uiTitlebarKind) {
+    case kCGSToplevelTitlebarNone: _uiDecorationRequest = 3; break;
+    case kCGSToplevelTitlebarHidden: _uiDecorationRequest = 2; break;
+    case kCGSToplevelTitlebarStandard: _uiDecorationRequest = _uiPrefersClientDecoration ? 2 : 1; break;
+    }
+    [self applyUIDecoration];
+}
+
+- (CGError) setToplevelTitlebarKind: (CGSToplevelTitlebarKind) kind {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiTitlebarKind = kind;
+    [self updateUIDecorationRequest];
+    return kCGSErrorSuccess;
+}
+
+- (CGSToplevelTitlebarKind) toplevelTitlebarKind {
+    return _uiTitlebarKind;
+}
+
+- (CGError) setToplevelPrefersClientDecoration: (BOOL) prefers {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiPrefersClientDecoration = prefers;
+    [self updateUIDecorationRequest];
+    return kCGSErrorSuccess;
+}
+
+#pragma mark - Client-side frame
+
+- (CGError) setToplevelClientDecorationLayout: (const CGSToplevelDecorationLayout *) layout {
+    if (!_ui)
+        return kCGErrorNotImplemented;
+    _uiHasDecorationLayout = layout != NULL;
+    if (layout != NULL)
+        _uiDecorationLayout = *layout;
+    return kCGSErrorSuccess;
+}
+
+- (BOOL) toplevelClientDecorationContainsPoint: (CGPoint) point {
+    if (!_uiHasDecorationLayout)
+        return NO;
+    const CGSToplevelDecorationLayout *layout = &_uiDecorationLayout;
+    CGFloat left = layout->border, top = layout->border + layout->titleHeight;
+    return point.x < left || point.y < top || point.x >= layout->size.width - layout->border ||
+           point.y >= layout->size.height - layout->border;
+}
+
+// The press on the frame: an edge resizes (a window that cannot be resized ignores it), a button acts, the rest of the
+// title bar moves the window. Every button of the frame is the frame's, the press and the release.
+- (BOOL) handleToplevelDecorationButton: (uint32_t) button pressed: (BOOL) pressed serial: (uint32_t) serial atPoint: (CGPoint) point {
+    if (![self toplevelClientDecorationContainsPoint: point])
+        return NO;
+    struct wl_proxy *seat = [_waylandConnection seat];
+    if (!pressed || button != WP_BTN_LEFT || _toplevel == NULL || seat == NULL)
+        return YES;
+    const CGSToplevelDecorationLayout *layout = &_uiDecorationLayout;
+    CGFloat border = layout->border;
+    uint32_t edge = 0;
+    if (point.y < border) edge |= 1;
+    if (point.y >= layout->size.height - border) edge |= 2;
+    if (point.x < border) edge |= 4;
+    if (point.x >= layout->size.width - border) edge |= 8;
+    union wl_argument args[3] = {{.o = (struct wl_object *) seat}, {.u = serial}, {.u = edge}};
+    if (edge != 0) {
+        if (layout->resizable)
+            WaylandMarshal(_toplevel, WP_TOPLEVEL_RESIZE, NULL, 0, args);
+    } else if (!CGRectIsNull(layout->closeButton) && CGRectContainsPoint(layout->closeButton, point)) {
+        CGSToplevelEvent event = {.kind = kCGSToplevelEventCloseRequested, .rect = CGRectNull};
+        [self postToplevelEvent: &event];
+    } else if (!CGRectIsNull(layout->miniaturizeButton) && CGRectContainsPoint(layout->miniaturizeButton, point)) {
+        [self miniaturizeToplevel];
+    } else if (!CGRectIsNull(layout->zoomButton) && CGRectContainsPoint(layout->zoomButton, point)) {
+        union wl_argument none[1] = {{.o = NULL}};
+        WaylandMarshal(_toplevel, _uiPending.maximized ? WP_TOPLEVEL_UNSET_MAXIMIZED : WP_TOPLEVEL_SET_MAXIMIZED, NULL, 0,
+                       none);
+    } else {
+        WaylandMarshal(_toplevel, WP_TOPLEVEL_MOVE, NULL, 0, args);
+    }
+    [_waylandConnection flush];
+    return YES;
+}
+
+// xdg_toplevel.move for the left button press that is being held on the window, with the serial of that press.
+- (CGError) beginToplevelMoveByWindowSystem {
+    struct wl_proxy *seat = [_waylandConnection seat];
+    uint32_t serial = _toplevel != NULL && seat != NULL ? [_waylandConnection heldLeftPressSerialForSurface: _surface] : 0;
+    if (serial == 0)
+        return kCGErrorFailure;
+    union wl_argument args[2] = {{.o = (struct wl_object *) seat}, {.u = serial}};
+    WaylandMarshal(_toplevel, WP_TOPLEVEL_MOVE, NULL, 0, args);
+    [_waylandConnection flush];
+    return kCGSErrorSuccess;
+}
+
 // Tells the compositor which side draws the frame. Compositors differ on the default for a window that says nothing, so a
 // window whose frame is its own says so.
 - (void) applyUIDecoration {
@@ -1435,15 +1534,19 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 }
 
 - (CGSSurface *) createSurface {
-    if (_surfaceObject != nil) {
+    // The surfaces of a toplevel window are subsurfaces (any number); the surface of any other window is the
+    // window's own, and there is one
+    BOOL sub = _role == CGSWaylandRoleToplevel && _waylandConnection->_subcompositor != NULL;
+    if (!sub && _surfaceObject != nil) {
         NSLog(@"CoreGraphics Wayland backend: window %d already has a surface; "
-              @"more than one surface per window would need subsurfaces, which "
-              @"are not implemented", (int) self.windowId);
+              @"more than one surface per window needs subsurfaces, which a toplevel window has",
+              (int) self.windowId);
         return nil;
     }
 
     if (![self ensureRole])
         return nil;
+    sub = _role == CGSWaylandRoleToplevel && _waylandConnection->_subcompositor != NULL;
     CGSSurfaceID surfaceID = _nextSurfaceId++;
     CGSSurfaceWayland *surface =
             [[CGSSurfaceWayland alloc] initWithWindow: self surfaceID: surfaceID];
@@ -1454,7 +1557,8 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         [_surfaces setObject: surface
                       forKey: [NSNumber numberWithInt: surfaceID]];
     }
-    _surfaceObject = surface;
+    if (!sub)
+        _surfaceObject = surface;
     [surface release];
     return surface;
 }
@@ -1697,6 +1801,13 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
         return kCGSErrorSuccess;
     }
     return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelContentContainsSurfacePoint: (CGPoint) point {
+    if (!_ui || (_uiContentOffset.x == 0 && _uiContentOffset.y == 0))
+        return YES;
+    return point.x >= _uiContentOffset.x && point.y >= _uiContentOffset.y &&
+           point.x < _uiContentOffset.x + _uiFrame.size.width && point.y < _uiContentOffset.y + _uiFrame.size.height;
 }
 
 - (CGPoint) frameOrigin {

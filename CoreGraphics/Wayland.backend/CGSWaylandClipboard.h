@@ -29,9 +29,10 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 @private
     CGSConnectionWayland *_connection; // not retained: the connection owns the clipboard
     struct wl_proxy *_manager, *_device, *_source, *_selection;
-    // The offer of the drag that is over a window of this client, kept until the drag leaves or drops.
-    struct wl_proxy *_dragOffer;
-    BOOL _dragDropped;
+    // The drag and drop of the same device (CGSWaylandDrag), which takes the events of the drags over the windows.
+    id _drag;
+    // The actions each offer the device introduced says its source allows, by wl_data_offer.
+    NSMutableDictionary *_offerActions;
     // The MIME types of every offer the device introduced, by wl_data_offer.
     NSMutableDictionary *_offers;
     NSMutableArray *_types;
@@ -50,6 +51,14 @@ along with Darling.  If not, see <http://www.gnu.org/licenses/>.
 // An input event of the seat that entitles the process to set the selection happened (a key press, a button press):
 // what is waiting to be published is published, with the serial the connection holds.
 - (void) inputAvailable;
+// The device, which also carries the drags (wl_data_device.start_drag), NULL once the clipboard is invalidated.
+- (struct wl_proxy *) dataDevice;
+// Who takes the events of the drags over the windows (CGSWaylandDrag, not retained).
+- (void) setDrag: (id) drag;
+// The data an offer gives for a MIME type, read from a pipe the offer's owner writes to: nil when it has none, does not
+// answer in a few seconds or is larger than the transfer limit. The caller keeps handling the window system's events
+// while it waits; the read ends as soon as valid answers NO.
+- (NSData *) readFromOffer: (struct wl_proxy *) offer mime: (NSString *) mime whileValid: (BOOL (^)(void)) valid;
 - (void) handleEvent: (uint32_t) opcode
                 kind: (CGSWaylandObjectKind) kind
                proxy: (struct wl_proxy *) proxy

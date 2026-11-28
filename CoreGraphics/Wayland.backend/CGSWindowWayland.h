@@ -111,6 +111,12 @@ typedef enum {
     // org_kde_kwin_appmenu object that tells the compositor, while the window is a toplevel and there is a manager.
     NSString *_uiMenuService, *_uiMenuPath;
     struct wl_proxy *_uiAppMenu;
+    // What the window shows of a title bar and who draws the frame (see -setToplevelTitlebarKind:), and the frame the
+    // UI layer draws inside the surface (see -setToplevelClientDecorationLayout:).
+    CGSToplevelTitlebarKind _uiTitlebarKind;
+    BOOL _uiPrefersClientDecoration;
+    BOOL _uiHasDecorationLayout;
+    CGSToplevelDecorationLayout _uiDecorationLayout;
     uint32_t _uiPopupGrabSerial;
     uint32_t _uiRepositionToken;
     // What the events of the configure sequence in progress said.
@@ -193,6 +199,9 @@ typedef enum {
 // Where the window's content starts in the surface, when the UI layer draws the window's frame inside it (see
 // -setToplevelContentOffset:).
 - (CGPoint) toplevelContentOffset;
+// Whether the point of the surface (in points from its top left corner) is in the window's content and not in the frame
+// the UI layer draws around it.
+- (BOOL) toplevelContentContainsSurfacePoint: (CGPoint) point;
 
 // The window's objects of the window system, for the UI layer that owns the window's content and what the protocol
 // has beyond CGSWindow.h (the toplevel's fullscreen, parent and move requests, the objects that must be made
@@ -216,6 +225,10 @@ typedef enum {
 // Tells the window system that the frame is not decided by the UI layer (the compositor's choice: used when the
 // window has no title bar).
 - (void) unsetToplevelDecoration;
+// A pointer button was pressed or released over the window's surface at a point of it (points from its top left corner):
+// whether it is the frame's (see -setToplevelClientDecorationLayout:), which then acts on a press of the left button with
+// the compositor's serial (resize, move, close, miniaturize, zoom) and takes the button.
+- (BOOL) handleToplevelDecorationButton: (uint32_t) button pressed: (BOOL) pressed serial: (uint32_t) serial atPoint: (CGPoint) point;
 // The alpha-modifier global arrived after the window was made: the window's opacity is told now.
 - (void) alphaModifierAvailable;
 // The opacity the window lists in CGWindowListCopyWindowInfo().

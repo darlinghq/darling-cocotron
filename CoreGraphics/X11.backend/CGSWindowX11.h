@@ -59,6 +59,7 @@
 	BOOL _shapeEmpty;
 	BOOL _ignoresMouse;
 	BOOL _skipsTaskList;
+	CGSToplevelTitlebarKind _titlebarKind;
 
 	BOOL _holdsMenuInput;        // see -setToplevelHoldsInputForMenu:
 	NSString* _menuService;      // see -setToplevelApplicationMenuServiceName:objectPath:

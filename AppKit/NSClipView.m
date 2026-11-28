@@ -27,6 +27,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSScrollView.h>
 #import <Foundation/NSKeyedArchiver.h>
 
+@interface NSView (NSClipViewInvalidRects)
+- (BOOL) _hasOnlyPartialInvalidRects;
+- (void) _clipInvalidRectsToRect: (NSRect) clipRect;
+@end
+
 @implementation NSClipView
 
 - (void) encodeWithCoder: (NSCoder *) coder {
@@ -146,6 +151,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 - initWithFrame: (NSRect) frame {
     [super initWithFrame: frame];
     _backgroundColor = [[NSColor controlBackgroundColor] retain];
+    NS_EXTRA(NSClipView, self)->_copiesOnScroll = YES;
     NS_EXTRA(NSClipView, self)->_drawsBackground = YES;
     NS_EXTRA(NSClipView, self)->_automaticallyAdjustsContentInsets = YES;
     return self;
@@ -333,8 +339,30 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
     }
 }
 
+static BOOL hasOverlappingSiblingAbove(NSView *view) {
+    NSRect visible = [view visibleRect];
+    for (NSView *v = view; [v superview] != nil; v = [v superview]) {
+        NSView *superview = [v superview];
+        NSArray *siblings = [superview subviews];
+        NSUInteger idx = [siblings indexOfObjectIdenticalTo: v];
+        if (idx == NSNotFound)
+            continue;
+        NSRect rectInSuper = [view convertRect: visible toView: superview];
+        for (NSUInteger i = idx + 1; i < [siblings count]; i++) {
+            NSView *sib = [siblings objectAtIndex: i];
+            if (![sib isHidden] && NSIntersectsRect(rectInSuper, [sib frame]))
+                return YES;
+        }
+    }
+    return NO;
+}
+
 - (BOOL) isOpaque {
-    return NS_EXTRA(NSClipView, self)->_drawsBackground && [_backgroundColor alphaComponent] >= 1.;
+    if (!NS_EXTRA(NSClipView, self)->_drawsBackground || _backgroundColor == nil)
+        return NO;
+    NSColor *resolved = [(id)_backgroundColor _resolvedColor];
+    return resolved != nil && [resolved type] != NSColorTypePattern &&
+           [resolved alphaComponent] >= 1.;
 }
 
 - (BOOL) isFlipped {
@@ -416,13 +444,15 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         NSRect overlap = NSIntersectionRect(oldVisible, newVisible);
         BOOL didCopy = NO;
 
+        BOOL canReusePartial = ![self needsDisplay] || ([self isOpaque] && [self _hasOnlyPartialInvalidRects]);
         if (NS_EXTRA(NSClipView, self)->_copiesOnScroll &&
             _layer == nil &&
             !NSIsEmptyRect(overlap) &&
-            ![self needsDisplay] &&
+            canReusePartial &&
             dx == floor(dx) && dy == floor(dy) &&
             NSEqualSizes(oldBounds.size, _frame.size) &&
-            ([self isOpaque] || [[self documentView] isOpaque]) &&
+            ([self isOpaque] || ([[self documentView] isOpaque] && NSContainsRect([_docView frame], overlap))) &&
+            !hasOverlappingSiblingAbove(self) &&
             [self canDraw]) {
             [self scrollRect: overlap by: NSMakeSize(dx, dy)];
             didCopy = YES;
@@ -431,6 +461,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
         [self setBoundsOrigin: point];
 
         if (didCopy) {
+            if ([self needsDisplay])
+                [self _clipInvalidRectsToRect: newVisible];
             if (point.y > oldBounds.origin.y) {
                 NSRect strip = NSMakeRect(newVisible.origin.x, NSMaxY(oldVisible),
                                           newVisible.size.width, point.y - oldBounds.origin.y);

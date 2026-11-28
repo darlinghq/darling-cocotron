@@ -271,6 +271,30 @@ const CFStringRef kCGSWindowTitle = CFSTR("WindowTitle");
     return kCGErrorNotImplemented;
 }
 
+- (CGError) setToplevelTitlebarKind: (CGSToplevelTitlebarKind) kind {
+    return kCGErrorNotImplemented;
+}
+
+- (CGSToplevelTitlebarKind) toplevelTitlebarKind {
+    return kCGSToplevelTitlebarNone;
+}
+
+- (CGError) setToplevelPrefersClientDecoration: (BOOL) prefers {
+    return kCGErrorNotImplemented;
+}
+
+- (CGError) setToplevelClientDecorationLayout: (const CGSToplevelDecorationLayout *) layout {
+    return kCGErrorNotImplemented;
+}
+
+- (BOOL) toplevelClientDecorationContainsPoint: (CGPoint) point {
+    return NO;
+}
+
+- (CGError) beginToplevelMoveByWindowSystem {
+    return kCGErrorNotImplemented;
+}
+
 - (CGError) setToplevelIcons: (NSArray<NSData *> *) icons {
     return kCGErrorNotImplemented;
 }
