@@ -46,13 +46,6 @@
     X(wl_display_disconnect)                                                   \
     X(wl_display_get_fd)                                                       \
     X(wl_display_get_error)                                                    \
-    X(wl_display_create_queue)                                                 \
-    X(wl_event_queue_destroy)                                                  \
-    X(wl_display_prepare_read_queue)                                           \
-    X(wl_display_dispatch_queue_pending)                                       \
-    X(wl_proxy_create_wrapper)                                                 \
-    X(wl_proxy_wrapper_destroy)                                                \
-    X(wl_proxy_set_queue)                                                      \
     X(wl_display_dispatch_pending)                                             \
     X(wl_display_prepare_read)                                                 \
     X(wl_display_read_events)                                                  \

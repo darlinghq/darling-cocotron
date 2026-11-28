@@ -18,7 +18,6 @@ if (WAYLAND_PROTOCOLS_USABLE AND WAYLAND_EGL_FOUND)
 	add_backend(Wayland
 		SOURCES
 			CGSConnectionWayland.m
-			CGSWaylandPingResponder.m
 			CGSWaylandKeyboard.m
 			CGSWaylandPointer.m
 			CGSWaylandCursor.m

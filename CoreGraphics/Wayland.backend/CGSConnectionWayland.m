@@ -26,7 +26,6 @@
 #import "CGSWaylandInputMethod.h"
 #import "CGSWaylandTablet.h"
 #import "CGSWaylandKeymap.h"
-#import "CGSWaylandPingResponder.h"
 #import "CGSWaylandClipboard.h"
 #import "CGSWaylandDrag.h"
 #import "CGSWaylandPortalShortcuts.h"
@@ -271,12 +270,6 @@ static void socketCallback(CFSocketRef socket, CFSocketCallBackType type,
 static const CGEventFlags kHotKeyModifierMask =
     kCGEventFlagMaskShift | kCGEventFlagMaskControl | kCGEventFlagMaskAlternate | kCGEventFlagMaskCommand;
 
-// The responder's thread read events of the default queue (the main thread does not see the socket readable
-// any more): dispatch them from the run loop.
-static void pingResponderWake(void *info) {
-    [(CGSConnectionWayland *) info processPendingEvents];
-}
-
 @implementation CGSConnectionWayland
 
 + (BOOL) isAvailable {
@@ -324,13 +317,6 @@ static void pingResponderWake(void *info) {
         const char *name = getenv("WAYLAND_DISPLAY");
         NSLog(@"CoreGraphics Wayland backend: cannot connect to the compositor "
               @"(WAYLAND_DISPLAY=%s)", name ? name : "unset");
-        [self release];
-        return nil;
-    }
-
-    _pingResponder = CGSWaylandPingResponderCreate(_wlDisplay, pingResponderWake, self);
-    if (_pingResponder == NULL) {
-        NSLog(@"CoreGraphics Wayland backend: cannot create the ping responder");
         [self release];
         return nil;
     }
@@ -411,12 +397,6 @@ static void pingResponderWake(void *info) {
     }
     [self observeDisplaySleepAssertions];
 
-    if (!CGSWaylandPingResponderStart(_pingResponder)) {
-        NSLog(@"CoreGraphics Wayland backend: cannot start the ping responder");
-        [self release];
-        return nil;
-    }
-
     _setupDone = YES;
     [self flush];
     return self;
@@ -429,12 +409,6 @@ static void pingResponderWake(void *info) {
     @synchronized (_windows) {
         [_windows removeAllObjects];
     }
-
-    // The windows' xdg_surfaces are gone; the thread stops before the connection does.
-    CGSWaylandPingResponderDestroy(_pingResponder);
-    _pingResponder = NULL;
-    _wmBase = NULL;
-    _wmBaseRequests = NULL;
 
     [(CGSWaylandDrag *) _drag invalidate];
     [_drag release];
@@ -658,7 +632,6 @@ static void pingResponderWake(void *info) {
     if (_wlDisplay == NULL)
         return;
 
-    CGSWaylandPingResponderHeartbeat(_pingResponder);
     _dispatching = YES;
     while (WL.wl_display_prepare_read(_wlDisplay) != 0) {
         if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
@@ -676,9 +649,6 @@ static void pingResponderWake(void *info) {
 
     if (WL.wl_display_dispatch_pending(_wlDisplay) < 0)
         [self connectionFailed];
-    // This read may have taken the pings that the responder's thread answers; it answers them only
-    // when it reads them itself.
-    CGSWaylandPingResponderDispatchPending(_pingResponder);
     _dispatching = NO;
     [self runAfterDispatchBlocks];
 
@@ -895,15 +865,7 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
     } else if (strcmp(interface, "xdg_wm_base") == 0 && _wmBase == NULL) {
         _wmBase = [self bindGlobal: name interface: &xdg_wm_base_interface
                            version: MIN(version, 7u)
-                              kind: CGSWaylandObjectNone object: nil];
-        if (_wmBase != NULL) {
-            _wmBaseRequests = CGSWaylandPingResponderAdopt(_pingResponder, _wmBase);
-            if (_wmBaseRequests == NULL) {
-                NSLog(@"CoreGraphics Wayland backend: cannot move xdg_wm_base to the ping queue");
-                WL.wl_proxy_destroy(_wmBase);
-                _wmBase = NULL;
-            }
-        }
+                              kind: CGSWaylandObjectWmBase object: self];
     } else if (strcmp(interface, "zwlr_layer_shell_v1") == 0 && _layerShell == NULL) {
         _layerShell = [self bindGlobal: name interface: &zwlr_layer_shell_v1_interface
                                version: MIN(version, 4u)
@@ -1423,6 +1385,14 @@ static const CFTimeInterval kInputSerialGrace = 1.0;
             [self registryGlobal: args[0].u interface: args[1].s version: args[2].u];
         else if (opcode == WP_REGISTRY_EV_GLOBAL_REMOVE)
             [self registryGlobalRemove: args[0].u];
+        break;
+
+    case CGSWaylandObjectWmBase:
+        if (opcode == WP_WM_BASE_EV_PING) {
+            union wl_argument pong[1] = {{.u = args[0].u}};
+            WaylandMarshal(_wmBase, WP_WM_BASE_PONG, NULL, 0, pong);
+            [self flush];
+        }
         break;
 
     case CGSWaylandObjectActivationToken:

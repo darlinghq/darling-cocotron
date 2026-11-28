@@ -215,7 +215,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 
 - (void) createToplevelRole {
     union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
-    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBaseRequests
+    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
                                             opcode: WP_WM_BASE_GET_XDG_SURFACE
                                          interface: &xdg_surface_interface
                                          arguments: args
@@ -270,7 +270,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 // layer surface of the menu bar or an xdg surface. Not grabbed: the application orders it out itself.
 - (void) createPopupRole: (CGSWindowWayland *) parent {
     union wl_argument args[4] = {{.o = NULL}};
-    struct wl_proxy *positioner = [_waylandConnection createObject: _waylandConnection->_wmBaseRequests
+    struct wl_proxy *positioner = [_waylandConnection createObject: _waylandConnection->_wmBase
                                                             opcode: WP_WM_BASE_CREATE_POSITIONER
                                                          interface: &xdg_positioner_interface
                                                          arguments: args
@@ -303,7 +303,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 
     args[0].o = NULL;
     args[1].o = (struct wl_object *) _surface;
-    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBaseRequests
+    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
                                             opcode: WP_WM_BASE_GET_XDG_SURFACE
                                          interface: &xdg_surface_interface
                                          arguments: args
@@ -1000,7 +1000,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 - (struct wl_proxy *) newUIPopupPositioner {
     CGSWindowWayland *parent = _popupParent;
     union wl_argument args[4] = {{.o = NULL}};
-    struct wl_proxy *positioner = [_waylandConnection createObject: _waylandConnection->_wmBaseRequests
+    struct wl_proxy *positioner = [_waylandConnection createObject: _waylandConnection->_wmBase
                                                             opcode: WP_WM_BASE_CREATE_POSITIONER
                                                          interface: &xdg_positioner_interface
                                                          arguments: args
@@ -1039,7 +1039,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
     CGSWindowWayland *parent = (CGSWindowWayland *) _uiHints.transientFor;
     _popupParent = [parent retain];
     union wl_argument args[3] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
-    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBaseRequests
+    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
                                             opcode: WP_WM_BASE_GET_XDG_SURFACE
                                          interface: &xdg_surface_interface
                                          arguments: args
@@ -1077,7 +1077,7 @@ static void destroyProxy(struct wl_proxy **proxy, uint32_t opcode) {
 
 - (void) createUIToplevelRole {
     union wl_argument args[2] = {{.o = NULL}, {.o = (struct wl_object *) _surface}};
-    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBaseRequests
+    _xdgSurface = [_waylandConnection createObject: _waylandConnection->_wmBase
                                             opcode: WP_WM_BASE_GET_XDG_SURFACE
                                          interface: &xdg_surface_interface
                                          arguments: args
