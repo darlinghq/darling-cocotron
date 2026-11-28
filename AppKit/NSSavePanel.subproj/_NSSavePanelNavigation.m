@@ -2,6 +2,7 @@
 #import "_NSSavePanelNavigation.h"
 #import <AppKit/NSApplication.h>
 #import <AppKit/NSButton.h>
+#import <AppKit/NSColor.h>
 #import <AppKit/NSEvent.h>
 #import <AppKit/NSLayoutConstraint.h>
 #import <AppKit/NSMenuItem.h>
