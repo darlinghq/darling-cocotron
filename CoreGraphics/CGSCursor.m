@@ -25,6 +25,7 @@
 #import <CoreGraphics/CGContext.h>
 #import <Foundation/NSData.h>
 #include <math.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -36,7 +37,7 @@ static const struct {
 	const char* themeFallback;
 	const char* x11;
 	const char* x11Alias;
-} kShapeNames[kCGSCursorShapeCount] = {
+} kShapeNames[kCGSCursorShapeBusy + 1] = {
 	[kCGSCursorShapeArrow] = {"default", "left_ptr", "left_ptr", NULL},
 	[kCGSCursorShapeIBeam] = {"text", "xterm", "xterm", "text"},
 	[kCGSCursorShapeVerticalIBeam] = {"vertical-text", "xterm", "vertical-text", "xterm"},
@@ -46,6 +47,8 @@ static const struct {
 	[kCGSCursorShapePointingHand] = {"pointer", "hand2", "hand", "pointer"},
 	[kCGSCursorShapeZoomIn] = {"zoom-in", "left_ptr", "zoom-in", NULL},
 	[kCGSCursorShapeZoomOut] = {"zoom-out", "left_ptr", "zoom-out", NULL},
+	// The wait cursor: the pointer is still usable while it is shown.
+	[kCGSCursorShapeBusy] = {"wait", "watch", "watch", NULL},
 	[kCGSCursorShapeResizeUp] = {"n-resize", "top_side", "top_side", NULL},
 	[kCGSCursorShapeResizeDown] = {"s-resize", "bottom_side", "bottom_side", NULL},
 	[kCGSCursorShapeResizeLeft] = {"w-resize", "left_side", "left_side", NULL},
@@ -195,7 +198,7 @@ static int32_t scaledExtent(double logical, double scale, int32_t limit)
 
 CGSCursorRef CGSCursorCreateWithShape(CGSCursorShape shape)
 {
-	if ((int) shape < 0 || shape >= kCGSCursorShapeCount)
+	if ((int) shape < 0 || shape > kCGSCursorShapeBusy)
 		shape = kCGSCursorShapeArrow;
 	return (CGSCursorRef) [[CGSCursor alloc] _initWithShape: shape];
 }
@@ -221,5 +224,43 @@ CGError CGSCursorSetCurrent(CGSCursorRef cursor)
 	if (connectionID == 0)
 		return kCGErrorCannotComplete;
 	[_CGSConnectionForID(connectionID) setCursor: (CGSCursor*) cursor];
+	return kCGErrorSuccess;
+}
+
+// QUIRK: CGSGetCursorScale/CGSSetCursorScale expose a process-wide pointer-size factor in [1, 4], initially 1.
+// Not documented. Evidence: the MIT-licensed CGSCursor.h of the NUIKit project declares these exact signatures
+// and the upper bound (tier 3, public source of a Cocoa compatibility project), and Blender's GPL-2.0-or-later
+// GHOST_SystemCocoa.mm calls them to follow the system pointer size. No OS-version dependence is known. The
+// connection argument is accepted for ABI compatibility but does not change the process-wide factor; a NULL
+// output pointer is an error rather than a crash.
+// https://github.com/NUIKit/CGSInternal/blob/master/CGSCursor.h
+// Test: coregraphics-cursor-scale
+static _Atomic(double) g_cursorScale = 1.0;
+
+CGError CGSGetCursorScale(CGSConnectionID connection, CGFloat *outScale)
+{
+	(void) connection;
+	if (outScale == NULL)
+		return kCGErrorIllegalArgument;
+	*outScale = atomic_load(&g_cursorScale);
+	return kCGErrorSuccess;
+}
+
+CGError CGSSetCursorScale(CGSConnectionID connection, CGFloat scale)
+{
+	(void) connection;
+	if (!isfinite(scale))
+		return kCGErrorIllegalArgument;
+	// The SPI range is 1 through 4; values beyond it are clamped to the neutral scale and the accessibility cap.
+	if (scale < 1.0)
+		scale = 1.0;
+	else if (scale > 4.0)
+		scale = 4.0;
+	atomic_store(&g_cursorScale, scale);
+	// Selecting the current cursor again asks the backend to rasterize it at the new scale.
+	CGSConnectionID connectionID = CGSMainConnectionID();
+	CGSConnection *cgsConnection = _CGSConnectionForID(connectionID);
+	if (cgsConnection != nil)
+		[cgsConnection setCursor: [cgsConnection cursor]];
 	return kCGErrorSuccess;
 }
