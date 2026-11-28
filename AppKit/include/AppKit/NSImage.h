@@ -379,6 +379,7 @@ APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddTabTemplate;
 APPKIT_EXPORT NSImageHintKey const NSImageHintInterpolation;
 APPKIT_EXPORT NSImageHintKey const NSImageHintCTM NS_SWIFT_NAME(ctm);
 APPKIT_EXPORT NSImageHintKey const NSImageHintSymbolScale;
+APPKIT_EXPORT NSImageHintKey const NSImageHintUserInterfaceLayoutDirection;
 
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddDetailTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddTemplate;

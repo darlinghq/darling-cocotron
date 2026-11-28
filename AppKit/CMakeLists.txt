@@ -244,6 +244,9 @@ set(AppKit_sources
 	NSMenu.subproj/NSMenu.m
 	NSMenu.subproj/NSMenuItem.m
 	NSMenuItemBadge.m
+	NSItemBadge.m
+	NSComboButton.m
+	NSGlassEffectView.m
 	NSMenu.subproj/NSCarbonMenuImpl.m
 
 	NSPathControl.m

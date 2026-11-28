@@ -23,6 +23,11 @@
 @class NSImage;
 
 typedef NS_ENUM(NSInteger, NSVisualEffectMaterial) {
+    NSVisualEffectMaterialAppearanceBased = 0,
+    NSVisualEffectMaterialLight = 1,
+    NSVisualEffectMaterialDark = 2,
+    NSVisualEffectMaterialMediumLight = 8,
+    NSVisualEffectMaterialUltraDark = 9,
     NSVisualEffectMaterialTitlebar = 3,
     NSVisualEffectMaterialSelection = 4,
     NSVisualEffectMaterialMenu = 5,

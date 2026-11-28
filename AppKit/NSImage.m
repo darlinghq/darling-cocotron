@@ -124,6 +124,8 @@ NSImageName const NSImageNameGoForwardTemplate = @"NSGoForwardTemplate";
 
 NSImageHintKey const NSImageHintInterpolation = @"NSImageHintInterpolation";
 NSImageHintKey const NSImageHintCTM = @"NSImageHintCTM";
+NSImageHintKey const NSImageHintUserInterfaceLayoutDirection =
+        @"NSImageHintUserInterfaceLayoutDirection";
 
 // Not declared in a public header.
 APPKIT_EXPORT NSImageHintKey const NSImageHintSymbolFont;

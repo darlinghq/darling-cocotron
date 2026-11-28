@@ -19,11 +19,12 @@
 
 #import <Foundation/NSObject.h>
 #import <Foundation/NSGeometry.h>
+#import <Foundation/NSRange.h>
 
 // Role and subrole values are the NSAccessibilityRole and NSAccessibilitySubrole strings of
 // NSAccessibilityConstants.h, which cannot be imported here: through NSAttributedString.h
 // it leads back to NSView.h, which imports this header.
-@class NSArray, NSString, NSAccessibilityCustomAction;
+@class NSArray, NSString, NSNumber, NSAttributedString, NSAccessibilityCustomAction;
 
 // The minimum an object exposed to assistive applications provides.
 @protocol NSAccessibilityElement <NSObject>
@@ -82,4 +83,72 @@
 
 // An element that groups others (the group role); it asks for nothing more.
 @protocol NSAccessibilityGroup <NSAccessibilityElement>
+@end
+
+// The role protocols. An object adopts the one for its role and answers the methods it requires.
+@protocol NSAccessibilityButton <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityLabel;
+- (BOOL) accessibilityPerformPress;
+@end
+
+@protocol NSAccessibilitySwitch <NSAccessibilityButton>
+@required
+- (NSString *) accessibilityValue;
+@optional
+- (BOOL) accessibilityPerformIncrement;
+- (BOOL) accessibilityPerformDecrement;
+@end
+
+@protocol NSAccessibilityRadioButton <NSAccessibilityButton>
+@required
+- (NSNumber *) accessibilityValue;
+@end
+
+@protocol NSAccessibilityCheckBox <NSAccessibilityButton>
+@required
+- (NSNumber *) accessibilityValue;
+@end
+
+@protocol NSAccessibilityStaticText <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityValue;
+@optional
+- (NSAttributedString *) accessibilityAttributedStringForRange: (NSRange) range;
+- (NSRange) accessibilityVisibleCharacterRange;
+@end
+
+@protocol NSAccessibilityNavigableStaticText <NSAccessibilityStaticText>
+@required
+- (NSString *) accessibilityStringForRange: (NSRange) range;
+- (NSInteger) accessibilityLineForIndex: (NSInteger) index;
+- (NSRange) accessibilityRangeForLine: (NSInteger) lineNumber;
+- (NSRect) accessibilityFrameForRange: (NSRange) range;
+@end
+
+@protocol NSAccessibilityProgressIndicator <NSAccessibilityGroup>
+@required
+- (NSNumber *) accessibilityValue;
+@end
+
+@protocol NSAccessibilityStepper <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityLabel;
+- (BOOL) accessibilityPerformIncrement;
+- (BOOL) accessibilityPerformDecrement;
+@optional
+- (id) accessibilityValue;
+@end
+
+@protocol NSAccessibilitySlider <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityLabel;
+- (id) accessibilityValue;
+- (BOOL) accessibilityPerformIncrement;
+- (BOOL) accessibilityPerformDecrement;
+@end
+
+@protocol NSAccessibilityImage <NSAccessibilityElement>
+@required
+- (NSString *) accessibilityLabel;
 @end

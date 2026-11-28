@@ -18,6 +18,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSCursor.h>
+#import <AppKit/NSCursor+Private.h>
 #import <AppKit/NSDisplay.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
@@ -168,6 +169,23 @@ static NSMutableArray *_cursorStack = nil;
 }
 
 + (NSCursor *) zoomOutCursor {
+    static NSCursor *shared = nil;
+
+    if (shared == nil)
+        shared = [[self alloc] initWithName: NSStringFromSelector(_cmd)];
+
+    return shared;
+}
+
+// QUIRK: +busyButClickableCursor is a private AppKit selector returning a shared wait cursor whose clicks
+// still reach the application. Not documented. Evidence: Mozilla's MPL-2.0 nsCursorManager.mm calls it, and
+// Chromium's BSD-licensed cursor_utils.mm names the same shape (CoreCursor type 4); tier 3, public source of
+// independent Cocoa clients. No OS-version dependence is known. The general effect is the wait/watch shape,
+// mapped through the existing standard-cursor table.
+// https://github.com/mozilla/gecko-dev/blob/5836a062726f715fda621338a17b51aff30d0a8c/widget/cocoa/nsCursorManager.mm
+// https://chromium.googlesource.com/chromium/src/+/731fa51dac6814748b0943d8e4a61698fbe099c5/ui/base/cocoa/cursor_utils.mm
+// Test: appkit-cursor-busy-but-clickable
++ (NSCursor *) busyButClickableCursor {
     static NSCursor *shared = nil;
 
     if (shared == nil)

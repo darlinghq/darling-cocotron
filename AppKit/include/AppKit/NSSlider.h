@@ -32,6 +32,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic) NSTickMarkPosition tickMarkPosition;
 @property(nonatomic) BOOL allowsTickMarkValuesOnly;
 @property(nonatomic) CGFloat knobThickness;
+@property(nonatomic) NSTintProminence tintProminence API_AVAILABLE(macos(26.0));
 
 
 

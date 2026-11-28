@@ -24,8 +24,21 @@
 #import <Foundation/NSObject.h>
 #import <Foundation/NSData.h>
 #include <CoreGraphics/CGSCursor.h>
+#include <CoreGraphics/CGSServerSPI.h>
 
 @class CGSCursor;
+
+// An internal shape appended after the public shape values so their ABI does not change. It uses the wait/watch
+// theme names and remains visible only to the backends and AppKit's standard-cursor table.
+enum { kCGSCursorShapeBusy = kCGSCursorShapeCount };
+
+// QUIRK: CGSGetCursorScale/CGSSetCursorScale expose the system-wide pointer-size factor, starting at 1, shared by
+// all processes. Not documented. The accepted range and the results are described, with the evidence (black-box on
+// macOS 26.7.3, tier 2), at the implementation in CGSCursor.m. The SPI exists because Blender calls the getter.
+// Test: coregraphics-cursor-scale.
+// The scale is a 4-byte float: the getter on macOS 26.7.3 writes one float, not a CGFloat (tier 2, black-box).
+COREGRAPHICS_EXPORT CGError CGSGetCursorScale(CGSConnectionID connection, float *outScale);
+COREGRAPHICS_EXPORT CGError CGSSetCursorScale(CGSConnectionID connection, float scale);
 
 // What makes the window system's object of a cursor: the backend's connection. The object belongs to the cursor
 // and is destroyed through the same owner when the cursor goes.

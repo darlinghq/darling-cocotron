@@ -160,6 +160,12 @@ typedef NS_OPTIONS(NSUInteger, NSMenuProperties) {
 - (BOOL) validateMenuItem: (NSMenuItem *) item;
 @end
 
+// Objects that validate menu items adopt this protocol (macOS 11); the NSObject category above is the
+// older informal form of it.
+@protocol NSMenuItemValidation <NSObject>
+- (BOOL) validateMenuItem: (NSMenuItem *) menuItem;
+@end
+
 @protocol NSMenuDelegate <NSObject>
 
 @optional

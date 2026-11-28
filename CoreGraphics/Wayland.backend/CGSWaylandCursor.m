@@ -167,10 +167,17 @@ static uint32_t cursorShapeForName(const char* name)
 // the compositor scales it down to a fractional output. Without a fractional-scale manager, or without
 // set_buffer_scale, the compositor owns the scaling: hand over a 1x raster.
 - (uint32_t) renderScale120 {
+    float pointerScale = 1.0f;
+    if (CGSGetCursorScale(CGSMainConnectionID(), &pointerScale) != kCGErrorSuccess || pointerScale <= 0.0)
+        pointerScale = 1.0;
+    uint32_t scale = 120;
     // set_buffer_scale needs wl_surface v3.
-    if (_fractionalScale == NULL || WL.wl_proxy_get_version(_connection->_compositor) < 3)
-        return 120;
-    return WaylandCursorBufferScale120(_preferredScale120 ?: [_connection maximumOutputScale120]);
+    if (_fractionalScale != NULL && WL.wl_proxy_get_version(_connection->_compositor) >= 3)
+        scale = WaylandCursorBufferScale120(_preferredScale120 ?: [_connection maximumOutputScale120]);
+    double scaled = (double) scale * pointerScale;
+    if (scaled > UINT32_MAX)
+        return UINT32_MAX;
+    return (uint32_t) lround(scaled);
 }
 
 - (void) preferredScaleChanged: (uint32_t) scale120 {
@@ -267,9 +274,13 @@ static uint32_t cursorShapeForName(const char* name)
 
     CGSCursor *cursor = [_connection cursor];
     BOOL image = [cursor isImage];
+    float pointerScale = 1.0f;
+    BOOL scaledByAccessibility = CGSGetCursorScale(CGSMainConnectionID(), &pointerScale) == kCGErrorSuccess
+                                 && pointerScale > 1.0;
     // A shape needs neither a cursor surface nor a theme when the compositor draws it. The protocol requires the
-    // latest wl_pointer.enter serial, which is the one the surface cursor uses too.
-    if (!image && _shapeDevice != NULL) {
+    // latest wl_pointer.enter serial, which is the one the surface cursor uses too. The compositor-drawn shape
+    // has no pointer-size control, so an enlarged pointer uses our raster instead.
+    if (!image && _shapeDevice != NULL && !scaledByAccessibility) {
         _preferredScale120 = 0;
         uint32_t shape = cursor != nil ? cursorShapeForName([cursor themeName]) : WP_CURSOR_SHAPE_DEFAULT;
         if ([self alreadyApplied: AppliedShape key: shape serial: serial])

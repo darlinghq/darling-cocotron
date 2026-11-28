@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/NSFontManager.h>
 #import <AppKit/NSGraphicsContext.h>
 #import <AppKit/NSImage.h>
+#import <AppKit/NSItemBadge.h>
 #import <AppKit/NSMenuItem.h>
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSStringDrawer.h>
@@ -235,6 +236,7 @@ extern NSSize _NSToolbarIconSizeSmall;
     NS_EXTRA(NSToolbarItem, self)->_visibilityPriority = NSToolbarItemVisibilityPriorityStandard;
     NS_EXTRA(NSToolbarItem, self)->_autovalidates = NO;
     NS_EXTRA(NSToolbarItem, self)->_isEnabled = YES;
+    NS_EXTRA(NSToolbarItem, self)->_badge = nil;
     [self _configureAsStandardItemIfNeeded];
 
     return self;
@@ -251,6 +253,7 @@ extern NSSize _NSToolbarIconSizeSmall;
     [NS_EXTRA(NSToolbarItem, self)->_paletteLabel release];
     [NS_EXTRA(NSToolbarItem, self)->_menuFormRepresentation release];
     [NS_EXTRA(NSToolbarItem, self)->_view release];
+    [NS_EXTRA(NSToolbarItem, self)->_badge release];
     NS_EXTRA_FREE(NSToolbarItem, self);
     [super dealloc];
 }
@@ -282,6 +285,7 @@ static NSView *copyToolbarItemView(NSView *view) {
             initWithFrame: [NS_EXTRA(NSToolbarItem, self)->_enclosingView frame]];
     [NS_EXTRA(NSToolbarItem, copy)->_enclosingView setToolbarItem: copy];
     [NS_EXTRA(NSToolbarItem, copy)->_enclosingView setSubview: NS_EXTRA(NSToolbarItem, copy)->_view];
+    NS_EXTRA(NSToolbarItem, copy)->_badge = [NS_EXTRA(NSToolbarItem, self)->_badge retain];
 
     return copy;
 }
@@ -497,6 +501,17 @@ static NSView *copyToolbarItemView(NSView *view) {
 
 - (NSString *) toolTip {
     return NS_EXTRA(NSToolbarItem, self)->_toolTip;
+}
+
+- (NSItemBadge *) badge {
+    return NS_EXTRA(NSToolbarItem, self)->_badge;
+}
+
+- (void) setBadge: (NSItemBadge *) badge
+{
+    badge = [badge copy];
+    [NS_EXTRA(NSToolbarItem, self)->_badge release];
+    NS_EXTRA(NSToolbarItem, self)->_badge = badge;
 }
 
 - (void) setImage: (NSImage *) image {

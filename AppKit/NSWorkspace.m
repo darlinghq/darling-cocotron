@@ -19,8 +19,10 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 #import <AppKit/NSRaise.h>
 #import <AppKit/NSWorkspace.h>
+#import <AppKit/NSWorkspace+Private.h>
 #import <AppKit/NSRunningApplication.h>
 #import <Foundation/Foundation.h>
+#import <objc/runtime.h>
 #import <CoreGraphics/CoreGraphicsPrivate.h>
 #import "NSWorkspaceVolumeEvents.h"
 #include <dispatch/dispatch.h>
@@ -524,6 +526,17 @@ BOOL NSAccessibilityDisplayShouldIncreaseContrast(void) {
 @synthesize environment = _environment;
 @synthesize architecture = _architecture;
 
+static char const *AdditionalLSOpenOptionsKey = "NSWorkspaceOpenConfiguration._additionalLSOpenOptions";
+
+- (NSDictionary<NSString *, id> *) _additionalLSOpenOptions {
+    return objc_getAssociatedObject(self, AdditionalLSOpenOptionsKey);
+}
+
+- (void) _setAdditionalLSOpenOptions: (NSDictionary<NSString *, id> *) options {
+    objc_setAssociatedObject(self, AdditionalLSOpenOptionsKey, [options copy],
+                             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
 + (instancetype)configuration {
     return [[[self alloc] init] autorelease];
 }
@@ -557,6 +570,7 @@ BOOL NSAccessibilityDisplayShouldIncreaseContrast(void) {
     copy.arguments = _arguments;
     copy.environment = _environment;
     copy->_architecture = _architecture;
+    [copy _setAdditionalLSOpenOptions: [self _additionalLSOpenOptions]];
     return copy;
 }
 

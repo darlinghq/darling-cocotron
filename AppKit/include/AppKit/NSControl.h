@@ -30,6 +30,20 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidBeginEditingNotification;
 APPKIT_EXPORT const NSNotificationName NSControlTextDidChangeNotification;
 APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
 
+typedef NS_ENUM(NSInteger, NSControlBorderShape) {
+    NSControlBorderShapeAutomatic = 0,
+    NSControlBorderShapeCapsule = 1,
+    NSControlBorderShapeRoundedRectangle = 2,
+    NSControlBorderShapeCircle = 3,
+};
+
+typedef NS_ENUM(NSInteger, NSTintProminence) {
+    NSTintProminenceAutomatic = 0,
+    NSTintProminenceNone = 1,
+    NSTintProminencePrimary = 2,
+    NSTintProminenceSecondary = 3,
+};
+
 // Legacy ObjC ABI (i386): instance size must stay 0x5c, Apple's; the ivars
 // before the extras sit at Apple's offsets. Add new state to the extra
 // struct, never as an ivar.
@@ -41,6 +55,8 @@ APPKIT_EXPORT const NSNotificationName NSControlTextDidEndEditingNotification;
         BOOL _allowsExpansionToolTips;
         BOOL _setsMaxLayoutWidthAtFirstLayout;
         BOOL _allowsLogicalLayoutDirection;
+        NSControlBorderShape _borderShape;
+        NSTintProminence _tintProminence;
     NS_EXTRA_IVARS_END(NSControl)
 }
 

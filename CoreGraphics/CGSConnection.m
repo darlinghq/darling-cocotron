@@ -36,12 +36,15 @@
 #import <CoreGraphics/CGSScreen.h>
 #import <CoreGraphics/CGDisplayConfiguration.h>
 #import "CGDisplayReconfiguration.h"
+#import "CGSSharedState.h"
 
 // The counter the window ids of all processes come from. A window id is the window server's name for a window: it is
 // the window's NSWindow number and its kCGWindowNumber, and other processes list the window under it, so two processes
 // must never give the same id. The processes share a counter in a file the container keeps (it is mapped, and advanced
 // with atomic operations). Without the file, a process counts on its own.
-static _Atomic uint32_t* sharedWindowIDCounter(void)
+// The same file holds the other state the processes of the container share, as further 32-bit words: word 0 is the
+// window id counter, word 1 the cursor scale (the bits of a float, 0 while it was never set).
+_Atomic uint32_t* _CGSSharedState(void)
 {
 	static _Atomic uint32_t* counter;
 	static dispatch_once_t once;
@@ -51,13 +54,13 @@ static _Atomic uint32_t* sharedWindowIDCounter(void)
 		if (fd < 0)
 			return;
 		struct stat st;
-		if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || (st.st_size < (off_t) sizeof(uint32_t) &&
+		if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || (st.st_size < (off_t) (2 * sizeof(uint32_t)) &&
 				ftruncate(fd, 4096) != 0))
 		{
 			close(fd);
 			return;
 		}
-		void* memory = mmap(NULL, sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+		void* memory = mmap(NULL, 2 * sizeof(uint32_t), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 		close(fd);
 		if (memory != MAP_FAILED)
 			counter = (_Atomic uint32_t*) memory;
@@ -68,7 +71,7 @@ static _Atomic uint32_t* sharedWindowIDCounter(void)
 @implementation CGSConnection
 -(CGSWindowID) _allocateWindowID
 {
-	_Atomic uint32_t* shared = sharedWindowIDCounter();
+	_Atomic uint32_t* shared = _CGSSharedState();
 	if (shared == NULL)
 		return _nextWindowId++;
 

@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <Foundation/NSGeometry.h>
 #import <Foundation/NSObject.h>
 
-@class NSString, NSImage, NSView, NSMenuItem, NSToolbar, NSToolbarItemView;
+@class NSString, NSImage, NSView, NSMenuItem, NSToolbar, NSToolbarItemView, NSItemBadge;
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -75,6 +75,7 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
     BOOL _autovalidates;
     BOOL _isEnabled;
     BOOL _bordered;
+    NSItemBadge *_badge;
     NS_EXTRA_IVARS_END(NSToolbarItem)
 }
 
@@ -103,6 +104,7 @@ APPKIT_EXPORT NSToolbarItemIdentifier NSToolbarWritingToolsItemIdentifier;
 @property(nonatomic) NSInteger tag;
 @property(nonatomic, getter=isEnabled) BOOL enabled;
 @property(nullable, nonatomic, copy) NSString *toolTip;
+@property(nullable, nonatomic, copy) NSItemBadge *badge API_AVAILABLE(macos(26.0));
 
 - (void) setTarget: (nullable id) target;
 

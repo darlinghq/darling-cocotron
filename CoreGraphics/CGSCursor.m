@@ -25,6 +25,8 @@
 #import <CoreGraphics/CGContext.h>
 #import <Foundation/NSData.h>
 #include <math.h>
+#include <stdatomic.h>
+#include "CGSSharedState.h"
 #include <stdint.h>
 #include <string.h>
 
@@ -36,7 +38,7 @@ static const struct {
 	const char* themeFallback;
 	const char* x11;
 	const char* x11Alias;
-} kShapeNames[kCGSCursorShapeCount] = {
+} kShapeNames[kCGSCursorShapeBusy + 1] = {
 	[kCGSCursorShapeArrow] = {"default", "left_ptr", "left_ptr", NULL},
 	[kCGSCursorShapeIBeam] = {"text", "xterm", "xterm", "text"},
 	[kCGSCursorShapeVerticalIBeam] = {"vertical-text", "xterm", "vertical-text", "xterm"},
@@ -46,6 +48,8 @@ static const struct {
 	[kCGSCursorShapePointingHand] = {"pointer", "hand2", "hand", "pointer"},
 	[kCGSCursorShapeZoomIn] = {"zoom-in", "left_ptr", "zoom-in", NULL},
 	[kCGSCursorShapeZoomOut] = {"zoom-out", "left_ptr", "zoom-out", NULL},
+	// The wait cursor: the pointer is still usable while it is shown.
+	[kCGSCursorShapeBusy] = {"wait", "watch", "watch", NULL},
 	[kCGSCursorShapeResizeUp] = {"n-resize", "top_side", "top_side", NULL},
 	[kCGSCursorShapeResizeDown] = {"s-resize", "bottom_side", "bottom_side", NULL},
 	[kCGSCursorShapeResizeLeft] = {"w-resize", "left_side", "left_side", NULL},
@@ -195,7 +199,7 @@ static int32_t scaledExtent(double logical, double scale, int32_t limit)
 
 CGSCursorRef CGSCursorCreateWithShape(CGSCursorShape shape)
 {
-	if ((int) shape < 0 || shape >= kCGSCursorShapeCount)
+	if ((int) shape < 0 || shape > kCGSCursorShapeBusy)
 		shape = kCGSCursorShapeArrow;
 	return (CGSCursorRef) [[CGSCursor alloc] _initWithShape: shape];
 }
@@ -221,5 +225,58 @@ CGError CGSCursorSetCurrent(CGSCursorRef cursor)
 	if (connectionID == 0)
 		return kCGErrorCannotComplete;
 	[_CGSConnectionForID(connectionID) setCursor: (CGSCursor*) cursor];
+	return kCGErrorSuccess;
+}
+
+// QUIRK: CGSGetCursorScale/CGSSetCursorScale expose the system-wide pointer-size factor (the Universal Access
+// cursor size). Not documented. Evidence: black-box observation on macOS 26.7.3 (tier 2), reproduced by the test:
+// the getter writes one 4-byte float and starts at 1; the setter stores any value from 0.5 up to (not including) 16
+// exactly and returns success; a value below 0.5 (including 0, negative values and -infinity) returns
+// kCGErrorFailure and changes nothing; a value of 16 or more, +infinity or NaN returns success and changes nothing;
+// the value is shared by all processes (one process sets 2, another reads 2). The SPI exists because Blender's
+// GHOST_SystemCocoa.mm calls the getter to follow the system pointer size (tier 3, public source). The connection
+// argument does not select anything; a NULL output pointer is an error rather than a crash. Here the value lives in
+// the container's shared state file (see _CGSSharedState), the one the window ids use. The setting process
+// re-selects its current cursor at once; other processes read the value whenever they make a cursor, so they
+// follow on their next cursor change, not live.
+// Test: coregraphics-cursor-scale
+static _Atomic uint32_t g_localCursorScale; // the bits of a float; used when there is no shared state file
+
+static _Atomic uint32_t *cursorScaleWord(void)
+{
+	_Atomic uint32_t *shared = _CGSSharedState();
+	return shared != NULL ? shared + 1 : &g_localCursorScale;
+}
+
+CGError CGSGetCursorScale(CGSConnectionID connection, float *outScale)
+{
+	(void) connection;
+	if (outScale == NULL)
+		return kCGErrorIllegalArgument;
+	uint32_t bits = atomic_load(cursorScaleWord());
+	float scale = 1.0f;
+	if (bits != 0)
+		memcpy(&scale, &bits, sizeof(scale));
+	*outScale = scale;
+	return kCGErrorSuccess;
+}
+
+CGError CGSSetCursorScale(CGSConnectionID connection, float scale)
+{
+	(void) connection;
+	if (isnan(scale))
+		return kCGErrorSuccess;
+	if (scale < 0.5f)
+		return kCGErrorFailure;
+	if (scale >= 16.0f)
+		return kCGErrorSuccess;
+	uint32_t bits;
+	memcpy(&bits, &scale, sizeof(bits));
+	atomic_store(cursorScaleWord(), bits);
+	// Selecting the current cursor again asks the backend to rasterize it at the new scale.
+	CGSConnectionID connectionID = CGSMainConnectionID();
+	CGSConnection *cgsConnection = _CGSConnectionForID(connectionID);
+	if (cgsConnection != nil)
+		[cgsConnection setCursor: [cgsConnection cursor]];
 	return kCGErrorSuccess;
 }
