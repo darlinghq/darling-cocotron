@@ -240,6 +240,26 @@ static const char pmObjectsKey;
     return result;
 }
 
+// The part of the page a view is printed in, in page coordinates: the page inside its margins, kept within the
+// imageable area. A page that the margins leave nothing of has its imageable area.
+- (NSRect) _printableArea {
+    NSSize paper = [self paperSize];
+    NSRect imageable = [self imageablePageBounds];
+
+    // the paper size is the one of the upright paper, the margins are those of the page as it is printed
+    if ([self orientation] == NSLandscapeOrientation)
+        paper = NSMakeSize(paper.height, paper.width);
+
+    NSRect area = NSMakeRect([self leftMargin], [self bottomMargin],
+                             paper.width - [self leftMargin] - [self rightMargin],
+                             paper.height - [self topMargin] - [self bottomMargin]);
+
+    area = NSIntersectionRect(area, imageable);
+    if (area.size.width <= 0 || area.size.height <= 0)
+        return imageable;
+    return area;
+}
+
 - (void) setPrinter: (NSPrinter *) printer {
     [_attributes setObject: printer forKey: NSPrintPrinter];
 }

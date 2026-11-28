@@ -64,6 +64,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 // Private to the print operation: whether a page of its PrintCore session is open
 @interface NSPrintOperation (NSViewPrinting)
 - (BOOL) _printCorePageIsOpen;
+- (BOOL) _usesPrintCore;
+@end
+
+@interface NSPrintInfo (NSViewPrinting)
+- (NSRect) _printableArea;
 @end
 #import "NSViewLayoutInternal.h"
 #import <AppKit/NSTextInput.h>
@@ -3793,30 +3798,41 @@ display_subviews:
 - (void) beginPageInRect: (NSRect) rect atPlacement: (NSPoint) placement {
     CGContextRef graphicsPort = NSCurrentGraphicsPort();
     CGRect mediaBox = NSMakeRect(0, 0, rect.size.width, rect.size.height);
-    NSPrintInfo *printInfo = [[NSPrintOperation currentOperation] printInfo];
-    NSRect imageableRect = [printInfo imageablePageBounds];
+    NSPrintOperation *operation = [NSPrintOperation currentOperation];
+    CGFloat scale = [self _printScaleOfOperation: operation];
     CGAffineTransform transform = CGAffineTransformIdentity;
 
     [NSCurrentFocusStack() addObject: self];
 
     // A page of a PrintCore job is begun by the operation, in the session that owns the context; a second begin
     // would leave that page open
-    if (![[NSPrintOperation currentOperation] _printCorePageIsOpen])
+    if (![operation _printCorePageIsOpen])
         CGContextBeginPage(graphicsPort, &mediaBox);
     CGContextSaveGState(graphicsPort);
 
-    transform = CGAffineTransformIdentity;
+    // The rectangle of the view lands on the page at the placement (its lower left corner, or its upper left
+    // one for a flipped view), scaled by the scaling factor of the print info, and nothing outside it is drawn.
+    CGContextClipToRect(graphicsPort, CGRectMake(placement.x, placement.y, rect.size.width * scale,
+                                                 rect.size.height * scale));
     if ([self isFlipped]) {
-        transform = CGAffineTransformMake(1, 0, 0, -1, 0,
-                                          [printInfo paperSize].height);
+        transform = CGAffineTransformTranslate(transform, placement.x, placement.y + rect.size.height * scale);
+        transform = CGAffineTransformScale(transform, scale, -scale);
+    } else {
+        transform = CGAffineTransformTranslate(transform, placement.x, placement.y);
+        transform = CGAffineTransformScale(transform, scale, scale);
     }
-
-    transform = CGAffineTransformTranslate(transform, -rect.origin.x,
-                                           -rect.origin.y);
+    transform = CGAffineTransformTranslate(transform, -rect.origin.x, -rect.origin.y);
 
     CGContextConcatCTM(graphicsPort, transform);
 
     [self setUpGState];
+}
+
+// The scale the pages of a printing operation have; the PDF and EPS operations are made at the size of the view.
+- (CGFloat) _printScaleOfOperation: (NSPrintOperation *) operation {
+    CGFloat scale = [operation _usesPrintCore] ? [[operation printInfo] scalingFactor] : 1;
+
+    return scale > 0 ? scale : 1;
 }
 
 - (void) endPage {
@@ -3884,8 +3900,26 @@ display_subviews:
     return NO;
 }
 
+// The place of a page of the view on the paper: the upper left corner of the printable area (the page inside its
+// margins), or the middle of it in the direction the print info centers in. The rectangle is as large on the paper
+// as the scaling factor makes it. The operations that make PDF or EPS data have no paper: the rectangle is the page.
 - (NSPoint) locationOfPrintRect: (NSRect) rect {
-    return NSZeroPoint;
+    NSPrintOperation *operation = [NSPrintOperation currentOperation];
+
+    if (operation == nil || ![operation _usesPrintCore])
+        return NSZeroPoint;
+
+    NSPrintInfo *printInfo = [operation printInfo];
+    NSRect area = [printInfo _printableArea];
+    CGFloat scale = [self _printScaleOfOperation: operation];
+    CGFloat width = rect.size.width * scale;
+    CGFloat height = rect.size.height * scale;
+    NSPoint location;
+
+    location.x = [printInfo isHorizontallyCentered] ? NSMinX(area) + (NSWidth(area) - width) / 2 : NSMinX(area);
+    location.y = [printInfo isVerticallyCentered] ? NSMinY(area) + (NSHeight(area) - height) / 2
+                                                   : NSMaxY(area) - height;
+    return location;
 }
 
 - (NSRect) rectForPage: (NSInteger) page {
