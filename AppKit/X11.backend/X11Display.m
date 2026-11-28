@@ -700,6 +700,11 @@ static int errorHandler(Display *display, XErrorEvent *errorEvent) {
     // The selections (the requests, replies and clears of the clipboard and of a drag's data, and the property
     // changes that pace their transfers) are handled by CoreGraphics, which owns the connection.
 
+    case ReparentNotify:
+        // A window manager reparenting a top-level window into its frame is tracked by CoreGraphics,
+        // which owns the connection; AppKit has nothing to do.
+        break;
+
     case ColormapNotify:
         break;
 
