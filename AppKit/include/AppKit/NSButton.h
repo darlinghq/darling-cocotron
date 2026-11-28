@@ -47,6 +47,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic) NSControlStateValue state;
 @property(nonatomic) BOOL allowsMixedState;
 @property(nullable, nonatomic, retain) NSSound *sound;
+@property(nonatomic) NSControlBorderShape borderShape API_AVAILABLE(macos(26.0));
+@property(nonatomic) NSTintProminence tintProminence API_AVAILABLE(macos(26.0));
 
 @property(nonatomic) NSBezelStyle bezelStyle;
 @property(nonatomic, copy) NSString *alternateTitle;

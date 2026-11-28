@@ -6,6 +6,13 @@ typedef NSString *NSAccessibilityActionName;
 typedef NSString *NSAccessibilityAttributeName;
 typedef NSString *NSAccessibilitySubrole;
 
+// The orientation of an accessibility element, used by -accessibilityOrientation.
+typedef NS_ENUM(NSInteger, NSAccessibilityOrientation) {
+    NSAccessibilityOrientationUnknown = 0,
+    NSAccessibilityOrientationVertical = 1,
+    NSAccessibilityOrientationHorizontal = 2,
+};
+
 APPKIT_EXPORT NSString *const NSAccessibilityChildrenAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityContentsAttribute;
 APPKIT_EXPORT NSString *const NSAccessibilityDescriptionAttribute;

@@ -243,6 +243,9 @@ typedef NS_ENUM(NSUInteger, NSImageLoadStatus) {
                              variableValue: (double) value;
 - (nullable NSImage *) imageWithSymbolConfiguration:
         (NSImageSymbolConfiguration *) configuration;
+// The spelling used by AppKit on macOS 26 and later.
+- (nullable NSImage *) imageByApplyingSymbolConfiguration:
+        (NSImageSymbolConfiguration *) configuration;
 @property(nonatomic, readonly) NSImageSymbolConfiguration *symbolConfiguration;
 // Private AppKit spelling of imageWithSystemSymbolName:accessibilityDescription:.
 + (null_unspecified instancetype) _imageWithSystemSymbolName: (null_unspecified NSString *) name;
@@ -379,6 +382,7 @@ APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddTabTemplate;
 APPKIT_EXPORT NSImageHintKey const NSImageHintInterpolation;
 APPKIT_EXPORT NSImageHintKey const NSImageHintCTM NS_SWIFT_NAME(ctm);
 APPKIT_EXPORT NSImageHintKey const NSImageHintSymbolScale;
+APPKIT_EXPORT NSImageHintKey const NSImageHintUserInterfaceLayoutDirection;
 
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddDetailTemplate;
 APPKIT_EXPORT NSImageName const NSImageNameTouchBarAddTemplate;

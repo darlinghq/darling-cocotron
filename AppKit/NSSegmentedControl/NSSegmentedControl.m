@@ -28,6 +28,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSSegmentedControl
 
+- (NSControlBorderShape) borderShape
+{
+    @synchronized(self) {
+        return NS_EXTRA(NSControl, self)->_borderShape;
+    }
+}
+
+- (void) setBorderShape: (NSControlBorderShape) value
+{
+    @synchronized(self) {
+        NS_EXTRA(NSControl, self)->_borderShape = value;
+    }
+}
+
 // Operated at once: the click that activates the window is delivered to it
 // (see -[NSWindow sendEvent:]).
 - (BOOL) acceptsFirstMouse: (NSEvent *) event {

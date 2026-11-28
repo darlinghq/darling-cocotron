@@ -56,6 +56,7 @@ typedef NS_ENUM(NSInteger, NSSegmentDistribution) {
 @property(nonatomic) NSInteger segmentCount;
 @property(nonatomic) NSSegmentStyle segmentStyle;
 @property(nonatomic) NSSegmentSwitchTracking trackingMode;
+@property(nonatomic) NSControlBorderShape borderShape API_AVAILABLE(macos(26.0));
 
 - (NSInteger) tagForSegment: (NSInteger) segment;
 - (nullable NSImage *) imageForSegment: (NSInteger) segment;

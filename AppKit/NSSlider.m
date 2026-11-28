@@ -38,6 +38,20 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 
 @implementation NSSlider
 
+- (NSTintProminence) tintProminence
+{
+    @synchronized(self) {
+        return NS_EXTRA(NSControl, self)->_tintProminence;
+    }
+}
+
+- (void) setTintProminence: (NSTintProminence) value
+{
+    @synchronized(self) {
+        NS_EXTRA(NSControl, self)->_tintProminence = value;
+    }
+}
+
 + (Class) cellClass {
     return [NSSliderCell class];
 }

@@ -21,9 +21,11 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. */
 #import <AppKit/AppKitIvarLayout.h>
 
 typedef NS_ENUM(NSUInteger, NSTokenStyle) {
-    NSTokenStyleDefault,
-    NSTokenStylePlainSquared,
-    NSTokenStyleRounded,
+    NSTokenStyleDefault = 0,
+    NSTokenStyleNone = 1,
+    NSTokenStyleRounded = 2,
+    NSTokenStyleSquared = 3,
+    NSTokenStylePlainSquared = 4,
 };
 
 // Names used before the modern spellings; plain constants, so Swift does not see them.
